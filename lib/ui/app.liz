@@ -1,0 +1,99 @@
+-~> app: the placeholder editor (B005). The real one replaces this in B007.
+-~> A gray background, a panel, and a square that follows the mouse while
+-~> held, drawn chunky in the half-resolution UI buffer. The canvas rectangle
+-~> (top right) shows a smooth full-resolution circle.
+
+let app = {
+  "needs_paint": true,
+  "wants_hover": false,
+  "path": "",
+  "held": false,
+  "mouse": (60, 60),
+  "events": 0,
+  "last": "none",
+  "canvas_pos": null,
+  "pings": 0
+}
+
+function app_rect(x, y, w, h, color) {
+  fb.fill((x, y), (w, h), color)
+}
+
+-~> Smooth full-resolution disc: one span per row, FLOAT ends for soft edges.
+function app_disc(cx, cy, r, color) {
+  for (let y = 0; y < r * 2; y = y + 1) {
+    let dy = y + 0.5 - r
+    let half = math.sqrt(r * r - dy * dy)
+    fb.span(cy - r + y, cx - half, cx + half, color)
+  }
+}
+
+function app_start(path) {
+  app["path"] = path
+  app["needs_paint"] = true
+}
+
+function app_event(e) {
+  app["events"] = app["events"] + 1
+  app["last"] = e["type"]
+  if (e["type"] == "down") {
+    app["held"] = true
+    app["mouse"] = e["pos"]
+  }
+  if (e["type"] == "move" && app["held"]) {
+    app["mouse"] = e["pos"]
+  }
+  if (e["type"] == "up") {
+    app["held"] = false
+  }
+  app["canvas_pos"] = e["canvas_pos"]
+  app["needs_paint"] = true
+}
+
+function app_paint() {
+  let size = fb.size()
+  let w = size.x
+  let h = size.y
+  fb.target("ui")
+  fb.unclip()
+  app_rect(0, 0, w, h, #3b3b40)
+  app_rect(4, 4, 76, h - 8, #54545c)
+  app_rect(6, 6, 72, 12, #1d1d1f)
+  app_rect(6, 22, 72, 8, #7a7a85)
+  app_rect(6, 34, 72, 8, #7a7a85)
+
+  let m = app["mouse"]
+  let c = #e0a526
+  if (app["held"]) {
+    c = #3fa34d
+  }
+  app_rect(m.x - 4, m.y - 4, 8, 8, c)
+
+  let cw = 160
+  let ch = 120
+  fb.canvas((90, 8), (cw, ch))
+  fb.target("canvas")
+  fb.clear((0, 0), (cw * 2, ch * 2))
+  app_rect(0, 0, cw * 2, ch * 2, #f4f1e8)
+  app_disc(cw, ch, ch * 2 / 5, #2d6a8f)
+  app_disc(cw, ch, ch / 5, #e0a526)
+  fb.target("ui")
+  app["needs_paint"] = false
+}
+
+function app_debug_state() {
+  {"path": app["path"], "events": app["events"], "last": app["last"],
+   "held": app["held"], "mouse": app["mouse"], "canvas_pos": app["canvas_pos"],
+   "pings": app["pings"]}
+}
+
+function app_ping(args) {
+  app["pings"] = app["pings"] + 1
+  {"pong": true, "args": args}
+}
+
+app["start"] = app_start
+app["event"] = app_event
+app["paint"] = app_paint
+app["debug_state"] = app_debug_state
+app["debug_commands"] = {"Ping": app_ping}

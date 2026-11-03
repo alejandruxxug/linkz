@@ -9,7 +9,7 @@ import (
 	"io"
 	"strings"
 
-	"linkz/lib"
+	"linkz/lib/draw"
 	"lizardscript/evaluator"
 	"lizardscript/lexer"
 	"lizardscript/object"
@@ -22,8 +22,8 @@ func Render(source string, out io.Writer) (string, error) {
 	evaluator.Output = out
 	env := object.NewEnvironment()
 
-	for _, name := range lib.Order {
-		code, err := lib.Files.ReadFile(name)
+	for _, name := range draw.Order {
+		code, err := draw.Files.ReadFile(name)
 		if err != nil {
 			return "", err
 		}

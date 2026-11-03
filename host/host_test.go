@@ -21,14 +21,12 @@ func TestRenderHello(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if !strings.HasPrefix(svg, "<svg xmlns='http://www.w3.org/2000/svg' width='400' height='200'") {
-		t.Errorf("wrong start of the SVG:\n%s", svg)
+	golden, err := os.ReadFile("../lib/draw/tests/golden/hello.svg.expected")
+	if err != nil {
+		t.Fatal(err)
 	}
-	if got := strings.Count(svg, "<circle"); got != 6 {
-		t.Errorf("expected 6 circles, got %d:\n%s", got, svg)
-	}
-	if !strings.Contains(svg, "fill='#e0a526'") {
-		t.Errorf("changing a shape after drawing it didn't reach the SVG:\n%s", svg)
+	if strings.TrimSpace(svg) != strings.TrimSpace(string(golden)) {
+		t.Errorf("the SVG differs from the golden file:\n%s", svg)
 	}
 	if got, want := printed.String(), "drew 7 shapes\n"; got != want {
 		t.Errorf("puts printed %q, want %q", got, want)
