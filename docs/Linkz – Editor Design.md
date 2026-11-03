@@ -55,6 +55,10 @@ Everything else in v1 serves this.
 - **Undo/redo** (Cmd+Z / Shift+Cmd+Z) over text edits.
 - **Drag rows** (or Alt+↑/↓) to reorder = move lines.
 
+## ↶ Undo / redo (important)
+
+Every change to the document is one undo step: typing (coalesced into words), row edits, paste/cut, moving rows, adding shapes or layers, property edits (a whole scrub = one step), layer rename/hide/lock, and every canvas gesture (a drag, a stroke, inserting/removing an anchor). Undo/redo restore the caret and selection and scroll to the row. Cmd+Z, Shift+Cmd+Z, Cmd+Y, toolbar ↶ ↷ with the action's name. View state (folds, selection, scroll, language) isn't undoable. History ≥ 200 steps, survives saving, resets when another file opens.
+
 ## 🖱️ Two-way canvas (protected for v1)
 
 - **Click** a shape → its row is selected (and its layer expanded). Click a row → its shapes get handles.
