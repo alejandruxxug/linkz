@@ -62,6 +62,10 @@ Everything else in v1 serves this.
 - **Drag a handle** → radius / size literal changes the same way.
 - Selection and hit-testing use the lizard geometry (point in path).
 
+## 🕹️ Look
+
+8-bit UI around a smooth canvas: the UI renders at half resolution and is scaled ×2 with hard pixels; the canvas is a separate full-resolution target composited into its rect. Rules and the Lizard 16 palette are in [[Linkz – Style Guide]].
+
 ## 🧱 How it's built
 
 ```
