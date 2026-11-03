@@ -30,6 +30,7 @@ The motto: **the code is the drawing.** The editor isn't a text box next to a ca
 3. The stroke is drawn as a smooth curve through its points (Catmull–Rom → cubic Béziers, in lizard).
 4. Select it → every point shows as an **anchor handle**. Drag an anchor → that one point literal in the array is rewritten. Double-click the curve → a point is inserted. Select an anchor + Delete → removed. The properties panel shows color and width.
 5. Undo works for every step.
+6. **Brush with pressure** (trackpad Force Touch / drawing tablet; speed with a mouse) and **default pen styles** (ink, pencil, marker, brush, calligraphy): `brush(points, pressures, color, pens.ink)`; switching the pen re-styles the stroke.
 
 Everything else in v1 serves this.
 

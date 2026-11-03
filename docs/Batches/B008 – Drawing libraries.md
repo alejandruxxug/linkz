@@ -10,7 +10,7 @@ The drawing API a `.lzdraw` file uses, written in lizard with points and colors.
 {"kind": "circle", "args": [...the call's values...],
  "path": [["M", p], ["L", p], ["C", c1, c2, p], ["Z"]],     -~> absolute points, floats ok
  "fill": color or null, "stroke": color or null, "width": number,
- "widths": [numbers] or null,                                -~> brush only
+ "widths": [numbers] or null, "opacities": [numbers] or null, -~> brush only, computed by the pen
  "anchors": [{"pos": p, "arg": i, "item": j or null, "role": "move"|"radius"|"corner"|"point"}],
  "line": n, "layer": ["sea", "waves"]}                       -~> set by draw() from src.here() when the host provides it; null otherwise
 ```
@@ -25,9 +25,12 @@ The drawing API a `.lzdraw` file uses, written in lizard with points and colors.
 | `line(a, b, color, width)` | stroked segment | a; b |
 | `polygon(points, fill)` | closed polygon | every point |
 | `stroke(points, color, width)` | **smooth curve through the points** (Catmull–Rom → cubic Béziers, open ends, round caps) | every point |
-| `brush(points, widths, color)` | smooth stroke whose width varies per point (pressure) | every point |
+| `brush(points, pressures, color, pen)` | smooth stroke shaped by a **pen style** from the raw pressures (0–1) | every point |
 | `canvas` | `{"size": (512, 512), "background": #ffffff}`, a variable the drawing reassigns | — |
 `stroke`/`brush` with 1 point → a dot; 2 → a straight segment. Wrong argument types → a lizard runtime error with a clear message (the language has no `error()` builtin yet; if you need one, report it as a language need instead of faking it).
+
+## Pen styles (`lib/draw/pens.liz`)
+A pen is a hash that turns pressure (and direction) into width and opacity per point; the stroke stores raw pressures, so changing the pen re-styles it. Defaults: `pens.ink` (pressure → width strongly, tapered ends), `pens.pencil` (thin; pressure → opacity more than width; slightly grainy edge from deterministic noise), `pens.marker` (constant width, semi-transparent, flat), `pens.brush` (wide width range, soft taper, fades at low pressure), `pens.calligraphy` (width from the angle between stroke direction and a nib angle). Shape: `{"name": "ink", "min": 1, "max": 10, "taper": 0.3, "opacity": [1, 1], "nib": null}` (document every key); users can write their own. `pens.list` for the editor's picker.
 
 ## Also
 - `lib/draw/geometry.liz`: Catmull–Rom → Bézier, Bézier flattening (tolerance 0.25 px) → polylines, path bounds, point-in-path (nonzero), distance from a point to a polyline, `nearest_on_path(path, p)` (for inserting an anchor), and Ramer–Douglas–Peucker `simplify(points, tolerance)`. B006's rasterizer imports the flattening from here.
