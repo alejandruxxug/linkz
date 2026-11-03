@@ -66,7 +66,7 @@ func run(source, name string, env *object.Environment, attr *attribution) (objec
 		}
 		evaluator.OnStatement = attr.hook
 	}
-	result := evaluator.Eval(program, env)
+	result := Eval(program, env)
 	if attr != nil {
 		evaluator.OnStatement = nil
 	}

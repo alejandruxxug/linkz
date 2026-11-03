@@ -31,7 +31,7 @@ func run(source string, env *object.Environment) error {
 	if len(p.Errors()) != 0 {
 		return errors.New(strings.Join(p.Errors(), "\n"))
 	}
-	if e, ok := evaluator.Eval(program, env).(*object.Error); ok {
+	if e, ok := host.Eval(program, env).(*object.Error); ok {
 		return errors.New(e.Message)
 	}
 	return nil

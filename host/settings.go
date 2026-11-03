@@ -77,7 +77,7 @@ func evalSettings(code string) (*object.Hash, error) {
 	evaluator.ResetSteps()
 
 	env := object.NewEnvironment()
-	if e, ok := evaluator.Eval(prog, env).(*object.Error); ok {
+	if e, ok := Eval(prog, env).(*object.Error); ok {
 		return nil, fmt.Errorf("%s", e.Message)
 	}
 	h := object.NewHash()

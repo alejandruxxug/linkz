@@ -162,7 +162,7 @@ func EvalIn(env *object.Environment, name, code string) error {
 	if errs := p.Errors(); len(errs) > 0 {
 		return fmt.Errorf("%s: %s", name, errs[0])
 	}
-	if e, ok := evaluator.Eval(prog, env).(*object.Error); ok {
+	if e, ok := Eval(prog, env).(*object.Error); ok {
 		return fmt.Errorf("%s: %s", name, e.Message)
 	}
 	return nil

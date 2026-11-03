@@ -269,7 +269,7 @@ func (s *Src) translation(lang string) map[string]any {
 		env := object.NewEnvironment()
 		prog, errs := syntaxErrors(string(code))
 		if len(errs) == 0 {
-			if res := evaluator.Eval(prog, env); res == nil || res.Type() != object.ERROR_OBJ {
+			if res := Eval(prog, env); res == nil || res.Type() != object.ERROR_OBJ {
 				if v, ok := env.Get("docs_" + lang); ok {
 					tr, _ = toGo(v, 0).(map[string]any)
 				}
@@ -412,7 +412,7 @@ func (s *Src) Run(code string) object.Object {
 			errs = []SrcError{{0, 0, lerr.Error()}}
 		} else {
 			libsLoaded = true
-			res := evaluator.Eval(prog, env)
+			res := Eval(prog, env)
 			if e, ok := res.(*object.Error); ok {
 				errs = []SrcError{runError(e, line)}
 			}
@@ -461,7 +461,7 @@ func (s *Src) loadLibs(env *object.Environment, afterHere func()) error {
 		if err != nil {
 			return err
 		}
-		if res := evaluator.Eval(prog, env); res != nil {
+		if res := Eval(prog, env); res != nil {
 			if e, ok := res.(*object.Error); ok {
 				return fmt.Errorf("library %s: %s", name, e.Message)
 			}

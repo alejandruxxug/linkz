@@ -95,7 +95,7 @@ func (s *Splash) run(name, code string) (object.Object, error) {
 	if errs := p.Errors(); len(errs) > 0 {
 		return nil, fmt.Errorf("%s: %s", name, errs[0])
 	}
-	res := evaluator.Eval(prog, s.env)
+	res := Eval(prog, s.env)
 	if e, ok := res.(*object.Error); ok {
 		return nil, fmt.Errorf("%s: %s", name, e.Message)
 	}

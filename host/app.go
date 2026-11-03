@@ -155,7 +155,7 @@ func (a *App) exec(name, code string) error {
 	if errs := p.Errors(); len(errs) > 0 {
 		return fmt.Errorf("%s: %s", name, errs[0])
 	}
-	if e, ok := evaluator.Eval(prog, a.env).(*object.Error); ok {
+	if e, ok := Eval(prog, a.env).(*object.Error); ok {
 		return fmt.Errorf("%s: %s", name, e.Message)
 	}
 	return nil
@@ -176,7 +176,7 @@ func (a *App) eval(src string, bind map[string]object.Object) (object.Object, er
 		a.env.Define(k, v)
 	}
 	evaluator.Output = os.Stderr
-	res := evaluator.Eval(prog, a.env)
+	res := Eval(prog, a.env)
 	if e, ok := res.(*object.Error); ok {
 		return nil, fmt.Errorf("%s", e.Message)
 	}
