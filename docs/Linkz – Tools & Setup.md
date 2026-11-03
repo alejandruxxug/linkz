@@ -36,6 +36,8 @@ let skip_loading_anim = true
 | `language` | `"en"`, `"es"` | The interface language. Without it Linkz uses the system's language, else English. The editor's language command rewrites this line and keeps the others. |
 | `skip_loading_anim` | `true` / `false` (default `false`) | `true` makes `linkz edit` start without the splash screen, like `--no-splash`. |
 
+`linkz edit --slow-splash` plays the splash at a quarter speed (to watch the animation); it plays even when `skip_loading_anim` is on.
+
 ## 📦 Releasing
 
 Nothing is published until a person pushes a tag and publishes the draft. The pieces:

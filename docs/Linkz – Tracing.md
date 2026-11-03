@@ -88,3 +88,7 @@ Result: 216 regions, 1 727 points, 20.7 KB of code. At `max_side` 256 (8 colors)
 - Neighbouring regions are separate shapes, so a faint hairline can show along shared edges (anti-aliasing). The biggest color is a plain rectangle (`background`) to avoid the most visible seams.
 - Holes are not editable anchors in the editor (only the outer outline's points are anchors of a `path`).
 - One palette distance: plain RGB. No dithering, no edge detection, no stroke (centerline) tracing.
+
+## Next: line art
+
+The anime/line-art pipeline (strokes with width, fills under the lines, sub-pixel Bézier edges, corners and hair spikes, primitive fitting) is designed in [[Linkz – Tracing v2]].

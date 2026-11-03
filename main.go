@@ -1,6 +1,6 @@
 // Command linkz draws vector art written in lizard-script.
 //
-//	linkz edit [--no-splash] [drawing.lzdraw]  opens the native editor
+//	linkz edit [--no-splash] [--slow-splash] [drawing.lzdraw]  opens the native editor
 //	linkz render drawing.lzdraw [out.svg]  writes the SVG
 //	linkz trace in.png out.lzdraw [--colors N] [--detail D]  traces a picture into code
 //	linkz paint prog.liz out.png [WxH]     runs a program headless on a buffer
@@ -23,7 +23,7 @@ import (
 )
 
 const usage = `usage:
-  linkz edit [--no-splash] [file.lzdraw]
+  linkz edit [--no-splash] [--slow-splash] [file.lzdraw]
   linkz render file.lzdraw [out.svg]
   linkz trace in.png out.lzdraw [--colors 8] [--detail 1.5]
   linkz paint prog.liz out.png [WxH]
@@ -124,13 +124,15 @@ func paint(args []string) error {
 }
 
 func edit(args []string) error {
-	path, splash := "", true
+	path, splash, slow := "", true, false
 	for _, a := range args {
 		switch {
 		case a == "--no-splash":
 			splash = false
+		case a == "--slow-splash":
+			slow = true
 		case strings.HasPrefix(a, "--"):
-			return fmt.Errorf("unknown flag %s (usage: linkz edit [--no-splash] [file.lzdraw])", a)
+			return fmt.Errorf("unknown flag %s (usage: linkz edit [--no-splash] [--slow-splash] [file.lzdraw])", a)
 		default:
 			path = a
 		}
@@ -147,7 +149,7 @@ func edit(args []string) error {
 	} else {
 		app.Machine = machine
 	}
-	if host.SkipLoadingAnim(settings) {
+	if host.SkipLoadingAnim(settings) && !slow {
 		splash = false
 	}
 	dbg := host.NewDebug(app)
@@ -177,6 +179,11 @@ func edit(args []string) error {
 			splash = false
 		} else {
 			launcher = host.NewLauncher(sp, app, path)
+			if slow {
+				// For watching the animation: the splash's clock runs at a quarter speed.
+				began := time.Now()
+				launcher.Now = func() time.Time { return began.Add(time.Since(began) / 4) }
+			}
 			launcher.OnReady = func() {
 				if err := dbg.Start(); err != nil {
 					fmt.Fprintln(os.Stderr, "linkz: backdoor:", err)

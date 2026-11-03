@@ -11,6 +11,7 @@ Private until the reveal.
 | [[Linkz – Product Design]] | What Linkz is, the scope tiers, the design log |
 | [[Linkz – Editor Design]] | The native editor: code = layers + properties, the v1 goal, the backdoor |
 | [[Linkz – Brushes]] | Note: Procreate-style brush creator, `.lzbrush` import/export, importing Procreate/ABR brushes |
+| [[Linkz – Tracing v2]] | Design: line-art tracing for anime art (strokes with width, smooth Bézier edges, hair spikes, shape snapping) |
 | [[Linkz – Architecture]] | The thin host, the lizard libraries, where new code goes |
 | [[Linkz – Language Needs]] | Every gap in lizard-script that Linkz hits, and the extensions they become |
 | [[Linkz – Build Plan]] | Milestones, ⏳ waiting on you, progress log |
