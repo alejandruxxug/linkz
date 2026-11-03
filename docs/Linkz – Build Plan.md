@@ -7,7 +7,7 @@
 | OK to commit the extensions-log section + CLAUDE.md in lizard-script | Language work starts there | lizard-script `git status` | 2026-11-02 |
 
 ## 🌙 Overnight plan (2026-11-03, developer away until morning)
-Order: finish B007b (editor view) + B015 (home) → **B009** pencil/brush/anchors (v1 finish line) → v1.1 **engine** parts that need no UI approval (gradients + steps and gradient spans, blend-mode compositing, MAX OBJ calibration) → M7 MCP (agents draw by writing lizard) → M9 release *prep* only (GoReleaser config + install script; nothing published). v1.1 **UI** (R002) waits for the developer's approval in Figma. Report: `docs/Reports/2026-11-03 Overnight.md`.
+Order: finish B007b (editor view) + B015 (home) → **B007c autocomplete (mandatory)** → **B009** pencil/brush/anchors (v1 finish line) → v1.1 **engine** parts that need no UI approval (gradients + steps and gradient spans, blend-mode compositing, MAX OBJ calibration) → M7 MCP (agents draw by writing lizard) → M9 release *prep* only (GoReleaser config + install script; nothing published). v1.1 **UI** (R002) waits for the developer's approval in Figma. Report: `docs/Reports/2026-11-03 Overnight.md`.
 
 ## 🧱 Milestones
 
