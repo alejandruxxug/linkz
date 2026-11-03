@@ -1,0 +1,55 @@
+-~> Strings: every escape, unicode, and what survives a round trip.
+
+function show(text_in) {
+  let s = json.parse(text_in)
+  puts(len(s), json.stringify(s))
+}
+
+show("\"plain\"")
+show("\"a\\\"b\"")
+show("\"a\\\\b\"")
+show("\"a\\/b\"")
+show("\"line1\\nline2\"")
+show("\"tab\\there\"")
+show("\"cr\\rhere\"")
+show("\"\\b\\f\"")
+show("\"\\u0041\\u0042\"")
+show("\"\\u00e9\"")
+show("\"\\u00E9\"")
+show("\"caf" + text.char(233) + "\"")
+show("\"\\u20ac\"")
+show("\"\\u0000\"")
+show("\"\\u001f\"")
+
+-~> A surrogate pair is one character.
+let pair = json.parse("\"\\ud83d\\ude00\"")
+puts(len(pair), text.code(pair, 0))
+let pair2 = json.parse("\"x\\uD834\\uDD1Ey\"")
+puts(len(pair2), text.code(pair2, 1))
+-~> The same character written directly.
+puts(json.parse("\"" + text.char(128512) + "\"") === pair)
+
+-~> Escape letters that are the same as the characters.
+puts(json.parse("\"\\u0022\\u005c\"") === "\"\\")
+
+-~> Writing: the quote, backslash and control characters are escaped, the rest is not.
+puts(json.stringify("say \"hi\"\\"))
+puts(json.stringify("a\nb\tc"))
+puts(json.stringify(text.char(8) + text.char(12) + text.char(13)))
+puts(json.stringify(text.char(0) + text.char(1) + text.char(31) + text.char(127)) == "\"\\u0000\\u0001\\u001f" + text.char(127) + "\"")
+puts(json.stringify(text.char(233) + text.char(8364)))
+puts(json.stringify(text.char(128512)) == "\"" + text.char(128512) + "\"")
+puts(json.stringify(""))
+
+-~> Round trips of awkward strings.
+let tricky = ["", " ", "\"", "\\", "\\n", "\n", "a\"b\\c\nd\te", "\\u0041", text.char(0), text.char(31), text.char(128512), "caf" + text.char(233), "{\"nested\": \"json\"}"]
+for (let i = 0; i < len(tricky); i += 1) {
+  let back = json.parse(json.stringify(tricky[i]))
+  puts(i, back === tricky[i])
+}
+
+-~> A long string is fast to write (no step for each character).
+let big = "abc\n" * 50000
+let before = len(big)
+let there = json.parse(json.stringify(big))
+puts(before, len(there), there === big)

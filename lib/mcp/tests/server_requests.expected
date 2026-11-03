@@ -1,0 +1,47 @@
+{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-03-26","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"linkz","version":"0.1.0"},"instructions":"Linkz draws vector art written in lizard-script. Call docs first to learn the language and the drawing functions, write the code, check it with run, then look at it with render and improve it. Save finished work with save."}}
+2025-03-26 linkz false
+2024-11-05
+2025-06-18
+abc 2025-06-18
+2025-06-18 0.1.0
+notification notifications/initialized
+(no reply)
+notification notifications/cancelled
+(no reply)
+notification something/unknown
+(no reply)
+{"jsonrpc":"2.0","id":4,"result":{}}
+{"jsonrpc":"2.0","id":5,"result":{}}
+docs object [] ["name"] true
+run object ["code"] ["code"] true
+render object ["code"] ["code", "width", "height"] true
+svg object ["code"] ["code"] true
+save object ["path", "code"] ["path", "code", "overwrite"] true
+open object ["path"] ["path"] true
+{"jsonrpc":"2.0","id":7,"error":{"code":-32601,"message":"method not found: no/such/method"}}
+{"jsonrpc":"2.0","id":8,"error":{"code":-32602,"message":"tools/call needs params.name, the name of a tool"}}
+{"jsonrpc":"2.0","id":10,"error":{"code":-32602,"message":"unknown tool nope"}}
+{"jsonrpc":"2.0","id":11,"error":{"code":-32602,"message":"params.arguments must be an object"}}
+{"jsonrpc":"2.0","id":12,"error":{"code":-32602,"message":"params must be an object"}}
+{"jsonrpc":"2.0","id":null,"error":{"code":-32600,"message":"Invalid Request: id must be a string or a whole number"}}
+{"jsonrpc":"2.0","id":13,"error":{"code":-32600,"message":"Invalid Request: a message needs a method"}}
+{"jsonrpc":"2.0","id":14,"error":{"code":-32600,"message":"Invalid Request: a message needs a method"}}
+{"jsonrpc":"2.0","id":null,"error":{"code":-32700,"message":"Parse error: JSON error at line 1, column 1: expected the word null, found 'not ' (the only words are true, false and null)"}}
+{"jsonrpc":"2.0","id":null,"error":{"code":-32700,"message":"Parse error: JSON error at line 1, column 25: the object is never closed"}}
+{"jsonrpc":"2.0","id":null,"error":{"code":-32600,"message":"Invalid Request: a message is a JSON object"}}
+{"jsonrpc":"2.0","id":null,"error":{"code":-32600,"message":"Invalid Request: a message is a JSON object"}}
+{"jsonrpc":"2.0","id":null,"error":{"code":-32600,"message":"Invalid Request: a message is a JSON object"}}
+(no reply)
+{"jsonrpc":"2.0","id":null,"error":{"code":-32600,"message":"Invalid Request: an empty batch"}}
+notification notifications/initialized
+[{"jsonrpc":"2.0","id":1,"result":{}},{"jsonrpc":"2.0","id":2,"error":{"code":-32601,"message":"method not found: no/such"}}]
+notification notifications/initialized
+(no reply)
+[{"jsonrpc":"2.0","id":null,"error":{"code":-32600,"message":"Invalid Request: a message is a JSON object"}}]
+99 {}
+{"jsonrpc":"2.0","id":1,"result":{}}
+
+{"jsonrpc":"2.0","id":null,"error":{"code":-32700,"message":"Parse error: JSON error at line 1, column 1: unexpected 'o', expected a value"}}
+
+{"jsonrpc":"2.0","id":2,"result":{}}
+

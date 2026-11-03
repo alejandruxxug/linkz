@@ -1,0 +1,90 @@
+false {"ok":true,"path":"$HOME/Documents/Linkz/sunset.lzdraw","bytes":93,"errors":[]}
+true
+-~> lzdraw 1
+canvas = {"size": (40, 30), "background": #ffffff}
+circle((20, 15), 8, #ff0000)
+
+true the file $HOME/Documents/Linkz/sunset.lzdraw exists already; save again with overwrite: true to replace it
+true
+true the file $HOME/Documents/Linkz/sunset.lzdraw exists already; save again with overwrite: true to replace it
+true the file $HOME/Documents/Linkz/sunset.lzdraw exists already; save again with overwrite: true to replace it
+false {"ok":true,"path":"$HOME/Documents/Linkz/sunset.lzdraw","bytes":30,"errors":[]}
+-~> lzdraw 1
+-~> mine
+puts(2)
+
+false -~> lzdraw 1
+-~> mine
+puts(2)
+
+false -~> lzdraw 1
+-~> mine
+puts(2)
+
+true there is no file $HOME/Documents/Linkz/nothing-here.lzdraw
+false {"ok":true,"path":"$HOME/Documents/Linkz/animals/cats/tom.lzdraw","bytes":93,"errors":[]}
+true
+false
+true 1 1
+false {"ok":true,"path":"$HOME/art/pieces/one.lzdraw","bytes":93,"errors":[]}
+true
+false {"ok":true,"path":"$HOME/art/two.lzdraw","bytes":93,"errors":[]}
+true
+false -~> lzdraw 1
+canvas = {"size": (40, 30), "background": #ffffff}
+circle((20, 15), 8, #ff0000)
+
+tool save failed: an absolute path must be inside your home folder ($HOME) or the drawings folder ($HOME/Documents/Linkz)
+true an absolute path must be inside your home folder ($HOME) or the drawings folder ($HOME/Documents/Linkz)
+tool save failed: an absolute path must be inside your home folder ($HOME) or the drawings folder ($HOME/Documents/Linkz)
+true an absolute path must be inside your home folder ($HOME) or the drawings folder ($HOME/Documents/Linkz)
+tool save failed: a relative path must stay inside the drawings folder $HOME/Documents/Linkz
+true a relative path must stay inside the drawings folder $HOME/Documents/Linkz
+tool save failed: a relative path must stay inside the drawings folder $HOME/Documents/Linkz
+true a relative path must stay inside the drawings folder $HOME/Documents/Linkz
+tool save failed: a relative path must stay inside the drawings folder $HOME/Documents/Linkz
+true a relative path must stay inside the drawings folder $HOME/Documents/Linkz
+tool save failed: an absolute path must be inside your home folder ($HOME) or the drawings folder ($HOME/Documents/Linkz)
+true an absolute path must be inside your home folder ($HOME) or the drawings folder ($HOME/Documents/Linkz)
+tool save failed: paths with hidden parts (.ssh) are not allowed
+true paths with hidden parts (.ssh) are not allowed
+tool save failed: paths with hidden parts (.linkz) are not allowed
+true paths with hidden parts (.linkz) are not allowed
+tool save failed: paths with hidden parts (.hidden) are not allowed
+true paths with hidden parts (.hidden) are not allowed
+tool save failed: paths with hidden parts (.hidden) are not allowed
+true paths with hidden parts (.hidden) are not allowed
+tool save failed: only .lzdraw files, not drawing.svg
+true only .lzdraw files, not drawing.svg
+tool save failed: only .lzdraw files, not drawing.liz
+true only .lzdraw files, not drawing.liz
+tool save failed: the path is a folder, give a file name ending in .lzdraw
+true the path is a folder, give a file name ending in .lzdraw
+tool save failed: the path is a folder, give a file name ending in .lzdraw
+true the path is a folder, give a file name ending in .lzdraw
+tool save failed: the argument path is required and must be a string
+true the argument path is required and must be a string
+tool save failed: the argument path is required and must be a string
+true the argument path is required and must be a string
+tool save failed: the argument code is required and must be a string
+true the argument code is required and must be a string
+tool open failed: an absolute path must be inside your home folder ($HOME) or the drawings folder ($HOME/Documents/Linkz)
+true an absolute path must be inside your home folder ($HOME) or the drawings folder ($HOME/Documents/Linkz)
+tool open failed: a relative path must stay inside the drawings folder $HOME/Documents/Linkz
+true a relative path must stay inside the drawings folder $HOME/Documents/Linkz
+tool open failed: only .lzdraw files, not notes.txt
+true only .lzdraw files, not notes.txt
+false false false
+false {"ok":true,"path":"$HOME/Documents/Linkz/win/style.lzdraw","bytes":93,"errors":[]}
+true
+false {"ok":true,"path":"$HOME/Pics/moved.lzdraw","bytes":93,"errors":[]}
+true
+tool save failed: a relative path must stay inside the drawings folder $HOME/Pics
+true a relative path must stay inside the drawings folder $HOME/Pics
+false {"ok":true,"path":"$HOME/inhome.lzdraw","bytes":93,"errors":[]}
+true
+tool save failed: a relative path must stay inside the drawings folder $HOME
+true a relative path must stay inside the drawings folder $HOME
+/var/linkz-elsewhere/ok.lzdraw
+/var/linkz-elsewhere/sub/ok.lzdraw
+an absolute path must be inside your home folder ($HOME) or the drawings folder (/var/linkz-elsewhere)

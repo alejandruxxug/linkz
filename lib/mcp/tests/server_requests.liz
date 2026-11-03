@@ -1,0 +1,96 @@
+-~> The JSON-RPC layer: initialize, ping, tools/list, errors, notifications.
+
+-~> One request line in, the reply text out (null when there is none).
+function send(line) {
+  let out = mcp_handle_line(line)
+  if (out === null) {
+    puts("(no reply)")
+  } else {
+    puts(out)
+  }
+  out
+}
+
+function req(id, method, params) {
+  json.stringify({"jsonrpc": "2.0", "id": id, "method": method, "params": params})
+}
+
+-~> initialize: the client's version is echoed when we speak it.
+let r = json.parse(send(req(1, "initialize", {"protocolVersion": "2025-03-26", "capabilities": {}, "clientInfo": {"name": "test", "version": "1"}})))
+puts(r.result.protocolVersion, r.result.serverInfo.name, r.result.capabilities.tools.listChanged)
+r = json.parse(mcp_handle_line(req(2, "initialize", {"protocolVersion": "2024-11-05"})))
+puts(r.result.protocolVersion)
+r = json.parse(mcp_handle_line(req(3, "initialize", {"protocolVersion": "1999-01-01"})))
+puts(r.result.protocolVersion)
+r = json.parse(mcp_handle_line(req("abc", "initialize", {})))
+puts(r.id, r.result.protocolVersion)
+r = json.parse(mcp_handle_line("{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"initialize\"}"))
+puts(r.result.protocolVersion, r.result.serverInfo.version)
+
+-~> Notifications get no reply, whatever they are.
+send("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}")
+send("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/cancelled\",\"params\":{\"requestId\":1}}")
+send("{\"jsonrpc\":\"2.0\",\"method\":\"something/unknown\"}")
+
+send(req(4, "ping", {}))
+send("{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"ping\"}")
+
+-~> tools/list: the six tools, each with an object schema.
+r = json.parse(mcp_handle_line(req(6, "tools/list", {})))
+let tools = r.result.tools
+for (let i = 0; i < len(tools); i += 1) {
+  let t = tools[i]
+  puts(t.name, t.inputSchema.type, t.inputSchema.required, keys(t.inputSchema.properties), len(t.description) > 40)
+}
+
+-~> Errors.
+send(req(7, "no/such/method", {}))
+send(req(8, "tools/call", {}))
+send(req(10, "tools/call", {"name": "nope", "arguments": {}}))
+send(req(11, "tools/call", {"name": "run", "arguments": 5}))
+send("{\"jsonrpc\":\"2.0\",\"id\":12,\"method\":\"ping\",\"params\":[1]}")
+send("{\"jsonrpc\":\"2.0\",\"id\":[1],\"method\":\"ping\"}")
+send("{\"jsonrpc\":\"2.0\",\"id\":13}")
+send("{\"jsonrpc\":\"2.0\",\"id\":14,\"method\":5}")
+send("not json")
+send("{\"jsonrpc\":\"2.0\",\"id\":1,")
+send("5")
+send("\"text\"")
+send("null")
+
+-~> A response from the client is ignored.
+send("{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}")
+
+-~> Batches.
+send("[]")
+send("[" + req(1, "ping", {}) + "," + "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}" + "," + req(2, "no/such", {}) + "]")
+send("[{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}]")
+send("[1]")
+
+-~> The server goes on after every one of those.
+r = json.parse(mcp_handle_line(req(99, "ping", {})))
+puts(r.id, r.result)
+
+-~> The loop itself: lines in, lines out, until the input ends. (The host's
+-~> io is replaced here by a scripted one.)
+let script = [req(1, "ping", {}), "", "   ", "oops", req(2, "ping", {})]
+let sent = []
+let read_at = 0
+let real_io = io
+io = {
+  "read_line": function() {
+    if (read_at >= len(script)) {
+      return null
+    }
+    read_at += 1
+    script[read_at - 1]
+  },
+  "write": function(s) { push(sent, s) },
+  "log": function(s) { null },
+  "step_limit": function(n) { null }
+}
+mcp_serve()
+io = real_io
+for (let i = 0; i < len(sent); i += 1) {
+  puts(sent[i])
+}

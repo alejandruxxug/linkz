@@ -1,0 +1,127 @@
+-~> The tools: docs, run, render and svg, called through tools/call.
+
+-~> Calls a tool and returns the decoded result.
+let next_id = 0
+function call(name, args) {
+  next_id += 1
+  let line = json.stringify({"jsonrpc": "2.0", "id": next_id, "method": "tools/call", "params": {"name": name, "arguments": args}})
+  let r = json.parse(mcp_handle_line(line))
+  if (r.error !== null) {
+    puts("rpc error", r.error.code, r.error.message)
+    return null
+  }
+  r.result
+}
+
+function first_text(result) {
+  result.content[0].text
+}
+
+-~> ---- run ----
+let r = call("run", {"code": "canvas = {\"size\": (200, 100), \"background\": #ffffff}\ncircle((50, 50), 20, #ff0000)\nrect((0, 0), (10, 10), #00ff00)\nputs(\"hello\", 1 + 1)"})
+puts(r.isError, len(r.content), r.content[0].type)
+let report = json.parse(first_text(r))
+puts(report.ok, report.errors, report.printed, report.shapes, report.steps > 0, type(report.ms))
+
+r = call("run", {"code": "circle((1, 2), 3)"})
+report = json.parse(first_text(r))
+puts(r.isError, report.ok, len(report.errors), report.errors[0].line, report.errors[0].message)
+
+r = call("run", {"code": "let x = \nlet y"})
+report = json.parse(first_text(r))
+puts(report.ok, len(report.errors) > 0, report.errors[0].line, report.shapes)
+
+r = call("run", {"code": "circle((5, 5), 3, #fff)\n\nnope(1)"})
+report = json.parse(first_text(r))
+puts(report.ok, report.errors[0].line, report.errors[0].message, report.shapes)
+
+-~> The sandbox: a drawing that never ends is stopped by the drawing step limit,
+-~> and the server answers the next request.
+r = call("run", {"code": "while (true) { let x = 1 }"})
+report = json.parse(first_text(r))
+puts(report.ok, report.errors[0].message, report.steps > 1000000)
+r = call("run", {"code": "puts(\"after\")"})
+puts(json.parse(first_text(r)).printed)
+
+-~> A lot of printing is cut.
+r = call("run", {"code": "for (let i = 0; i < 4000; i += 1) { puts(\"line number\", i) }"})
+report = json.parse(first_text(r))
+puts(len(report.printed) < 20100, text.find(report.printed, "(cut") > 0)
+
+-~> Missing and wrong arguments are tool errors, not crashes.
+r = call("run", {})
+puts(r.isError, first_text(r))
+r = call("run", {"code": 5})
+puts(r.isError, first_text(r))
+
+-~> ---- svg ----
+r = call("svg", {"code": "canvas = {\"size\": (100, 60), \"background\": #f4f1e8}\nrect((0, 0), (50, 50), #ff0000)\ncircle((50, 30), 10, #0000ff)"})
+puts(r.isError)
+puts(first_text(r))
+r = call("svg", {"code": "circle(1)"})
+puts(r.isError, json.parse(first_text(r)).ok, json.parse(first_text(r)).errors[0].message)
+
+-~> ---- docs ----
+r = call("docs", {})
+let all = first_text(r)
+puts(r.isError, text.starts(all, "# Drawing in Linkz"), text.find(all, "circle(center, r, fill)") > 0, text.find(all, "example: circle((256, 256), 40, #3fa34d)") > 0)
+puts(text.find(all, "Layers higher in the file are IN FRONT") > 0, text.find(all, "blend(") > 0, text.find(all, "pens.calligraphy") > 0, text.find(all, "linear(from, to, stops, steps)") > 0)
+r = call("docs", {"name": "rect"})
+puts(first_text(r))
+r = call("docs", {"name": "  circle "})
+puts(text.starts(first_text(r), "circle(center, r, fill)"))
+r = call("docs", {"name": "nosuchthing"})
+puts(r.isError, text.starts(first_text(r), "no drawing function is called nosuchthing"))
+r = call("docs", {"name": "ellip"})
+puts(r.isError, first_text(r))
+r = call("docs", {"name": 5})
+puts(r.isError, first_text(r))
+
+-~> ---- render ----
+
+-~> The PNG bytes decode from base64? Here only the start is checked: every PNG
+-~> in base64 starts with iVBORw0KGgo.
+function image_report(r) {
+  let item = r.content[0]
+  puts(item.type, item.mimeType, text.starts(item.data, "iVBORw0KGgo"), len(item.data) > 100, len(r.content))
+}
+
+r = call("render", {"code": "canvas = {\"size\": (64, 48), \"background\": #336699}\ncircle((32, 24), 10, #ff0000)"})
+puts(r.isError)
+image_report(r)
+
+r = call("render", {"code": "canvas = {\"size\": (64, 48), \"background\": #336699}\ncircle((32, 24), 10, #ff0000)\nnope(1)"})
+puts(r.isError)
+image_report(r)
+puts(len(r.content), r.content[1].type, json.parse(r.content[1].text).ok, json.parse(r.content[1].text).errors[0].message)
+
+-~> A canvas that is too big, or a bad size, is an error.
+r = call("render", {"code": "canvas = {\"size\": (9000, 10), \"background\": #ffffff}"})
+puts(r.isError, first_text(r))
+r = call("render", {"code": "circle((1, 1), 1, #fff)", "width": 0})
+puts(r.isError, first_text(r))
+r = call("render", {"code": "circle((1, 1), 1, #fff)", "width": "wide"})
+puts(r.isError, first_text(r))
+r = call("render", {"code": "canvas = {\"size\": (0, 10), \"background\": #ffffff}"})
+puts(r.isError, first_text(r))
+
+-~> Scaling: the helper that fits the canvas to width and height.
+puts(mcp_fit(100, 50, null, null))
+puts(mcp_fit(100, 50, 200, null))
+puts(mcp_fit(100, 50, null, 25))
+puts(mcp_fit(100, 50, 200, 200))
+puts(mcp_fit(100, 50, 50, 200))
+puts(mcp_fit(100, 50, 10000, null))
+puts(mcp_fit(100, 4000, null, 4096))
+
+-~> A scaled shape: path, width and a pinned gradient grow, a color stays.
+let g = linear((0, 0), (100, 0), [#ffffff, #000000])
+let s = line((10, 20), (30, 40), g, 2)
+let big = mcp_scale_shape(s, 2)
+puts(big.path, big.width, big.stroke.from, big.stroke.to, big.stroke.origin, big.stroke.axis, s.path, s.width)
+let rg = radial((10, 10), 5, [#ffffff, #000000])
+let c = circle((10, 10), 5, rg)
+let cb = mcp_scale_shape(c, 3)
+puts(cb.fill.center, cb.fill.r, cb.fill.origin, cb.fill.scale, rg.scale)
+let rel = gradient([#ffffff, #000000])
+puts(mcp_scale_paint(rel, 4) === rel, mcp_scale_paint(#ff0000, 4))

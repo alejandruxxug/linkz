@@ -1,0 +1,49 @@
+-~> json.parse: every kind of value, whitespace, and the types it gives.
+
+function show(text_in) {
+  let v = json.parse(text_in)
+  puts(type(v), json.stringify(v))
+}
+
+show("null")
+show("true")
+show("false")
+show("0")
+show("-0")
+show("42")
+show("-17")
+show("3.5")
+show("-0.25")
+show("1e3")
+show("1E3")
+show("2.5e-3")
+show("1e+2")
+show("9223372036854775807")
+show("12345678901234567890")
+show("\"\"")
+show("\"hello\"")
+show("[]")
+show("{}")
+show("[1, 2, 3]")
+show("[[1, [2]], [], {}]")
+show("{\"a\": 1, \"b\": [true, null], \"c\": {\"d\": \"e\"}}")
+show("  \t\n" + text.char(13) + " [ 1 ,\n 2 ]  \n")
+show("{ \"a\" : 1 , \"a\" : 2 }")
+
+-~> Objects are hashes with their keys in order, arrays are arrays.
+let v = json.parse("{\"z\": 1, \"a\": [10, 20], \"m\": {\"k\": \"v\"}}")
+puts(keys(v))
+puts(v.a[1], v.m.k, v.z + 1)
+puts(type(v), type(v.a), type(v.m))
+
+-~> null stays null, and an integer stays an integer.
+let n = json.parse("{\"x\": null, \"i\": 7, \"f\": 7.0}")
+puts(n.x === null, type(n.i), type(n.f), n.i === 7, n.f === 7.0)
+
+-~> A key may be empty or look like a number.
+let odd = json.parse("{\"\": 1, \"1\": 2}")
+puts(odd[""], odd["1"])
+
+-~> Deep but allowed.
+let deep = json.parse(text.join(list.slice(["[", "[", "[", "[", "[", "1", "]", "]", "]", "]", "]"], 0, 11), ""))
+puts(deep[0][0][0][0][0])

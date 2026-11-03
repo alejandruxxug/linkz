@@ -1,0 +1,46 @@
+JSON error at line 1, column 1: the text ends where a value should be
+JSON error at line 1, column 4: the text ends where a value should be
+JSON error at line 1, column 1: expected the word null, found 'nul' (the only words are true, false and null)
+JSON error at line 1, column 1: expected the word null, found 'nulL' (the only words are true, false and null)
+JSON error at line 1, column 1: expected the word true, found 'tru' (the only words are true, false and null)
+JSON error at line 1, column 1: unexpected 'T', expected a value
+JSON error at line 1, column 1: unexpected 'g', expected a value
+JSON error at line 1, column 6: the array is never closed, expected , or ]
+JSON error at line 1, column 4: expected , or ] in an array, got '2'
+JSON error at line 1, column 4: unexpected ']', expected a value
+JSON error at line 1, column 2: unexpected ',', expected a value
+JSON error at line 1, column 8: the object is never closed, expected , or }
+JSON error at line 1, column 6: expected : after the key "a"
+JSON error at line 1, column 7: unexpected '}', expected a value
+JSON error at line 1, column 2: expected a string key in an object, got 'a'
+JSON error at line 1, column 9: expected a string key in an object, got '}'
+JSON error at line 1, column 2: expected a string key in an object, got '''
+JSON error at line 1, column 10: unexpected 'x' after the end of the value
+JSON error at line 1, column 3: unexpected '2' after the end of the value
+JSON error at line 1, column 1: this string is never closed
+JSON error at line 1, column 7: bad escape \q
+JSON error at line 1, column 17: the text ends inside an escape
+JSON error at line 1, column 4: a \u escape needs 4 hex digits
+JSON error at line 1, column 6: a \u escape needs 4 hex digits, got 'G'
+JSON error at line 1, column 8: a high surrogate must be followed by a low one (\udc00 to \udfff)
+JSON error at line 1, column 8: a high surrogate must be followed by a low one (\udc00 to \udfff)
+JSON error at line 1, column 14: a high surrogate must be followed by a low one (\udc00 to \udfff)
+JSON error at line 1, column 8: a low surrogate (\udc00 to \udfff) must come right after a high one (\ud800 to \udbff)
+JSON error at line 1, column 5: a string can not hold the character code 9 as it is, write it as an escape
+JSON error at line 1, column 5: a string can not hold the character code 10 as it is, write it as an escape
+JSON error at line 1, column 2: a number can not start with extra zeros
+JSON error at line 1, column 2: a number needs a digit here
+JSON error at line 1, column 2: a number needs a digit here
+JSON error at line 1, column 3: a number needs a digit after the point
+JSON error at line 1, column 1: unexpected '.', expected a value
+JSON error at line 1, column 3: a number needs a digit in its exponent
+JSON error at line 1, column 4: a number needs a digit in its exponent
+JSON error at line 1, column 1: unexpected '+', expected a value
+JSON error at line 1, column 2: unexpected 'x' after the end of the value
+JSON error at line 1, column 1: this number is too big
+JSON error at line 3, column 2: unexpected 'o', expected a value
+JSON error at line 3, column 8: unexpected '?', expected a value
+JSON error at line 1, column 102: nested more than 100 levels deep
+180
+json.parse needs a STRING, got INTEGER
+json.parse needs a STRING, got NULL

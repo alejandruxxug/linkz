@@ -1,0 +1,40 @@
+5 "plain"
+3 "a\"b"
+3 "a\\b"
+3 "a/b"
+11 "line1\nline2"
+8 "tab\there"
+7 "cr\rhere"
+2 "\b\f"
+2 "AB"
+1 "é"
+1 "é"
+4 "café"
+1 "€"
+1 "\u0000"
+1 "\u001f"
+1 128512
+3 119070
+true
+true
+"say \"hi\"\\"
+"a\nb\tc"
+"\b\f\r"
+true
+"é€"
+true
+""
+0 true
+1 true
+2 true
+3 true
+4 true
+5 true
+6 true
+7 true
+8 true
+9 true
+10 true
+11 true
+12 true
+200000 200000 true

@@ -1,0 +1,71 @@
+-~> json.parse errors: the message says what is wrong and where.
+
+function bad(text_in) {
+  try {
+    let v = json.parse(text_in)
+    puts("no error:", json.stringify(v))
+  } catch (e) {
+    puts(e.message)
+  }
+}
+
+bad("")
+bad("   ")
+bad("nul")
+bad("nulL")
+bad("tru")
+bad("True")
+bad("garbage")
+bad("[1, 2")
+bad("[1 2]")
+bad("[1,]")
+bad("[,1]")
+bad("{\"a\": 1")
+bad("{\"a\" 1}")
+bad("{\"a\": }")
+bad("{a: 1}")
+bad("{\"a\": 1,}")
+bad("{'a': 1}")
+bad("{\"a\": 1} x")
+bad("1 2")
+bad("\"never closed")
+bad("\"bad \\q escape\"")
+bad("\"ends in escape\\")
+bad("\"\\u12\"")
+bad("\"\\u12G4\"")
+bad("\"\\ud83d\"")
+bad("\"\\ud83dx\"")
+bad("\"\\ud83d\\u0041\"")
+bad("\"\\ude00\"")
+bad("\"raw\ttab\"")
+bad("\"raw\nnewline\"")
+bad("01")
+bad("-")
+bad("-x")
+bad("1.")
+bad(".5")
+bad("1e")
+bad("1e+")
+bad("+1")
+bad("0x10")
+bad("1e999")
+bad("[1,\n 2,\n oops]")
+bad("{\n  \"a\": 1,\n  \"b\": ?\n}")
+
+-~> Too deep.
+let deep = "[" * 150 + "]" * 150
+bad(deep)
+let ok_deep = "[" * 90 + "]" * 90
+puts(len(json.stringify(json.parse(ok_deep))))
+
+-~> Not a string at all.
+try {
+  json.parse(5)
+} catch (e) {
+  puts(e.message)
+}
+try {
+  json.parse(null)
+} catch (e) {
+  puts(e.message)
+}

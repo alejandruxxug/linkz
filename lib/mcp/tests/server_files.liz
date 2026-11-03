@@ -1,0 +1,100 @@
+-~> save and open: where files may go, and that nothing is replaced by accident.
+-~> The test runs with HOME in a temporary folder, shown here as $HOME.
+
+let next_id = 0
+function call(name, args) {
+  next_id += 1
+  let line = json.stringify({"jsonrpc": "2.0", "id": next_id, "method": "tools/call", "params": {"name": name, "arguments": args}})
+  json.parse(mcp_handle_line(line)).result
+}
+
+function say(r) {
+  let t = r.content[0].text
+  let home = os.home()
+  t = text.replace(t, home, "$HOME")
+  puts(r.isError, t)
+}
+
+let code = "canvas = {\"size\": (40, 30), \"background\": #ffffff}\ncircle((20, 15), 8, #ff0000)"
+
+-~> The default folder is ~/Documents/Linkz, made when it is not there.
+say(call("save", {"path": "sunset", "code": code}))
+puts(fs.exists(os.home() + "/Documents/Linkz/sunset.lzdraw"))
+puts(fs.read(os.home() + "/Documents/Linkz/sunset.lzdraw"))
+
+-~> Saving again needs overwrite: true.
+say(call("save", {"path": "sunset.lzdraw", "code": "puts(1)"}))
+puts(fs.read(os.home() + "/Documents/Linkz/sunset.lzdraw") == "-~> lzdraw 1\n" + code + "\n")
+say(call("save", {"path": "sunset.lzdraw", "code": "puts(1)", "overwrite": false}))
+say(call("save", {"path": "sunset.lzdraw", "code": "puts(1)", "overwrite": "yes"}))
+say(call("save", {"path": "sunset.lzdraw", "code": "-~> lzdraw 1\n-~> mine\nputs(2)\n", "overwrite": true}))
+puts(fs.read(os.home() + "/Documents/Linkz/sunset.lzdraw"))
+
+-~> open reads it back, by the same name or by the full path.
+say(call("open", {"path": "sunset"}))
+say(call("open", {"path": os.home() + "/Documents/Linkz/sunset.lzdraw"}))
+say(call("open", {"path": "nothing-here"}))
+
+-~> Folders inside the drawings folder are made.
+say(call("save", {"path": "animals/cats/tom.lzdraw", "code": code}))
+puts(fs.exists(os.home() + "/Documents/Linkz/animals/cats/tom.lzdraw"))
+
+-~> A drawing with a syntax error is saved, and the errors are reported.
+let r = call("save", {"path": "broken", "code": "let = 5"})
+puts(r.isError)
+let info = json.parse(r.content[0].text)
+puts(info.ok, len(info.errors), info.errors[0].line)
+
+-~> An absolute path inside the home folder works.
+say(call("save", {"path": os.home() + "/art/pieces/one.lzdraw", "code": code}))
+puts(fs.exists(os.home() + "/art/pieces/one.lzdraw"))
+say(call("save", {"path": "~/art/two.lzdraw", "code": code}))
+puts(fs.exists(os.home() + "/art/two.lzdraw"))
+say(call("open", {"path": "~/art/two"}))
+
+-~> Everything else is refused.
+say(call("save", {"path": "/etc/linkz-test.lzdraw", "code": code}))
+say(call("save", {"path": "/tmp/linkz-test.lzdraw", "code": code}))
+say(call("save", {"path": "../escape.lzdraw", "code": code}))
+say(call("save", {"path": "../../../escape.lzdraw", "code": code}))
+say(call("save", {"path": "a/../../escape.lzdraw", "code": code}))
+say(call("save", {"path": os.home() + "/Documents/Linkz/../../../escape.lzdraw", "code": code}))
+say(call("save", {"path": "~/.ssh/key.lzdraw", "code": code}))
+say(call("save", {"path": "~/.linkz/settings.lzdraw", "code": code}))
+say(call("save", {"path": ".hidden", "code": code}))
+say(call("save", {"path": "x/.hidden/y.lzdraw", "code": code}))
+say(call("save", {"path": "drawing.svg", "code": code}))
+say(call("save", {"path": "drawing.liz", "code": code}))
+say(call("save", {"path": "~", "code": code}))
+say(call("save", {"path": os.home() + "/Documents/Linkz", "code": code}))
+say(call("save", {"path": "   ", "code": code}))
+say(call("save", {"code": code}))
+say(call("save", {"path": "x"}))
+say(call("open", {"path": "/etc/passwd"}))
+say(call("open", {"path": "../../.bashrc"}))
+say(call("open", {"path": "notes.txt"}))
+puts(fs.exists(os.home() + "/escape.lzdraw"), fs.exists("/etc/linkz-test.lzdraw"), fs.exists(os.home() + "/.ssh"))
+
+-~> Windows style separators are the same as slashes.
+say(call("save", {"path": "win\\style.lzdraw", "code": code}))
+puts(fs.exists(os.home() + "/Documents/Linkz/win/style.lzdraw"))
+
+-~> settings.drawings_dir moves the default folder.
+settings.drawings_dir = "~/Pics"
+say(call("save", {"path": "moved", "code": code}))
+puts(fs.exists(os.home() + "/Pics/moved.lzdraw"))
+say(call("save", {"path": "../Documents/Linkz/out.lzdraw", "code": code}))
+settings.drawings_dir = "~"
+say(call("save", {"path": "inhome", "code": code}))
+puts(fs.exists(os.home() + "/inhome.lzdraw"))
+say(call("save", {"path": "../up.lzdraw", "code": code}))
+-~> A drawings folder outside home is allowed for its own files only (checked
+-~> without writing anything).
+settings.drawings_dir = "/var/linkz-elsewhere"
+puts(mcp_resolve_path("/var/linkz-elsewhere/ok.lzdraw"))
+puts(mcp_resolve_path("sub/ok"))
+try {
+  mcp_resolve_path("/var/other/ok.lzdraw")
+} catch (e) {
+  puts(e.message)
+}

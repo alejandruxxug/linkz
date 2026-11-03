@@ -1,0 +1,27 @@
+null
+true
+false
+0
+-12
+2.5
+1.0
+0.1
+1e+21
+1e-07
+[]
+{}
+[1,"two",[3],{"four":4},null,true]
+{"b":1,"a":2,"c":{"d":[]}}
+"#3fa34d"
+"#3fa34d80"
+[1,2]
+[0.5,2,3]
+{"size":[480,320],"background":"#f4f1e8"}
+{"1":"one","true":"yes"}
+FLOAT
+json.stringify can not write a FUNCTION
+json.stringify can not write a BUILTIN
+json.stringify: the value is nested more than 100 levels deep (does it contain itself?)
+{"jsonrpc":"2.0","id":7,"result":{"items":[{"t":"x\ny"},{"n":15000000000.0}],"ok":true,"none":null}}
+true
+true

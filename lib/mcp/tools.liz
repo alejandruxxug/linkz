@@ -1,0 +1,557 @@
+-~> tools: the tools the MCP server offers, so an AI agent can draw in Linkz by
+-~> writing lizard-script: docs, run, render, svg, save and open. Each tool is
+-~> a function mcp_tool_<name>(args) that returns an MCP tool result:
+-~>   {"content": [items], "isError": false}
+-~> A tool that stops with an error() is turned into an isError result by the
+-~> server, so a tool can use error() for a bad argument.
+-~> Needs json.liz, the drawing libraries and gfx/raster.liz, and the host's
+-~> src, fb, fs and os.
+
+-~> ---- results ----
+
+function mcp_text(s) {
+  {"type": "text", "text": s}
+}
+
+function mcp_result(items) {
+  {"content": items, "isError": false}
+}
+
+function mcp_tool_error(message) {
+  {"content": [mcp_text(message)], "isError": true}
+}
+
+-~> A text result holding the JSON of v.
+function mcp_json_result(v) {
+  mcp_result([mcp_text(json.stringify(v))])
+}
+
+-~> ---- arguments ----
+
+function mcp_need_string(args, name) {
+  let v = args[name]
+  if (type(v) != "STRING") {
+    error("the argument " + name + " is required and must be a string")
+  }
+  v
+}
+
+-~> An optional whole number between lo and hi, or null.
+function mcp_opt_int(args, name, lo, hi) {
+  let v = args[name]
+  if (v === null) {
+    return null
+  }
+  if (type(v) == "FLOAT" && v == math.floor(v)) {
+    v = int(v)
+  }
+  if (type(v) != "INTEGER" || v < lo || v > hi) {
+    error("the argument " + name + " must be a whole number from " + str(lo) + " to " + str(hi))
+  }
+  v
+}
+
+function mcp_schema(properties, required) {
+  {"type": "object", "properties": properties, "required": required, "additionalProperties": false}
+}
+
+-~> ---- the primer for docs ----
+
+-~> How to write a .lzdraw, in lines.
+function mcp_primer_lines() {
+  [
+    "# Drawing in Linkz",
+    "",
+    "A Linkz drawing is a lizard-script program (a .lzdraw file). Never write SVG: write code that calls the drawing functions below, then use the render tool to look at the result and fix what is wrong.",
+    "",
+    "## The basics",
+    "- A line starting with -~> is a comment. Saved files start with the line `-~> lzdraw 1`.",
+    "- Set the canvas first: `canvas = {\"size\": (480, 320), \"background\": #f6d9a8}`. The default is 512 by 512 and white.",
+    "- Points are `(x, y)`: x grows to the right, y grows DOWN, (0, 0) is the top-left corner. Points add and scale: `p + (10, 5)`, `p * 2`, and `p.x`, `p.y` read a coordinate.",
+    "- Colors: `#3fa34d`, `#rgb`, `#rrggbbaa` (the last two digits are the alpha), `rgb(r, g, b)`, `rgba(r, g, b, a)`, `hsl(h, s, l)` (degrees, percent, percent).",
+    "- Every shape call draws and also returns the shape, so `let c = circle((100, 100), 30, #3fa34d)` lets you change it later with `c.fill = #e0a526`.",
+    "- Shapes: circle, ellipse, rect, line, polygon, stroke (a smooth curve through points), brush (a pressure-sensitive stroke). See the function list for their parameters.",
+    "- Units: `45deg`, `0.25turn`, `10px`. `math.sin`, `math.cos`, `math.pi`, `math.random()` (the same numbers on every run) are there, like the `text` and `list` helpers.",
+    "- The language: `let x = 1`, `x = x + 1`, `x += 1`; `if (c) { } elif (d) { } else { }`; `for (let i = 0; i < 6; i = i + 1) { }`; `while (c) { }`; `function f(a, b = 2) { a + b }`; lists `[1, 2]` and hashes `{\"k\": v}`; `try { } catch (e) { puts(e.message) }`; `puts(...)` prints (you get it back in `printed`).",
+    "",
+    "## Layers",
+    "A layer is the word `layer`, a name, and an indented body (indent the body deeper than the word `layer`, with 2 spaces):",
+    "",
+    "    layer sun",
+    "      circle((360, 90), 34, #fff3c4)",
+    "    layer sky",
+    "      rect((0, 0), (480, 320), #f2a65a)",
+    "",
+    "Layers higher in the file are IN FRONT of the ones below, and inside a layer the objects higher up are in front too. So write the foreground first and the background last (the opposite of most drawing programs). Layers nest. Inside a layer, `blend(\"multiply\")` mixes it with what is behind (normal, multiply, screen, overlay, darken, lighten, add) and `opacity(0.6)` makes the whole layer see-through.",
+    "",
+    "## Gradients",
+    "Anywhere a fill or stroke color goes you can give a gradient: `rect((0, 0), (480, 200), linear((0, 0), (0, 200), [#f4d35e, #3d1c4f]))` or `circle(c, 80, radial(c, 80, [#fff3c4, #e0607a]))`. Stops are colors, `[t, color]` pairs (t from 0 to 1) or `hard(color)` for a sharp edge; a last argument of 2 to 64 makes flat bands. `gradient(stops, angle)` and `radial_gradient(stops)` fit each shape's own box instead of canvas positions, so one value can be reused on many shapes.",
+    "",
+    "## Pens",
+    "`brush(points, pressures, color, pen)` draws a stroke whose width follows the pressure (one number 0 to 1 for each point). The pens are `pens.ink`, `pens.pencil`, `pens.marker`, `pens.brush` and `pens.calligraphy` (all in `pens.list`). A pen is a hash, so you can make your own: `{\"name\": \"mine\", \"min\": 1, \"max\": 8, \"taper\": 0.3, \"opacity\": [1, 1], \"nib\": null, \"grain\": 0}`.",
+    "",
+    "## Working with the tools",
+    "1. `run` checks the code fast (errors with line and column, what it printed, how many shapes).",
+    "2. `render` gives you the picture, so you can see what you drew. Judge it and improve it.",
+    "3. `save` writes the .lzdraw into the user's drawings folder (the Linkz editor opens it), `open` reads one back, `svg` gives the SVG text.",
+    "4. A drawing may take 2 million steps at most (loops and calls); keep loops small."
+  ]
+}
+
+-~> ---- docs ----
+
+-~> One function's documentation as text lines.
+function mcp_function_doc(name, f) {
+  let lines = [name + "(" + text.join(f.params, ", ") + ")"]
+  if (f.doc.summary != "") {
+    push(lines, "  " + f.doc.summary)
+  }
+  for (let i = 0; i < len(f.params); i += 1) {
+    let d = f.doc.params[f.params[i]]
+    if (d !== null) {
+      push(lines, "  " + f.params[i] + ": " + d)
+    }
+  }
+  if (f.doc.example !== null) {
+    push(lines, "  example: " + f.doc.example)
+  }
+  text.join(lines, "\n")
+}
+
+function mcp_tool_docs(args) {
+  let all = src.library_docs()
+  let name = args.name
+  if (name !== null) {
+    if (type(name) != "STRING") {
+      error("the argument name must be a string")
+    }
+    name = text.trim(name)
+    let f = all[name]
+    if (f === null) {
+      let close = []
+      let names = list.sort(keys(all))
+      for (let i = 0; i < len(names); i += 1) {
+        if (text.find(names[i], text.lower(name)) >= 0) {
+          push(close, names[i])
+        }
+      }
+      let hint = "all the names: " + text.join(names, ", ")
+      if (len(close) > 0) {
+        hint = "did you mean: " + text.join(close, ", ")
+      }
+      return mcp_tool_error("no drawing function is called " + name + " (" + hint + ")")
+    }
+    return mcp_result([mcp_text(mcp_function_doc(name, f))])
+  }
+  let lines = mcp_primer_lines()
+  push(lines, "")
+  push(lines, "## The drawing functions")
+  push(lines, "(Optional parameters, like steps in linear, may be left out. Call docs with a name for one function. Variables you can use: canvas, drawing (the list of shapes), pens, math, text, list.)")
+  push(lines, "")
+  let names = list.sort(keys(all))
+  let helpers = []
+  for (let i = 0; i < len(names); i += 1) {
+    if (all[names[i]].doc.example !== null) {
+      push(lines, mcp_function_doc(names[i], all[names[i]]))
+      push(lines, "")
+    } else {
+      push(helpers, names[i])
+    }
+  }
+  push(lines, "## Helper functions (call docs with the name for details)")
+  push(lines, text.join(helpers, ", "))
+  mcp_result([mcp_text(text.join(lines, "\n"))])
+}
+
+-~> ---- run ----
+
+let mcp_printed_max = 20000
+
+function mcp_run_report(r) {
+  let printed = r.printed
+  if (len(printed) > mcp_printed_max) {
+    printed = text.slice(printed, 0, mcp_printed_max) + "\n... (cut, " + str(len(r.printed)) + " characters in all)"
+  }
+  let count = 0
+  if (type(r.shapes) == "ARRAY") {
+    count = len(r.shapes)
+  }
+  {"ok": len(r.errors) == 0, "errors": r.errors, "printed": printed, "shapes": count,
+   "steps": r.steps, "ms": math.round(r.ms * 100) / 100.0}
+}
+
+function mcp_tool_run(args) {
+  let code = mcp_need_string(args, "code")
+  mcp_json_result(mcp_run_report(src.run(code)))
+}
+
+-~> ---- render ----
+
+let mcp_max_side = 4096
+
+-~> The size of the canvas of a run in whole pixels, as [w, h].
+function mcp_canvas_size(canvas) {
+  let w = 512
+  let h = 512
+  if (type(canvas) == "HASH" && type(canvas.size) == "POINT") {
+    w = int(math.round(canvas.size.x))
+    h = int(math.round(canvas.size.y))
+  }
+  if (w < 1 || h < 1) {
+    error("the canvas is " + str(w) + " by " + str(h) + ", it needs at least 1 by 1")
+  }
+  if (w > mcp_max_side || h > mcp_max_side) {
+    error("the canvas is " + str(w) + " by " + str(h) + ", too big to render (the most is " + str(mcp_max_side) + " by " + str(mcp_max_side) + ")")
+  }
+  [w, h]
+}
+
+-~> A pinned gradient with its positions multiplied by k. A color, and a
+-~> gradient that fits each shape's box, are returned as they are (the
+-~> rasterizer works the second out from the scaled path).
+function mcp_scale_paint(p, k) {
+  if (type(p) != "HASH" || is_relative_gradient(p)) {
+    return p
+  }
+  let out = {}
+  let ks = keys(p)
+  for (let i = 0; i < len(ks); i += 1) {
+    out[ks[i]] = p[ks[i]]
+  }
+  if (p.kind == "linear") {
+    out.from = p.from * k
+    out.to = p.to * k
+    out.origin = p.origin * k
+    out.axis = p.axis / k
+  } else {
+    out.center = p.center * k
+    out.r = p.r * k
+    out.origin = p.origin * k
+    out.scale = p.scale / k
+  }
+  out
+}
+
+-~> A shape with its path, widths and gradients multiplied by k.
+function mcp_scale_shape(s, k) {
+  let out = {}
+  let ks = keys(s)
+  for (let i = 0; i < len(ks); i += 1) {
+    out[ks[i]] = s[ks[i]]
+  }
+  let path = []
+  for (let i = 0; i < len(s.path); i += 1) {
+    let c = s.path[i]
+    if (c[0] == "C") {
+      push(path, ["C", c[1] * k, c[2] * k, c[3] * k])
+    } elif (c[0] == "Z") {
+      push(path, ["Z"])
+    } else {
+      push(path, [c[0], c[1] * k])
+    }
+  }
+  out.path = path
+  if (type(s.width) == "INTEGER" || type(s.width) == "FLOAT") {
+    out.width = s.width * k
+  }
+  if (type(s.widths) == "ARRAY") {
+    let ws = []
+    for (let i = 0; i < len(s.widths); i += 1) {
+      push(ws, s.widths[i] * k)
+    }
+    out.widths = ws
+  }
+  out.fill = mcp_scale_paint(s.fill, k)
+  out.stroke = mcp_scale_paint(s.stroke, k)
+  out
+}
+
+function mcp_scale_shapes(shapes, k) {
+  if (k == 1) {
+    return shapes
+  }
+  let out = []
+  for (let i = 0; i < len(shapes); i += 1) {
+    push(out, mcp_scale_shape(shapes[i], k))
+  }
+  out
+}
+
+-~> How much to scale a w by h canvas to fit the width and height asked for
+-~> (either may be null). With neither the picture keeps its size.
+function mcp_fit(w, h, want_w, want_h) {
+  let k = 1.0
+  if (want_w !== null && want_h !== null) {
+    k = math.min(want_w / float(w), want_h / float(h))
+  } elif (want_w !== null) {
+    k = want_w / float(w)
+  } elif (want_h !== null) {
+    k = want_h / float(h)
+  }
+  if (w * k > mcp_max_side) {
+    k = mcp_max_side / float(w)
+  }
+  if (h * k > mcp_max_side) {
+    k = mcp_max_side / float(h)
+  }
+  k
+}
+
+-~> Fills the whole w by h buffer with the canvas background: a color, or a
+-~> gradient (a relative one fits the canvas). k is how much the canvas was scaled.
+function mcp_fill_background(background, w, h, k) {
+  if (type(background) == "COLOR") {
+    fb.fill((0, 0), (w, h), background)
+  } elif (is_gradient(background)) {
+    let g = background
+    if (is_relative_gradient(g)) {
+      g = resolve_gradient(g, {"min": (0, 0), "max": (w, h)})
+    } else {
+      g = mcp_scale_paint(g, k)
+    }
+    let spans = []
+    for (let y = 0; y < h; y += 1) {
+      push(spans, [y, 0, w])
+    }
+    raster.draw(spans, (0, 0), g)
+  } else {
+    fb.fill((0, 0), (w, h), #ffffff)
+  }
+}
+
+-~> Paints shapes on a w by h transparent buffer over the background and
+-~> returns the PNG as base64 text.
+function mcp_paint_png(shapes, background, w, h, k) {
+  fb.offscreen((w, h))
+  let failure = null
+  try {
+    mcp_fill_background(background, w, h, k)
+    raster.paint(shapes, (0, 0))
+  } catch (e) {
+    failure = e.message
+  }
+  let data = fb.png_base64()
+  fb.screen()
+  if (failure !== null) {
+    error("painting failed: " + failure)
+  }
+  data
+}
+
+function mcp_tool_render(args) {
+  let code = mcp_need_string(args, "code")
+  let want_w = mcp_opt_int(args, "width", 1, mcp_max_side)
+  let want_h = mcp_opt_int(args, "height", 1, mcp_max_side)
+  let r = src.run(code)
+  let size = mcp_canvas_size(r.canvas)
+  let k = mcp_fit(size[0], size[1], want_w, want_h)
+  let w = math.max(1, int(math.round(size[0] * k)))
+  let h = math.max(1, int(math.round(size[1] * k)))
+  let shapes = []
+  if (type(r.shapes) == "ARRAY") {
+    shapes = mcp_scale_shapes(r.shapes, k)
+  }
+  let data = mcp_paint_png(shapes, r.canvas.background, w, h, k)
+  let items = [{"type": "image", "data": data, "mimeType": "image/png"}]
+  if (len(r.errors) > 0) {
+    push(items, mcp_text(json.stringify({"ok": false, "errors": r.errors, "printed": r.printed, "note": "the picture shows what was drawn before the first error"})))
+  }
+  mcp_result(items)
+}
+
+-~> ---- svg ----
+
+function mcp_tool_svg(args) {
+  let code = mcp_need_string(args, "code")
+  let r = src.run(code)
+  if (len(r.errors) > 0) {
+    return mcp_tool_error(json.stringify({"ok": false, "errors": r.errors, "printed": r.printed}))
+  }
+  mcp_result([mcp_text(svg_document(r.canvas, r.shapes))])
+}
+
+-~> ---- files: save and open ----
+
+-~> The folder of the user's drawings: settings.drawings_dir (a leading ~/ is
+-~> the home folder), else ~/Documents/Linkz. Same rule as the editor's.
+function mcp_drawings_dir() {
+  let home = text.replace(os.home(), "\\", "/")
+  let d = settings.drawings_dir
+  if (type(d) == "STRING" && text.trim(d) != "") {
+    d = text.replace(text.trim(d), "\\", "/")
+    if (d == "~") {
+      return home
+    }
+    if (text.starts(d, "~/")) {
+      return home + text.slice(d, 1, len(d))
+    }
+    return d
+  }
+  home + "/Documents/Linkz"
+}
+
+-~> The path with "." and ".." parts worked out and doubled slashes removed.
+function mcp_clean_path(p) {
+  let root = ""
+  if (text.starts(p, "/")) {
+    root = "/"
+  } elif (len(p) >= 2 && p[1] == ":") {
+    root = text.slice(p, 0, 2) + "/"
+    p = text.slice(p, 2, len(p))
+  }
+  let out = []
+  let parts = text.split(p, "/")
+  for (let i = 0; i < len(parts); i += 1) {
+    if (parts[i] == ".." ) {
+      if (len(out) > 0) {
+        pop(out)
+      }
+    } elif (parts[i] != "" && parts[i] != ".") {
+      push(out, parts[i])
+    }
+  }
+  root + text.join(out, "/")
+}
+
+function mcp_inside(path, base) {
+  path == base || text.starts(path, base + "/")
+}
+
+-~> The full path a tool may use for what the agent wrote, or an error that
+-~> says why not. A relative path is inside the drawings folder; an absolute
+-~> one must be inside the home folder (or the drawings folder). Nothing
+-~> hidden (a part starting with a dot) and only .lzdraw files.
+function mcp_resolve_path(raw) {
+  if (type(raw) != "STRING" || text.trim(raw) == "") {
+    error("the argument path is required and must be a string")
+  }
+  let home = mcp_clean_path(text.replace(os.home(), "\\", "/"))
+  let dir = mcp_clean_path(mcp_drawings_dir())
+  let p = text.replace(text.trim(raw), "\\", "/")
+  if (p == "~" || text.starts(p, "~/")) {
+    p = home + text.slice(p, 1, len(p))
+  }
+  let absolute = text.starts(p, "/") || (len(p) >= 3 && p[1] == ":" && p[2] == "/")
+  if (!absolute) {
+    p = dir + "/" + p
+  }
+  p = mcp_clean_path(p)
+  let base = dir
+  if (!absolute) {
+    if (!mcp_inside(p, dir)) {
+      error("a relative path must stay inside the drawings folder " + dir)
+    }
+  } elif (mcp_inside(p, dir)) {
+    base = dir
+  } elif (mcp_inside(p, home)) {
+    base = home
+  } else {
+    error("an absolute path must be inside your home folder (" + home + ") or the drawings folder (" + dir + ")")
+  }
+  if (p == base) {
+    error("the path is a folder, give a file name ending in .lzdraw")
+  }
+  let parts = text.split(text.slice(p, len(base) + 1, len(p)), "/")
+  for (let i = 0; i < len(parts); i += 1) {
+    if (text.starts(parts[i], ".")) {
+      error("paths with hidden parts (" + parts[i] + ") are not allowed")
+    }
+  }
+  let name = parts[len(parts) - 1]
+  if (text.find(name, ".") < 0) {
+    p = p + ".lzdraw"
+  } elif (!text.ends(name, ".lzdraw")) {
+    error("only .lzdraw files, not " + name)
+  }
+  p
+}
+
+let mcp_code_max = 1000000
+
+function mcp_tool_save(args) {
+  let code = mcp_need_string(args, "code")
+  if (len(code) > mcp_code_max) {
+    error("the code is longer than " + str(mcp_code_max) + " characters")
+  }
+  let path = mcp_resolve_path(args.path)
+  if (fs.exists(path) && args.overwrite !== true) {
+    return mcp_tool_error("the file " + path + " exists already; save again with overwrite: true to replace it")
+  }
+  let body = code
+  if (!text.starts(body, "-~> lzdraw")) {
+    body = "-~> lzdraw 1\n" + body
+  }
+  if (!text.ends(body, "\n")) {
+    body = body + "\n"
+  }
+  let parts = text.split(path, "/")
+  pop(parts)
+  let parent = text.join(parts, "/")
+  if (parent != "") {
+    fs.mkdir(parent)
+  }
+  fs.write(path, body)
+  mcp_json_result({"ok": true, "path": path, "bytes": len(body), "errors": src.parse(code).errors})
+}
+
+function mcp_tool_open(args) {
+  let path = mcp_resolve_path(args.path)
+  if (!fs.exists(path)) {
+    return mcp_tool_error("there is no file " + path)
+  }
+  mcp_result([mcp_text(fs.read(path))])
+}
+
+-~> ---- the list ----
+
+function mcp_tools() {
+  let code_arg = {"type": "string", "description": "The lizard-script source of the drawing (the contents of a .lzdraw file)."}
+  let tools = [
+    {"name": "docs",
+     "description": "Start here. Explains how to draw in Linkz by writing lizard-script (canvas, layers, points, colors, gradients, blend modes, pens) and lists every drawing function with its parameters, a summary and an example. With name, gives the full documentation of that one function.",
+     "inputSchema": mcp_schema({"name": {"type": "string", "description": "A function name, like circle or linear. Leave out for the primer and the whole list."}}, [])},
+    {"name": "run",
+     "description": "Runs lizard-script drawing code and reports {ok, errors: [{line, column, message}], printed, shapes, steps, ms} as JSON, without drawing a picture. Use it to check code quickly.",
+     "inputSchema": mcp_schema({"code": code_arg}, ["code"])},
+    {"name": "render",
+     "description": "Runs the drawing code and returns the picture as a PNG image, so you can see what you drew (plus the errors, if there were any). Width and height scale the picture to fit, keeping its shape.",
+     "inputSchema": mcp_schema({"code": code_arg,
+                                "width": {"type": "integer", "minimum": 1, "maximum": 4096, "description": "Fit the picture in this many pixels across."},
+                                "height": {"type": "integer", "minimum": 1, "maximum": 4096, "description": "Fit the picture in this many pixels high."}}, ["code"])},
+    {"name": "svg",
+     "description": "Runs the drawing code and returns the drawing as SVG text.",
+     "inputSchema": mcp_schema({"code": code_arg}, ["code"])},
+    {"name": "save",
+     "description": "Writes the code as a .lzdraw file. A relative path goes in the user's drawings folder (settings.drawings_dir, by default ~/Documents/Linkz); an absolute path must be inside the home folder. It never replaces a file unless overwrite is true.",
+     "inputSchema": mcp_schema({"path": {"type": "string", "description": "File name or path, like sunset.lzdraw. .lzdraw is added when there is no extension."},
+                                "code": code_arg,
+                                "overwrite": {"type": "boolean", "description": "Replace the file if it exists. Default false."}}, ["path", "code"])},
+    {"name": "open",
+     "description": "Reads a .lzdraw file and returns its code. Same path rules as save.",
+     "inputSchema": mcp_schema({"path": {"type": "string", "description": "File name or path of the .lzdraw."}}, ["path"])}
+  ]
+  tools
+}
+
+-~> Runs the tool called name, or returns null when there is none.
+function mcp_run_tool(name, args) {
+  if (name == "docs") {
+    return mcp_tool_docs(args)
+  }
+  if (name == "run") {
+    return mcp_tool_run(args)
+  }
+  if (name == "render") {
+    return mcp_tool_render(args)
+  }
+  if (name == "svg") {
+    return mcp_tool_svg(args)
+  }
+  if (name == "save") {
+    return mcp_tool_save(args)
+  }
+  if (name == "open") {
+    return mcp_tool_open(args)
+  }
+  null
+}

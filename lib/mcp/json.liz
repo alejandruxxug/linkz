@@ -1,0 +1,423 @@
+-~> json: a JSON parser and writer, for the MCP server.
+-~>   json.parse(s)       the value of the JSON text s; an error says where it is wrong
+-~>   json.stringify(v)   the compact JSON text of v
+-~> Objects are hashes, arrays are arrays, strings are strings, true and false
+-~> are booleans and null is null. A number without a fraction or exponent is
+-~> an INTEGER (a FLOAT if it does not fit), any other is a FLOAT. When writing,
+-~> a COLOR becomes its "#rrggbb" text and a POINT becomes [x, y] (or [x, y, z]).
+-~> A hash key that is not a string is written with str(). A value that can
+-~> not be JSON (a function) or that contains itself is an error.
+-~> Text goes in and out as characters, so "é" and "é" are the same
+-~> string; \u escapes (with surrogate pairs) are decoded, and when writing
+-~> only ", \ and the control characters are escaped.
+
+let json = {}
+
+-~> Objects and arrays nest at most this deep, so a hostile input can not
+-~> overflow the stack.
+let json_max_depth = 100
+
+-~> ---- reading ----
+
+-~> Stops with a message that says where in the text the problem is.
+function json_fail(p, message) {
+  let row = 1
+  let col = 1
+  for (let k = 0; k < p.i && k < p.n; k += 1) {
+    if (p.c[k] == "\n") {
+      row += 1
+      col = 1
+    } else {
+      col += 1
+    }
+  }
+  error("JSON error at line " + str(row) + ", column " + str(col) + ": " + message)
+}
+
+-~> The text of characters a to b of the input.
+function json_chunk(p, a, b) {
+  text.join(list.slice(p.c, a, b), "")
+}
+
+-~> A character for a message: control characters are shown by their code.
+function json_show(c) {
+  if (c === null) {
+    return "the end of the text"
+  }
+  if (c < " ") {
+    return "character code " + str(text.code(c, 0))
+  }
+  "'" + c + "'"
+}
+
+let json_cr = text.char(13)
+
+function json_skip(p) {
+  while (p.i < p.n) {
+    let c = p.c[p.i]
+    if (c == " " || c == "\n" || c == "\t" || c == json_cr) {
+      p.i += 1
+    } else {
+      return null
+    }
+  }
+}
+
+function json_is_digit(c) {
+  c != null && c >= "0" && c <= "9"
+}
+
+-~> The word true, false or null, and the value it stands for.
+function json_word(p, word, value) {
+  let found = json_chunk(p, p.i, p.i + len(word))
+  if (found !== word) {
+    json_fail(p, "expected the word " + word + ", found '" + found + "' (the only words are true, false and null)")
+  }
+  p.i += len(word)
+  value
+}
+
+let json_digits = "0123456789abcdef"
+
+-~> The four hex digits at the cursor as a number; moves past them.
+function json_hex4(p) {
+  if (p.i + 4 > p.n) {
+    json_fail(p, "a \\u escape needs 4 hex digits")
+  }
+  let n = 0
+  for (let k = 0; k < 4; k += 1) {
+    let d = text.find(json_digits, text.lower(p.c[p.i + k]))
+    if (d < 0) {
+      p.i += k
+      json_fail(p, "a \\u escape needs 4 hex digits, got " + json_show(p.c[p.i]))
+    }
+    n = n * 16 + d
+  }
+  p.i += 4
+  n
+}
+
+let json_simple = {"\"": "\"", "\\": "\\", "/": "/", "b": text.char(8), "f": text.char(12), "n": "\n", "r": text.char(13), "t": "\t"}
+
+-~> The character of the escape after a backslash. The cursor is on the
+-~> letter after the backslash.
+function json_escape_char(p) {
+  let e = p.c[p.i]
+  let simple = json_simple[e]
+  if (simple !== null) {
+    p.i += 1
+    return simple
+  }
+  if (e != "u") {
+    json_fail(p, "bad escape \\" + e)
+  }
+  p.i += 1
+  let code = json_hex4(p)
+  if (code >= 56320 && code <= 57343) {
+    json_fail(p, "a low surrogate (\\udc00 to \\udfff) must come right after a high one (\\ud800 to \\udbff)")
+  }
+  if (code >= 55296 && code <= 56319) {
+    if (p.i + 1 < p.n && p.c[p.i] == "\\" && p.c[p.i + 1] == "u") {
+      p.i += 2
+      let low = json_hex4(p)
+      if (low >= 56320 && low <= 57343) {
+        return text.char(65536 + (code - 55296) * 1024 + (low - 56320))
+      }
+    }
+    json_fail(p, "a high surrogate must be followed by a low one (\\udc00 to \\udfff)")
+  }
+  text.char(code)
+}
+
+-~> The string at the cursor (on its opening quote).
+function json_string(p) {
+  let opening = p.i
+  p.i += 1
+  let parts = []
+  let start = p.i
+  while (true) {
+    if (p.i >= p.n) {
+      p.i = opening
+      json_fail(p, "this string is never closed")
+    }
+    let c = p.c[p.i]
+    if (c == "\"") {
+      push(parts, json_chunk(p, start, p.i))
+      p.i += 1
+      return text.join(parts, "")
+    }
+    if (c == "\\") {
+      push(parts, json_chunk(p, start, p.i))
+      p.i += 1
+      if (p.i >= p.n) {
+        json_fail(p, "the text ends inside an escape")
+      }
+      push(parts, json_escape_char(p))
+      start = p.i
+    } elif (c < " ") {
+      json_fail(p, "a string can not hold the " + json_show(c) + " as it is, write it as an escape")
+    } else {
+      p.i += 1
+    }
+  }
+}
+
+function json_number(p) {
+  let start = p.i
+  if (p.c[p.i] == "-") {
+    p.i += 1
+  }
+  if (!json_is_digit(p.c[p.i])) {
+    json_fail(p, "a number needs a digit here")
+  }
+  if (p.c[p.i] == "0") {
+    p.i += 1
+    if (json_is_digit(p.c[p.i])) {
+      json_fail(p, "a number can not start with extra zeros")
+    }
+  } else {
+    while (json_is_digit(p.c[p.i])) {
+      p.i += 1
+    }
+  }
+  if (p.c[p.i] == ".") {
+    p.i += 1
+    if (!json_is_digit(p.c[p.i])) {
+      json_fail(p, "a number needs a digit after the point")
+    }
+    while (json_is_digit(p.c[p.i])) {
+      p.i += 1
+    }
+  }
+  if (p.c[p.i] == "e" || p.c[p.i] == "E") {
+    p.i += 1
+    if (p.c[p.i] == "+" || p.c[p.i] == "-") {
+      p.i += 1
+    }
+    if (!json_is_digit(p.c[p.i])) {
+      json_fail(p, "a number needs a digit in its exponent")
+    }
+    while (json_is_digit(p.c[p.i])) {
+      p.i += 1
+    }
+  }
+  let n = text.number(json_chunk(p, start, p.i))
+  if (n === null) {
+    p.i = start
+    json_fail(p, "this number is too big")
+  }
+  n
+}
+
+function json_array(p, depth) {
+  p.i += 1
+  let out = []
+  json_skip(p)
+  if (p.i < p.n && p.c[p.i] == "]") {
+    p.i += 1
+    return out
+  }
+  while (true) {
+    push(out, json_value(p, depth + 1))
+    json_skip(p)
+    if (p.i >= p.n) {
+      json_fail(p, "the array is never closed, expected , or ]")
+    }
+    let c = p.c[p.i]
+    p.i += 1
+    if (c == "]") {
+      return out
+    }
+    if (c != ",") {
+      p.i -= 1
+      json_fail(p, "expected , or ] in an array, got " + json_show(c))
+    }
+  }
+}
+
+function json_object(p, depth) {
+  p.i += 1
+  let out = {}
+  json_skip(p)
+  if (p.i < p.n && p.c[p.i] == "}") {
+    p.i += 1
+    return out
+  }
+  while (true) {
+    json_skip(p)
+    if (p.i >= p.n || p.c[p.i] != "\"") {
+      if (p.i >= p.n) {
+        json_fail(p, "the object is never closed")
+      }
+      json_fail(p, "expected a string key in an object, got " + json_show(p.c[p.i]))
+    }
+    let key = json_string(p)
+    json_skip(p)
+    if (p.i >= p.n || p.c[p.i] != ":") {
+      json_fail(p, "expected : after the key \"" + key + "\"")
+    }
+    p.i += 1
+    out[key] = json_value(p, depth + 1)
+    json_skip(p)
+    if (p.i >= p.n) {
+      json_fail(p, "the object is never closed, expected , or }")
+    }
+    let c = p.c[p.i]
+    p.i += 1
+    if (c == "}") {
+      return out
+    }
+    if (c != ",") {
+      p.i -= 1
+      json_fail(p, "expected , or } in an object, got " + json_show(c))
+    }
+  }
+}
+
+function json_value(p, depth) {
+  if (depth > json_max_depth) {
+    json_fail(p, "nested more than " + str(json_max_depth) + " levels deep")
+  }
+  json_skip(p)
+  if (p.i >= p.n) {
+    json_fail(p, "the text ends where a value should be")
+  }
+  let c = p.c[p.i]
+  if (c == "{") {
+    return json_object(p, depth)
+  }
+  if (c == "[") {
+    return json_array(p, depth)
+  }
+  if (c == "\"") {
+    return json_string(p)
+  }
+  if (c == "t") {
+    return json_word(p, "true", true)
+  }
+  if (c == "f") {
+    return json_word(p, "false", false)
+  }
+  if (c == "n") {
+    return json_word(p, "null", null)
+  }
+  if (c == "-" || json_is_digit(c)) {
+    return json_number(p)
+  }
+  json_fail(p, "unexpected " + json_show(c) + ", expected a value")
+}
+
+-~> The value of the JSON text s.
+function json_parse(s) {
+  if (type(s) != "STRING") {
+    error("json.parse needs a STRING, got " + type(s))
+  }
+  let chars = text.split(s, "")
+  let p = {"c": chars, "i": 0, "n": len(chars)}
+  let v = json_value(p, 0)
+  json_skip(p)
+  if (p.i < p.n) {
+    json_fail(p, "unexpected " + json_show(p.c[p.i]) + " after the end of the value")
+  }
+  v
+}
+
+-~> ---- writing ----
+
+let json_hex = "0123456789abcdef"
+
+-~> The escapes for the control characters, as [character, escape] pairs.
+function json_control_table() {
+  let names = {8: "\\b", 9: "\\t", 10: "\\n", 12: "\\f", 13: "\\r"}
+  let out = []
+  for (let k = 0; k < 32; k += 1) {
+    let e = names[k]
+    if (e === null) {
+      e = "\\u00" + json_hex[k // 16] + json_hex[k % 16]
+    }
+    push(out, [text.char(k), e])
+  }
+  out
+}
+
+let json_controls = json_control_table()
+
+-~> The JSON text of a string, with its quotes. It works with a few calls
+-~> that go over the whole text, not one for each character, so a picture
+-~> of hundreds of kilobytes is cheap.
+function json_quote(s) {
+  if (text.find(s, "\\") >= 0) {
+    s = text.replace(s, "\\", "\\\\")
+  }
+  if (text.find(s, "\"") >= 0) {
+    s = text.replace(s, "\"", "\\\"")
+  }
+  for (let k = 0; k < 32; k += 1) {
+    if (text.find(s, json_controls[k][0]) >= 0) {
+      s = text.replace(s, json_controls[k][0], json_controls[k][1])
+    }
+  }
+  "\"" + s + "\""
+}
+
+function json_write(v, depth) {
+  if (depth > json_max_depth) {
+    error("json.stringify: the value is nested more than " + str(json_max_depth) + " levels deep (does it contain itself?)")
+  }
+  let t = type(v)
+  if (t == "STRING") {
+    return json_quote(v)
+  }
+  if (t == "INTEGER" || t == "FLOAT") {
+    return str(v)
+  }
+  if (t == "BOOLEAN") {
+    if (v) {
+      return "true"
+    }
+    return "false"
+  }
+  if (t == "NULL") {
+    return "null"
+  }
+  if (t == "COLOR") {
+    return json_quote(str(v))
+  }
+  if (t == "POINT") {
+    -~> Reading z of a point with two coordinates is an error.
+    let out = "[" + str(v.x) + "," + str(v.y)
+    try {
+      out = out + "," + str(v.z)
+    } catch {
+      out = out
+    }
+    return out + "]"
+  }
+  if (t == "ARRAY") {
+    let parts = []
+    for (let k = 0; k < len(v); k += 1) {
+      push(parts, json_write(v[k], depth + 1))
+    }
+    return "[" + text.join(parts, ",") + "]"
+  }
+  if (t == "HASH") {
+    let parts = []
+    let ks = keys(v)
+    for (let k = 0; k < len(ks); k += 1) {
+      let name = ks[k]
+      if (type(name) != "STRING") {
+        name = str(name)
+      }
+      push(parts, json_quote(name) + ":" + json_write(v[ks[k]], depth + 1))
+    }
+    return "{" + text.join(parts, ",") + "}"
+  }
+  error("json.stringify can not write a " + t)
+}
+
+function json_stringify(v) {
+  json_write(v, 0)
+}
+
+json.parse = json_parse
+json.stringify = json_stringify

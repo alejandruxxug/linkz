@@ -5,6 +5,7 @@
 //	linkz paint prog.liz out.png [WxH]     runs a program headless on a buffer
 //	linkz debug [--pid N] Command [args]   drives a running editor
 //	linkz calibrate                        measures this machine, prints JSON
+//	linkz mcp                              MCP server on stdin/stdout, for AI agents
 package main
 
 import (
@@ -25,7 +26,8 @@ const usage = `usage:
   linkz render file.lzdraw [out.svg]
   linkz paint prog.liz out.png [WxH]
   linkz debug [--pid N] Command [args...]
-  linkz calibrate`
+  linkz calibrate
+  linkz mcp`
 
 func main() {
 	if len(os.Args) < 2 {
@@ -44,6 +46,8 @@ func main() {
 		err = debug(os.Args[2:])
 	case "calibrate":
 		err = calibrate()
+	case "mcp":
+		err = host.ServeMCP(os.Stdin, os.Stdout, os.Stderr)
 	default:
 		fmt.Fprintln(os.Stderr, usage)
 		os.Exit(2)

@@ -1,0 +1,55 @@
+-~> json.stringify: every value, and the values JSON has no word for.
+
+puts(json.stringify(null))
+puts(json.stringify(true))
+puts(json.stringify(false))
+puts(json.stringify(0))
+puts(json.stringify(-12))
+puts(json.stringify(2.5))
+puts(json.stringify(1.0))
+puts(json.stringify(0.1))
+puts(json.stringify(10.0 ** 21))
+puts(json.stringify(0.0000001))
+puts(json.stringify([]))
+puts(json.stringify({}))
+puts(json.stringify([1, "two", [3], {"four": 4}, null, true]))
+puts(json.stringify({"b": 1, "a": 2, "c": {"d": []}}))
+
+-~> Colors and points.
+puts(json.stringify(#3fa34d))
+puts(json.stringify(#3fa34d80))
+puts(json.stringify((1, 2)))
+puts(json.stringify((0.5, 2, 3)))
+puts(json.stringify({"size": (480, 320), "background": #f4f1e8}))
+
+-~> A key that is not a string is written as text.
+puts(json.stringify({1: "one", true: "yes"}))
+
+-~> A float that was an integer's value keeps its point, so it reads back as a float.
+puts(type(json.parse(json.stringify(3.0))))
+
+-~> What cannot be written.
+try {
+  json.stringify(function(x) { x })
+} catch (e) {
+  puts(e.message)
+}
+try {
+  json.stringify([1, len])
+} catch (e) {
+  puts(e.message)
+}
+let loop = []
+push(loop, loop)
+try {
+  json.stringify(loop)
+} catch (e) {
+  puts(e.message)
+}
+
+-~> A full round trip of a nested value.
+let doc = {"jsonrpc": "2.0", "id": 7, "result": {"items": [{"t": "x\ny"}, {"n": 15000000000.0}], "ok": true, "none": null}}
+let text_form = json.stringify(doc)
+puts(text_form)
+puts(json.stringify(json.parse(text_form)) == text_form)
+puts(json.parse(text_form) == doc)

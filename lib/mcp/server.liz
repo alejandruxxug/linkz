@@ -1,0 +1,195 @@
+-~> server: the MCP server. MCP over stdio is JSON-RPC 2.0, one JSON message
+-~> per line. mcp_serve() reads lines until the input ends and answers each one.
+-~> A bad request never ends the server: every request runs inside try/catch
+-~> and becomes a JSON-RPC error. (Only the step limit and a stack overflow
+-~> can stop it, and the limit is set so that a normal tool call is far from it.)
+-~>   mcp_handle_line(line)   the text to write back for one line, or null for none
+-~>   mcp_serve()             the loop
+-~> Needs json.liz and tools.liz, and the host's io.
+
+let mcp_server_version = "0.1.0"
+
+-~> The protocol versions this server speaks, newest first.
+let mcp_versions = ["2025-06-18", "2025-03-26", "2024-11-05"]
+
+-~> The steps one request may take. Running a drawing has a limit of its own,
+-~> lower; this covers the server's work, like painting the picture.
+let mcp_step_limit = 300000000
+
+let mcp_instructions = "Linkz draws vector art written in lizard-script. Call docs first to learn the language and the drawing functions, write the code, check it with run, then look at it with render and improve it. Save finished work with save."
+
+let mcp_invalid_request = -32600
+let mcp_method_not_found = -32601
+let mcp_invalid_params = -32602
+let mcp_internal_error = -32603
+let mcp_parse_error = -32700
+
+function mcp_response(id, result) {
+  {"jsonrpc": "2.0", "id": id, "result": result}
+}
+
+function mcp_error_response(id, code, message) {
+  {"jsonrpc": "2.0", "id": id, "error": {"code": code, "message": message}}
+}
+
+-~> What a method returns to say "answer with this JSON-RPC error".
+function mcp_rpc_fail(code, message) {
+  {"__rpc_error": {"code": code, "message": message}}
+}
+
+function mcp_initialize(params) {
+  let version = mcp_versions[0]
+  if (params.protocolVersion !== null && list.index(mcp_versions, params.protocolVersion) >= 0) {
+    version = params.protocolVersion
+  }
+  {"protocolVersion": version,
+   "capabilities": {"tools": {"listChanged": false}},
+   "serverInfo": {"name": "linkz", "version": mcp_server_version},
+   "instructions": mcp_instructions}
+}
+
+function mcp_tools_call(params) {
+  let name = params.name
+  if (type(name) != "STRING") {
+    return mcp_rpc_fail(mcp_invalid_params, "tools/call needs params.name, the name of a tool")
+  }
+  let args = params.arguments
+  if (args === null) {
+    args = {}
+  }
+  if (type(args) != "HASH") {
+    return mcp_rpc_fail(mcp_invalid_params, "params.arguments must be an object")
+  }
+  let result = null
+  try {
+    result = mcp_run_tool(name, args)
+  } catch (e) {
+    io.log("tool " + name + " failed: " + e.message)
+    return mcp_tool_error(e.message)
+  }
+  if (result === null) {
+    return mcp_rpc_fail(mcp_invalid_params, "unknown tool " + name)
+  }
+  result
+}
+
+-~> The result of a request, or an mcp_rpc_fail.
+function mcp_call(method, params) {
+  if (method == "initialize") {
+    return mcp_initialize(params)
+  }
+  if (method == "ping") {
+    return {}
+  }
+  if (method == "tools/list") {
+    return {"tools": mcp_tools()}
+  }
+  if (method == "tools/call") {
+    return mcp_tools_call(params)
+  }
+  mcp_rpc_fail(mcp_method_not_found, "method not found: " + method)
+}
+
+-~> The response to one decoded message, or null when it gets none (a
+-~> notification, or a response from the client).
+function mcp_dispatch(msg) {
+  if (type(msg) != "HASH") {
+    return mcp_error_response(null, mcp_invalid_request, "Invalid Request: a message is a JSON object")
+  }
+  let id = msg.id
+  let method = msg.method
+  if (type(method) != "STRING") {
+    if (msg.result !== null || msg.error !== null) {
+      return null
+    }
+    return mcp_error_response(id, mcp_invalid_request, "Invalid Request: a message needs a method")
+  }
+  if (id === null) {
+    io.log("notification " + method)
+    return null
+  }
+  if (type(id) != "STRING" && type(id) != "INTEGER") {
+    return mcp_error_response(null, mcp_invalid_request, "Invalid Request: id must be a string or a whole number")
+  }
+  let params = msg.params
+  if (params === null) {
+    params = {}
+  }
+  if (type(params) != "HASH") {
+    return mcp_error_response(id, mcp_invalid_params, "params must be an object")
+  }
+  let result = null
+  try {
+    result = mcp_call(method, params)
+  } catch (e) {
+    io.log("request " + method + " failed: " + e.message)
+    return mcp_error_response(id, mcp_internal_error, "Internal error: " + e.message)
+  }
+  if (result["__rpc_error"] !== null) {
+    return mcp_error_response(id, result["__rpc_error"].code, result["__rpc_error"].message)
+  }
+  mcp_response(id, result)
+}
+
+-~> The text to write for one line of input, or null when there is nothing to say.
+function mcp_handle_line(line) {
+  let msg = null
+  try {
+    msg = json.parse(line)
+  } catch (e) {
+    return json.stringify(mcp_error_response(null, mcp_parse_error, "Parse error: " + e.message))
+  }
+  let reply = null
+  try {
+    if (type(msg) == "ARRAY") {
+      if (len(msg) == 0) {
+        reply = mcp_error_response(null, mcp_invalid_request, "Invalid Request: an empty batch")
+      } else {
+        reply = []
+        for (let i = 0; i < len(msg); i += 1) {
+          let one = mcp_dispatch(msg[i])
+          if (one !== null) {
+            push(reply, one)
+          }
+        }
+        if (len(reply) == 0) {
+          reply = null
+        }
+      }
+    } else {
+      reply = mcp_dispatch(msg)
+    }
+    if (reply === null) {
+      return null
+    }
+    return json.stringify(reply)
+  } catch (e) {
+    io.log("could not answer: " + e.message)
+    return json.stringify(mcp_error_response(null, mcp_internal_error, "Internal error: " + e.message))
+  }
+}
+
+function mcp_serve() {
+  io.log("linkz mcp: ready")
+  while (true) {
+    let line = null
+    try {
+      line = io.read_line()
+    } catch (e) {
+      io.log("linkz mcp: cannot read: " + e.message)
+      break
+    }
+    if (line === null) {
+      break
+    }
+    if (text.trim(line) == "") {
+      continue
+    }
+    io.step_limit(mcp_step_limit)
+    let out = mcp_handle_line(line)
+    if (out !== null) {
+      io.write(out + "\n")
+    }
+  }
+  io.log("linkz mcp: input closed, bye")
+}
