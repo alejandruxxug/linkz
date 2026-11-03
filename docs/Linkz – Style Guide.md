@@ -18,6 +18,8 @@
 | Caret | Solid 1 px `amber` bar (nothing animates while idle, so no blink). |
 | Tooltips | `row` box, `void` outline, `bevel` top line, 2 px `void` drop shadow below-right. |
 | Canvas | Full-res drawing inside a 1 px `void` frame on a `coal` / `#161815` 16 px checker surround (the one off-palette tint, kept because it is only a texture). |
+| Color content ⏳ (R002) | The one exception to "only the 16 colors, no gradients": UI parts that *show a user color* — the HSV square, hue and alpha strips, gradient bars, variable chips, swatches, layer thumbnails, the pen preview — show the exact colors, smooth, at screen resolution. Everything around them (1 px `void` frame, labels, thumbs, markers) stays 8-bit. Alpha shows over a `#d4dacd`/`#a0ab9b` checker (2–3 UI px). |
+| Spotlight ⏳ (R002) | Tutorial focus: everything else under `void` at 62%, the target ringed 1 px `amber` (focus color). Same 62% `void` dim behind modal dialogs. |
 
 ## 🎨 Palette: Linkz Dark
 
@@ -85,7 +87,28 @@ Approved frames (page ✅ Approved, node ids):
 | Home – empty (first launch) | `4:1184` | `3:105` |
 | Home – gallery, Spanish | `4:1194` | `4:748` |
 
-Style page: palette section `4:501` (swatches bound to the **Linkz Dark** variables `color/<name>`, paint styles `Linkz Dark/<name>`), font `4:502`, components `4:503` (`button/*`, `tool/*`, `field/*`, `row/*`, `tooltip`), icons `4:504` (components `icon/<name>`).
+Style page: palette section `4:501` (swatches bound to the **Linkz Dark** variables `color/<name>`, paint styles `Linkz Dark/<name>`), font `4:502`, components `4:503` (`button/*`, `tool/*`, `field/*`, `row/*`, `tooltip`), icons `4:504` (components `icon/<name>`). R002 components ⏳ in section `7:2125`: `menu/shape`, `menu item/{normal,hover,disabled,danger,submenu ▸,current}`, `gradient bar/{smooth,stepped}`, `color stop/{normal,selected,hard,ghost}`, `segmented tabs`, `hsv picker`, `variable chip/{solid,linear,radial,stepped}`, `color popover`, `fill editor`, `layer row (thumbnail)/{normal,selected + blend badge}`, `row/layer with blend badge`, `blend dropdown (open)`, `slider/{single,range}`, `coach-mark`, `status counter/{normal,near,over}`, `autocomplete popup`, `pen settings panel`, and 30 more icons (`icon/up … icon/settings`, incl. the home icons).
+
+R002 – Menu, fill, palette, artist mode, tutorial ⏳ (🧪 Reviews, section `6:1257`; generator `docs/Art/Figma-gen/r002.py` + `r002_split.py`; PNGs in `docs/Art/Reviews/R002/`):
+
+| # | Frame | Node |
+|---|---|---|
+| 1 | Shape menu – right-click on canvas, Fill ▸ open | `6:1258` |
+| 2 | Fill editor – linear gradient on the sky | `6:1259` |
+| 3 | Fill editor – stepped gradient, 5 bands | `6:1260` |
+| 4 | Palette sidebar – editing variable `colors.sky` | `6:1261` |
+| 5 | Artist mode – layers.lzdraw | `6:1262` |
+| 6 | Artist mode – code drawer open | `6:1263` |
+| 7 | Blend modes – coder, `shadows` in Multiply | `6:1264` |
+| 8 | Blend modes – artist, dropdown open | `6:1265` |
+| 9 | Spanish – row menu + fill editor (radial, hard stop), two windows | `6:1266` (`6:1281`, `6:1282`) |
+| 10–13 | Tutorial 1–4 (shape, color, brush, code + lizard) | `6:1267` `6:1268` `6:1269` `6:1270` |
+| 14 | Tutorial 1 – Spanish | `6:1271` |
+| 15 / 16 | New drawing dialog (object budget) EN / ES | `7:1963` / `7:2025` |
+| 17 | Status bar – object counter, 3 states | `6:1272` |
+| 18 / 19 | Pen settings – coder EN / artist ES | `6:1273` / `6:1274` |
+| 20–22 | Autocomplete – `ci`, signature hint, `math.s` | `6:1275` `6:1276` `6:1277` |
+| 23–25 | Color popover – code-row swatch, fill field (save as variable), artist ES | `6:1278` `6:1279` `6:1280` |
 
 ### 📏 UI metrics (UI pixels: the half-res buffer, shown ×2)
 
@@ -112,6 +135,29 @@ Style page: palette section `4:501` (swatches bound to the **Linkz Dark** variab
 | Pen picker | 230 wide under the brush button, header 13, rows 20, preview 50×16 inset in a `void` frame (full-res strokes) |
 | Home | top bar 22 (search field 212×16 at x 150). Section title + 1 px `bevel` rule. Working-on row: `+ New drawing` card 80 wide (dashed `bevel` outline, label wraps when too long), 3 recent cards 128 wide, 8 apart, thumb 76 high + 32 text. Grid: 5 cards 91 wide (thumb 50 + 28 text), 8 apart, 6 between rows. Hover card: `lizard` outline + `⋯` button. Card menu rows 14 (Delete in `ember` after a separator) |
 
+R002 metrics ⏳ (waiting for approval, same units):
+
+| Part | Metric |
+|---|---|
+| Coder layout with palette | code panel 0–256, splitter 2, canvas 258–404, splitter 2, sidebar 406–512 (106, inner 96 at +5). Sidebar collapsed = 14 px rail at 498 (variables 10×10 step 12, a `bevel` mark, recent), canvas grows to 258–496. Canvas zoom = largest of 62.5/45/37.5/27.5% (UI) that leaves 10 px around: 55% open, 90% rail |
+| Properties at 256 | fields that don't fit wrap to a second 20 px row (the hint goes) |
+| Palette sidebar | header 13 (title = what is being edited: `COLOR`, `STOP 2`, `colors.sky`) + collapse chevron. Variable kind tabs (icons only, 3 × 32) when a variable is selected. SV square 96×52 (44 with tabs), hue 96×6, alpha 96×6 (5 px apart), hex field 57×16 + alpha field, `RECENT` 8 swatches 10×10 step 12, `VARIABLES` grid 3 columns × 32 (chip 29×12 + name under it, cell 27 high; selected cell `moss`), "in N shapes" hint `lizard`, `+ Variable` button 96×16 at the bottom |
+| Variable chip | solid fill, linear (smooth), radial (over checker), stepped (4 bands); 1 px `void` outline. Gradients and colors are interchangeable |
+| Context menu | rows 14, header 13 `raised` (`circle · line 10`), icon at +6, label at +18, shortcut right-aligned 6 from the edge, `chevron-right` for submenus, separators 4 (1 px `bevel`). Hover: `moss` + 2 px `lizard` bar, `bright` text, `lizard` icon. Disabled: `dim` icon/label. Danger (Remove): `ember` label/icon, on hover keeps `row` (ember fails 4.5:1 on `moss`). Current: `lizard` check. Flips left/up at the window edge; submenu opens on the side with room. Submenu can end with a swatch row (10×10 step 12) |
+| Fill editor | floating, 186 wide, beside the shape (over the code panel when the canvas is narrow), 5-step pixel tail toward the shape. Header 13, kind tabs (3 × 59, 14 high), gradient bar 174×14 (`void` frame, checker under alpha), stops below it, stop row (color field, `at` field, remove), soft/hard segmented + `steps` field with −/+, code preview inset (13 px lines, wraps at 166), two `mute` hint lines, `+ Save as variable…` |
+| Color stop | 9×9 marker: 3-row pointer + 7×5 color body, `void` outline; selected = `bright` outline + `void` ring; hard = 1-px stem pointer + 1 px `bright` line through the bar; ghost (add) = `dim` outline + `+` |
+| Gradient handles | linear: 1 px `bright` line (with `void` sides) from start (5×5 `bright`) to end (5×5 `lizard`), stops as 5×5 color dots on it. Radial: 5×5 center, 1 px `bright` pixel circle (+ `void` ring) at the radius, radius handle 5×5 `lizard` |
+| Color popover | 150 wide, beside the clicked color with a tail: `VARIABLES` 4 columns × 35 (chip 32×10 + name), current `moss`, keyboard focus 1 px `amber` ring; `RECENT` 14 swatches 9×9 step 10; SV 140×36, hue 140×5, hex + alpha + eyedropper; `+ Save as variable…` (opens inline name field + Save); `writes colors.sun` preview |
+| Artist mode | toolbar (`</> Code` toggle, mode label), tab bar, inspector context bar 20 high (y 30–50, fields 16 high), tool column 20 wide (tools 14×14 step 15 from y 53, fill/stroke chips at the bottom), canvas 20–360, right column 362–512: compact palette (header, SV 116×40 + vertical hue/alpha 8×40, hex/alpha/eyedropper, one row of variable chips + recent), then `LAYERS` header (+ add, trash), blend dropdown 82×16 + opacity field, layer rows, `canvas` row pinned at the bottom |
+| Layer row (artist) | 22 high: eye +4, lock +14, chevron +24, thumbnail 29×20 at +34 (rendered layer on a 3 px checker), name at +67, blend badge right. Object rows under an open layer are 18 (kind icon +44, name +56) |
+| Code drawer | opens under the canvas at y 196 (canvas area shrinks, zoom drops to 75%), full width 0–360, header 13 `</> CODE · file` + lower/close; same rows as coder mode |
+| Blend | layer row badge in the count slot (`MUL 80%`); modes Normal │ Multiply, Darken │ Screen, Lighten, Add │ Overlay, each with a 10×10 preview (sky under the shade, result) and a 3-letter code; opacity slider (track 6, thumb 5×12 `bright`) + `%` field |
+| Coach-mark | tooltip box, 250 wide, 2 px `lizard` left bar, title `bright`, body `text` at 14 pitch, footer: step dots 4×4 (current `lizard`, others `bevel`), `Skip` (`mute`), primary `Next` (`moss` + `lizard` bevel); 5-step tail toward the target |
+| New drawing dialog | 300×214 centered at y 64 over a 62% `void` dim; header 15; name field (`.lzdraw` in `dim`), size presets as buttons (selected = active), custom W × H fields, rule, `objects` icon + "Recommended: up to ~1,800 objects" + `info` (`sky`), `measured on this Mac` (`mute`), Cancel + primary Create |
+| Object counter | status bar part after `saved`: `objects N / MAX`, `mute` < 80%, `amber` ≥ 80%, `ember` + `warn` icon over; tooltip on hover. It replaces "steps · ms" in the status bar |
+| Pen settings | the pen picker turns into this panel (`◂ pens` back), 320 wide: pressure graph 84×84 (`coal`, `bevel` dotted quarters, `dim` diagonal, `lizard` curve, 5×5 points, hovered 7×7 `amber`, `sky` dashed live-pressure line), preset dropdown; sliders (label, track, `amber` value): width (range), opacity (range), taper, smoothing, speed; input switch Trackpad / Tablet / Mouse with that input's overrides in a `coal` box with a `lizard` bar (trackpad: floor); live preview 308×34 on paper; coder mode adds the code it writes (6 lines); name field + primary `Save as new pen` |
+| Autocomplete | 214 wide under the caret, rows 14: kind icon, label with matched letters `lizard`, kind right `mute`; selected `moss` + bar; doc block (signature, one line); footer `Tab insert · Esc close`. Signature hint: tooltip above the row, current parameter `lizard` + 1 px underline, its doc line below |
+
 ## 🖼️ Inputs
 
 | File | For | What to take from it |
@@ -136,3 +182,13 @@ Style page: palette section `4:501` (swatches bound to the **Linkz Dark** variab
 | 2026-11-02 | R001 – Editor views, Figma "Linkz" → 🧪 Reviews (section `3:2`): main, new row with inline tool strip, pencil (anchors, one hovered), brush + pen picker, tooltip + error row, Spanish, splash, plus home gallery, home empty and home Spanish. The six decisions are approved too (no name column, 4 px blank lines, English parameter labels in Spanish, full-res pen previews, last good drawing on error, splash keeps its art colors) | ✅ approved 2026-11-02 ("design is approved! I'm very happy with it"); copies on ✅ Approved |
 | 2026-11-02 | Row spacing (developer: "maybe the lines are too close together"): row pitch 14 → 18, 4 px gap above layer rows, properties rows to 18 high. Frame 1 now scrolls past `layer sea` (scrollbar shown) | ✅ approved 2026-11-02 |
 | 2026-11-02 | Home screen (developer request): gallery with "Working on" (+ New drawing first, 3 recent big cards) and "All drawings" grid, rendered thumbnails, hover card with ⋯ menu (Open, Rename, Duplicate, Show in Finder, Delete); empty first-launch state with the lizard, "+ New drawing" and "Open an example"; Spanish version (labels fit; "Nuevo dibujo" wraps) | ✅ approved 2026-11-02 |
+| 2026-11-03 | R002 – shape menu (canvas or row right-click / two-finger click): Rename, Duplicate, Bring forward / Send backward (= move the line; disabled when already first in its layer), Hide, Lock, Fill ▸ (Solid / Linear / Radial / Edit fill… + variable swatches), Copy code, Show in code, Remove (`ember`). Frames `6:1258`, ES `6:1281` | ⏳ waiting for approval |
+| 2026-11-03 | R002 – fill editor: floating beside the shape, kind tabs, gradient bar with draggable stops (click to add, drag off to remove), stop color from the palette sidebar, soft/hard per stop, steps (off or 2–16 flat bands), live code preview, Save as variable; canvas handles (linear start/end, radial center/radius). Linear on the sky `6:1259`, 5-band stepped `6:1260`, radial with a hard stop (ES) `6:1282`. Figma's SVG import drops duplicate-offset (hard) stops, so the hard-stop sun is drawn as a disk + ring | ⏳ waiting for approval |
+| 2026-11-03 | R002 – palette sidebar (106 wide, collapsible to a 14 px rail): HSV picker, recent, VARIABLES grid (solid and gradient chips with names, kind tabs Solid/Linear/Radial when one is selected, "in N shapes"), + Variable. Editing `colors.sky` repaints the sky and the waves `6:1261`. Proposes the "color content" exception to the no-gradient rule | ⏳ waiting for approval |
+| 2026-11-03 | R002 – artist mode: vertical tools left, canvas center, right column = compact palette + layers with thumbnails, blend dropdown + opacity in the layers header, properties as an Aseprite-style context bar under the tabs, `</> Code` toggles a code drawer under the canvas (same rows). `6:1262`, drawer `6:1263` | ⏳ waiting for approval |
+| 2026-11-03 | R002 – blend modes + opacity: `blend("multiply")` / `opacity(0.8)` rows inside the layer, `MUL 80%` badge on the layer row, properties blend dropdown + opacity slider; artist header dropdown. `shadows` layer really in Multiply 80% in Figma (visibly darker over sky, sea and boat). Coder `6:1264`, artist `6:1265` | ⏳ waiting for approval |
+| 2026-11-03 | R002 – first-run tutorial: 62% `void` spotlight with `amber` rings, coach-mark with step dots, Skip, Next; (1) tool strip, (2) variables + fill field, (3) brush + canvas with a dotted ghost stroke, (4) the new code rows, lizard celebrating with sparkles, "Let's draw!". `6:1267`–`6:1270`, Spanish step 1 `6:1271` | ⏳ waiting for approval |
+| 2026-11-03 | R002 – object budget: New drawing dialog (name, size presets, custom W×H, "Recommended: up to ~1,800 objects · measured on this Mac" + ⓘ tooltip) EN `7:1963` / ES `7:2025` (cloned from the approved home galleries); status bar counter normal / near (≥ 80%, `amber`) / over (`ember`, tooltip) `6:1272`; the counter replaces "steps · ms" | ⏳ waiting for approval |
+| 2026-11-03 | R002 – pen settings: pressure curve editor (soft/linear/firm presets), width and opacity ranges, taper, smoothing, speed, Trackpad/Tablet/Mouse overrides (trackpad floor), live preview, Save as new pen; coder shows the `pens.soft_ink = {…, "pressure": {…}}` it writes `6:1273`; artist (ES) from the brush tool `6:1274` | ⏳ waiting for approval |
+| 2026-11-03 | R002 – autocomplete polish frames (approved R001 layout, 320 code panel): `ci` popup with kinds and matched letters `6:1275`, signature hint with the current parameter `6:1276`, `math.s` members `6:1277` | ⏳ waiting for approval |
+| 2026-11-03 | R002 – color popover beside the clicked color (code-row swatch `6:1278`, properties fill field with inline Save as variable `6:1279`, artist inspector fill, Spanish `6:1280`): Variables (solid + gradient chips, picking writes `colors.<name>`), Recent 14, compact HSV + hex + alpha + eyedropper, keyboard focus `amber` | ⏳ waiting for approval |

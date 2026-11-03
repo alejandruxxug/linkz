@@ -5,3 +5,4 @@
 *.test
 go.work
 go.work.sum
+__pycache__/

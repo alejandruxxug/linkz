@@ -38,7 +38,7 @@ gen.ICONS.update({
 })
 
 # ---------- named colors: `colors.sky` gets a swatch like a literal ----------
-NAMED = {"colors.sky": "#f2a65a", "colors.sea": "#2d6a8f", "colors.sun": "#fff3c4", "colors.boat": "#3b2a6b"}
+NAMED = {"colors.sky": "#f2a65a", "colors.sea": "#2d6a8f", "colors.sun": "#fff3c4", "colors.boat": "#3b2a6b", "colors.dusk": "#e0607a", "colors.glow": "#fff3c4", "colors.dune": "#d8a070"}
 _code = gen.code
 def code(s, x, y, base="text", sel=False, maxw=None, name="code"):
     items, cx, groups, clipped = [], x, {}, False
@@ -74,7 +74,7 @@ gen.KIND_ICON.update({"blend": "blend", "opacity": "opacity", "ellipse": "circle
 # ---------- strings ----------
 TX = {
  "en": dict(layers="LAYERS", props="PROPERTIES", line="line", saved="saved", unsaved="unsaved", objects="objects", lang="EN",
-            color="COLOR", recent="RECENT", palette="PALETTE", gradients="GRADIENTS", add_pal="To palette", used="used by",
+            color="COLOR", recent="RECENT", palette="VARIABLES", gradients="GRADIENTS", add_pal="Variable", used="used by",
             menu=[("rename", "Rename", "F2"), ("copy", "Duplicate", "Cmd+D"), ("up", "Bring forward", "Cmd+]"), ("down", "Send backward", "Cmd+["),
                   None, ("eye-off", "Hide", "H"), ("lock", "Lock", "L"), None, ("fill", "Fill", ">"), None,
                   ("code", "Copy code", ""), ("open", "Show in code", ""), None, ("trash", "Remove", "Del")],
@@ -83,7 +83,7 @@ TX = {
             hint1="click bar: add a stop", hint2="drag a stop off: remove", pick="stop 2 · pick in palette",
             code_btn="</> Code", export="Export PNG", save="Save"),
  "es": dict(layers="CAPAS", props="PROPIEDADES", line="línea", saved="guardado", unsaved="sin guardar", objects="objetos", lang="ES",
-            color="COLOR", recent="RECIENTES", palette="PALETA", gradients="DEGRADADOS", add_pal="A la paleta", used="usado en",
+            color="COLOR", recent="RECIENTES", palette="VARIABLES", gradients="DEGRADADOS", add_pal="Variable", used="usado en",
             menu=[("rename", "Renombrar", "F2"), ("copy", "Duplicar", "Cmd+D"), ("up", "Traer adelante", "Cmd+]"), ("down", "Enviar atrás", "Cmd+["),
                   None, ("eye-off", "Ocultar", "H"), ("lock", "Bloquear", "L"), None, ("fill", "Relleno", ">"), None,
                   ("code", "Copiar código", ""), ("open", "Mostrar en el código", ""), None, ("trash", "Eliminar", "Supr")],
@@ -105,7 +105,7 @@ class Lay:
         s.cx1 = (s.sb_x - (2 if sidebar else 0)) if cx1 is None else cx1
         s.cy0, s.cy1 = cy0, cy1
         aw, ah = s.cx1 - s.cx0, s.cy1 - s.cy0
-        s.z = zoom or next(z for z in (0.625, 0.45, 0.375, 0.275) if 480 * z <= aw - 12 and 320 * z <= ah - 12)
+        s.z = zoom or next(z for z in (0.625, 0.45, 0.375, 0.275) if 480 * z <= aw - 10 and 320 * z <= ah - 10)
         s.dw, s.dh = int(480 * s.z), int(320 * s.z)
         s.dx = s.cx0 + (aw - s.dw) // 2
         s.dy = s.cy0 + (ah - s.dh) // 2
@@ -494,7 +494,47 @@ def grad_bar_vec(name, x, y, w, h, cols):
     st = even(cols)
     return px_grad(name.replace("(vector)", "(pixels)"), x, y, w, h, lambda u, v: grad_at_a(st, u))
 
-def sidebar(lay, lang, color, title=None, palette=PALETTE, sel_name=None, used=None, alpha="100%", hover_add=False, hex_focus=False):
+# color variables: solid or gradient, interchangeable (`colors.dusk` works wherever a color does)
+VARS = [("sky", "s", "#f2a65a"), ("sea", "s", "#2d6a8f"), ("sun", "s", "#fff3c4"), ("boat", "s", "#3b2a6b"),
+        ("dusk", "l", ["#3b2a6b", "#e0607a", "#f2a65a"]), ("glow", "r", ["#fff3c4", "#f2a65a00"]), ("dune", "st", ["#f6d9a8", "#c0703a"])]
+
+def var_chip(x, y, w, h, var, name_col="text"):
+    n, k, v = var
+    it = [frame_lines(x, y, w, h, "void", "chip outline")]
+    ix, iy, iw, ih = x + 1, y + 1, w - 2, h - 2
+    if k == "s":
+        it.append(R(ix, iy, iw, ih, v[:7], v))
+    elif k == "l":
+        st = even(v)
+        it.append(px_grad(f"linear chip", ix, iy, iw, ih, lambda u, vv: grad_at_a(st, u)))
+    elif k == "r":
+        st = even(v)
+        it.append(px_grad(f"radial chip", ix, iy, iw, ih, lambda u, vv: grad_at_a(st, min(1, math.hypot((u - 0.5) * iw, (vv - 0.5) * ih) / (iw / 2))), check=2))
+    else:
+        n_ = 4
+        for i in range(n_):
+            x0 = ix + iw * i // n_; x1 = ix + iw * (i + 1) // n_
+            it.append(R(x0, iy, x1 - x0, ih, mix(v[0], v[1], i / (n_ - 1)), f"band {i+1}"))
+    return G(f"variable chip {n} ({ {'s': 'solid', 'l': 'linear', 'r': 'radial', 'st': 'stepped'}[k]})", *it)
+
+def var_grid(x, y, cols, cw, vars_, sel=None, focus=None, chip_h=12, name_col="text"):
+    """Chips with the name under each. Cell cw wide, chip_h + 14 high."""
+    it = []
+    ch = chip_h + 15
+    for i, var in enumerate(vars_):
+        cx, cy = x + (i % cols) * cw, y + (i // cols) * ch
+        g = []
+        if var[0] == sel:
+            g.append(R(cx - 1, cy - 1, cw - 1, ch - 1, "moss", "cell bg (selected)"))
+        g.append(var_chip(cx, cy, cw - 3, chip_h, var))
+        g.append(T(var[0], cx, cy + chip_h, "bright" if var[0] == sel else name_col, "name " + var[0]))
+        if var[0] == focus:
+            g.append(frame_lines(cx - 2, cy - 2, cw + 1, ch + 1, "amber", "keyboard focus ring (amber)"))
+        it.append(G(f"variable colors.{var[0]}" + (" (selected)" if var[0] == sel else "") + (" (keyboard focus)" if var[0] == focus else ""), *g))
+    rows = (len(vars_) + cols - 1) // cols
+    return G("variables (solid and gradient)", *it), rows * ch
+
+def sidebar(lay, lang, color, title=None, vars_=VARS, sel_name=None, used=None, alpha="100%", hover_add=False, hex_focus=False, var_kind=None):
     t = TX[lang]
     x0, w = lay.sb_x, lay.sb_w
     ix, iw = x0 + 5, w - 10
@@ -502,8 +542,13 @@ def sidebar(lay, lang, color, title=None, palette=PALETTE, sel_name=None, used=N
              R(x0, MAIN_Y, w, STATUS_Y - MAIN_Y, "panel", "sidebar bg"),
              G("sidebar header", R(x0, MAIN_Y, w, 13, "raised", "header bg"), R(x0, MAIN_Y + 13, w, 1, "void", "header line"),
                T(title or t["color"], x0 + 5, MAIN_Y, "mute", "title"), I("chevron-right", x0 + w - 11, MAIN_Y + 3, "mute", "collapse to rail"))]
-    y = MAIN_Y + 18
-    items += sv_square(ix, y, iw, 56, color); y += 61
+    y = MAIN_Y + 17
+    if var_kind is not None:
+        sg, _ = seg(ix, y, ["", "", ""], var_kind, "variable kind (solid / linear / radial)", icons=["solid", "gradient", "radial"], w=(iw + 2) // 3)
+        items.append(sg)
+        y += 18
+    sq = 44 if var_kind is not None else 52
+    items += sv_square(ix, y, iw, sq, color); y += sq + 5
     items += hue_strip(ix, y, iw, 6, color); y += 11
     items += alpha_strip(ix, y, iw, 6, color); y += 11
     hw = tw("#e0607a") + 8
@@ -514,27 +559,16 @@ def sidebar(lay, lang, color, title=None, palette=PALETTE, sel_name=None, used=N
     y += 13
     items.append(G("recent colors", *[sw(ix + i * 12, y, 10, c) for i, c in enumerate(RECENT)]))
     y += 15
-    items.append(G("label palette", T(t["palette"], ix, y - 1, "mute"), I("plus", ix + iw - 8, y + 2, "lizard", "add named color")))
+    items.append(G("label variables", T(t["palette"], ix, y - 1, "mute"), I("plus", ix + iw - 8, y + 2, "lizard", "add variable")))
     y += 13
-    for name, c in palette:
-        sel = name == sel_name
-        it = []
-        if sel:
-            it += [R(x0, y, w, ROW_H, "moss", "row bg (selected)"), R(x0, y, 2, ROW_H, "lizard", "selection bar")]
-        it += [sw(ix, y + 3, 12, c), T(name, ix + 16, y + 3, "bright" if sel else "text")] + ([T(c[:7], ix + iw - tw(c[:7]), y + 3, "text", "hex (selected row only)")] if sel else [])
-        items.append(G(f"palette color {name}" + (" (selected, editing)" if sel else ""), *it))
-        y += ROW_H
+    g, gh = var_grid(ix + 1, y, 3, 32, vars_, sel=sel_name)
+    items.append(g)
+    y += gh
     if used:
         items.append(T(used, ix, y, "lizard", "used-by hint"))
         y += 13
-    y += 3
-    items.append(T(t["gradients"], ix, y - 1, "mute", "label gradients"))
-    y += 13
-    for name, cols in (SAVED_GRADS[:2] if used else SAVED_GRADS):
-        items.append(G(f"saved gradient {name}", frame_lines(ix, y, iw, 9, "void", "outline"), grad_bar_vec(f"gradient {name} (vector)", ix + 1, y + 1, iw - 2, 7, cols)))
-        y += 11
     by = STATUS_Y - 20
-    items.append(button(ix, by, iw, 16, "button + add to palette" + (" (hover)" if hover_add else ""), icon="plus", label=t["add_pal"],
+    items.append(button(ix, by, iw, 16, "button + save as variable" + (" (hover)" if hover_add else ""), icon="plus", label=t["add_pal"],
                         state="hover" if hover_add else "normal"))
     assert y < by, ("sidebar overflow", y, by)
     return G("palette sidebar (open)", *items)
@@ -544,8 +578,8 @@ def rail(lay):
     items = [R(x0 - 2, MAIN_Y, 2, STATUS_Y - MAIN_Y, "void", "splitter"), R(x0 - 1, MAIN_Y, 1, STATUS_Y - MAIN_Y, "bevel", "splitter highlight"),
              R(x0, MAIN_Y, 14, STATUS_Y - MAIN_Y, "panel", "rail bg"), button(x0 + 1, MAIN_Y + 2, 12, 12, "button expand palette", icon="chevron-left")]
     y = MAIN_Y + 20
-    for n, c in PALETTE:
-        items.append(sw(x0 + 2, y, 10, c, f"palette {n}")); y += 12
+    for var in VARS:
+        items.append(var_chip(x0 + 2, y, 10, 10, var)); y += 12
     items.append(R(x0 + 3, y + 1, 8, 1, "bevel", "separator")); y += 5
     for c in RECENT[:4]:
         items.append(sw(x0 + 2, y, 10, c, f"recent {c}")); y += 12
@@ -659,7 +693,8 @@ def fill_editor(x, y, lang, kind, stops, sel=1, steps=0, code_lines=(), title=""
     y4 = y3 + ch + 3
     items.append(T(t["hint1"], x + 6, y4, "mute", "hint add"))
     items.append(T(t["hint2"], x + 6, y4 + 12, "mute", "hint remove"))
-    hh = y4 + 12 + 16 - y
+    items.append(G("button + save as variable", I("plus", x + 6, y4 + 29, "lizard"), T(CP[lang]["save"], x + 16, y4 + 26, "lizard")))
+    hh = y4 + 26 + 16 - y
     items = chrome(x, y, w, hh, name="fill editor") + items[4:]
     if tail:
         side, ty = tail
@@ -729,16 +764,16 @@ SKY_STOPS = even(["#3b2a6b", "#e0607a", "#f2a65a"])
 def f_fill_linear():
     lang = "en"; t = TX[lang]
     lay = Lay("open")
-    sky_code = "rect((0, 0), (480, horizon), linear((240, 0), (240, 200), [#3b2a6b, #e0607a, #f2a65a]))"
+    sky_code = "rect((0, 0), (480, horizon), gradient([#3b2a6b, #e0607a, #f2a65a], 90deg))"
     rows = rows_layers(sky_code=sky_code, sun_open=False)
     props = props2(lay, lang, f"rect · {t['line']} 26", lambda y: G("fields", gen.point_field(6, y, "pos", "0", "0", "pos")[0],
-                   G("field fill (gradient)", T("fill", 104, y + 2, "mute"), field(104 + 32, y, 112, 18, [grad_bar_vec("fill swatch gradient (vector)", 104 + 35, y + 4, 24, 10, ["#3b2a6b", "#e0607a", "#f2a65a"]),
-                     T("linear(…)", 104 + 63, y + 3, "text")], "input fill", focused=True))), "line 26 · drag the handles on the canvas")
+                   G("field fill (gradient)", T("fill", 104, y + 2, "mute"), field(104 + 32, y, 116, 18, [grad_bar_vec("fill swatch gradient (vector)", 104 + 35, y + 4, 24, 10, ["#3b2a6b", "#e0607a", "#f2a65a"]),
+                     T("gradient(…)", 104 + 63, y + 3, "text")], "input fill", focused=True))), "line 26 · drag the handles on the canvas")
     bodies = layer_bodies(sky=("linear", (240, 0), (240, 200), SKY_STOPS, 0))
     hnd = linear_handles(lay, (240, 0), (240, 200), SKY_STOPS)
     ax, ay = lay.cv((0, 0))
     ov = G("selection (rect line 26)", sel_box(*lay.cvs((0, 0)), *lay.cvs((480, 200))), hnd)
-    lines = ["linear((240, 0),", "  (240, 200),", "  [#3b2a6b, #e0607a,", "   #f2a65a])"]
+    lines = ["gradient([#3b2a6b,", "  #e0607a, #f2a65a],", "  90deg)"]
     fe, fh = fill_editor(lay.cx0 - FE_W - 4, MAIN_Y + 22, lang, 1, SKY_STOPS, sel=1, code_lines=lines, title="rect · line 26",
                          tail=("right", int(lay.cv((0, 60))[1])), ghost_at=0.75)
     gx = lay.cx0 - FE_W - 4 + 6 + 1 + int((FE_W - 15) * 0.75)
@@ -749,14 +784,14 @@ def f_fill_linear():
 def f_fill_stepped():
     lang = "en"; t = TX[lang]
     lay = Lay("open")
-    sky_code = "rect((0, 0), (480, horizon), linear((240, 0), (240, 200), [#3b2a6b, #e0607a, #f2a65a], 5))"
+    sky_code = "rect((0, 0), (480, horizon), gradient([#3b2a6b, #e0607a, #f2a65a], 90deg, 5))"
     rows = rows_layers(sky_code=sky_code, sun_open=False)
     props = props2(lay, lang, f"rect · {t['line']} 26", lambda y: G("fields", gen.point_field(6, y, "pos", "0", "0", "pos")[0],
                    gen.num_field(104, y, "steps", "5", "steps", focused=True)), "line 26 · 5 flat bands, no blending")
     bodies = layer_bodies(sky=("linear", (240, 0), (240, 200), SKY_STOPS, 5))
     hnd = linear_handles(lay, (240, 0), (240, 200), SKY_STOPS)
     ov = G("selection (rect line 26)", sel_box(*lay.cvs((0, 0)), *lay.cvs((480, 200))), hnd)
-    lines = ["linear((240, 0),", "  (240, 200),", "  [#3b2a6b, #e0607a,", "   #f2a65a], 5)"]
+    lines = ["gradient([#3b2a6b,", "  #e0607a, #f2a65a],", "  90deg, 5)"]
     fe, fh = fill_editor(lay.cx0 - FE_W - 4, MAIN_Y + 22, lang, 1, SKY_STOPS, sel=1, steps=5, code_lines=lines, title="rect · line 26",
                          tail=("right", int(lay.cv((0, 60))[1])))
     return window2([gen.toolbar(None, lang), tabbar2(unsaved=True), code_panel(lay, lang, rows, sel_line=26, props=props),
@@ -767,9 +802,9 @@ def f_palette():
     lang = "en"; t = TX[lang]
     lay = Lay("open")
     new_sky = "#e9806e"
-    pal = [("sky", new_sky)] + PALETTE[1:]
+    pal = [("sky", "s", new_sky)] + VARS[1:]
     NAMED["colors.sky"] = new_sky
-    top = [dict(kind="value", d=0, code=f'let colors = {{"sky": {new_sky}, "sea": #2d6a8f, "sun": #fff3c4, "boat": #3b2a6b}}', line=6)]
+    top = [dict(kind="value", d=0, code=f'let colors = {{"sky": {new_sky}, "sea": #2d6a8f, "sun": #fff3c4, "boat": #3b2a6b, "dusk": gradient([#3b2a6b, #e0607a, #f2a65a], 90deg)}}', line=6)]
     rows = rows_layers(sky_code="rect((0, 0), (480, horizon), colors.sky)", extra_top=top)
     for r in rows:
         if r.get("line") == 7: r["line"] = 7
@@ -780,7 +815,7 @@ def f_palette():
     props = props2(lay, lang, f"colors · {t['line']} 6", f, "changing sky repaints its 2 shapes")
     bodies = layer_bodies(sky=("solid", new_sky), wave=new_sky)
     out = window2([gen.toolbar(None, lang), tabbar2(unsaved=True), code_panel(lay, lang, rows, sel_line=6, hover_lines=(18, 26), props=props),
-                   canvas_area2(lay, drawing_g(lay, bodies)), sidebar(lay, lang, new_sky, title="colors.sky", palette=pal, sel_name="sky",
+                   canvas_area2(lay, drawing_g(lay, bodies)), sidebar(lay, lang, new_sky, title="colors.sky", vars_=pal, sel_name="sky", var_kind=0,
                    used="in 2 shapes", hover_add=False, hex_focus=True),
                    status2(lang, lay, saved=False, pos=None)])
     NAMED["colors.sky"] = "#f2a65a"
@@ -884,11 +919,13 @@ def blend_list(x, y, cur="Multiply", lang="en", w=None):
     items = chrome(x, y, w, hh, name="blend list") + items[4:]
     return G("blend mode dropdown (open)", *items), w, hh
 
+THUMBS = []
 def thumb_g(name, x, y, body, bg_check=True):
+    """Frame + checker stay in the row's pixels; the rendered drawing is queued as a vector drawn on top."""
     it = [frame_lines(x, y, 29, 20, "void", "thumb outline")]
     if bg_check:
         it.append(checker(x + 1, y + 1, 27, 18, "#d4dacd", "#a0ab9b", 3, "transparency checker"))
-    it.append(vec(f"thumbnail {name} (vector)", x + 1, y + 1, 480, 320, body, 27 / 480))
+    THUMBS.append(vec(f"thumbnail {name} (vector)", x + 1, y + 1, 480, 320, body, 27 / 480))
     return G(f"thumbnail {name}", *it)
 
 def a_layer_row(x0, y, w, name, body, sel=False, open_=None, badge=None, kind="layer", bg_check=True):
@@ -915,6 +952,7 @@ def a_obj_row(x0, y, w, kind, name, sel=False):
 
 def right_column(lang, color, layers, mode=("Normal", "100%"), dropdown=False, title=None):
     t = TX[lang]
+    THUMBS.clear()
     x0, w = RC_X, W - RC_X
     items = [R(ART_X1, 50, 2, STATUS_Y - 50, "void", "splitter"), R(ART_X1 + 1, 50, 1, STATUS_Y - 50, "bevel", "splitter highlight"),
              R(x0, 50, w, STATUS_Y - 50, "panel", "right column bg")]
@@ -926,9 +964,9 @@ def right_column(lang, color, layers, mode=("Normal", "100%"), dropdown=False, t
     pal.append(sfield(x0 + 5, 112, 57, color[:7], "hex"))
     pal.append(sfield(x0 + 64, 112, 36, "100%", "alpha", "amber"))
     pal.append(button(x0 + 102, 113, 14, 14, "button eyedropper", icon="dropper"))
-    pal.append(G("palette colors", *[sw(x0 + 5 + i * 12, 131, 10, c, f"palette {n}") for i, (n, c) in enumerate(PALETTE)]))
-    pal.append(R(x0 + 5 + 4 * 12 + 1, 132, 1, 8, "bevel", "separator"))
-    pal.append(G("recent colors", *[sw(x0 + 5 + 4 * 12 + 5 + i * 12, 131, 10, c, f"recent {c}") for i, c in enumerate(RECENT[:7])]))
+    pal.append(G("variables (solid and gradient chips; names in tooltip)", *[var_chip(x0 + 5 + i * 12, 131, 10, 10, v) for i, v in enumerate(VARS)]))
+    pal.append(R(x0 + 5 + 7 * 12 + 1, 132, 1, 8, "bevel", "separator"))
+    pal.append(G("recent colors", *[sw(x0 + 5 + 7 * 12 + 5 + i * 12, 131, 10, c, f"recent {c}") for i, c in enumerate(RECENT[:4])]))
     items.append(G("palette (compact)", *pal))
     y = 145
     lay_items = [R(x0, y, w, 13, "raised", "header bg"), R(x0, y + 13, w, 1, "void", "header line"), T(t["layers"], x0 + 5, y, "mute"),
@@ -952,7 +990,8 @@ def right_column(lang, color, layers, mode=("Normal", "100%"), dropdown=False, t
     el, _ = a_layer_row(x0, py + 1, w, "canvas" if lang == "en" else "lienzo", bgb, bg_check=False)
     lay_items.append(G("pinned canvas row (background)", R(x0, py, w, 1, "void", "pin line"), R(x0, py + 1, w, 22, "coal", "pinned bg"), el))
     items.append(G("layers panel (artist)", *lay_items))
-    out = G("right column (palette + layers)", *items)
+    out = G("right column (palette + layers)", *items) + G("layer thumbnails (rendered, vector)", *THUMBS)
+    THUMBS.clear()
     if dropdown:
         dl, dw, dh = blend_list(x0 + 5, 161 + 17, mode[0], lang)
         out += dl
@@ -1046,7 +1085,7 @@ def f_blend_artist():
                     status2(lang, lay, saved=False, pos=None, objects=(16, 1800))])
 
 GLOW_STOPS = [(0, "#fff3c4", False), (0.6, "#f2a65a", True), (1, "#f2a65a00", False)]
-GLOW_CODE = "circle((360, 90), 56, radial((360, 90), 56, [#fff3c4, hard(#f2a65a, 0.6), #f2a65a00]))"
+GLOW_CODE = "circle((360, 90), 56, radial_gradient([#fff3c4, hard(#f2a65a, 0.6), #f2a65a00]))"
 
 def f_spanish_menu():
     lang = "es"; t = TX[lang]
@@ -1073,7 +1112,7 @@ def f_spanish_fill():
     rr = int(56 * lay.z)
     hnd = G("gradient handles (radial)", pixel_circle(cx, cy, rr + 1, "void", "radius ring outline"), pixel_circle(cx, cy, rr, "bright", "radius ring"),
             gen.anchor(cx * S, cy * S, "handle center", "alt"), gen.anchor((cx + rr) * S, cy * S, "handle radius", "normal"))
-    lines = ["radial((360, 90), 56,", "  [#fff3c4,", "   hard(#f2a65a, 0.6),", "   #f2a65a00])"]
+    lines = ["radial_gradient(", "  [#fff3c4,", "   hard(#f2a65a, 0.6),", "   #f2a65a00])"]
     fe, fh = fill_editor(lay.cx0 - FE_W - 4, MAIN_Y + 22, lang, 2, GLOW_STOPS, sel=1, code_lines=lines, title="línea 11", at="60%",
                          tail=("right", MAIN_Y + 60))
     return window2([gen.toolbar(None, lang), tabbar2(unsaved=True), code_panel(lay, lang, rows, sel_line=11, props=props),
@@ -1506,7 +1545,7 @@ def ac_frame(variant):
         doc = [lambda a, b: sig(a, b, "math.sin", ["x"], -1), lambda a, b: T("Sine of x in radians.", a, b, "text")]
         pop, h = ac_popup(cx - 18 - 7 + 2, ys[12] + ROW_H, items, 0, doc, "member completion (math.s)")
         parts.append(pop)
-    parts.append(status2(lang, None, saved=False, pos=None, zoom="75%"))
+    parts.append(status2(lang, lay, saved=False, pos=None))
     return window2(parts)
 
 # ---------- style page components ----------
@@ -1536,10 +1575,13 @@ def comps():
          + [sfield(5, 88 - 0, 57, "#e0607a", "hex"), sfield(64, 88, 37, "100%", "alpha", "amber")]
     out["hsv picker"] = wrap(106, 106, G("hsv picker", *hp))
     bb = layer_bodies()
+    THUMBS.clear()
     el, _ = a_layer_row(0, 0, 150, "sun", bb["sun"])
-    out["layer row/normal"] = wrap(150, 22, R(0, 0, 150, 22, "panel", "bg") + el)
+    out["layer row/normal"] = wrap(150, 22, R(0, 0, 150, 22, "panel", "bg") + el + "".join(THUMBS))
+    THUMBS.clear()
     el, _ = a_layer_row(0, 0, 150, "shadows", SHADOWS, sel=True, open_=False, badge="MUL")
-    out["layer row/selected + blend badge"] = wrap(150, 22, R(0, 0, 150, 22, "panel", "bg") + el)
+    out["layer row/selected + blend badge"] = wrap(150, 22, R(0, 0, 150, 22, "panel", "bg") + el + "".join(THUMBS))
+    THUMBS.clear()
     cm, ch = coach(0, 6, 250, "Make your first shape", TUT["en"][0][1], 0, 4, "en", tail=("up", 20))
     out["coach-mark"] = wrap(254, ch + 10, cm)
     dl, dw, dh = blend_list(0, 0)
@@ -1548,16 +1590,128 @@ def comps():
     out["slider/range"] = wrap(80, 16, slider(2, 0, 76, 0.1, 0.45))
     sg, ex = seg(0, 0, ["Solid", "Linear", "Radial"], 1, "tabs", icons=["solid", "gradient", "radial"], w=58)
     out["segmented tabs"] = wrap(ex + 1, 14, sg)
-    st = statusbar_y(0, [counter_part("en", 840, 1800)[0]], [], w=150)
-    out["status counter/normal"] = wrap(150, 16, st)
-    out["status counter/near"] = wrap(150, 16, statusbar_y(0, [counter_part("en", 1520, 1800)[0]], [], w=150))
-    out["status counter/over"] = wrap(150, 16, statusbar_y(0, [counter_part("en", 2130, 1800)[0]], [], w=150))
+    st = statusbar_y(0, [counter_part("en", 840, 1800)[0]], [], w=180)
+    out["status counter/normal"] = wrap(180, 16, st)
+    out["status counter/near"] = wrap(180, 16, statusbar_y(0, [counter_part("en", 1520, 1800)[0]], [], w=180))
+    out["status counter/over"] = wrap(180, 16, statusbar_y(0, [counter_part("en", 2130, 1800)[0]], [], w=180))
     out["row badge/blend"] = wrap(280, ROW_H, R(0, 0, 280, ROW_H, "panel", "bg") + gen.row_el(dict(kind="layer", d=0, code="layer shadows", line=9, open=True, count="MUL 80%"), 0, w=280)[0])
     pop, ph = ac_popup(0, 0, [("circle", "circle", [0, 1], "function"), ("function", "circle_ring", [0, 1], "line 30")], 0,
                        [lambda a, b: sig(a, b, "circle", ["center", "r", "fill"], -1)], "autocomplete")
     out["autocomplete"] = wrap(216, ph + 2, pop)
+    for v in VARS[3:]:
+        out[f"variable chip/{ {'s': 'solid', 'l': 'linear', 'r': 'radial', 'st': 'stepped'}[v[1]]}"] = wrap(32, 27, R(0, 0, 32, 27, "panel", "bg") + var_grid(1, 1, 1, 32, [v])[0])
+    pop, ph = color_popover(0, 7, "en", "#fff3c4", tail=("up", 20))
+    out["color popover"] = wrap(154, ph + 10, pop)
+    fe, fh = fill_editor(0, 0, "en", 1, SKY_STOPS, sel=1, code_lines=["gradient([#3b2a6b,", "  #e0607a, #f2a65a],", "  90deg)"], title="rect · line 26")
+    out["fill editor"] = wrap(FE_W + 2, fh + 2, fe)
+    ps, ph2 = pen_settings(0, 0, "en", True)
+    out["pen settings"] = wrap(322, ph2 + 2, ps)
     out["sidebar rail"] = wrap(14, 200, rail(Lay("rail")).replace(f'y="{MAIN_Y}"', 'y="0"')) if False else None
     return {k: v for k, v in out.items() if v}
+
+# ---------- color popover ----------
+CP = {"en": dict(vars="VARIABLES", recent="RECENT", save="Save as variable…", writes="writes", name="name", ok="Save"),
+      "es": dict(vars="VARIABLES", recent="RECIENTES", save="Guardar variable…", writes="escribe", name="nombre", ok="Guardar")}
+RECENT12 = RECENT + ["#f36c5b", "#72b8e6", "#c8f08a", "#6e4a2a", "#a9d3e4", "#fbf8ef"]
+
+def tail_px(side, x, y, w, h, p):
+    tl = []
+    for k in range(6):
+        span = 11 - 2 * k
+        if span <= 0: break
+        top = p - span // 2
+        if side == "up":
+            tl += [R(top, y - k, span, 1, "void", "tail edge")] + ([R(top + 1, y - k, span - 2, 1, "row", "tail fill")] if span > 2 else [])
+        elif side == "down":
+            tl += [R(top, y + h - 1 + k, span, 1, "void", "tail edge")] + ([R(top + 1, y + h - 1 + k, span - 2, 1, "row", "tail fill")] if span > 2 else [])
+        elif side == "left":
+            tl += [R(x - k, top, 1, span, "void", "tail edge")] + ([R(x - k, top + 1, 1, span - 2, "row", "tail fill")] if span > 2 else [])
+    return G("tail", *tl)
+
+def color_popover(x, y, lang, cur, focus="sun", current="sun", save_open=False, tail=None, target="fill"):
+    c = CP[lang]
+    w = 150
+    ix, iw = x + 5, w - 10
+    it = []
+    yy = y + 3
+    it.append(T(c["vars"], ix, yy, "mute", "label variables")); yy += 14
+    g, gh = var_grid(ix + 1, yy, 4, 35, VARS, sel=current, focus=focus, chip_h=10)
+    it.append(g)
+    yy += gh + 2
+    it.append(T(c["recent"], ix, yy, "mute", "label recent")); yy += 14
+    it.append(G("recent colors (14)", *[sw(ix + i * 10, yy, 9, col) for i, col in enumerate(RECENT12)])); yy += 14
+    it += sv_square(ix, yy, iw, 36, cur, "saturation/value square (pixels)"); yy += 40
+    it += hue_strip(ix, yy, iw, 5, cur); yy += 9
+    it.append(sfield(ix, yy, 62, cur[:7], "hex"))
+    it.append(sfield(ix + 64, yy, 38, "100%", "alpha", "amber"))
+    it.append(button(ix + iw - 14, yy + 1, 14, 14, "button eyedropper", icon="dropper"))
+    yy += 20
+    if save_open:
+        bw = tw(c["ok"]) + 8
+        it.append(G("save as variable (open)", sfield(ix, yy, iw - bw - 2, "glow", "variable name", focused=True),
+                    R(ix + 4 + tw("glow"), yy + 2, 1, 12, "amber", "caret"),
+                    button(ix + iw - bw, yy + 1, bw, 14, "button save variable", label=c["ok"])))
+        yy += 18
+        it.append(T("colors.glow = " + cur[:7], ix, yy, "mute", "writes hint"))
+        yy += 14
+    else:
+        it.append(G("button + save as variable", I("plus", ix, yy + 3, "lizard"), T(c["save"], ix + 10, yy, "lizard")))
+        yy += 14
+        it.append(G("writes hint", T(c["writes"], ix, yy, "mute"), code("colors." + focus, ix + tw(c["writes"]) + 7, yy, name="ref")))
+        yy += 14
+    h = yy + 3 - y
+    out = chrome(x, y, w, h, name="color popover") + it
+    if tail:
+        out.append(tail_px(tail[0], x, y, w, h, tail[1]))
+    return G(f"color popover ({target})", *out), h
+
+COLORS_ROW = dict(kind="value", d=0, code='let colors = {"sky": #f2a65a, "sea": #2d6a8f, "sun": #fff3c4, "boat": #3b2a6b}', line=6)
+
+def f_pop_row():
+    lang = "en"; t = TX[lang]
+    lay = Lay("rail")
+    rows = rows_layers(extra_top=[COLORS_ROW])
+    ys = row_heights(rows)
+    sx = 46 + 10 + tw("circle((360, 90), 34, ")
+    ring = G("swatch focus (clicked)", frame_lines(sx - 2, ys[10] + 2, 10, 10, "amber", "focus ring"))
+    pop, h = color_popover(sx - 20, ys[10] + ROW_H + 6, lang, "#fff3c4", tail=("up", sx + 3), target="code-row swatch, line 10")
+    props = props2(lay, lang, f"circle · {t['line']} 10", circ_cr("34"), "click a swatch: color popover")
+    return window2([gen.toolbar(None, lang), tabbar2(), code_panel(lay, lang, rows, sel_line=10, props=props), ring,
+                    canvas_area2(lay, drawing_g(lay, layer_bodies())), rail(lay), pop, status2(lang, lay, pos=None)])
+
+def f_pop_props():
+    lang = "en"; t = TX[lang]
+    lay = Lay("rail")
+    rows = rows_layers(extra_top=[COLORS_ROW], glow_code="circle((360, 90), 56, #f2a65a66)")
+    def pf(y):
+        g1, x = gen.point_field(6, y, "center", "360", "90", "center")
+        g2 = gen.num_field(x + 4, y, "r", "56", "r")
+        g3 = G("field fill (color, focused)", T("fill", 6, y + 22, "mute"),
+               field(38, y + 20, tw("#f2a65a66") + 22, 18, [R(41, y + 24, 10, 10, "void", "swatch outline"), R(42, y + 25, 8, 8, "#f2a65a", "swatch"),
+                     T("#f2a65a66", 54, y + 23, "text")], "input fill", focused=True))
+        return G("fields", g1, g2, g3)
+    props = props2(lay, lang, f"circle · {t['line']} 11", pf, None)
+    pop, h = color_popover(30, 0, lang, "#f2a65a", save_open=True)
+    py = PROPS_Y + 42 - 6 - h
+    pop, h = color_popover(30, py, lang, "#f2a65a", focus=None, current=None, save_open=True, tail=("down", 48), target="properties fill field")
+    return window2([gen.toolbar(None, lang), tabbar2(unsaved=True), code_panel(lay, lang, rows, sel_line=11, props=props),
+                    canvas_area2(lay, drawing_g(lay, layer_bodies())), rail(lay), pop, status2(lang, lay, saved=False, pos=None)])
+
+def f_pop_artist_es():
+    lang = "es"
+    lay = art_lay()
+    b = layer_bodies()
+    x0, y0 = lay.cvs((326, 56)); x1, y1 = lay.cvs((394, 124))
+    ov = G("selection (circle line 10)", sel_box(x0, y0, x1, y1), gen.anchor(*lay.cvs((360, 90)), "anchor center", "normal"),
+           gen.anchor(*lay.cvs((394, 90)), "anchor radius", "alt"))
+    def ins(x, y):
+        return G("fields", T("relleno", x, y + 1, "mute"), sfield(x + 54, y, tw("colors.sun") + 22, "colors.sun", "fill", swatch="#fff3c4", focused=True),
+                 T("centro (360, 90)  r 34", x + 54 + tw("colors.sun") + 30, y + 1, "mute"))
+    fx = 18 + tw("círculo · sun") + 6 + 7 + 54
+    pop, h = color_popover(fx - 10, MAIN_Y + 25, lang, "#fff3c4", focus="sky", current="sun", tail=("up", fx + 8), target="artist inspector fill")
+    return window2([toolbar_artist(lang), tabbar2(), inspector(lang, ins, "circle", "círculo · sun"), tool_column("circle"),
+                    canvas_area2(lay, drawing_g(lay, b), ov, splitter=False), right_column(lang, "#fff3c4", art_layers(b)), pop,
+                    status2(lang, lay, pos=None)])
 
 FRAMES = [
  ("r1", "R002-1 Shape menu – right-click on canvas, Fill ▸ open", f_menu),
@@ -1583,6 +1737,9 @@ FRAMES = [
  ("r20", "R002-20 Autocomplete – typing ci", lambda: ac_frame("ci")),
  ("r21", "R002-21 Autocomplete – signature hint", lambda: ac_frame("sig")),
  ("r22", "R002-22 Autocomplete – member math.s", lambda: ac_frame("math")),
+ ("r23", "R002-23 Color popover – from a code-row swatch", f_pop_row),
+ ("r24", "R002-24 Color popover – from the fill field, save as variable", f_pop_props),
+ ("r25", "R002-25 Color popover – artist mode, Spanish", f_pop_artist_es),
 ]
 
 if __name__ == "__main__":
