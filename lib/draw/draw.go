@@ -9,6 +9,13 @@ import "embed"
 //go:embed *.liz
 var Files embed.FS
 
+// Docs holds the translated doc comments, one file per language
+// (docs/es.liz defines docs_es). They are data for the tooltips, not library
+// code: they are never loaded into a drawing's environment.
+//
+//go:embed docs/*.liz
+var Docs embed.FS
+
 // Order is the order the libraries load in, since a library can use what the
 // ones before it define. here.liz must come first: the host replaces its
 // here() with the real one after loading it.

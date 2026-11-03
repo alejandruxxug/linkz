@@ -31,8 +31,9 @@ const libLineBase = 100_000
 type Src struct {
 	stats *Stats
 
-	mu    sync.Mutex
-	cache map[string]*ast.Program // parsed libraries
+	mu        sync.Mutex
+	cache     map[string]*ast.Program   // parsed libraries
+	docsCache map[string]map[string]any // translated docs by language
 }
 
 // NewSrc makes the src primitives. stats may be nil.
@@ -61,7 +62,20 @@ func (s *Src) Builtins() *object.Hash {
 			return s.Run(code)
 		},
 		"library_docs": func(args ...object.Object) object.Object {
-			return fromGo(s.libraryDocs())
+			// src.library_docs() is English; src.library_docs("es") uses the
+			// translations in lib/draw/docs, English where one is missing.
+			lang := ""
+			if len(args) > 1 {
+				return errorf("wrong number of arguments. got=%d, want=0 or 1 (lang)", len(args))
+			}
+			if len(args) == 1 {
+				l, err := oneString(args, "lang")
+				if err != nil {
+					return err
+				}
+				lang = l
+			}
+			return fromGo(s.libraryDocsIn(lang))
 		},
 	})
 }
@@ -209,6 +223,65 @@ func (s *Src) libraryDocs() map[string]any {
 		walk(ScanSource(string(code)).Stmts)
 	}
 	return out
+}
+
+// libraryDocsIn is libraryDocs with the summaries and parameter lines of a
+// language laid over the English ones. A missing function, summary or
+// parameter keeps its English text; an unknown language changes nothing.
+func (s *Src) libraryDocsIn(lang string) map[string]any {
+	docs := s.libraryDocs()
+	tr := s.translation(lang)
+	for name, t := range tr {
+		entry, ok := docs[name].(map[string]any)
+		if !ok {
+			continue
+		}
+		doc := entry["doc"].(map[string]any)
+		th, _ := t.(map[string]any)
+		if sum, ok := th["summary"].(string); ok && sum != "" {
+			doc["summary"] = sum
+		}
+		params := doc["params"].(map[string]any)
+		tp, _ := th["params"].(map[string]any)
+		for p, text := range tp {
+			if _, known := params[p]; known {
+				params[p] = text
+			}
+		}
+	}
+	return docs
+}
+
+// translation reads lib/draw/docs/<lang>.liz (its docs_<lang> hash) once.
+// It is nil for an unknown language or a file that does not run.
+func (s *Src) translation(lang string) map[string]any {
+	if lang == "" || strings.ContainsAny(lang, "/\\.") {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if tr, ok := s.docsCache[lang]; ok {
+		return tr
+	}
+	var tr map[string]any
+	if code, err := draw.Docs.ReadFile("docs/" + lang + ".liz"); err == nil {
+		prevSteps := evaluator.Steps()
+		env := object.NewEnvironment()
+		prog, errs := syntaxErrors(string(code))
+		if len(errs) == 0 {
+			if res := evaluator.Eval(prog, env); res == nil || res.Type() != object.ERROR_OBJ {
+				if v, ok := env.Get("docs_" + lang); ok {
+					tr, _ = toGo(v, 0).(map[string]any)
+				}
+			}
+		}
+		evaluator.SetSteps(prevSteps)
+	}
+	if s.docsCache == nil {
+		s.docsCache = map[string]map[string]any{}
+	}
+	s.docsCache[lang] = tr
+	return tr
 }
 
 // ---- src.run ----

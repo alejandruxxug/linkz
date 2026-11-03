@@ -467,3 +467,56 @@ func TestLibraryDocsKeepCommaDefaults(t *testing.T) {
 		t.Errorf("radial_gradient defaults = %v", defs)
 	}
 }
+
+func TestLibraryDocsTranslated(t *testing.T) {
+	s := NewSrc(nil)
+	en, es := s.libraryDocsIn(""), s.libraryDocsIn("es")
+	docOf := func(m map[string]any, name string) map[string]any {
+		return m[name].(map[string]any)["doc"].(map[string]any)
+	}
+	var missing []string
+	for name := range en {
+		d := docOf(en, name)
+		params, _ := d["params"].(map[string]any)
+		if d["summary"] == "" && len(params) == 0 {
+			continue // undocumented helper
+		}
+		e := docOf(es, name)
+		if d["summary"] != "" && e["summary"] == d["summary"] {
+			missing = append(missing, name+" (summary)")
+		}
+		for p, text := range params {
+			if e["params"].(map[string]any)[p] == text {
+				missing = append(missing, name+"."+p)
+			}
+		}
+		if e["example"] != d["example"] {
+			t.Errorf("%s: the example must stay as it is", name)
+		}
+	}
+	if len(missing) > 0 {
+		t.Errorf("no Spanish text for: %v", missing)
+	}
+}
+
+func TestLibraryDocsFallback(t *testing.T) {
+	s := NewSrc(nil)
+	en := s.libraryDocsIn("")
+	for _, lang := range []string{"xx", "../es", "es.liz"} {
+		got := s.libraryDocsIn(lang)
+		if fmt.Sprint(got["circle"]) != fmt.Sprint(en["circle"]) {
+			t.Errorf("language %q changed the docs", lang)
+		}
+	}
+	// A function missing from the translation keeps its English doc.
+	s.docsCache = map[string]map[string]any{"zz": {"circle": map[string]any{"summary": "Solo resumen"}}}
+	got := s.libraryDocsIn("zz")
+	c := got["circle"].(map[string]any)["doc"].(map[string]any)
+	e := en["circle"].(map[string]any)["doc"].(map[string]any)
+	if c["summary"] != "Solo resumen" || fmt.Sprint(c["params"]) != fmt.Sprint(e["params"]) {
+		t.Errorf("partial translation: summary %v, params %v", c["summary"], c["params"])
+	}
+	if got["rect"].(map[string]any)["doc"].(map[string]any)["summary"] != en["rect"].(map[string]any)["doc"].(map[string]any)["summary"] {
+		t.Error("an untranslated function lost its English summary")
+	}
+}

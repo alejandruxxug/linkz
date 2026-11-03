@@ -1,0 +1,137 @@
+-~> Spanish tooltips for the drawing library, keyed by function name.
+-~> Each entry: "summary" and "params" (parameter name -> text). A missing
+-~> entry, summary or parameter falls back to the English doc comment.
+-~> Code names, parameters and examples stay as they are in the library.
+let docs_es = {
+  "circle": {"summary": "Dibuja un círculo relleno.", "params": {
+    "center": "el centro del círculo, un punto",
+    "r": "el radio en píxeles",
+    "fill": "el color del relleno"}},
+  "ellipse": {"summary": "Dibuja una elipse rellena.", "params": {
+    "center": "el centro de la elipse, un punto",
+    "radii": "la mitad del ancho y la mitad del alto, un punto como (60, 30)",
+    "fill": "el color del relleno"}},
+  "rect": {"summary": "Dibuja un rectángulo relleno.", "params": {
+    "pos": "la esquina superior izquierda, un punto",
+    "size": "ancho y alto, un punto como (120, 60)",
+    "fill": "el color del relleno"}},
+  "line": {"summary": "Dibuja una línea recta con extremos redondeados.", "params": {
+    "a": "dónde empieza la línea, un punto",
+    "b": "dónde termina la línea, un punto",
+    "color": "el color de la línea",
+    "width": "el grosor en píxeles"}},
+  "polygon": {"summary": "Dibuja una figura rellena de lados rectos.", "params": {
+    "points": "las esquinas en orden, una lista de puntos",
+    "fill": "el color del relleno"}},
+  "path": {"summary": "Dibuja una figura rellena de contorno suave, con huecos si los das. El contorno es una curva por los puntos; donde la línea gira más de `corner` grados queda una esquina, y entre dos esquinas los tramos son rectos. Es de lo que se hace una imagen vectorizada.", "params": {
+    "points": "el contorno, una lista de puntos",
+    "fill": "el color del relleno",
+    "closed": "true para unir el último punto con el primero (necesario para huecos)",
+    "smooth": "false para lados rectos, como polygon",
+    "holes": "una lista de listas de puntos, cada una recortada de la figura",
+    "corner": "el giro en grados desde el que un punto queda como esquina"}},
+  "stroke": {"summary": "Dibuja una curva suave que pasa por todos los puntos. Un punto es un círculo y dos son una línea recta. Los extremos son redondos.", "params": {
+    "points": "los sitios por donde pasa la curva, una lista de puntos",
+    "color": "el color de la línea",
+    "width": "el grosor en píxeles"}},
+  "brush": {"summary": "Dibuja una curva suave cuyo grosor y opacidad siguen la presión del lápiz que la trazó. Se guardan las presiones originales, así que otro lápiz puede cambiar el estilo del mismo trazo.", "params": {
+    "points": "los sitios por donde pasa la curva, una lista de puntos",
+    "pressures": "un número de 0 a 1 por cada punto",
+    "color": "el color de la tinta",
+    "pen": "un estilo de lápiz como pens.ink, pens.pencil o pens.calligraphy"}},
+  "hard": {"summary": "Marca una parada como borde: su color empieza justo ahí en lugar de mezclarse con la parada anterior.", "params": {
+    "color": "el color después del borde"}},
+  "linear": {"summary": "Un degradado que corre a lo largo de una línea, de un punto a otro.", "params": {
+    "from": "dónde está la primera parada, un punto",
+    "to": "dónde está la última parada, un punto",
+    "stops": "colores, pares [t, color] o hard(color), al menos dos",
+    "steps": "0 para suave, o de 2 a 64 para ese número de bandas planas"}},
+  "radial": {"summary": "Un degradado que se expande desde un punto, en círculos.", "params": {
+    "center": "dónde está la primera parada, un punto",
+    "r": "la distancia donde está la última parada, en píxeles",
+    "stops": "colores, pares [t, color] o hard(color), al menos dos",
+    "steps": "0 para suave, o de 2 a 64 para ese número de anillos planos"}},
+  "gradient": {"summary": "Un degradado que se ajusta a cada figura, a lo largo de su caja. El ángulo es la dirección en que viajan los colores, en pantalla y girando a la derecha desde la derecha: 0deg va de izquierda a derecha, 90deg de arriba abajo (el valor por defecto), 180deg de derecha a izquierda y 270deg de abajo arriba. No es como CSS, que cuenta desde arriba. La primera parada está en la esquina inicial de la caja y la última en la opuesta.", "params": {
+    "stops": "colores, pares [t, color] o hard(color), al menos dos",
+    "angle": "la dirección, como 90deg, 45deg o 0.25turn",
+    "steps": "0 para suave, o de 2 a 64 para ese número de bandas planas"}},
+  "radial_gradient": {"summary": "Un degradado que sale desde un punto de cada figura, en círculos. El centro es un punto en fracciones de la caja ((0, 0) arriba a la izquierda, (1, 1) abajo a la derecha) y r es una fracción del lado mayor, así que r = 0.5 llega al borde del lado más largo. Los anillos son círculos, no una elipse: en una caja ancha no se llegan a los lados cortos.", "params": {
+    "stops": "colores, pares [t, color] o hard(color), al menos dos",
+    "center": "dónde está la primera parada, en fracciones de la caja",
+    "r": "dónde está la última parada, como fracción del lado mayor",
+    "steps": "0 para suave, o de 2 a 64 para ese número de anillos planos"}},
+  "blend": {"summary": "Define cómo se mezcla la capa en la que está con lo que tiene detrás.", "params": {
+    "mode": "\"normal\", \"multiply\", \"screen\", \"overlay\", \"darken\", \"lighten\" o \"add\""}},
+  "opacity": {"summary": "Define qué tan transparente es la capa en la que está: 1 es sólida, 0 es invisible.", "params": {
+    "x": "un número de 0 a 1"}},
+
+  "lerp": {"summary": "Mezcla dos números o dos puntos: a cuando t = 0, b cuando t = 1.", "params": {}},
+  "bezier_point": {"summary": "El punto en t (de 0 a 1) sobre la Bezier cúbica p0, c1, c2, p3.", "params": {}},
+  "point_line_distance": {"summary": "La distancia del punto p a la recta infinita que pasa por a y b.", "params": {}},
+  "closest_on_segment": {"summary": "El punto del segmento a-b más cercano a p: {point, t a lo largo del segmento, dist}.", "params": {}},
+  "catmull_rom": {"summary": "Catmull-Rom por los puntos, como trozos de Bezier cúbica. El trozo i va de points[i] a points[i + 1] y devuelve [c1, c2, final]. Los extremos usan su propio punto como vecino, así que la curva queda abierta.", "params": {}},
+  "smooth_path": {"summary": "El trazado de una curva suave por los puntos. Un punto es un punto suelto (se dibuja con extremos redondos) y dos son una línea recta.", "params": {}},
+  "flatten_cubic": {"summary": "Agrega los puntos de una Bezier cúbica a `out` (sin el inicial) y los valores t a `ts`, dividiendo hasta que la curva esté a menos de `tol` píxeles de sus segmentos.", "params": {}},
+  "flatten_path": {"summary": "Un trazado como líneas rectas: una lista de {points, closed}, una por subtrazado.", "params": {}},
+  "path_bounds": {"summary": "La caja que rodea un trazado: {min, max}, o null si está vacío.", "params": {}},
+  "point_in_path": {"summary": "Si el punto p está dentro del trazado, con la regla del giro no nulo. Todo subtrazado cuenta como cerrado.", "params": {}},
+  "distance_to_polyline": {"summary": "La distancia de p a una polilínea (lista de puntos). Con `closed` se suma el segmento del último punto al primero.", "params": {}},
+  "distance_to_path": {"summary": "La distancia de p al contorno de un trazado.", "params": {}},
+  "nearest_on_path": {"summary": "El lugar de un trazado más cercano a p, para insertar un ancla ahí: {point, dist, command, t}. Null si el trazado está vacío.", "params": {}},
+  "simplify": {"summary": "Ramer-Douglas-Peucker: una lista nueva sin los puntos que doblan la línea menos de `tolerance` píxeles. Los extremos siempre se quedan.", "params": {}},
+  "turn_angle": {"summary": "Cuánto cambia la dirección en p al ir de a a b pasando por p, en radianes: 0 en línea recta, pi si se devuelve.", "params": {}},
+  "polygon_area2": {"summary": "El doble del área con signo de un polígono (suma del cordón de zapato), como decimal. Es positiva si los puntos van en sentido horario en pantalla (y apunta hacia abajo).", "params": {}},
+  "corner_path": {"summary": "Comandos de trazado para un contorno suave por los puntos, con esquinas vivas. Como smooth_path, pero un punto donde la línea gira más de `corner` grados queda como esquina y los tramos entre esquinas son rectos. Un contorno cerrado termina con [\"Z\"]; uno abierto tiene extremos vivos. Con menos de 3 puntos son líneas rectas.", "params": {}},
+
+  "pen_block": {"summary": "Los ajustes de presión de un lápiz para un dispositivo: los valores por defecto, luego el bloque del lápiz y luego lo propio del dispositivo. Con `source` null usa pen_input.", "params": {}},
+  "pen_curve": {"summary": "La presión efectiva (0 a 1) con la presión cruda p: el piso la reescala y luego se lee la curva (lineal por tramos).", "params": {}},
+  "pen_prepare": {"summary": "Una lista de presiones preparada para el lápiz: suavizada (hacia delante y atrás, para que la línea no se retrase) y aligerada donde los puntos están lejos (rápido). Sigue en espacio crudo: pen_response aplica la curva.", "params": {}},
+  "pen_response": {"summary": "Lo que hace un lápiz en un punto del trazo: [grosor, opacidad] según la presión cruda (0 a 1) y la dirección del trazo ahí, en radianes. El afinado y el grano se aplican después, a lo largo del contorno.", "params": {}},
+  "pen_taper": {"summary": "Cuánto de su grosor conserva un lápiz en `along` (0 al inicio del trazo a 1 al final): 1 en el medio, 0.15 en las puntas.", "params": {}},
+  "pen_noise": {"summary": "Un número repetible de 0 a 1 para cada entero k (el grano del lápiz). El mismo k siempre da el mismo número.", "params": {}},
+
+  "draw": {"summary": "Agrega una figura al dibujo, marcándola con la línea y la capa que informa el host. Devuelve la figura.", "params": {}},
+  "reject": {"summary": "Detiene el dibujo con un mensaje que nombra la llamada que falló.", "params": {}},
+  "ellipse_path": {"summary": "El trazado cerrado de una elipse como cuatro Beziers cúbicas (0.5523 es la constante que las hace redondas).", "params": {}},
+  "paint_order": {"summary": "Las figuras en el orden en que se pintan, del fondo al frente. Las filas más abajo en el archivo quedan detrás; las de una misma fila (un bucle o una función) conservan su orden de creación, así que las últimas quedan encima.", "params": {}},
+  "brush_samples": {"summary": "De dónde sale el contorno de un trazo de pincel: una lista de {pos, w, op} a lo largo de la curva suave, 8 por trozo.", "params": {}},
+  "unit_vector": {"summary": "El vector unitario en la dirección de v, o (1, 0) si v no tiene largo.", "params": {}},
+  "brush_outline": {"summary": "El contorno relleno de un trazo de grosor variable: baja por la izquierda, redondea el final, sube por la derecha y redondea el inicio.", "params": {}},
+  "fade_color": {"summary": "El color con su opacidad multiplicada por `op` (0 a 1).", "params": {}},
+  "add_styles": {"summary": "Le da a una figura los estilos de su ruta de capas. Devuelve la figura.", "params": {}},
+  "layer_key": {"summary": "La clave de una ruta de capas en layer_styles: los primeros `depth` nombres unidos con \"/\".", "params": {}},
+  "styles_for": {"summary": "Los estilos de cada nivel de una ruta de capas, de afuera hacia adentro (se crean al primer uso).", "params": {}},
+  "layer_is_styled": {"summary": "Verdadero si el estilo de una capa cambia cómo se mezcla con lo de abajo.", "params": {}},
+  "layer_chain": {"summary": "Las capas con estilo en las que está una figura, de afuera hacia adentro: [[clave, estilo], ...].", "params": {}},
+  "any_styled": {"summary": "Verdadero si alguna figura está en una capa con modo de mezcla u opacidad.", "params": {}},
+  "layer_events": {"summary": "Las figuras (ya en orden de pintado) como lista plana de eventos, para que un escritor envuelva cada capa con estilo: [\"open\", estilo], [\"shape\", figura], [\"close\", estilo]. Solo las capas con modo de mezcla u opacidad abren un grupo.", "params": {}},
+  "need_paint": {"summary": "Un relleno o trazo: un color, o un degradado (linear, radial, gradient, radial_gradient).", "params": {}},
+  "object_count": {"summary": "Cuántas figuras tiene un dibujo.", "params": {}},
+  "object_budget": {"summary": "En qué punto está un dibujo respecto al límite de objetos: count (figuras ahora), max (el límite que cuenta), file_max, state (\"ok\", \"near\" o \"over\") y slower_machine (el archivo puede ir lento en esta máquina).", "params": {}},
+
+  "is_gradient": {"summary": "Verdadero si v es un degradado (ver linear y radial).", "params": {}},
+  "gradient_stops": {"summary": "Las paradas como lista de [t, color], con las t que faltan repartidas por igual y cada parada dura escrita como dos (el color viejo y luego el nuevo).", "params": {}},
+  "gradient_color_at": {"summary": "El color de un degradado en t (0 a 1), pasos incluidos. El rasterizador hace lo mismo por cada píxel; esto es para el escritor de SVG y para pruebas.", "params": {}},
+  "gradient_svg_stops": {"summary": "Las paradas que necesita un SVG: las propias, o en un degradado por pasos dos paradas (mismo color) por cada banda.", "params": {}},
+  "is_relative_gradient": {"summary": "Verdadero si v es un degradado que se ajusta a cada figura (gradient, radial_gradient).", "params": {}},
+  "is_paint": {"summary": "Verdadero si v puede ser un relleno o trazo: un color o cualquier degradado.", "params": {}},
+  "paint_kind": {"summary": "\"color\" o \"gradient\" para una pintura, \"none\" para cualquier otra cosa.", "params": {}},
+  "resolve_gradient": {"summary": "Un degradado relativo calculado para una caja ({min, max}): un linear() o radial() fijo con los números en píxeles.", "params": {}},
+  "scale_paint": {"summary": "Una pintura que se mueve con su figura cuando esta se escala por k y se desplaza por offset (un punto): un linear() o radial() fijo escala sus números igual; un color o degradado relativo se devuelve igual.", "params": {}},
+  "resolve_paint": {"summary": "El \"fill\" o \"stroke\" de una figura listo para dibujar: un color o degradado fijo se devuelve igual; uno relativo se calcula con la caja del trazado. El resultado se guarda en la figura y se reusa mientras la pintura y el trazado sean los mismos.", "params": {}},
+
+  "current_layer_style": {"summary": "El estilo de la capa en la que corre la llamada, o un error si no está en una.", "params": {}},
+
+  "color_hex": {"summary": "Un color como \"#rrggbb\" (el alfa se escribe aparte como opacidad).", "params": {}},
+  "svg_num": {"summary": "Un número con a lo sumo dos decimales y sin \".0\" de sobra.", "params": {}},
+  "path_data": {"summary": "El texto d=\"...\" de un trazado.", "params": {}},
+  "svg_gradient_id": {"summary": "El id del <linearGradient> o <radialGradient> de un degradado (se crea al primer uso).", "params": {}},
+  "svg_stops": {"summary": "Los elementos <stop> de un degradado.", "params": {}},
+  "svg_gradient_def": {"summary": "El elemento <linearGradient> o <radialGradient> de un degradado.", "params": {}},
+  "paint_attrs": {"summary": "Los atributos fill o stroke para un color o degradado: none si no hay ninguno.", "params": {}},
+  "svg_shape": {"summary": "Un elemento <path> para una figura. Un degradado relativo se escribe como el degradado fijo que le corresponde a esa figura; las figuras que resuelven igual comparten una entrada en <defs>.", "params": {}},
+  "svg_layer_style": {"summary": "El estilo de un <g> para una capa: su modo de mezcla y opacidad.", "params": {}},
+  "svg_background": {"summary": "El fondo del lienzo; un degradado relativo se ajusta a todo el lienzo.", "params": {}},
+  "check_canvas": {"summary": "Revisa un lienzo: un hash cuyo \"size\" es un punto con ancho y alto de 1 a 16384, y cuyo \"background\" (si lo tiene) es un color o un degradado. Da un error() si no, y null si está bien.", "params": {}},
+  "svg_document": {"summary": "El texto SVG completo de un lienzo y una lista de figuras.", "params": {}}
+}
