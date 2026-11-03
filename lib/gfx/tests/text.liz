@@ -1,0 +1,8 @@
+-~> Text at scale 1, 2 and 3, a non-ASCII character, a character the font lacks and two lines.
+fb.fill((0, 0), (200, 100), #ffffff)
+font.draw("Hello, Linkz!", (4, 4), #000000, 1)
+font.draw("Scale 2", (4, 20), #cc2200, 2)
+font.draw("Aa 3", (4, 50), #0044aa, 3)
+font.draw("Ñandú ★", (100, 4), #000000, 1)
+font.draw("two\nlines", (110, 50), #006600, 1)
+puts(font.measure("Hello", 1), font.measure("Hello", 2), font.measure("a\nbcd", 3), font.height(2))

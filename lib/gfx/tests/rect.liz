@@ -1,0 +1,11 @@
+-~> A filled rectangle with whole-number edges, then one with half-pixel edges.
+fb.fill((0, 0), (120, 80), #ffffff)
+let r = [["M", (10, 10)], ["L", (50, 10)], ["L", (50, 40)], ["L", (10, 40)], ["Z"]]
+let spans = raster.fill(r, "nonzero")
+puts(len(spans), spans[0], spans[29])
+raster.draw(spans, (0, 0), #ff0000)
+let h = [["M", (60.5, 10)], ["L", (100.25, 10)], ["L", (100.25, 40)], ["L", (60.5, 40)], ["Z"]]
+raster.draw(raster.fill(h, "nonzero"), (0, 0), #0000ff)
+-~> A rectangle partly outside the buffer must clip cleanly.
+let o = [["M", (-20, 50)], ["L", (30, 50)], ["L", (30, 120)], ["L", (-20, 120)], ["Z"]]
+raster.draw(raster.fill(o, "nonzero"), (0, 0), #00aa00)

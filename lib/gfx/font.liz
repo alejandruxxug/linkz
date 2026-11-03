@@ -1,0 +1,72 @@
+-~> font: draws text with the 7x13 bitmap font in font_data.liz.
+-~>   font.draw(text, pos, color, scale)   pos is the top left of the text
+-~>   font.measure(text, scale)            the size as a point
+-~>   font.height(scale)                   the height of one line
+-~> Scale is a whole number from 1 to 3 (pixels are repeated, not smoothed).
+-~> A character the font lacks is drawn as an empty box. "\n" starts a new line.
+
+let font = {}
+
+-~> Glyph spans already multiplied by the scale, kept per scale.
+let font_cache = {1: {}, 2: {}, 3: {}}
+
+function font_scale(scale) {
+  math.max(1, math.min(3, math.round(scale)))
+}
+
+-~> The spans of one character at a scale, as [y, x0, x1] from its top left.
+function font_glyph(ch, scale) {
+  let cache = font_cache[scale]
+  let hit = cache[ch]
+  if (hit !== null) {
+    return hit
+  }
+  let g = font_data.glyphs[ch]
+  if (g === null) {
+    g = font_data.glyphs["fallback"]
+  }
+  let out = []
+  for (let i = 0; i < len(g); i = i + 1) {
+    let run = g[i]
+    for (let k = 0; k < scale; k = k + 1) {
+      push(out, [run[0] * scale + k, run[1] * scale, run[2] * scale])
+    }
+  }
+  cache[ch] = out
+  out
+}
+
+function font_height(scale) {
+  font_data.height * font_scale(scale)
+}
+
+function font_measure(s, scale) {
+  scale = font_scale(scale)
+  let lines = text.lines(s)
+  let widest = 0
+  for (let i = 0; i < len(lines); i = i + 1) {
+    widest = math.max(widest, len(lines[i]))
+  }
+  (widest * font_data.width * scale, len(lines) * font_data.height * scale)
+}
+
+function font_draw(s, pos, color, scale) {
+  scale = font_scale(scale)
+  let adv = font_data.width * scale
+  let lines = text.lines(s)
+  for (let l = 0; l < len(lines); l = l + 1) {
+    let line_text = lines[l]
+    let y = pos.y + l * font_data.height * scale
+    for (let i = 0; i < len(line_text); i = i + 1) {
+      let ch = line_text[i]
+      if (ch != " ") {
+        fb.spans(font_glyph(ch, scale), (pos.x + i * adv, y), color)
+      }
+    }
+  }
+  null
+}
+
+font.draw = font_draw
+font.measure = font_measure
+font.height = font_height

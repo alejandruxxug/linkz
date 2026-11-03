@@ -1,0 +1,6 @@
+-~> A variable-width brush stroke, and a brush shape from the drawing library.
+fb.fill((0, 0), (200, 100), #ffffff)
+let pts = [(20, 70), (70, 30), (120, 70), (180, 30)]
+raster.draw(raster.brush(pts, [2, 14, 8, 1]), (0, 0), #1d1d1f)
+let b = brush([(20, 90), (100, 80), (180, 90)], [0.2, 0.9, 0.3], #aa2200, pens.ink)
+raster.paint([b], (0, 0))

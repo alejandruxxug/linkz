@@ -1,0 +1,18 @@
+-~> A five-point star by its diagonals: nonzero fills the middle, evenodd leaves it empty.
+function star(cx, cy, r) {
+  let path = []
+  for (let i = 0; i < 5; i = i + 1) {
+    let a = i * 2 * math.tau / 5 - math.pi / 2
+    let p = (cx + math.cos(a) * r, cy + math.sin(a) * r)
+    if (i == 0) {
+      push(path, ["M", p])
+    } else {
+      push(path, ["L", p])
+    }
+  }
+  push(path, ["Z"])
+  path
+}
+fb.fill((0, 0), (200, 100), #ffffff)
+raster.draw(raster.fill(star(50, 50, 45), "nonzero"), (0, 0), #cc2200)
+raster.draw(raster.fill(star(150, 50, 45), "evenodd"), (0, 0), #cc2200)

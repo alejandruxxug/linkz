@@ -1,0 +1,8 @@
+-~> A circle from the drawing library, rasterized as a shape and painted.
+fb.fill((0, 0), (120, 120), #ffffff)
+let c = circle((60, 60), 40, #3fa34d)
+raster.paint([c], (0, 0))
+let r = raster.shape(c)
+puts(len(r.fill), r.stroke)
+-~> The same shape again comes from the cache.
+puts(raster.shape(c) === r)

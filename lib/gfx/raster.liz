@@ -1,0 +1,358 @@
+-~> raster: turns paths into pixel spans, using only fb.span / fb.spans.
+-~> A span is [y, x0, x1]: row y, from x0 up to (not including) x1. The ends
+-~> are floats, so the left and right edges of a shape are soft. A row is
+-~> sampled at its middle (y + 0.5), so there is no soft edge up or down.
+-~> It needs geometry.liz from lib/draw (flatten_path, catmull_rom, ...).
+-~>   raster.fill(path, rule)      spans inside a path; rule "nonzero" or "evenodd"
+-~>   raster.stroke(path, width)   spans of a line along a path, round joins and caps
+-~>   raster.brush(points, widths) spans of a smooth stroke with a width per point
+-~>   raster.shape(shape)          {"fill": spans or null, "stroke": spans or null}, cached
+-~>   raster.draw(spans, offset, color)
+-~>   raster.paint(shapes, offset) draws a whole drawing, back to front
+
+let raster = {}
+
+-~> Rows outside this range are never produced, so a huge shape stays cheap.
+-~> The host cuts what is outside the buffer anyway.
+let raster_min_row = -64
+let raster_max_row = 4096
+
+-~> Finished shapes, kept by the shape's path and widths (not its colors).
+let raster_cache = {}
+let raster_cache_size = 0
+let raster_cache_limit = 400
+
+-~> How far a curve may stray from its segments, in pixels.
+let raster_tolerance = 0.25
+
+-~> The scanline filler. polys is a list of point lists; each is closed by
+-~> itself. Edges go into buckets by their first row, then one pass over the
+-~> rows keeps the list of edges that cross the row (the active edges).
+function raster_scan(polys, rule) {
+  let lo = raster_max_row
+  let hi = raster_min_row - 1
+  let edges = []
+  for (let k = 0; k < len(polys); k = k + 1) {
+    let poly = polys[k]
+    let n = len(poly)
+    for (let j = 0; j < n; j = j + 1) {
+      let top = poly[j]
+      let bot = poly[(j + 1) % n]
+      let dir = 1
+      if (top.y > bot.y) {
+        let swap = top
+        top = bot
+        bot = swap
+        dir = -1
+      }
+      if (top.y != bot.y) {
+        -~> the rows whose middle lies in [top.y, bot.y)
+        let r0 = math.max(math.ceil(top.y - 0.5), raster_min_row)
+        let r1 = math.min(math.ceil(bot.y - 0.5) - 1, raster_max_row - 1)
+        if (r1 >= r0) {
+          push(edges, [r0, r1, top.x, (bot.x - top.x) / float(bot.y - top.y), top.y, dir])
+          lo = math.min(lo, r0)
+          hi = math.max(hi, r1)
+        }
+      }
+    }
+  }
+  if (hi < lo) {
+    return []
+  }
+
+  let buckets = []
+  for (let r = lo; r <= hi; r = r + 1) {
+    push(buckets, [])
+  }
+  for (let i = 0; i < len(edges); i = i + 1) {
+    push(buckets[edges[i][0] - lo], edges[i])
+  }
+
+  let spans = []
+  let active = []
+  let odd = rule == "evenodd"
+  for (let r = lo; r <= hi; r = r + 1) {
+    let added = buckets[r - lo]
+    for (let i = 0; i < len(added); i = i + 1) {
+      push(active, added[i])
+    }
+    let keep = []
+    let xs = []
+    let yc = r + 0.5
+    for (let i = 0; i < len(active); i = i + 1) {
+      let e = active[i]
+      if (e[1] >= r) {
+        push(keep, e)
+        let cur = [e[2] + (yc - e[4]) * e[3], e[5]]
+        let j = len(xs) - 1
+        push(xs, cur)
+        while (j >= 0 && xs[j][0] > cur[0]) {
+          xs[j + 1] = xs[j]
+          j = j - 1
+        }
+        xs[j + 1] = cur
+      }
+    }
+    active = keep
+
+    let w = 0
+    let inside = false
+    let start = 0.0
+    for (let i = 0; i < len(xs); i = i + 1) {
+      w = w + xs[i][1]
+      let now = w != 0
+      if (odd) {
+        now = i % 2 == 0
+      }
+      if (now && !inside) {
+        start = xs[i][0]
+      } elif (!now && inside) {
+        if (xs[i][0] > start) {
+          push(spans, [r, start, xs[i][0]])
+        }
+      }
+      inside = now
+    }
+  }
+  spans
+}
+
+function raster_fill(path, rule) {
+  let subs = flatten_path(path, raster_tolerance)
+  let polys = []
+  for (let i = 0; i < len(subs); i = i + 1) {
+    if (len(subs[i].points) >= 3) {
+      push(polys, subs[i].points)
+    }
+  }
+  raster_scan(polys, rule)
+}
+
+-~> Twice the signed area of a polygon. Its sign says which way it turns.
+function raster_area2(poly) {
+  let a = 0.0
+  let n = len(poly)
+  for (let i = 0; i < n; i = i + 1) {
+    let p = poly[i]
+    let q = poly[(i + 1) % n]
+    a = a + p.x * q.y - q.x * p.y
+  }
+  a
+}
+
+-~> Adds a polygon to `out`, turned to the positive way. The nonzero rule then
+-~> sees the union of all the pieces of a stroke, however they overlap.
+function raster_add(out, poly) {
+  if (raster_area2(poly) < 0) {
+    poly = list.reverse(poly)
+  }
+  push(out, poly)
+}
+
+-~> The angle step that keeps a circle of radius h within the tolerance.
+function raster_arc_step(h) {
+  math.min(0.8, math.sqrt(1.2 / math.max(h, 0.05)))
+}
+
+-~> A pie slice (a fan) round v with radius h, from angle a0 turning by delta.
+function raster_fan(v, h, a0, delta) {
+  let steps = math.max(1, math.ceil(math.abs(delta) / raster_arc_step(h)))
+  let poly = [v]
+  for (let k = 0; k <= steps; k = k + 1) {
+    let a = a0 + delta * k / float(steps)
+    push(poly, (v.x + math.cos(a) * h, v.y + math.sin(a) * h))
+  }
+  poly
+}
+
+-~> The angle b - a brought into -pi to pi.
+function raster_turn(a, b) {
+  let d = b - a
+  while (d > math.pi) {
+    d = d - math.tau
+  }
+  while (d < -math.pi) {
+    d = d + math.tau
+  }
+  d
+}
+
+-~> The polygons that, joined, make a line through points whose half-width at
+-~> each point is halves[i]: a quad for each segment, a round wedge for each
+-~> corner and a half disc on each end of an open line. They go into `out`.
+function raster_sweep(out, points, halves, closed) {
+  let pts = [points[0]]
+  let hs = [halves[0]]
+  for (let i = 1; i < len(points); i = i + 1) {
+    if (points[i] != pts[len(pts) - 1]) {
+      push(pts, points[i])
+      push(hs, halves[i])
+    }
+  }
+  if (closed && len(pts) > 1 && pts[0] == pts[len(pts) - 1]) {
+    list.remove(pts, len(pts) - 1)
+    list.remove(hs, len(hs) - 1)
+  }
+  let m = len(pts)
+  if (m == 1) {
+    raster_add(out, raster_fan(pts[0], hs[0], 0.0, math.tau))
+    return null
+  }
+
+  let nseg = m - 1
+  if (closed) {
+    nseg = m
+  }
+  let dirs = []
+  for (let i = 0; i < nseg; i = i + 1) {
+    let a = pts[i]
+    let b = pts[(i + 1) % m]
+    let len2 = math.dist(a, b)
+    let d = (b - a) / float(len2)
+    push(dirs, d)
+    let n = (-d.y, d.x)
+    let ha = hs[i]
+    let hb = hs[(i + 1) % m]
+    -~> this order always turns the positive way, so no area check
+    push(out, [a - n * ha, b - n * hb, b + n * hb, a + n * ha])
+  }
+
+  let first = 1
+  let last = m - 2
+  if (closed) {
+    first = 0
+    last = m - 1
+  }
+  for (let i = first; i <= last; i = i + 1) {
+    let d0 = dirs[(i - 1 + nseg) % nseg]
+    let d1 = dirs[i % nseg]
+    let cross = d0.x * d1.y - d0.y * d1.x
+    let dot = d0.x * d1.x + d0.y * d1.y
+    if (dot < -0.999) {
+      raster_add(out, raster_fan(pts[i], hs[i], 0.0, math.tau))
+    } else {
+      let delta = math.atan2(cross, dot)
+      if (math.abs(delta) * hs[i] > 0.02) {
+        -~> the wedge fills the outside of the corner
+        let s = 1.0
+        if (cross > 0) {
+          s = -1.0
+        }
+        let a0 = math.atan2(s * d0.x, -s * d0.y)
+        raster_add(out, raster_fan(pts[i], hs[i], a0, delta))
+      }
+    }
+  }
+
+  if (!closed) {
+    let d = dirs[0]
+    raster_add(out, raster_fan(pts[0], hs[0], math.atan2(d.x, -d.y), math.pi))
+    d = dirs[nseg - 1]
+    raster_add(out, raster_fan(pts[m - 1], hs[m - 1], math.atan2(-d.x, d.y), math.pi))
+  }
+  null
+}
+
+function raster_stroke(path, width) {
+  let subs = flatten_path(path, raster_tolerance)
+  let polys = []
+  let half = math.max(width / 2.0, 0.05)
+  for (let i = 0; i < len(subs); i = i + 1) {
+    let pts = subs[i].points
+    let halves = []
+    for (let j = 0; j < len(pts); j = j + 1) {
+      push(halves, half)
+    }
+    raster_sweep(polys, pts, halves, subs[i].closed)
+  }
+  raster_scan(polys, "nonzero")
+}
+
+-~> A smooth curve through the points (the same one brush() draws), thick by
+-~> widths[i] at point i and blending between them.
+function raster_brush(points, widths) {
+  let n = len(points)
+  let pos = []
+  let halves = []
+  if (n == 1) {
+    pos = [points[0]]
+    halves = [math.max(widths[0] / 2.0, 0.05)]
+  } else {
+    let steps = 8
+    let pieces = catmull_rom(points)
+    for (let i = 0; i < len(pieces); i = i + 1) {
+      let piece = pieces[i]
+      for (let s = 0; s < steps; s = s + 1) {
+        let t = s / float(steps)
+        push(pos, bezier_point(points[i], piece[0], piece[1], piece[2], t))
+        push(halves, math.max(lerp(widths[i], widths[i + 1], t) / 2.0, 0.05))
+      }
+    }
+    push(pos, points[n - 1])
+    push(halves, math.max(widths[n - 1] / 2.0, 0.05))
+  }
+  let polys = []
+  raster_sweep(polys, pos, halves, false)
+  raster_scan(polys, "nonzero")
+}
+
+function raster_key(shape) {
+  str(shape.path) + "|" + str(shape.width) + "|" + str(shape.widths) + "|" + str(shape.rule) + "|" + str(shape.fill != null) + str(shape.stroke != null)
+}
+
+-~> The spans of a shape record: {"fill": spans or null, "stroke": spans or
+-~> null}. A brush shape is its outline, filled. The result is kept by path
+-~> and widths, so a shape that did not change is never rasterized again. A
+-~> shape may carry "rule": "evenodd" (the default is nonzero).
+function raster_shape(shape) {
+  let key = raster_key(shape)
+  let hit = raster_cache[key]
+  if (hit !== null) {
+    return hit
+  }
+  let rule = "nonzero"
+  if (shape.rule == "evenodd") {
+    rule = "evenodd"
+  }
+  let out = {"fill": null, "stroke": null}
+  if (shape.fill != null) {
+    out.fill = raster_fill(shape.path, rule)
+  }
+  if (shape.stroke != null && shape.width > 0) {
+    out.stroke = raster_stroke(shape.path, shape.width)
+  }
+  if (raster_cache_size >= raster_cache_limit) {
+    raster_cache = {}
+    raster_cache_size = 0
+  }
+  raster_cache[key] = out
+  raster_cache_size = raster_cache_size + 1
+  out
+}
+
+function raster_draw(spans, offset, color) {
+  fb.spans(spans, offset, color)
+}
+
+-~> Draws shapes back to front (paint_order), each shape's fill and then its stroke.
+function raster_paint(shapes, offset) {
+  let ordered = paint_order(shapes)
+  for (let i = 0; i < len(ordered); i = i + 1) {
+    let s = ordered[i]
+    let r = raster_shape(s)
+    if (r.fill !== null) {
+      raster_draw(r.fill, offset, s.fill)
+    }
+    if (r.stroke !== null) {
+      raster_draw(r.stroke, offset, s.stroke)
+    }
+  }
+}
+
+raster.fill = raster_fill
+raster.stroke = raster_stroke
+raster.brush = raster_brush
+raster.shape = raster_shape
+raster.draw = raster_draw
+raster.paint = raster_paint
