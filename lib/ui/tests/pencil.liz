@@ -1,0 +1,52 @@
+-~> The pencil and the brush: recorded samples become one row.
+-~> A drag along an L shape, with a little noise on the straight parts.
+function sample(x, y, p, t) {
+  {"pos": (x * 2, y * 2), "canvas_pos": (x, y), "pressure": p, "t": t}
+}
+let samples = []
+for (let i = 0; i <= 10; i = i + 1) {
+  push(samples, sample(40 + i * 10, 100 + (i % 2) * 0.4, 1.0, i * 0.01))
+}
+for (let i = 1; i <= 10; i = i + 1) {
+  push(samples, sample(140, 100 + i * 10, 1.0, 0.1 + i * 0.01))
+}
+let m = doc_new("layer a\n  circle((1, 1), 2, #fff)\nlayer b")
+-~> Loose: at the top of the file. 21 samples shrink to 3 points.
+show(pencil_insert(m, samples, null, "#1d1d1f", 4))
+-~> In a layer: its first row, indented.
+show(pencil_insert(m, samples, 3, "#1d1d1f", 4))
+-~> The row runs and has the points.
+let r = src.run(doc_text(pencil_insert(m, samples, 1, "#c0392b", 6)))
+puts(len(r.errors), r.shapes[0].kind, len(r.shapes[0].args[0]), r.shapes[0].width)
+-~> A sample off the canvas is skipped; nothing on the canvas is refused.
+let off = {"pos": (1, 1), "canvas_pos": null, "pressure": 1.0, "t": 0.0}
+puts(pencil_insert(m, [off], null, "#000", 1).refused)
+show(pencil_insert(m, [off, sample(5.4, 6.6, 1.0, 0.0)], null, "#000", 1))
+-~> The brush with a trackpad keeps the raw pressures (2 decimals).
+let pressed = []
+for (let i = 0; i <= 10; i = i + 1) {
+  push(pressed, sample(40 + i * 10, 100 + (i % 2) * 0.4, i / 10.0 * 0.987, i * 0.01))
+}
+push(pressed, sample(140, 200, 0.5, 0.2))
+show(brush_insert(m, pressed, "ink", "trackpad", null, "#1d1d1f"))
+-~> With a mouse, the pressure comes from the speed: slow strokes press harder.
+let slow = []
+let fast = []
+for (let i = 0; i <= 8; i = i + 1) {
+  push(slow, sample(10 + i * 5, 50 + (i % 3) * 20, 1.0, i * 0.1))
+  push(fast, sample(10 + i * 50, 50 + (i % 3) * 20, 1.0, i * 0.01))
+}
+function mean(ps) {
+  let total = 0.0
+  for (let i = 0; i < len(ps); i = i + 1) {
+    total = total + ps[i]
+  }
+  total / len(ps)
+}
+let ps_slow = speed_pressures(samples_points(slow))
+let ps_fast = speed_pressures(samples_points(fast))
+puts(mean(ps_slow) > mean(ps_fast), mean(ps_slow) <= 1.0, mean(ps_fast) >= 0.1)
+let drawn = brush_insert(m, slow, "pencil", "mouse", null, "#1d1d1f")
+let br = src.run(doc_text(drawn))
+puts(len(br.errors), br.shapes[0].kind, len(br.shapes[0].args[0]) == len(br.shapes[0].args[1]))
+puts(brush_insert(m, slow, "quill", "mouse", null, "#000").refused)

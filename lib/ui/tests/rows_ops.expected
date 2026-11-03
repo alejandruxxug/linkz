@@ -1,0 +1,78 @@
+layer sun
+  circle((1, 2), 3, #fff)
+  rect((0, 0), (5, 5), #000)
+
+1: let a = 1
+2: layer sun
+3:   circle((1, 2), 3, #fff)
+4:   rect((0, 0), (5, 5), #000)|
+5: layer sun
+6:   circle((1, 2), 3, #fff)
+7:   rect((0, 0), (5, 5), #000)
+8: layer sea
+9:   line((0, 0), (9, 9), #111, 2)
+10: 
+1: layer x
+2:   layer sun
+3:     circle((1, 2), 3, #fff)
+4:     rect((0, 0), (5, 5), #000)|
+1: let a = 1
+2: layer sun
+3:   circle((1, 2), 3, #fff)
+4:   rect((0, 0), (5, 5), #000)
+5: |
+layer sea
+  line((0, 0), (9, 9), #111, 2)
+
+  circle((1, 2), 3, #fff)
+  rect((0, 0), (5, 5), #000)
+
+1: let añu| = 1
+2: layer sun
+3:   circle((1, 2), 3, #fff)
+4:   rect((0, 0), (5, 5), #000)
+5: layer sea
+6:   line((0, 0), (9, 9), #111, 2)
+7: 
+1: let a = 1
+2: |layer sea
+3:   line((0, 0), (9, 9), #111, 2)
+4: layer sun
+5:   circle((1, 2), 3, #fff)
+6:   rect((0, 0), (5, 5), #000)
+7: 
+1: let a = 1
+2: layer sea
+3:   line((0, 0), (9, 9), #111, 2)
+4: |layer sun
+5:   circle((1, 2), 3, #fff)
+6:   rect((0, 0), (5, 5), #000)
+7: 
+1: let a = 1
+2: layer sun
+3:   r|ect((0, 0), (5, 5), #000)
+4:   circle((1, 2), 3, #fff)
+5: layer sea
+6:   line((0, 0), (9, 9), #111, 2)
+7: 
+1: let a = 1
+2: layer sun
+3:   c|ircle((1, 2), 3, #fff)
+4:   rect((0, 0), (5, 5), #000)
+5: layer sea
+6:   line((0, 0), (9, 9), #111, 2)
+7: 
+1: |let a = 1
+2: layer sun
+3:   circle((1, 2), 3, #fff)
+4:   rect((0, 0), (5, 5), #000)
+5: layer sea
+6:   line((0, 0), (9, 9), #111, 2)
+7: 
+1: let a = 1
+2: layer sun
+3:   circle((1, 2), 3, #fff)
+4:   rect((0, 0), (5, 5), #000)
+5: |layer sea
+6:   line((0, 0), (9, 9), #111, 2)
+7: 

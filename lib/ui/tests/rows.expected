@@ -1,0 +1,33 @@
+1 0 value [sky line] false false null 0 0 1
+2 0 layer [Sun] true false null 0 0 4
+3 1 shape [core] false true null 2 2 3
+4 1 shape [circle] false false boom 2 2 4
+5 0 layer [sea] false false null 0 0 8
+6 1 block [for] false false null 5 5 8
+7 2 shape [rect] false false null 5 6 7
+8 1 cont [] false false null 5 6 8
+9 0 empty [] false false null 0 0 9
+10 0 definition [star] false false null 0 0 12
+11 1 shape [circle] false false null 0 10 11
+12 0 cont [] false false null 0 10 12
+13 0 canvas [canvas] false false null 0 0 13
+14 0 empty [] false false null 0 0 14
+layer:sea
+1 true false
+2 true false
+3 true false
+4 true false
+5 true true
+6 false false
+7 false false
+8 false false
+9 true false
+10 true false
+11 true false
+12 true false
+13 true false
+14 true false
+null null
+5 3
+2 null
+2 sea

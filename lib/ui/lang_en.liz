@@ -1,0 +1,50 @@
+-~> English: the fallback language. Every key the interface uses is here.
+lang_register("en", {
+  "lang.name": "English",
+
+  "tool.circle": "Circle",
+  "tool.ellipse": "Ellipse",
+  "tool.rect": "Rectangle",
+  "tool.line": "Line",
+  "tool.polygon": "Polygon",
+  "tool.stroke": "Curve",
+  "tool.pencil": "Pencil",
+  "tool.brush": "Brush",
+  "tool.value": "Value",
+  "tool.layer": "Layer",
+
+  "panel.layers": "Layers",
+  "panel.properties": "Properties",
+  "props.name": "Name",
+  "props.hidden": "Hidden",
+  "props.locked": "Locked",
+  "props.empty": "Nothing to edit on this row",
+
+  "button.save": "Save",
+  "button.export": "Export PNG",
+  "button.undo": "Undo",
+  "button.redo": "Redo",
+
+  "status.saved": "Saved {file}",
+  "status.opened": "Opened {file}",
+  "status.no_file_at": "There is no file at {file}",
+  "status.no_path": "This drawing has no file yet",
+  "status.dirty": "Unsaved changes",
+
+  "refuse.position": "position comes from `{expr}`",
+  "refuse.size": "size comes from `{expr}`",
+  "refuse.points": "the points come from `{expr}`",
+  "refuse.pressures": "the pressures are not a list of numbers",
+  "refuse.no_row": "that shape has no row in the code",
+  "refuse.no_call": "that row is not a call",
+  "refuse.no_arg": "that value is not in the row",
+  "refuse.no_points": "that shape has no list of points",
+  "refuse.min_points": "a curve needs at least one point",
+  "refuse.no_props": "this row has no properties",
+  "refuse.no_field": "there is no property called {name}",
+  "refuse.empty_value": "write a value first",
+  "refuse.fill_earlier": "set the earlier values first",
+  "refuse.no_samples": "nothing was drawn on the canvas",
+  "refuse.no_pen": "there is no pen called {name}",
+  "refuse.shape": "can't add a {kind} yet"
+})

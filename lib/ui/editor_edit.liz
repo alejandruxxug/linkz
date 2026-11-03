@@ -1,0 +1,346 @@
+-~> editor_edit: editing operations. Each one takes a model and returns a new
+-~> model (text, caret and selection), never changing the old one.
+
+-~> Splits typed or pasted text into lines, whatever line breaks it uses.
+function edit_split(s) {
+  text.split(text.replace(s, text.char(13) + "\n", "\n"), "\n")
+}
+
+-~> Types text at the caret. A line break in it starts a new row.
+function ed_insert(m, s) {
+  if (s == "") {
+    return m
+  }
+  let parts = edit_split(s)
+  let cur = doc_cur(m)
+  let head = text.slice(cur, 0, m.col)
+  let tail = text.slice(cur, m.col, len(cur))
+  let before = list.slice(m.lines, 0, m.line - 1)
+  let after = list.slice(m.lines, m.line, len(m.lines))
+  if (len(parts) == 1) {
+    return doc_with(m, before + [head + s + tail] + after, m.line, m.col + len(s))
+  }
+  let mid = [head + parts[0]]
+  for (let i = 1; i < len(parts) - 1; i = i + 1) {
+    push(mid, parts[i])
+  }
+  let last = parts[len(parts) - 1]
+  push(mid, last + tail)
+  doc_with(m, before + mid + after, m.line + len(parts) - 1, len(last))
+}
+
+-~> Deletes whole rows a to b (counted from 1); the caret lands on the row that took their place.
+function ed_delete_rows(m, a, b) {
+  let lines = list.slice(m.lines, 0, a - 1) + list.slice(m.lines, b, len(m.lines))
+  let line = math.min(a, math.max(1, len(lines)))
+  doc_with(m, lines, line, 0)
+}
+
+-~> Backspace: removes the character before the caret; at the start of a row it
+-~> joins the row to the one above. With rows selected it deletes them.
+function ed_backspace(m) {
+  if (m.sel != null) {
+    return ed_delete_rows(m, m.sel.from, m.sel.to)
+  }
+  let cur = doc_cur(m)
+  if (m.col > 0) {
+    let fixed = text.slice(cur, 0, m.col - 1) + text.slice(cur, m.col, len(cur))
+    return doc_with(m, list.slice(m.lines, 0, m.line - 1) + [fixed] + list.slice(m.lines, m.line, len(m.lines)), m.line, m.col - 1)
+  }
+  if (m.line == 1) {
+    return m
+  }
+  let above = m.lines[m.line - 2]
+  let joined = above + cur
+  doc_with(m, list.slice(m.lines, 0, m.line - 2) + [joined] + list.slice(m.lines, m.line, len(m.lines)), m.line - 1, len(above))
+}
+
+-~> Delete: removes the character after the caret; at the end of a row it joins
+-~> the next row to this one. With rows selected it deletes them.
+function ed_delete(m) {
+  if (m.sel != null) {
+    return ed_delete_rows(m, m.sel.from, m.sel.to)
+  }
+  let cur = doc_cur(m)
+  if (m.col < len(cur)) {
+    let fixed = text.slice(cur, 0, m.col) + text.slice(cur, m.col + 1, len(cur))
+    return doc_with(m, list.slice(m.lines, 0, m.line - 1) + [fixed] + list.slice(m.lines, m.line, len(m.lines)), m.line, m.col)
+  }
+  if (m.line == len(m.lines)) {
+    return m
+  }
+  let joined = cur + m.lines[m.line]
+  doc_with(m, list.slice(m.lines, 0, m.line - 1) + [joined] + list.slice(m.lines, m.line + 1, len(m.lines)), m.line, m.col)
+}
+
+-~> The indentation a new row under this one should have: the same, one level
+-~> deeper after a layer or an opening brace.
+function edit_next_indent(m, line) {
+  let cur = m.lines[line - 1]
+  let pad = leading_ws(cur)
+  let code = comment_split(cur)[0]
+  let row = doc_row(m, line, null, null)
+  if (row.kind == "layer" || text.ends(code, "{")) {
+    return pad + 2
+  }
+  pad
+}
+
+-~> Enter: the text after the caret moves to a new row below, at the same
+-~> depth. After a layer (or an opening brace) the new row is one level deeper.
+function ed_enter(m) {
+  let cur = doc_cur(m)
+  let pad = edit_next_indent(m, m.line)
+  let head = text.slice(cur, 0, m.col)
+  let tail = text.slice(cur, m.col, len(cur))
+  let fresh = " " * pad + tail
+  let lines = list.slice(m.lines, 0, m.line - 1) + [head, fresh] + list.slice(m.lines, m.line, len(m.lines))
+  doc_with(m, lines, m.line + 1, pad)
+}
+
+-~> Shift+Enter: a new empty row above (in front), at the same depth.
+function ed_enter_above(m) {
+  let pad = leading_ws(doc_cur(m))
+  let lines = list.slice(m.lines, 0, m.line - 1) + [" " * pad] + list.slice(m.lines, m.line - 1, len(m.lines))
+  doc_with(m, lines, m.line, pad)
+}
+
+-~> The rows an indent or a copy works on: the selection, else the caret's row.
+function edit_rows_of(m) {
+  if (m.sel != null) {
+    return [m.sel.from, m.sel.to]
+  }
+  return [m.line, m.line]
+}
+
+-~> Tab: indents the caret's row (or the selected rows) by 2 spaces.
+function ed_indent(m) {
+  let r = edit_rows_of(m)
+  let lines = list.copy(m.lines)
+  for (let n = r[0]; n <= r[1]; n = n + 1) {
+    lines[n - 1] = "  " + lines[n - 1]
+  }
+  let out = doc_with(m, lines, m.line, m.col + 2)
+  out.sel = m.sel
+  out
+}
+
+-~> Shift+Tab: takes up to 2 spaces (or one tab) off the start of the caret's row or the selected rows.
+function ed_outdent(m) {
+  let r = edit_rows_of(m)
+  let lines = list.copy(m.lines)
+  let cut = 0
+  for (let n = r[0]; n <= r[1]; n = n + 1) {
+    let s = lines[n - 1]
+    let k = 0
+    if (text.starts(s, "\t")) {
+      k = 1
+    } else {
+      while (k < 2 && k < len(s) && s[k] == " ") {
+        k = k + 1
+      }
+    }
+    lines[n - 1] = text.slice(s, k, len(s))
+    if (n == m.line) {
+      cut = k
+    }
+  }
+  let out = doc_with(m, lines, m.line, math.max(0, m.col - cut))
+  out.sel = m.sel
+  out
+}
+
+-~> Moves the caret. dir is "left", "right", "up", "down", "home" or "end".
+-~> Up and Down keep the column the caret wanted. With extend (Shift) the
+-~> rows from where the move began to the caret become the selection.
+function ed_move(m, dir, extend) {
+  let line = m.line
+  let col = m.col
+  let want = m.want
+  let n = len(m.lines)
+  if (dir == "left") {
+    if (col > 0) {
+      col = col - 1
+    } elif (line > 1) {
+      line = line - 1
+      col = len(m.lines[line - 1])
+    }
+    want = col
+  } elif (dir == "right") {
+    if (col < len(m.lines[line - 1])) {
+      col = col + 1
+    } elif (line < n) {
+      line = line + 1
+      col = 0
+    }
+    want = col
+  } elif (dir == "up" || dir == "down") {
+    if (dir == "up" && line > 1) {
+      line = line - 1
+      col = math.min(want, len(m.lines[line - 1]))
+    } elif (dir == "up") {
+      col = 0
+    } elif (line < n) {
+      line = line + 1
+      col = math.min(want, len(m.lines[line - 1]))
+    } else {
+      col = len(m.lines[line - 1])
+    }
+  } elif (dir == "home") {
+    col = 0
+    want = 0
+  } elif (dir == "end") {
+    col = len(m.lines[line - 1])
+    want = 1000000
+  }
+  let out = {"lines": m.lines, "line": line, "col": col, "want": want, "sel": null, "parse": m.parse}
+  if (extend) {
+    let anchor = m.line
+    if (m.sel != null) {
+      anchor = m.sel.anchor
+    }
+    out.sel = {"from": math.min(anchor, line), "to": math.max(anchor, line), "anchor": anchor}
+  }
+  out
+}
+
+-~> Selects rows a to b; the caret goes to the end of b.
+function ed_select_rows(m, a, b) {
+  let n = len(m.lines)
+  let x = math.max(1, math.min(a, n))
+  let y = math.max(1, math.min(b, n))
+  let out = doc_at(m, y, len(m.lines[y - 1]))
+  out.sel = {"from": math.min(x, y), "to": math.max(x, y), "anchor": x}
+  out
+}
+
+-~> Puts the caret at the end of row n and clears the selection.
+function ed_select_row(m, n) {
+  let k = math.max(1, math.min(n, len(m.lines)))
+  doc_at(m, k, len(m.lines[k - 1]))
+}
+
+-~> The rows a copy, cut or move works on, as [from, to]: the selection; else the
+-~> caret's statement with everything in it (a layer with its body).
+function ed_block(m) {
+  if (m.sel != null) {
+    return [m.sel.from, m.sel.to]
+  }
+  let r = doc_row(m, m.line, null, null)
+  return [m.line, r.end_line]
+}
+
+-~> The text of rows a to b, ending with a line break (so a paste knows they are rows).
+function edit_rows_text(m, a, b) {
+  text.join(list.slice(m.lines, a - 1, b), "\n") + "\n"
+}
+
+-~> Copy: puts the rows on the clipboard. Returns the model unchanged.
+function ed_copy(m) {
+  let b = ed_block(m)
+  clip.set(edit_rows_text(m, b[0], b[1]))
+  m
+}
+
+-~> Cut: copy, then delete the rows.
+function ed_cut(m) {
+  let b = ed_block(m)
+  clip.set(edit_rows_text(m, b[0], b[1]))
+  ed_delete_rows(m, b[0], b[1])
+}
+
+-~> Moves rows to a new indentation: `shift` columns more (or fewer when negative).
+function edit_reindent(lines, shift) {
+  let out = []
+  for (let i = 0; i < len(lines); i = i + 1) {
+    let s = lines[i]
+    if (shift >= 0) {
+      if (!is_blank(s)) {
+        s = " " * shift + s
+      }
+    } else {
+      let k = math.min(-shift, leading_ws(s))
+      s = text.slice(s, k, len(s))
+    }
+    push(out, s)
+  }
+  out
+}
+
+-~> Paste. Rows (text ending in a line break, as copied by ed_copy) go below
+-~> the caret's statement, or replace an empty row, lined up with the caret's
+-~> row. Any other text is typed at the caret.
+function ed_paste(m) {
+  let s = clip.get()
+  if (s == "") {
+    return m
+  }
+  if (!text.ends(s, "\n")) {
+    return ed_insert(m, s)
+  }
+  let rows = edit_split(text.slice(s, 0, len(s) - 1))
+  let pad = leading_ws(doc_cur(m))
+  rows = edit_reindent(rows, pad - leading_ws(rows[0]))
+  let at = doc_row(m, m.line, null, null)
+  let lines = []
+  let end = 0
+  if (is_blank(doc_cur(m))) {
+    lines = list.slice(m.lines, 0, m.line - 1) + rows + list.slice(m.lines, m.line, len(m.lines))
+    end = m.line - 1 + len(rows)
+  } else {
+    lines = list.slice(m.lines, 0, at.end_line) + rows + list.slice(m.lines, at.end_line, len(m.lines))
+    end = at.end_line + len(rows)
+  }
+  doc_with(m, lines, end, len(lines[end - 1]))
+}
+
+-~> Alt+Up / Alt+Down: moves the caret's statement (or the selected rows) one
+-~> sibling up or down, taking its body with it. dir is "up" or "down". A
+-~> statement that has no sibling in that direction stays where it is.
+function ed_move_rows(m, dir) {
+  let b = ed_block(m)
+  let s = b[0]
+  let e = b[1]
+  let rows = doc_rows(m, null, null)
+  if (rows[s - 1].stmt == null) {
+    return m
+  }
+  let parent = rows[s - 1].parent
+  let prev = null
+  let next = null
+  for (let i = 0; i < len(rows); i = i + 1) {
+    let r = rows[i]
+    if (r.stmt != null && r.parent == parent) {
+      if (r.line < s) {
+        prev = r
+      } elif (r.line > e && next == null) {
+        next = r
+      }
+    }
+  }
+  let lines = m.lines
+  let shift = 0
+  let block = list.slice(lines, s - 1, e)
+  if (dir == "up") {
+    if (prev == null) {
+      return m
+    }
+    let gap = list.slice(lines, prev.end_line, s - 1)
+    let other = list.slice(lines, prev.line - 1, prev.end_line)
+    lines = list.slice(lines, 0, prev.line - 1) + block + gap + other + list.slice(lines, e, len(lines))
+    shift = prev.line - s
+  } else {
+    if (next == null) {
+      return m
+    }
+    let gap = list.slice(lines, e, next.line - 1)
+    let other = list.slice(lines, next.line - 1, next.end_line)
+    lines = list.slice(lines, 0, s - 1) + other + gap + block + list.slice(lines, next.end_line, len(lines))
+    shift = len(other) + len(gap)
+  }
+  let out = doc_with(m, lines, m.line + shift, m.col)
+  if (m.sel != null) {
+    out.sel = {"from": m.sel.from + shift, "to": m.sel.to + shift, "anchor": m.sel.anchor + shift}
+  }
+  out
+}

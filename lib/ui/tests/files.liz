@@ -1,0 +1,41 @@
+-~> Open, Save, dirty, and the language setting, on the in-memory files.
+fake_files["/a.lzdraw"] = "circle((1, 2), 3, #fff)\n"
+puts(ed_open("/missing.lzdraw"), ed.status)
+puts(ed_open("/a.lzdraw"), ed.file, ed_dirty(), ed.status)
+ed_set_caret(1, 0)
+ed_type("ñ")
+puts(ed_dirty())
+puts(ed_save(""), ed_dirty(), fake_files["/a.lzdraw"], ed.status)
+puts(ed_save("/b.lzdraw"), ed.file, fake_files["/b.lzdraw"] == fake_files["/a.lzdraw"])
+ed_new()
+puts(ed_save(""), ed.status)
+-~> Save an edited file, reopen it: same rows.
+ed_open("/a.lzdraw")
+ed_add_shape("rect")
+ed_save("")
+let before = doc_text(ed_model())
+ed_open("/a.lzdraw")
+puts(doc_text(ed_model()) == before, ed_dirty(), len(ed.undo))
+-~> Language: settings.liz, then the system's, then English.
+puts(lang_codes())
+fake_os.locale = "es"
+puts(lang_init())
+fake_files["/cfg/settings.liz"] = "let settings = {\"language\": \"en\"}\n"
+puts(lang_init())
+fake_files["/cfg/settings.liz"] = "-~> mine\nlet settings = {\"language\": \"xx\"}\n"
+puts(lang_init())
+fake_files["/cfg/settings.liz"] = ""
+fake_os.locale = "fr"
+puts(lang_init())
+puts(set_language("es"), lang_get())
+puts(fake_files["/cfg/settings.liz"])
+puts(set_language("en"))
+puts(fake_files["/cfg/settings.liz"])
+puts(set_language("xx"), lang_get())
+fake_files["/cfg/settings.liz"] = "let settings = {\"theme\": \"dark\"}\n"
+set_language("es")
+puts(fake_files["/cfg/settings.liz"])
+puts(lang_init())
+fake_files["/cfg/settings.liz"] = "let settings = {\"theme\": \"dark\", \"language\": \"en\"}\n"
+set_language("es")
+puts(fake_files["/cfg/settings.liz"])

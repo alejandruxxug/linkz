@@ -1,0 +1,45 @@
+-~> The backdoor: a drawing made from empty with commands only.
+let cmds = editor_debug_commands()
+function call(name, args) {
+  let r = cmds[name](args)
+  puts(">", name, str(args), r.ok)
+}
+function state_line() {
+  let s = editor_debug_state()
+  puts("  caret", s.caret.line, s.caret.col, "dirty", s.dirty, "errors", len(s.errors), "shapes", s.shapes, "props", s.properties)
+}
+ed_reset("", "")
+call("AddLayer", [])
+call("AddShape", ["circle"])
+state_line()
+call("SetProp", ["r", 55])
+call("SetProp", ["center", "(100,", "120)"])
+call("SetProp", ["fill", "ff0000"])
+call("SetProp", ["nope", 1])
+puts(ed.status)
+call("AddShape", ["rect"])
+call("AddLayer", [])
+call("SelectRow", [3])
+call("Caret", [3, 4])
+state_line()
+call("PencilStroke", [10, 10, 60, 60, 110, 10])
+call("ToggleLayer", [1])
+call("Undo", [])
+call("Redo", [])
+call("Language", ["es"])
+call("Language", ["xx"])
+puts(fake_files["/cfg/settings.liz"])
+fake_files["/d.lzdraw"] = "circle((5, 5), 2, #000)\n"
+call("Open", ["/d.lzdraw"])
+call("SetCode", ["let nino = 1 -~> niño\ncircle((5, 5), 2, #000)"])
+call("Save", [])
+call("Save", ["/e.lzdraw"])
+puts(fake_files["/e.lzdraw"])
+let s = editor_debug_state()
+puts(s.file, s.dirty, s.language, s.code)
+for (let i = 0; i < len(s.rows); i = i + 1) {
+  puts(" ", s.rows[i].line, s.rows[i].kind, s.rows[i].name, s.rows[i].depth)
+}
+puts(s.can_undo, s.can_redo, s.stale, s.selection)
+ed_reset("", "")
+lang_use("en")

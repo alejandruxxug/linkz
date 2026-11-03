@@ -1,0 +1,85 @@
+-~> editor_commands: the editor's part of the agent backdoor. The app merges
+-~> editor_debug_commands() into app.debug_commands and returns
+-~> editor_debug_state() (next to its own fields) from app.debug_state().
+-~> Command arguments arrive as a list; numbers are already numbers.
+-~> Lines are counted from 1 and columns from 0, like the rows in the dump.
+
+-~> The state an agent can read: rows, selection, caret, properties, errors, ...
+function editor_debug_state() {
+  ed_settle()
+  let m = ed_model()
+  let rows = []
+  let all = ed_rows()
+  for (let i = 0; i < len(all); i = i + 1) {
+    let r = all[i]
+    push(rows, {"line": r.line, "depth": r.depth, "kind": r.kind, "name": r.name, "text": r.text, "hidden": r.hidden,
+                "locked": r.locked, "error": r.error, "layer": r.layer, "foldable": r.foldable,
+                "collapsed": r.collapsed, "visible": r.visible})
+  }
+  let props = ed_props()
+  let shown = null
+  if (props != null && props.kind == "call") {
+    let fields = []
+    for (let i = 0; i < len(props.fields); i = i + 1) {
+      let f = props.fields[i]
+      push(fields, {"name": f.name, "text": f.text, "kind": f.kind})
+    }
+    shown = {"kind": "call", "callee": props.callee, "fields": fields}
+  } elif (props != null) {
+    shown = {"kind": "layer", "name": props.name, "hidden": props.hidden, "locked": props.locked}
+  }
+  let sel = null
+  if (m.sel != null) {
+    sel = {"from": m.sel.from, "to": m.sel.to}
+  }
+  {"file": ed.file, "dirty": ed_dirty(), "language": lang_get(), "rows": rows,
+   "selection": {"row": m.line, "rows": sel}, "caret": {"line": m.line, "col": m.col},
+   "properties": shown, "errors": ed.errors, "stale": ed.stale, "status": ed.status,
+   "refusal": ed.refusal, "shapes": len(ed.shapes), "run": ed.stats, "can_undo": len(ed.undo) > 0,
+   "can_redo": len(ed.redo) > 0, "code": doc_text(m)}
+}
+
+-~> All the arguments from index `from` joined with spaces (so a value with
+-~> spaces needs no quotes).
+function cmd_rest(args, from) {
+  let parts = []
+  for (let i = from; i < len(args); i = i + 1) {
+    push(parts, str(args[i]))
+  }
+  text.join(parts, " ")
+}
+
+function cmd_result(ok) {
+  ed_settle()
+  {"ok": ok, "status": ed.status}
+}
+
+-~> The samples of a straight-line drag through the given canvas points
+-~> (x1 y1 x2 y2 ...), 10 ms apart, with full pressure.
+function cmd_samples(args) {
+  let samples = []
+  for (let i = 0; i + 1 < len(args); i = i + 2) {
+    let p = point(args[i], args[i + 1])
+    push(samples, {"pos": p, "canvas_pos": p, "pressure": 1.0, "t": len(samples) * 0.01})
+  }
+  samples
+}
+
+-~> The commands: name -> function(args).
+function editor_debug_commands() {
+  {
+    "SetCode": function(args) { ed_set_code(cmd_rest(args, 0)); cmd_result(true) },
+    "Open": function(args) { cmd_result(ed_open(cmd_rest(args, 0))) },
+    "Save": function(args) { cmd_result(ed_save(cmd_rest(args, 0))) },
+    "SelectRow": function(args) { ed_select(args[0]); cmd_result(true) },
+    "SetProp": function(args) { cmd_result(ed_set_prop(str(args[0]), cmd_rest(args, 1))) },
+    "AddShape": function(args) { cmd_result(ed_add_shape(str(args[0]))) },
+    "AddLayer": function(args) { cmd_result(ed_add_layer()) },
+    "ToggleLayer": function(args) { cmd_result(ed_toggle_fold(args[0])) },
+    "Caret": function(args) { ed_set_caret(args[0], args[1]); cmd_result(true) },
+    "Undo": function(args) { cmd_result(ed_undo()) },
+    "Redo": function(args) { cmd_result(ed_redo()) },
+    "Language": function(args) { cmd_result(set_language(str(args[0]))) },
+    "PencilStroke": function(args) { cmd_result(pencil_commit(cmd_samples(args), doc_current_layer(ed_model()))) }
+  }
+}

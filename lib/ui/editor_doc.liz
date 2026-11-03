@@ -1,0 +1,198 @@
+-~> editor_doc: the editor's document model, as plain data and pure functions.
+-~> A model is a hash:
+-~>   lines  the source text, one string per line (the file is exactly these)
+-~>   line   the caret's line, counted from 1 like src.parse
+-~>   col    the caret's column, counted from 0: how many characters come before it
+-~>   want   the column Up and Down try to keep
+-~>   sel    null, or {"from", "to", "anchor"}: a range of whole rows
+-~>   parse  the cached result of src.parse for this text, or null
+-~> An edit never changes a model, it returns a new one (the old one stays valid,
+-~> which is what undo needs). Only `parse` is filled in later, as a cache.
+
+function doc_new(code) {
+  doc_make(text.lines(code), 1, 0)
+}
+
+function doc_make(lines, line, col) {
+  doc_at({"lines": lines, "line": 1, "col": 0, "want": 0, "sel": null, "parse": null}, line, col)
+}
+
+-~> The same text with the caret somewhere else. Keeps the parse cache.
+function doc_at(m, line, col) {
+  let n = len(m.lines)
+  let l = math.max(1, math.min(line, n))
+  let c = math.max(0, math.min(col, len(m.lines[l - 1])))
+  {"lines": m.lines, "line": l, "col": c, "want": c, "sel": null, "parse": m.parse}
+}
+
+-~> New text, new caret, no selection, no cache.
+function doc_with(m, lines, line, col) {
+  if (len(lines) == 0) {
+    lines = [""]
+  }
+  doc_make(lines, line, col)
+}
+
+function doc_text(m) {
+  text.join(m.lines, "\n")
+}
+
+function doc_line(m, n) {
+  m.lines[n - 1]
+}
+
+function doc_cur(m) {
+  m.lines[m.line - 1]
+}
+
+-~> The model's src.parse result, computed once per text.
+function doc_parsed(m) {
+  if (m.parse == null) {
+    m.parse = src.parse(doc_text(m))
+  }
+  m.parse
+}
+
+-~> A copy of a hash (the language only copies arrays).
+function hash_copy(h) {
+  let out = {}
+  let ks = keys(h)
+  for (let i = 0; i < len(ks); i = i + 1) {
+    out[ks[i]] = h[ks[i]]
+  }
+  out
+}
+
+-~> How many spaces or tabs a line starts with.
+function leading_ws(s) {
+  let i = 0
+  while (i < len(s) && (s[i] == " " || s[i] == "\t")) {
+    i = i + 1
+  }
+  i
+}
+
+function is_blank(s) {
+  text.trim(s) == ""
+}
+
+-~> A string without its trailing spaces.
+function rtrim(s) {
+  let e = len(s)
+  while (e > 0 && (s[e - 1] == " " || s[e - 1] == "\t" || s[e - 1] == text.char(13))) {
+    e = e - 1
+  }
+  text.slice(s, 0, e)
+}
+
+-~> The index where a trailing `-~>` comment starts, or -1. Strings are skipped.
+function comment_start(s) {
+  let in_str = false
+  let i = 0
+  while (i < len(s)) {
+    let ch = s[i]
+    if (in_str && ch == "\\") {
+      i = i + 1
+    } elif (ch == "\"") {
+      in_str = !in_str
+    } elif (!in_str && ch == "-" && text.slice(s, i, i + 3) == "-~>") {
+      return i
+    }
+    i = i + 1
+  }
+  return -1
+}
+
+-~> A line split in its code and its comment text: [code, comment or null].
+function comment_split(s) {
+  let at = comment_start(s)
+  if (at < 0) {
+    return [s, null]
+  }
+  return [rtrim(text.slice(s, 0, at)), text.trim(text.slice(s, at + 3, len(s)))]
+}
+
+-~> The parts of a comment: {"name", "hidden", "locked"}.
+function comment_parts(c) {
+  let name = []
+  let hidden = false
+  let locked = false
+  if (c != null) {
+    let words = text.split(c, " ")
+    for (let i = 0; i < len(words); i = i + 1) {
+      if (words[i] == "[hidden]") {
+        hidden = true
+      } elif (words[i] == "[locked]") {
+        locked = true
+      } elif (words[i] != "") {
+        push(name, words[i])
+      }
+    }
+  }
+  {"name": text.join(name, " "), "hidden": hidden, "locked": locked}
+}
+
+-~> A line with its comment replaced by `-~> name [hidden] [locked]` (no comment at all when all are empty).
+function comment_write(s, parts) {
+  let code = comment_split(s)[0]
+  let words = []
+  if (parts.name != "") {
+    push(words, parts.name)
+  }
+  if (parts.hidden) {
+    push(words, "[hidden]")
+  }
+  if (parts.locked) {
+    push(words, "[locked]")
+  }
+  if (len(words) == 0) {
+    return code
+  }
+  code + " -~> " + text.join(words, " ")
+}
+
+-~> Replaces the text between two positions (lines from 1, columns from 1, the
+-~> end column just after the last character, like src.parse spans).
+function span_replace(lines, l1, c1, l2, c2, new_text) {
+  let before = text.slice(lines[l1 - 1], 0, c1 - 1)
+  let after = text.slice(lines[l2 - 1], c2 - 1, len(lines[l2 - 1]))
+  let mid = text.split(before + new_text + after, "\n")
+  list.slice(lines, 0, l1 - 1) + mid + list.slice(lines, l2, len(lines))
+}
+
+-~> The text between two positions, same convention as span_replace.
+function span_text(lines, l1, c1, l2, c2) {
+  if (l1 == l2) {
+    return text.slice(lines[l1 - 1], c1 - 1, c2 - 1)
+  }
+  let parts = [text.slice(lines[l1 - 1], c1 - 1, len(lines[l1 - 1]))]
+  for (let l = l1 + 1; l < l2; l = l + 1) {
+    push(parts, lines[l - 1])
+  }
+  push(parts, text.slice(lines[l2 - 1], 0, c2 - 1))
+  text.join(parts, "\n")
+}
+
+-~> A number as whole-number text: 40.6 becomes "41".
+function fmt_int(v) {
+  str(math.round(v))
+}
+
+-~> A point as text with whole coordinates: (40.2, 9.7) becomes "(40, 10)".
+function fmt_point(p) {
+  "(" + fmt_int(p.x) + ", " + fmt_int(p.y) + ")"
+}
+
+-~> A list of points as text: "[(1, 2), (3, 4)]".
+function fmt_points(points) {
+  let parts = []
+  for (let i = 0; i < len(points); i = i + 1) {
+    push(parts, fmt_point(points[i]))
+  }
+  "[" + text.join(parts, ", ") + "]"
+}
+
+-~> A number with two decimals at most: 0.456 becomes "0.46".
+function fmt_decimal(v) {
+  str(math.round(v * 100) / 100.0)
+}

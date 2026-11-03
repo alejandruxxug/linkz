@@ -1,0 +1,285 @@
+-~> editor_state: what the user does, applied to the editor's state `ed`.
+-~> Each function runs one of the pure model operations, keeps the undo
+-~> history and marks the drawing to be run again. The view calls these.
+
+-~> == Running the drawing ==
+
+
+-~> Runs the drawing. A run with errors keeps the last good shapes (ed.stale
+-~> says they are old) and the errors go to their rows.
+function ed_run() {
+  let r = src.run(doc_text(ed_model()))
+  ed.errors = r.errors
+  ed.printed = r.printed
+  ed.stats = {"ms": r.ms, "steps": r.steps}
+  if (len(r.errors) == 0) {
+    ed.shapes = r.shapes
+    if (type(r.canvas) == "HASH" && type(r.canvas.size) == "POINT") {
+      ed.canvas = r.canvas
+    }
+    ed.stale = false
+  } else {
+    ed.stale = true
+  }
+  ed.pending = false
+  r
+}
+
+-~> Runs the drawing if it changed since the last run. The view calls this once
+-~> per paint, so a burst of edits costs one run.
+function ed_settle() {
+  if (ed.pending) {
+    ed_run()
+  }
+}
+
+function ed_canvas_size() {
+  ed.canvas.size
+}
+
+function ed_docs() {
+  if (ed.docs == null) {
+    ed.docs = src.library_docs()
+  }
+  ed.docs
+}
+
+-~> The rows of the layers panel, with the last run's errors and the folds.
+function ed_rows() {
+  doc_rows(ed_model(), ed.errors, ed.folded)
+}
+
+-~> The shapes to paint, back to front, without the hidden ones.
+function ed_paint_shapes() {
+  shapes_to_paint(ed.shapes, ed_rows())
+}
+
+-~> The shapes made by the call on this line.
+function ed_shapes_of(line) {
+  let out = []
+  for (let i = 0; i < len(ed.shapes); i = i + 1) {
+    if (ed.shapes[i].line == line) {
+      push(out, ed.shapes[i])
+    }
+  }
+  out
+}
+
+-~> What the properties panel shows for the caret's row (or null).
+function ed_props() {
+  props_of(ed_model(), ed_model().line, ed_docs())
+}
+
+-~> == Files ==
+
+
+function ed_new() {
+  ed_reset("", "")
+}
+
+-~> Opens a file. False (with a status message) if it isn't there.
+function ed_open(path) {
+  if (!fs.exists(path)) {
+    ed_refuse(tf("status.no_file_at", {"file": path}))
+    return false
+  }
+  ed_reset(fs.read(path), path)
+  ed.status = tf("status.opened", {"file": path})
+  true
+}
+
+-~> Saves to path, or to the open file when path is null or "".
+function ed_save(path) {
+  let target = path
+  if (target == null || target == "") {
+    target = ed.file
+  }
+  if (target == "") {
+    ed_refuse(t("status.no_path"))
+    return false
+  }
+  let body = doc_text(ed_model())
+  fs.write(target, body)
+  ed.file = target
+  ed.saved = body
+  ed.status = tf("status.saved", {"file": target})
+  true
+}
+
+-~> Replaces the whole text (one undo step).
+function ed_set_code(code) {
+  ed_apply(doc_new(code), null)
+}
+
+-~> == Editing ==
+
+
+function ed_type(s) {
+  ed_apply(ed_insert(ed_model(), s), "type")
+}
+
+function ed_move_caret(dir, extend) {
+  ed_apply(ed_move(ed_model(), dir, extend), null)
+}
+
+function ed_set_caret(line, col) {
+  ed_apply(doc_at(ed_model(), line, col), null)
+}
+
+function ed_select(n) {
+  ed_apply(ed_select_row(ed_model(), n), null)
+}
+
+function ed_select_range(a, b) {
+  ed_apply(ed_select_rows(ed_model(), a, b), null)
+}
+
+function ed_copy_rows() {
+  ed_copy(ed_model())
+}
+
+-~> Folds or unfolds the layer (or block) on this row. Editor-only state.
+function ed_toggle_fold(line) {
+  let key = row_fold_key(ed_model(), line)
+  if (key == null) {
+    return false
+  }
+  ed.folded[key] = ed.folded[key] != true
+  true
+}
+
+-~> == Creating and properties ==
+
+
+function ed_add_shape(kind) {
+  ed_try(add_shape(ed_model(), kind, ed_canvas_size()), null)
+}
+
+function ed_add_layer() {
+  ed_try(add_layer(ed_model()), null)
+}
+
+function ed_set_prop(name, value) {
+  ed_try(set_prop(ed_model(), ed_model().line, name, value, ed_docs()), "prop:" + name)
+}
+
+function ed_set_layer_name(line, name) {
+  ed_try(set_layer_name(ed_model(), line, name), null)
+}
+
+function ed_set_hidden(line, on) {
+  ed_try(set_row_hidden(ed_model(), line, on), null)
+}
+
+function ed_set_locked(line, on) {
+  ed_try(set_row_locked(ed_model(), line, on), null)
+}
+
+-~> == The canvas editing the code ==
+
+
+-~> Drag helpers: call ed_begin_gesture on mouse down and ed_end_gesture on
+-~> mouse up; in between, each move calls one of these with absolute positions.
+function ed_move_anchor(shape, anchor, pos) {
+  ed_try_at(move_anchor(ed_model(), shape, anchor, pos), null, shape.line)
+}
+
+function ed_move_shape(shape, delta) {
+  ed_try_at(move_shape(ed_model(), shape, delta), null, shape.line)
+}
+
+function ed_insert_point(shape, pos) {
+  ed_try_at(insert_point_near(ed_model(), shape, pos), null, shape.line)
+}
+
+function ed_remove_point(shape, index) {
+  ed_try_at(remove_point(ed_model(), shape, index), null, shape.line)
+}
+
+-~> The pencil's mouse-up: the recorded move samples become a `stroke` row in
+-~> the layer on line `layer` (null: loose, at the top). One undo step.
+function pencil_commit(samples, layer) {
+  ed_try(pencil_insert(ed_model(), samples, layer, ed.color, ed.width), "stroke")
+}
+
+-~> The brush's mouse-up: a `brush` row with the pen's name (such as "ink") and
+-~> the pressures. source is the event's pen.source ("mouse", "trackpad", "tablet").
+function brush_commit(samples, pen, source, layer) {
+  ed_try(brush_insert(ed_model(), samples, pen, source, layer, ed.color), "stroke")
+}
+
+-~> == Keyboard ==
+
+
+-~> Handles a key event's name ("Backspace", "ArrowUp", "Z", ...) and mods
+-~> ({"shift", "alt", "cmd", "ctrl"}). True when the editor used the key.
+function ed_key(name, mods) {
+  let k = text.lower(name)
+  let shift = mods != null && mods.shift == true
+  let alt = mods != null && mods.alt == true
+  let cmd = mods != null && (mods.cmd == true || mods.ctrl == true)
+  let m = ed_model()
+  if (cmd) {
+    if (k == "z" && shift) {
+      return ed_redo()
+    }
+    if (k == "z") {
+      return ed_undo()
+    }
+    if (k == "y") {
+      return ed_redo()
+    }
+    if (k == "c") {
+      ed_copy(m)
+      return true
+    }
+    if (k == "x") {
+      return ed_try(ed_cut(m), null)
+    }
+    if (k == "v") {
+      return ed_try(ed_paste(m), null)
+    }
+    if (k == "s") {
+      return ed_save("")
+    }
+    if (k == "a") {
+      ed_apply(ed_select_rows(m, 1, len(m.lines)), null)
+      return true
+    }
+    return false
+  }
+  if (k == "backspace") {
+    ed_apply(ed_backspace(m), "backspace")
+    return true
+  }
+  if (k == "delete") {
+    ed_apply(ed_delete(m), "delete")
+    return true
+  }
+  if (k == "enter" || k == "return") {
+    if (shift) {
+      ed_apply(ed_enter_above(m), null)
+    } else {
+      ed_apply(ed_enter(m), null)
+    }
+    return true
+  }
+  if (k == "tab") {
+    if (shift) {
+      ed_apply(ed_outdent(m), null)
+    } else {
+      ed_apply(ed_indent(m), null)
+    }
+    return true
+  }
+  let dir = text.replace(k, "arrow", "")
+  if ((dir == "up" || dir == "down") && alt) {
+    ed_apply(ed_move_rows(m, dir), null)
+    return true
+  }
+  if (dir == "left" || dir == "right" || dir == "up" || dir == "down" || dir == "home" || dir == "end") {
+    ed_apply(ed_move(m, dir, shift), null)
+    return true
+  }
+  false
+}

@@ -1,0 +1,52 @@
+-~> The properties panel: fields from parameter names, edits that rewrite one span.
+let docs = src.library_docs()
+let code = "-~> A five-point star.
+-~> center: where it is
+-~> r: how big
+function star(center, points, r) {
+  circle(center, r, #fff)
+}
+layer sun -~> Sun
+  circle((380, 90), 40, #e0a526) -~> core
+  star((10, 10), 5, 30)
+  stroke([(1, 2), (3, 4)], #1d1d1f)
+  line()
+"
+let m = doc_new(code)
+function dump(p) {
+  puts(p.kind, p.callee, "[" + p.summary + "]")
+  for (let i = 0; i < len(p.fields); i = i + 1) {
+    let f = p.fields[i]
+    puts(" ", f.name, f.kind, "[" + f.text + "]", len(f.items), "[" + f.doc + "]")
+  }
+}
+-~> A library function: parameter names from src.library_docs().
+dump(props_of(m, 8, docs))
+-~> The drawing's own function: parameter names and docs from its definition.
+dump(props_of(m, 9, docs))
+-~> A call that lacks its last argument still shows the field.
+dump(props_of(m, 10, docs))
+-~> A layer.
+puts(props_of(m, 7, docs))
+puts(props_of(m, 5, docs))
+-~> Editing rewrites exactly that argument.
+show(set_prop(doc_at(m, 8, 0), 8, "r", "55", docs))
+show(set_prop(doc_at(m, 8, 0), 8, "center", "(1, 2)", docs))
+show(set_prop(doc_at(m, 8, 0), 8, "fill", "3fa34d", docs))
+show(set_prop(doc_at(m, 9, 0), 9, "center", "(horizon, 3)", docs))
+-~> An argument the call doesn't have yet is added after the last one, or inside empty parens.
+show(set_prop(doc_at(m, 10, 0), 10, "width", "6", docs))
+puts(set_prop(m, 10, "width", "6", docs).refused)
+show(set_prop(doc_at(m, 11, 0), 11, "a", "(0, 0)", docs))
+puts(set_prop(m, 11, "b", "(0, 0)", docs).refused)
+-~> Refusals.
+puts(set_prop(m, 8, "nope", "1", docs).refused)
+puts(set_prop(m, 8, "r", "  ", docs).refused)
+puts(set_prop(m, 6, "r", "1", docs).refused)
+-~> Layer name and flags rewrite the trailing comment.
+show(set_layer_name(m, 7, "Sol y mar"))
+show(set_row_hidden(m, 7, true))
+show(set_row_locked(set_row_hidden(m, 7, true), 7, true))
+show(set_row_hidden(set_row_hidden(m, 7, true), 7, false))
+show(set_layer_name(set_row_hidden(m, 7, true), 7, ""))
+show(set_row_locked(m, 8, true))

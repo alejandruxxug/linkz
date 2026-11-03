@@ -1,0 +1,132 @@
+-~> editor_undo: the editor's one piece of state, `ed`, and undo/redo.
+-~> The model functions (editor_doc, editor_edit, ...) are pure; everything the
+-~> user does goes through ed_apply, which keeps the history. An undo step is a
+-~> whole model (text, caret, selection), so undo brings all three back.
+-~>   one step per edit; typing or backspacing along one row is one step
+-~>   one step per gesture (a drag, a stroke): ed_begin_gesture ... ed_end_gesture
+
+let ed = {
+  "model": null, "undo": [], "redo": [], "gesture": null, "merge": null,
+  "file": "", "saved": "", "folded": {},
+  "errors": [], "shapes": [], "canvas": {"size": (512, 512), "background": #ffffff},
+  "stale": false, "pending": true, "stats": {"ms": 0, "steps": 0}, "printed": "",
+  "docs": null, "status": "", "refusal": null,
+  "color": "#1d1d1f", "width": 4, "pen": "ink"
+}
+
+-~> The current model (an empty document until something is opened).
+function ed_model() {
+  if (ed.model == null) {
+    ed.model = doc_new("")
+  }
+  ed.model
+}
+
+-~> Forgets everything about the open document and starts from this text.
+function ed_reset(code, file) {
+  ed.model = doc_new(code)
+  ed.undo = []
+  ed.redo = []
+  ed.gesture = null
+  ed.merge = null
+  ed.file = file
+  ed.saved = code
+  ed.folded = {}
+  ed.errors = []
+  ed.shapes = []
+  ed.stale = false
+  ed.pending = true
+  ed.status = ""
+  ed.refusal = null
+}
+
+function ed_dirty() {
+  doc_text(ed_model()) != ed.saved
+}
+
+-~> Makes newm the current model. key (or null) names the kind of edit: the same
+-~> key on the same row again joins the previous undo step.
+function ed_apply(newm, key) {
+  let old = ed_model()
+  let changed = doc_text(newm) != doc_text(old)
+  if (changed) {
+    ed.pending = true
+    ed.refusal = null
+    if (ed.gesture == null) {
+      let join = key != null && key == ed.merge && len(ed.undo) > 0 && newm.line == old.line
+      if (!join) {
+        push(ed.undo, old)
+      }
+      ed.redo = []
+    }
+    ed.merge = key
+  } elif (newm.line != old.line || newm.col != old.col) {
+    ed.merge = null
+  }
+  ed.model = newm
+  changed
+}
+
+-~> Applies the result of a model function: a refusal is kept for the view to
+-~> show (status line, flashing row) and nothing changes. True when it applied.
+function ed_try(result, key) {
+  ed_try_at(result, key, ed_model().line)
+}
+
+-~> Like ed_try, but a refusal flashes row `line` (the row the canvas edit was about).
+function ed_try_at(result, key, line) {
+  if (is_refusal(result)) {
+    ed_refuse(result.refused)
+    ed.refusal.line = line
+    return false
+  }
+  ed_apply(result, key)
+  true
+}
+
+function ed_refuse(message) {
+  ed.status = message
+  ed.refusal = {"line": ed_model().line, "message": message}
+}
+
+function ed_undo() {
+  if (len(ed.undo) == 0) {
+    return false
+  }
+  push(ed.redo, ed_model())
+  let prev = pop(ed.undo)
+  ed.pending = true
+  ed.merge = null
+  ed.model = prev
+  true
+}
+
+function ed_redo() {
+  if (len(ed.redo) == 0) {
+    return false
+  }
+  push(ed.undo, ed_model())
+  let next = pop(ed.redo)
+  ed.pending = true
+  ed.merge = null
+  ed.model = next
+  true
+}
+
+-~> Starts a gesture: until ed_end_gesture the edits don't make undo steps.
+function ed_begin_gesture() {
+  ed.gesture = ed_model()
+}
+
+-~> Ends the gesture: one undo step if the text changed since it began.
+function ed_end_gesture() {
+  let start = ed.gesture
+  ed.gesture = null
+  ed.merge = null
+  if (start != null && doc_text(start) != doc_text(ed_model())) {
+    push(ed.undo, start)
+    ed.redo = []
+    return true
+  }
+  false
+}

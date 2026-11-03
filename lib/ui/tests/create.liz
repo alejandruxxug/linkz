@@ -1,0 +1,31 @@
+-~> Creating objects: shapes centered on the canvas, layers with an empty row.
+let m = doc_new("")
+show(add_shape(m, "circle", (400, 200)))
+show(add_shape(m, "ellipse", null))
+show(add_shape(m, "rect", null))
+show(add_shape(m, "line", null))
+show(add_shape(m, "polygon", null))
+show(add_shape(m, "stroke", null))
+show(add_shape(m, "brush", null))
+show(add_shape(m, "value", null))
+puts(add_shape(m, "text", null).refused)
+-~> Every template runs.
+let kinds = ["circle", "ellipse", "rect", "line", "polygon", "stroke", "brush"]
+let all = doc_new("")
+for (let i = 0; i < len(kinds); i = i + 1) {
+  all = add_shape(doc_at(all, 1, 0), kinds[i], null)
+}
+let r = src.run(doc_text(all))
+puts(len(r.errors), len(r.shapes))
+-~> A new shape goes in front of the row it is added at; into a layer, as its first row.
+let base = doc_new("layer a\n  circle((1, 1), 2, #fff)\nrect((0, 0), (1, 1), #000)")
+show(add_shape(doc_at(base, 2, 0), "line", null))
+show(add_shape(doc_at(base, 1, 0), "line", null))
+show(add_shape(doc_at(base, 3, 0), "line", null))
+-~> A layer is `layer layerN` and an empty row inside it.
+show(add_layer(m))
+let two = add_layer(doc_at(add_layer(m), 1, 0))
+show(two)
+puts(len(doc_layers(two)))
+-~> Added into an empty row of a layer, a shape takes its indentation.
+show(add_shape(doc_at(add_layer(m), 2, 2), "circle", (100, 100)))

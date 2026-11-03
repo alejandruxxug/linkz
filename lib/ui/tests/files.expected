@@ -1,0 +1,29 @@
+false There is no file at /missing.lzdraw
+true /a.lzdraw false Opened /a.lzdraw
+true
+true false ñcircle((1, 2), 3, #fff)
+ Saved /a.lzdraw
+true /b.lzdraw true
+false This drawing has no file yet
+true false 0
+["en", "es"]
+es
+en
+es
+en
+true es
+-~> Linkz settings
+let settings = {"language": "es"}
+
+true
+-~> Linkz settings
+let settings = {"language": "en"}
+
+false en
+let settings = {"theme": "dark"}
+
+settings.language = "es"
+
+es
+let settings = {"theme": "dark", "language": "es"}
+

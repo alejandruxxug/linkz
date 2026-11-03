@@ -1,0 +1,146 @@
+-~> i18n: the words of the interface, one table per language.
+-~> Every label, button, status message and tooltip frame goes through
+-~>   t("key")                       a plain text
+-~>   tf("key", {"file": name})      a text with {file} placeholders filled in
+-~> (A function here can't have an optional argument, so it is two names.)
+-~> A language is one file, lib/ui/lang_<code>.liz, that calls lang_register.
+-~> A key missing in the current language falls back to English; a key missing
+-~> everywhere shows the key itself, which is easy to spot.
+
+let i18n = {"lang": "en", "tables": {}}
+
+function lang_register(code, table) {
+  i18n.tables[code] = table
+}
+
+-~> The codes of the languages that are loaded.
+function lang_codes() {
+  keys(i18n.tables)
+}
+
+function lang_get() {
+  i18n.lang
+}
+
+function lang_known(code) {
+  type(code) == "STRING" && i18n.tables[code] != null
+}
+
+-~> Switches the language for the rest of the session. False for an unknown code.
+function lang_use(code) {
+  if (!lang_known(code)) {
+    return false
+  }
+  i18n.lang = code
+  true
+}
+
+function t(key) {
+  tf(key, null)
+}
+
+function tf(key, values) {
+  let s = null
+  let table = i18n.tables[i18n.lang]
+  if (table != null) {
+    s = table[key]
+  }
+  if (s == null && i18n.tables["en"] != null) {
+    s = i18n.tables["en"][key]
+  }
+  if (s == null) {
+    return key
+  }
+  if (values != null) {
+    let ks = keys(values)
+    for (let i = 0; i < len(ks); i = i + 1) {
+      s = text.replace(s, "{" + ks[i] + "}", str(values[ks[i]]))
+    }
+  }
+  s
+}
+
+function settings_path() {
+  os.config_dir() + "/settings.liz"
+}
+
+-~> Where the language code sits in the settings text: [start, end] of the code
+-~> between its quotes, or null. Reads `"language": "es"` and `settings.language = "es"`.
+function settings_find(body) {
+  let at = text.find(body, "language")
+  if (at < 0) {
+    return null
+  }
+  let i = at + 8
+  if (text.slice(body, i, i + 1) == "\"") {
+    i = i + 1
+  }
+  let q1 = text.find(body, "\"", i)
+  if (q1 < 0) {
+    return null
+  }
+  let q2 = text.find(body, "\"", q1 + 1)
+  if (q2 < 0) {
+    return null
+  }
+  return [q1 + 1, q2]
+}
+
+-~> The language in a settings text, or null.
+function settings_language(body) {
+  let at = settings_find(body)
+  if (at == null) {
+    return null
+  }
+  text.slice(body, at[0], at[1])
+}
+
+-~> The settings text with the language set.
+function settings_with_language(body, code) {
+  let at = null
+  if (body != null) {
+    at = settings_find(body)
+  }
+  if (at != null) {
+    return text.slice(body, 0, at[0]) + code + text.slice(body, at[1], len(body))
+  }
+  if (body != null && text.trim(body) != "") {
+    return body + "\nsettings.language = \"" + code + "\"\n"
+  }
+  "-~> Linkz settings\nlet settings = {\"language\": \"" + code + "\"}\n"
+}
+
+-~> The language to start in: settings.liz, else the system's, else English.
+function lang_detect() {
+  let path = settings_path()
+  if (fs.exists(path)) {
+    let code = settings_language(fs.read(path))
+    if (lang_known(code)) {
+      return code
+    }
+  }
+  let sys = os.locale()
+  if (lang_known(sys)) {
+    return sys
+  }
+  "en"
+}
+
+function lang_init() {
+  i18n.lang = lang_detect()
+  i18n.lang
+}
+
+-~> Switches the language and remembers it in settings.liz. False for an unknown code.
+function set_language(code) {
+  if (!lang_use(code)) {
+    return false
+  }
+  let path = settings_path()
+  let body = null
+  if (fs.exists(path)) {
+    body = fs.read(path)
+  }
+  fs.write(path, settings_with_language(body, code))
+  true
+}

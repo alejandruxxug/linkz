@@ -1,0 +1,60 @@
+-~> Typing, Backspace, Delete, Enter, Tab and caret movement, with Spanish letters.
+let m = doc_new("")
+m = ed_insert(m, "let niño = 1")
+show(m)
+m = ed_insert(doc_at(m, 1, 6), "á")
+show(m)
+-~> Backspace removes one character, not one byte.
+m = ed_backspace(m)
+show(m)
+m = ed_backspace(doc_at(m, 1, 7))
+show(m)
+-~> Enter splits the row; the new row keeps the depth.
+m = ed_enter(doc_at(doc_new("  circle((1, 2), 3, #fff)"), 1, 8))
+show(m)
+-~> Backspace at the start of a row joins it to the one above.
+m = ed_backspace(m)
+show(m)
+-~> Delete at the end of a row joins the next one.
+m = doc_new("año\nñandú")
+show(ed_delete(doc_at(m, 1, 3)))
+show(ed_delete(doc_at(m, 1, 0)))
+-~> Backspace at the very start and Delete at the very end do nothing.
+show(ed_backspace(doc_at(m, 1, 0)))
+show(ed_delete(doc_at(m, 2, 5)))
+-~> Enter after a layer goes one level deeper; Shift+Enter opens a row above.
+m = doc_new("layer sun\n  circle((1, 2), 3, #fff)")
+show(ed_enter(doc_at(m, 1, 9)))
+show(ed_enter(doc_at(m, 2, 29)))
+show(ed_enter_above(doc_at(m, 2, 5)))
+-~> Tab and Shift+Tab.
+show(ed_indent(doc_at(m, 2, 4)))
+show(ed_outdent(doc_at(m, 2, 4)))
+show(ed_outdent(doc_at(m, 1, 2)))
+-~> Multi-line text typed in.
+show(ed_insert(doc_at(doc_new("ab"), 1, 1), "x\ny\nz"))
+-~> Arrows keep the column.
+m = doc_new("hello world\nhi\nthe last line")
+m = ed_move(doc_at(m, 1, 9), "down", false)
+show(m)
+m = ed_move(m, "down", false)
+show(m)
+m = ed_move(m, "up", false)
+m = ed_move(m, "up", false)
+show(m)
+show(ed_move(m, "home", false))
+show(ed_move(m, "end", false))
+show(ed_move(doc_at(m, 2, 0), "left", false))
+show(ed_move(doc_at(m, 1, 11), "right", false))
+show(ed_move(doc_at(m, 1, 3), "up", false))
+show(ed_move(doc_at(m, 3, 3), "down", false))
+-~> Selecting rows with Shift+Down, and deleting them.
+m = ed_move(doc_at(m, 1, 2), "down", true)
+m = ed_move(m, "down", true)
+show(m)
+show(ed_backspace(m))
+m = ed_select_rows(doc_new("a\nb\nc\nd"), 2, 3)
+show(m)
+show(ed_delete(m))
+show(ed_indent(m))
+show(ed_select_row(m, 4))

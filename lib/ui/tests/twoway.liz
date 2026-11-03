@@ -1,0 +1,98 @@
+-~> The canvas edits the code: rewrite_arg, move_anchor, move_shape, insert_point, remove_point.
+let code = "let horizon = 300
+circle((380, 90), 40, #e0a526)
+rect((10, 20), (120, 60), #2d6a8f)
+circle((50, horizon + 20), 10, #fff)
+stroke([(40, 300), (120, 210), (260, 240)], #1d1d1f, 4)
+brush([(0, 0), (10, 10), (20, 0)], [0.2, 0.9, 0.4], #1d1d1f, pens.ink)
+polygon([(0, 0), (9, 0), (9, 9)], #c0392b)
+line((1, 1), (5, 5), #000, 2)
+function ring(c) {
+  circle(c, 5, #fff)
+}
+ring((70, 70))
+stroke(pts, #000, 1)
+"
+let m = doc_new(code)
+let r = src.run(code)
+puts(len(r.errors))
+-~> pts is undefined, so use a run of the lines before it.
+let ok = src.run(text.join(list.slice(m.lines, 0, 12), "\n"))
+puts(len(ok.errors), len(ok.shapes))
+function shape_at(line, nth) {
+  let n = 0
+  for (let i = 0; i < len(ok.shapes); i = i + 1) {
+    if (ok.shapes[i].line == line) {
+      if (n == nth) {
+        return ok.shapes[i]
+      }
+      n = n + 1
+    }
+  }
+  null
+}
+function anchor_of(shape, role, item) {
+  for (let i = 0; i < len(shape.anchors); i = i + 1) {
+    let a = shape.anchors[i]
+    if (a.role == role && a.item == item) {
+      return a
+    }
+  }
+  null
+}
+function line_of(model, n) {
+  model.lines[n - 1]
+}
+-~> rewrite_arg: a whole argument, one element of an array, one coordinate of a point.
+puts(line_of(rewrite_arg(m, 2, 1, null, "50"), 2))
+puts(line_of(rewrite_arg(m, 5, 0, 1, "(130, 205)"), 5))
+puts(line_of(rewrite_arg(m, 2, 0, 1, "99"), 2))
+puts(rewrite_arg(m, 2, 9, null, "1").refused)
+puts(rewrite_arg(m, 1, 0, null, "1").refused)
+-~> A circle's center and radius handles.
+let c = shape_at(2, 0)
+puts(line_of(move_anchor(m, c, anchor_of(c, "move", null), (402.4, 77.6)), 2))
+puts(line_of(move_anchor(m, c, anchor_of(c, "radius", null), (380, 150)), 2))
+-~> A rectangle: the corner handle changes the size, not the position.
+let rc = shape_at(3, 0)
+puts(line_of(move_anchor(m, rc, anchor_of(rc, "corner", null), (200, 100)), 3))
+puts(line_of(move_anchor(m, rc, anchor_of(rc, "move", null), (15, 25)), 3))
+-~> One point of a stroke: only that point's text changes.
+let st = shape_at(5, 0)
+let moved = move_anchor(m, st, anchor_of(st, "point", 1), (125, 200))
+puts(line_of(moved, 5))
+puts(doc_text(moved) == code, len(moved.lines) == len(m.lines))
+-~> Dragging along: the same anchor again moves the same literal.
+puts(line_of(move_anchor(moved, st, anchor_of(st, "point", 1), (130, 190)), 5))
+-~> A position that is an expression is refused, and nothing changes.
+let ex = shape_at(4, 0)
+let refusal = move_anchor(m, ex, anchor_of(ex, "move", null), (60, 60))
+puts(refusal.refused)
+puts(refusal.lines)
+-~> A shape made by the drawing's own function has no literal of its own.
+let ring = shape_at(12, 0)
+puts(move_anchor(m, ring, anchor_of(ring, "move", null), (1, 1)).refused)
+-~> Moving whole shapes.
+puts(line_of(move_shape(m, c, (10, -5)), 2))
+puts(line_of(move_shape(m, st, (5, 5)), 5))
+puts(line_of(move_shape(m, shape_at(8, 0), (2, 2)), 8))
+puts(move_shape(m, ex, (1, 1)).refused)
+-~> Inserting a point after point 0, first, and last; a brush gets a pressure too.
+puts(line_of(insert_point(m, st, 0, (80, 250)), 5))
+puts(line_of(insert_point(m, st, -1, (10, 10)), 5))
+puts(line_of(insert_point(m, st, 2, (300, 300)), 5))
+let br = shape_at(6, 0)
+puts(line_of(insert_point(m, br, 0, (5, 5)), 6))
+puts(line_of(insert_point(m, shape_at(7, 0), 1, (9, 4)), 7))
+puts(insert_point(m, c, 0, (1, 1)).refused)
+-~> A double-click on the curve inserts at the nearest piece.
+puts(line_of(insert_point_near(m, st, (190, 225)), 5))
+puts(line_of(insert_point_near(m, st, (260, 245)), 5))
+-~> Removing points: first, middle and last; the last point never goes.
+puts(line_of(remove_point(m, st, 0), 5))
+puts(line_of(remove_point(m, st, 1), 5))
+puts(line_of(remove_point(m, st, 2), 5))
+puts(line_of(remove_point(m, br, 1), 6))
+let one = doc_new("stroke([(1, 1)], #000, 1)")
+let r1 = src.run(doc_text(one))
+puts(remove_point(one, r1.shapes[0], 0).refused)

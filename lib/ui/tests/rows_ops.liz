@@ -1,0 +1,35 @@
+-~> Copy, cut and paste rows through the clipboard, and moving rows.
+let code = "let a = 1
+layer sun
+  circle((1, 2), 3, #fff)
+  rect((0, 0), (5, 5), #000)
+layer sea
+  line((0, 0), (9, 9), #111, 2)
+"
+let m = doc_new(code)
+-~> Copying a layer takes its body with it.
+ed_copy(doc_at(m, 2, 0))
+puts(fake_clip.text)
+-~> Pasting rows goes below the caret's statement, lined up with it.
+show(ed_paste(doc_at(m, 1, 0)))
+-~> Pasting into an empty row replaces it and takes its indentation.
+show(ed_paste(doc_at(doc_new("layer x\n  "), 2, 2)))
+-~> Cut removes the rows and puts them on the clipboard.
+let cut = ed_cut(doc_at(m, 5, 0))
+show(cut)
+puts(fake_clip.text)
+-~> A row range selected with the keyboard.
+ed_copy(ed_select_rows(m, 3, 4))
+puts(fake_clip.text)
+-~> Plain text pastes at the caret.
+fake_clip.text = "ñu"
+show(ed_paste(doc_at(m, 1, 5)))
+-~> Alt+Up and Alt+Down move a statement with its body past its sibling.
+show(ed_move_rows(doc_at(m, 5, 0), "up"))
+show(ed_move_rows(doc_at(m, 2, 0), "down"))
+-~> Moving inside a layer swaps only the siblings.
+show(ed_move_rows(doc_at(m, 4, 3), "up"))
+-~> At the edge nothing moves.
+show(ed_move_rows(doc_at(m, 3, 3), "up"))
+show(ed_move_rows(doc_at(m, 1, 0), "up"))
+show(ed_move_rows(doc_at(m, 5, 0), "down"))

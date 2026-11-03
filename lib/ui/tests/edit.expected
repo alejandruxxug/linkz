@@ -1,0 +1,78 @@
+1: let niño = 1|
+1: let niá|ño = 1
+1: let ni|ño = 1
+1: let ni|o = 1
+1:   circle
+2:   |((1, 2), 3, #fff)
+1:   circle
+2:  |((1, 2), 3, #fff)
+1: año|ñandú
+1: |ño
+2: ñandú
+1: |año
+2: ñandú
+1: año
+2: ñandú|
+1: layer sun
+2:   |
+3:   circle((1, 2), 3, #fff)
+1: layer sun
+2:   circle((1, 2), 3, #fff)
+3:   |
+1: layer sun
+2:   |
+3:   circle((1, 2), 3, #fff)
+1: layer sun
+2:     ci|rcle((1, 2), 3, #fff)
+1: layer sun
+2: ci|rcle((1, 2), 3, #fff)
+1: la|yer sun
+2:   circle((1, 2), 3, #fff)
+1: ax
+2: y
+3: z|b
+1: hello world
+2: hi|
+3: the last line
+1: hello world
+2: hi
+3: the last |line
+1: hello wor|ld
+2: hi
+3: the last line
+1: |hello world
+2: hi
+3: the last line
+1: hello world|
+2: hi
+3: the last line
+1: hello world|
+2: hi
+3: the last line
+1: hello world
+2: |hi
+3: the last line
+1: |hello world
+2: hi
+3: the last line
+1: hello world
+2: hi
+3: the last line|
+1: hello world
+2: hi
+3: th|e last line sel 1-3
+1: |
+1: a
+2: b
+3: c|
+4: d sel 2-3
+1: a
+2: |d
+1: a
+2:   b
+3:   c|
+4: d sel 2-3
+1: a
+2: b
+3: c
+4: d|

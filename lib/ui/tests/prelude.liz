@@ -1,0 +1,29 @@
+-~> Stand-ins for the host's fs, clip and os, all in memory, so the tests are
+-~> hermetic. (The host's own are not exported to other packages.)
+let fake_files = {}
+let fake_clip = {"text": ""}
+let fake_os = {"locale": "en"}
+let fs = {
+  "read": function(p) { fake_files[p] },
+  "write": function(p, body) { fake_files[p] = body; null },
+  "exists": function(p) { fake_files[p] != null }
+}
+let clip = {"get": function() { fake_clip.text }, "set": function(s) { fake_clip.text = s; null }}
+let os = {"locale": function() { fake_os.locale }, "config_dir": function() { "/cfg" }}
+
+-~> Prints a model compactly: its text with the caret as ‸ and the row selection.
+function show(m) {
+  let out = []
+  for (let i = 0; i < len(m.lines); i = i + 1) {
+    let s = m.lines[i]
+    if (i + 1 == m.line) {
+      s = text.slice(s, 0, m.col) + "|" + text.slice(s, m.col, len(s))
+    }
+    push(out, str(i + 1) + ": " + s)
+  }
+  let sel = ""
+  if (m.sel != null) {
+    sel = " sel " + str(m.sel.from) + "-" + str(m.sel.to)
+  }
+  puts(text.join(out, "\n") + sel)
+}

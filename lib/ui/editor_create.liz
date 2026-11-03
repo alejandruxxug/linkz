@@ -1,0 +1,94 @@
+-~> editor_create: writing new objects into the file. The tool strip's tools
+-~> end up here: a shape becomes a line of code, a layer becomes `layer name`
+-~> and an empty row inside it.
+
+let default_canvas_size = (512, 512)
+
+-~> The code of a new shape of this kind, centered on a canvas of `size`.
+-~> Null for a kind that has no template.
+function create_template(kind, size) {
+  let cx = size.x // 2
+  let cy = size.y // 2
+  if (kind == "circle") {
+    return "circle(" + fmt_point((cx, cy)) + ", 40, #3fa34d)"
+  }
+  if (kind == "ellipse") {
+    return "ellipse(" + fmt_point((cx, cy)) + ", (60, 30), #e0a526)"
+  }
+  if (kind == "rect") {
+    return "rect(" + fmt_point((cx - 60, cy - 30)) + ", (120, 60), #2d6a8f)"
+  }
+  if (kind == "line") {
+    return "line(" + fmt_point((cx - 100, cy)) + ", " + fmt_point((cx + 100, cy)) + ", #1d1d1f, 2)"
+  }
+  if (kind == "polygon") {
+    return "polygon(" + fmt_points([(cx, cy - 60), (cx + 70, cy + 50), (cx - 70, cy + 50)]) + ", #c0392b)"
+  }
+  if (kind == "stroke") {
+    return "stroke(" + fmt_points([(cx - 100, cy + 20), (cx - 40, cy - 30), (cx + 40, cy + 30), (cx + 100, cy - 20)]) + ", #1d1d1f, 4)"
+  }
+  if (kind == "brush") {
+    return "brush(" + fmt_points([(cx - 100, cy + 20), (cx - 40, cy - 30), (cx + 40, cy + 30), (cx + 100, cy - 20)]) + ", [0.3, 0.8, 0.9, 0.2], #1d1d1f, pens.ink)"
+  }
+  null
+}
+
+-~> The first name base1, base2, ... that the text doesn't use yet.
+function create_unique(m, base) {
+  let all = doc_text(m)
+  let n = 1
+  while (text.find(all, base + str(n)) >= 0) {
+    n = n + 1
+  }
+  base + str(n)
+}
+
+-~> Puts new rows into the file near the caret and returns the model with the
+-~> caret on row `focus` of them (0 = the first). Where they go:
+-~>   an empty row: they replace it, at its indentation
+-~>   a layer row: they become its first (frontmost) row, one level deeper
+-~>   any other row: they go just above it (in front), at its indentation
+function create_rows(m, rows, focus) {
+  let cur = doc_cur(m)
+  let row = doc_row(m, m.line, null, null)
+  let at = m.line - 1
+  let drop = 0
+  let pad = leading_ws(cur)
+  if (is_blank(cur)) {
+    drop = 1
+  } elif (row.kind == "layer") {
+    at = m.line
+    pad = leading_ws(cur) + 2
+  }
+  let made = []
+  for (let i = 0; i < len(rows); i = i + 1) {
+    push(made, " " * pad + rows[i])
+  }
+  let lines = list.slice(m.lines, 0, at) + made + list.slice(m.lines, at + drop, len(m.lines))
+  let line = at + 1 + focus
+  doc_with(m, lines, line, len(lines[line - 1]))
+}
+
+-~> Adds a shape of this kind. size is the canvas size. Returns the model, or
+-~> {"refused": ...} for a kind that can't be added.
+function add_shape(m, kind, size) {
+  if (size == null) {
+    size = default_canvas_size
+  }
+  if (kind == "value") {
+    return create_rows(m, ["let " + create_unique(m, "value") + " = 0"], 0)
+  }
+  if (kind == "layer") {
+    return add_layer(m)
+  }
+  let code = create_template(kind, size)
+  if (code == null) {
+    return {"refused": tf("refuse.shape", {"kind": kind})}
+  }
+  create_rows(m, [code], 0)
+}
+
+-~> Adds `layer layerN` and an empty row inside it, with the caret on that row.
+function add_layer(m) {
+  create_rows(m, ["layer " + create_unique(m, "layer"), "  "], 1)
+}

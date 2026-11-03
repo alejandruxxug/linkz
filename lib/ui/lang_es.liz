@@ -1,0 +1,50 @@
+-~> Español.
+lang_register("es", {
+  "lang.name": "Español",
+
+  "tool.circle": "Círculo",
+  "tool.ellipse": "Elipse",
+  "tool.rect": "Rectángulo",
+  "tool.line": "Línea",
+  "tool.polygon": "Polígono",
+  "tool.stroke": "Curva",
+  "tool.pencil": "Lápiz",
+  "tool.brush": "Pincel",
+  "tool.value": "Valor",
+  "tool.layer": "Capa",
+
+  "panel.layers": "Capas",
+  "panel.properties": "Propiedades",
+  "props.name": "Nombre",
+  "props.hidden": "Oculta",
+  "props.locked": "Bloqueada",
+  "props.empty": "No hay nada que editar en esta fila",
+
+  "button.save": "Guardar",
+  "button.export": "Exportar PNG",
+  "button.undo": "Deshacer",
+  "button.redo": "Rehacer",
+
+  "status.saved": "Se guardó {file}",
+  "status.opened": "Se abrió {file}",
+  "status.no_file_at": "No hay ningún archivo en {file}",
+  "status.no_path": "Este dibujo todavía no tiene archivo",
+  "status.dirty": "Cambios sin guardar",
+
+  "refuse.position": "la posición viene de `{expr}`",
+  "refuse.size": "el tamaño viene de `{expr}`",
+  "refuse.points": "los puntos vienen de `{expr}`",
+  "refuse.pressures": "las presiones no son una lista de números",
+  "refuse.no_row": "esa forma no tiene fila en el código",
+  "refuse.no_call": "esa fila no es una llamada",
+  "refuse.no_arg": "ese valor no está en la fila",
+  "refuse.no_points": "esa forma no tiene una lista de puntos",
+  "refuse.min_points": "una curva necesita al menos un punto",
+  "refuse.no_props": "esta fila no tiene propiedades",
+  "refuse.no_field": "no hay ninguna propiedad llamada {name}",
+  "refuse.empty_value": "escribe un valor primero",
+  "refuse.fill_earlier": "primero completa los valores anteriores",
+  "refuse.no_samples": "no se dibujó nada en el lienzo",
+  "refuse.no_pen": "no existe un pincel llamado {name}",
+  "refuse.shape": "todavía no se puede agregar: {kind}"
+})

@@ -1,0 +1,184 @@
+-~> editor_props: the properties panel's logic. The fields of a call row are
+-~> the arguments of the call, named after the function's own parameters. A
+-~> field knows the exact span of its argument, so editing it rewrites only that.
+
+-~> The function statement with this name, searching layers, blocks and bodies too.
+function props_find_function(stmts, name) {
+  for (let i = 0; i < len(stmts); i = i + 1) {
+    let s = stmts[i]
+    if (s.kind == "function" && s.name == name) {
+      return s
+    }
+    let inner = props_find_function(s.children, name)
+    if (inner != null) {
+      return inner
+    }
+  }
+  null
+}
+
+-~> What is known about a function: {"params", "param_docs", "summary", "example"}
+-~> or null. The drawing's own functions win over the library's (`docs` is
+-~> src.library_docs()).
+function props_function_info(m, name, docs) {
+  let f = props_find_function(doc_parsed(m).statements, name)
+  if (f != null) {
+    return {"params": f.params, "param_docs": f.doc.params, "summary": f.doc.summary, "example": f.doc.example}
+  }
+  if (docs != null && docs[name] != null) {
+    let d = docs[name]
+    return {"params": d.params, "param_docs": d.doc.params, "summary": d.doc.summary, "example": d.doc.example}
+  }
+  null
+}
+
+-~> One field of the properties panel for argument `index`.
+function props_field(info, args, index) {
+  let name = "arg" + str(index + 1)
+  let note = ""
+  if (info != null && index < len(info.params)) {
+    name = info.params[index]
+    if (info.param_docs[name] != null) {
+      note = info.param_docs[name]
+    }
+  }
+  let f = {"name": name, "index": index, "doc": note, "text": "", "kind": "missing", "missing": true, "items": [],
+           "line": 0, "end_line": 0, "start": 0, "end": 0}
+  if (index < len(args)) {
+    let a = args[index]
+    f.text = a.text
+    f.kind = a.kind
+    f.missing = false
+    f.items = a.items
+    f.line = a.line
+    f.end_line = a.end_line
+    f.start = a.start
+    f.end = a.end
+  }
+  f
+}
+
+-~> What the panel shows for a row. For a call:
+-~>   {"kind": "call", "line", "callee", "summary", "example", "fields": [...]}
+-~> where a field is {"name", "index", "doc", "text", "kind" (number point color
+-~> array string expr, or missing), "missing", "items", "line", "end_line",
+-~> "start", "end"}. For a layer: {"kind": "layer", "line", "name", "ident",
+-~> "hidden", "locked"}. Null for any other row.
+function props_of(m, line, docs) {
+  let row = doc_row(m, line, null, null)
+  if (row.kind == "layer") {
+    return {"kind": "layer", "line": line, "name": row.name, "ident": row.stmt.name, "hidden": row.hidden,
+            "locked": row.locked}
+  }
+  if (row.stmt == null || row.stmt.kind != "call") {
+    return null
+  }
+  let args = row.stmt.args
+  let info = props_function_info(m, row.callee, docs)
+  let n = len(args)
+  if (info != null) {
+    n = math.max(n, len(info.params))
+  }
+  let fields = []
+  for (let i = 0; i < n; i = i + 1) {
+    push(fields, props_field(info, args, i))
+  }
+  let summary = ""
+  let example = null
+  if (info != null) {
+    summary = info.summary
+    example = info.example
+  }
+  {"kind": "call", "line": line, "callee": row.callee, "summary": summary, "example": example, "fields": fields}
+}
+
+function props_field_named(props, name) {
+  for (let i = 0; i < len(props.fields); i = i + 1) {
+    if (props.fields[i].name == name) {
+      return props.fields[i]
+    }
+  }
+  null
+}
+
+function props_is_hex(s) {
+  if (len(s) == 0) {
+    return false
+  }
+  for (let i = 0; i < len(s); i = i + 1) {
+    if (text.find("0123456789abcdefABCDEF", s[i]) < 0) {
+      return false
+    }
+  }
+  len(s) == 3 || len(s) == 6 || len(s) == 8
+}
+
+-~> Writes `value` as the argument called `name` of the call on `line`: the
+-~> argument's own text is replaced and nothing else moves. An argument the call
+-~> doesn't have yet is added after the last one. Returns the model, or
+-~> {"refused": ...}.
+function set_prop(m, line, name, value, docs) {
+  let props = props_of(m, line, docs)
+  if (props == null || props.kind != "call") {
+    return {"refused": t("refuse.no_props")}
+  }
+  let f = props_field_named(props, name)
+  if (f == null) {
+    return {"refused": tf("refuse.no_field", {"name": name})}
+  }
+  let v = text.trim(value)
+  if (v == "") {
+    return {"refused": t("refuse.empty_value")}
+  }
+  if (f.kind == "color" && props_is_hex(v)) {
+    v = "#" + v
+  }
+  if (!f.missing) {
+    return rewrite_arg(m, line, f.index, null, v)
+  }
+  let stmt = doc_row(m, line, null, null).stmt
+  let n = len(stmt.args)
+  let lines = m.lines
+  if (f.index > n) {
+    return {"refused": t("refuse.fill_earlier")}
+  }
+  if (n > 0) {
+    let last = stmt.args[n - 1]
+    return doc_with(m, span_replace(lines, last.end_line, last.end, last.end_line, last.end, ", " + v), m.line, m.col)
+  }
+  let open = text.find(lines[line - 1], "(", stmt.column - 1 + len(stmt.callee))
+  if (open < 0) {
+    return {"refused": t("refuse.no_props")}
+  }
+  doc_with(m, span_replace(lines, line, open + 2, line, open + 2, v), m.line, m.col)
+}
+
+-~> Rewrites the trailing comment of a row: name, hidden and locked. Used for layers.
+function row_comment_set(m, line, change) {
+  let s = m.lines[line - 1]
+  let parts = comment_parts(comment_split(s)[1])
+  if (change.name != null) {
+    parts.name = text.trim(text.replace(change.name, "\n", " "))
+  }
+  if (change.hidden != null) {
+    parts.hidden = change.hidden
+  }
+  if (change.locked != null) {
+    parts.locked = change.locked
+  }
+  let lines = list.copy(m.lines)
+  lines[line - 1] = comment_write(s, parts)
+  doc_with(m, lines, m.line, m.col)
+}
+
+function set_layer_name(m, line, name) {
+  row_comment_set(m, line, {"name": name, "hidden": null, "locked": null})
+}
+
+function set_row_hidden(m, line, on) {
+  row_comment_set(m, line, {"name": null, "hidden": on, "locked": null})
+}
+
+function set_row_locked(m, line, on) {
+  row_comment_set(m, line, {"name": null, "hidden": null, "locked": on})
+}

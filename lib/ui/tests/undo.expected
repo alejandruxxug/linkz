@@ -1,0 +1,25 @@
+false 0
+abñcircle((100, 100), 30, #3fa34d)
+ 1 true
+true 0
+true abñcircle((100, 100), 30, #3fa34d)
+0 1
+1 0 2
+1 6 2
+cicle((100, 100), 30, #3fa34d)
+circle((100, 100), 30, #3fa34d)
+cicle((100, 100), 30, #3fa34d)
+[  circle((100, 100), 30, #3fa34d)]
+circle((100, 100), 30, #3fa34d) false
+circle((60, 35), 5, #fff) 1
+circle((10, 10), 5, #fff)
+false
+position comes from `y * 2` 2 true false
+1 false 0
+1 true 1 2
+null | runtime error: identifier not found: nope
+1 true true
+2 false 0 true
+true false false
+false true true
+2 1

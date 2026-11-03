@@ -1,0 +1,163 @@
+call circle [Draws a filled circle.]
+  center point [(380, 90)] 2 [the middle of the circle, a point]
+  r number [40] 0 [the radius in pixels]
+  fill color [#e0a526] 0 [the color inside]
+call star [A five-point star.]
+  center point [(10, 10)] 2 [where it is]
+  points number [5] 0 []
+  r number [30] 0 [how big]
+call stroke [Draws a smooth curve that passes through every point. One point is a dot and two are a straight line. The ends are round.]
+  points array [[(1, 2), (3, 4)]] 2 [the spots the curve goes through, a list of points]
+  color color [#1d1d1f] 0 [the color of the line]
+  width missing [] 0 [the thickness in pixels]
+{"kind": "layer", "line": 7, "name": "Sun", "ident": "sun", "hidden": false, "locked": false}
+{"kind": "call", "line": 5, "callee": "circle", "summary": "Draws a filled circle.", "example": "circle((256, 256), 40, #3fa34d)", "fields": [{"name": "center", "index": 0, "doc": "the middle of the circle, a point", "text": "center", "kind": "expr", "missing": false, "items": [], "line": 5, "end_line": 5, "start": 10, "end": 16}, {"name": "r", "index": 1, "doc": "the radius in pixels", "text": "r", "kind": "expr", "missing": false, "items": [], "line": 5, "end_line": 5, "start": 18, "end": 19}, {"name": "fill", "index": 2, "doc": "the color inside", "text": "#fff", "kind": "color", "missing": false, "items": [], "line": 5, "end_line": 5, "start": 21, "end": 25}]}
+1: -~> A five-point star.
+2: -~> center: where it is
+3: -~> r: how big
+4: function star(center, points, r) {
+5:   circle(center, r, #fff)
+6: }
+7: layer sun -~> Sun
+8: |  circle((380, 90), 55, #e0a526) -~> core
+9:   star((10, 10), 5, 30)
+10:   stroke([(1, 2), (3, 4)], #1d1d1f)
+11:   line()
+12: 
+1: -~> A five-point star.
+2: -~> center: where it is
+3: -~> r: how big
+4: function star(center, points, r) {
+5:   circle(center, r, #fff)
+6: }
+7: layer sun -~> Sun
+8: |  circle((1, 2), 40, #e0a526) -~> core
+9:   star((10, 10), 5, 30)
+10:   stroke([(1, 2), (3, 4)], #1d1d1f)
+11:   line()
+12: 
+1: -~> A five-point star.
+2: -~> center: where it is
+3: -~> r: how big
+4: function star(center, points, r) {
+5:   circle(center, r, #fff)
+6: }
+7: layer sun -~> Sun
+8: |  circle((380, 90), 40, #3fa34d) -~> core
+9:   star((10, 10), 5, 30)
+10:   stroke([(1, 2), (3, 4)], #1d1d1f)
+11:   line()
+12: 
+1: -~> A five-point star.
+2: -~> center: where it is
+3: -~> r: how big
+4: function star(center, points, r) {
+5:   circle(center, r, #fff)
+6: }
+7: layer sun -~> Sun
+8:   circle((380, 90), 40, #e0a526) -~> core
+9: |  star((horizon, 3), 5, 30)
+10:   stroke([(1, 2), (3, 4)], #1d1d1f)
+11:   line()
+12: 
+1: -~> A five-point star.
+2: -~> center: where it is
+3: -~> r: how big
+4: function star(center, points, r) {
+5:   circle(center, r, #fff)
+6: }
+7: layer sun -~> Sun
+8:   circle((380, 90), 40, #e0a526) -~> core
+9:   star((10, 10), 5, 30)
+10: |  stroke([(1, 2), (3, 4)], #1d1d1f, 6)
+11:   line()
+12: 
+null
+1: -~> A five-point star.
+2: -~> center: where it is
+3: -~> r: how big
+4: function star(center, points, r) {
+5:   circle(center, r, #fff)
+6: }
+7: layer sun -~> Sun
+8:   circle((380, 90), 40, #e0a526) -~> core
+9:   star((10, 10), 5, 30)
+10:   stroke([(1, 2), (3, 4)], #1d1d1f)
+11: |  line((0, 0))
+12: 
+set the earlier values first
+there is no property called nope
+write a value first
+this row has no properties
+1: |-~> A five-point star.
+2: -~> center: where it is
+3: -~> r: how big
+4: function star(center, points, r) {
+5:   circle(center, r, #fff)
+6: }
+7: layer sun -~> Sol y mar
+8:   circle((380, 90), 40, #e0a526) -~> core
+9:   star((10, 10), 5, 30)
+10:   stroke([(1, 2), (3, 4)], #1d1d1f)
+11:   line()
+12: 
+1: |-~> A five-point star.
+2: -~> center: where it is
+3: -~> r: how big
+4: function star(center, points, r) {
+5:   circle(center, r, #fff)
+6: }
+7: layer sun -~> Sun [hidden]
+8:   circle((380, 90), 40, #e0a526) -~> core
+9:   star((10, 10), 5, 30)
+10:   stroke([(1, 2), (3, 4)], #1d1d1f)
+11:   line()
+12: 
+1: |-~> A five-point star.
+2: -~> center: where it is
+3: -~> r: how big
+4: function star(center, points, r) {
+5:   circle(center, r, #fff)
+6: }
+7: layer sun -~> Sun [hidden] [locked]
+8:   circle((380, 90), 40, #e0a526) -~> core
+9:   star((10, 10), 5, 30)
+10:   stroke([(1, 2), (3, 4)], #1d1d1f)
+11:   line()
+12: 
+1: |-~> A five-point star.
+2: -~> center: where it is
+3: -~> r: how big
+4: function star(center, points, r) {
+5:   circle(center, r, #fff)
+6: }
+7: layer sun -~> Sun
+8:   circle((380, 90), 40, #e0a526) -~> core
+9:   star((10, 10), 5, 30)
+10:   stroke([(1, 2), (3, 4)], #1d1d1f)
+11:   line()
+12: 
+1: |-~> A five-point star.
+2: -~> center: where it is
+3: -~> r: how big
+4: function star(center, points, r) {
+5:   circle(center, r, #fff)
+6: }
+7: layer sun -~> [hidden]
+8:   circle((380, 90), 40, #e0a526) -~> core
+9:   star((10, 10), 5, 30)
+10:   stroke([(1, 2), (3, 4)], #1d1d1f)
+11:   line()
+12: 
+1: |-~> A five-point star.
+2: -~> center: where it is
+3: -~> r: how big
+4: function star(center, points, r) {
+5:   circle(center, r, #fff)
+6: }
+7: layer sun -~> Sun
+8:   circle((380, 90), 40, #e0a526) -~> core [locked]
+9:   star((10, 10), 5, 30)
+10:   stroke([(1, 2), (3, 4)], #1d1d1f)
+11:   line()
+12: 

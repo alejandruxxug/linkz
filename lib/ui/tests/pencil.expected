@@ -1,0 +1,21 @@
+1: stroke([(40, 100), (140, 100), (140, 200)], #1d1d1f, 4)|
+2: layer a
+3:   circle((1, 1), 2, #fff)
+4: layer b
+1: layer a
+2:   circle((1, 1), 2, #fff)
+3: layer b
+4:   stroke([(40, 100), (140, 100), (140, 200)], #1d1d1f, 4)|
+0 stroke 3 6
+nothing was drawn on the canvas
+1: stroke([(5, 7)], #000, 1)|
+2: layer a
+3:   circle((1, 1), 2, #fff)
+4: layer b
+1: brush([(40, 100), (140, 100), (140, 200)], [0.0, 0.99, 0.5], #1d1d1f, pens.ink)|
+2: layer a
+3:   circle((1, 1), 2, #fff)
+4: layer b
+true true true
+0 brush true
+there is no pen called quill

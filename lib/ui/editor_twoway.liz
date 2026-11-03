@@ -1,0 +1,414 @@
+-~> editor_twoway: the canvas edits the code. Pure helpers: they take a model
+-~> and a shape from the last run, and return a new model, or a refusal
+-~> {"refused": "position comes from `horizon + i * 20`"} when the number that
+-~> would have to change is not written as a literal in the row.
+-~> An edit is {"l1", "c1", "l2", "c2", "text"}: replace that span (columns from 1,
+-~> the end just after the last character, like src.parse).
+
+function is_refusal(r) {
+  type(r) == "HASH" && r.refused != null
+}
+
+-~> Applies edits to a model, last position first so the earlier spans stay valid.
+function twoway_apply(m, edits) {
+  let ordered = list.sort(edits, function(a, b) { a.l1 > b.l1 || (a.l1 == b.l1 && a.c1 > b.c1) })
+  let lines = m.lines
+  for (let i = 0; i < len(ordered); i = i + 1) {
+    let e = ordered[i]
+    lines = span_replace(lines, e.l1, e.c1, e.l2, e.c2, e.text)
+  }
+  doc_with(m, lines, m.line, m.col)
+}
+
+function twoway_edit(arg, new_text) {
+  {"l1": arg.line, "c1": arg.start, "l2": arg.end_line, "c2": arg.end, "text": new_text}
+}
+
+-~> The argument `arg` (and its element `item`) of the call on `line`, or a refusal.
+function twoway_target(m, line, arg, item) {
+  if (type(line) != "INTEGER" || line < 1 || line > len(m.lines)) {
+    return {"refused": t("refuse.no_row")}
+  }
+  let row = doc_row(m, line, null, null)
+  if (row.stmt == null || row.stmt.kind != "call") {
+    return {"refused": t("refuse.no_call")}
+  }
+  if (arg < 0 || arg >= len(row.stmt.args)) {
+    return {"refused": t("refuse.no_arg")}
+  }
+  let a = row.stmt.args[arg]
+  if (item == null) {
+    return a
+  }
+  if (item < 0 || item >= len(a.items)) {
+    return {"refused": t("refuse.no_arg")}
+  }
+  a.items[item]
+}
+
+-~> Replaces one argument (or one element of an array or point argument) of the
+-~> call on `line` with new text. Returns the model or a refusal.
+function rewrite_arg(m, line, arg, item, new_text) {
+  let target = twoway_target(m, line, arg, item)
+  if (is_refusal(target)) {
+    return target
+  }
+  twoway_apply(m, [twoway_edit(target, new_text)])
+}
+
+-~> The edits that make a point argument hold `pos`, changing only the
+-~> coordinates that differ. A refusal if a coordinate is not a number literal.
+function twoway_point_edits(target, pos) {
+  if (target.kind != "point" || len(target.items) < 2) {
+    return {"refused": tf("refuse.position", {"expr": target.text})}
+  }
+  let want = [math.round(pos.x), math.round(pos.y)]
+  let edits = []
+  for (let i = 0; i < 2; i = i + 1) {
+    let c = target.items[i]
+    if (c.kind != "number") {
+      return {"refused": tf("refuse.position", {"expr": c.text})}
+    }
+    if (text.number(c.text) != want[i]) {
+      push(edits, twoway_edit(c, str(want[i])))
+    }
+  }
+  edits
+}
+
+-~> The edits that make a number argument hold n (whole).
+function twoway_number_edits(target, n) {
+  if (target.kind != "number") {
+    return {"refused": tf("refuse.size", {"expr": target.text})}
+  }
+  if (text.number(target.text) == n) {
+    return []
+  }
+  return [twoway_edit(target, str(n))]
+}
+
+-~> The call row a shape was made by, or a refusal: a shape made inside a
+-~> function of the drawing has no literal of its own to move.
+function twoway_shape_row(m, shape) {
+  let line = shape.line
+  if (type(line) != "INTEGER" || line < 1 || line > len(m.lines)) {
+    return {"refused": t("refuse.no_row")}
+  }
+  let row = doc_row(m, line, null, null)
+  if (row.stmt == null || row.stmt.kind != "call") {
+    return {"refused": t("refuse.no_call")}
+  }
+  if (row.callee != shape.kind) {
+    return {"refused": tf("refuse.position", {"expr": row.callee + "(...)"})}
+  }
+  row
+}
+
+-~> The edits that put one anchor at new_pos, or a refusal.
+function twoway_anchor_edits(row, shape, anchor, new_pos) {
+  let args = row.stmt.args
+  if (anchor.arg >= len(args)) {
+    return {"refused": t("refuse.no_arg")}
+  }
+  let target = args[anchor.arg]
+  if (anchor.item != null) {
+    if (anchor.item >= len(target.items)) {
+      return {"refused": t("refuse.no_arg")}
+    }
+    target = target.items[anchor.item]
+  }
+  if (anchor.role == "radius") {
+    return twoway_number_edits(target, math.round(math.dist(shape.args[0], new_pos)))
+  }
+  if (anchor.role == "corner") {
+    let d = new_pos - shape.args[0]
+    return twoway_point_edits(target, (math.max(0, d.x), math.max(0, d.y)))
+  }
+  twoway_point_edits(target, new_pos)
+}
+
+-~> Drags one anchor of a shape to new_pos (canvas coordinates): rewrites the
+-~> literal it stands for. Returns the model or a refusal.
+function move_anchor(m, shape, anchor, new_pos) {
+  let row = twoway_shape_row(m, shape)
+  if (is_refusal(row)) {
+    return row
+  }
+  let edits = twoway_anchor_edits(row, shape, anchor, new_pos)
+  if (is_refusal(edits)) {
+    return edits
+  }
+  twoway_apply(m, edits)
+}
+
+-~> Moves a whole shape by delta: its "move" anchor, or else every point of it.
+-~> All or nothing: one expression among the literals refuses the move.
+function move_shape(m, shape, delta) {
+  let row = twoway_shape_row(m, shape)
+  if (is_refusal(row)) {
+    return row
+  }
+  let role = "point"
+  for (let i = 0; i < len(shape.anchors); i = i + 1) {
+    if (shape.anchors[i].role == "move") {
+      role = "move"
+    }
+  }
+  let edits = []
+  for (let i = 0; i < len(shape.anchors); i = i + 1) {
+    let a = shape.anchors[i]
+    if (a.role == role) {
+      let e = twoway_anchor_edits(row, shape, a, a.pos + delta)
+      if (is_refusal(e)) {
+        return e
+      }
+      edits = edits + e
+    }
+  }
+  twoway_apply(m, edits)
+}
+
+-~> The points of a stroke, polygon or brush are arg 0, an array literal. A brush
+-~> also has its pressures in arg 1. Returns [points, pressures or null] as
+-~> parsed arguments, or a refusal.
+function twoway_point_lists(m, shape) {
+  let row = twoway_shape_row(m, shape)
+  if (is_refusal(row)) {
+    return row
+  }
+  if (shape.kind != "stroke" && shape.kind != "polygon" && shape.kind != "brush") {
+    return {"refused": t("refuse.no_points")}
+  }
+  let args = row.stmt.args
+  if (len(args) == 0 || args[0].kind != "array") {
+    let expr = "?"
+    if (len(args) > 0) {
+      expr = args[0].text
+    }
+    return {"refused": tf("refuse.points", {"expr": expr})}
+  }
+  let pressures = null
+  if (shape.kind == "brush") {
+    if (len(args) < 2 || args[1].kind != "array" || len(args[1].items) != len(args[0].items)) {
+      return {"refused": t("refuse.pressures")}
+    }
+    pressures = args[1]
+  }
+  return [args[0], pressures]
+}
+
+-~> Adds a point to a stroke, polygon or brush, after point `after` (-1 puts it
+-~> first). A brush gets a pressure between its neighbours' too.
+function insert_point(m, shape, after, pos) {
+  let lists = twoway_point_lists(m, shape)
+  if (is_refusal(lists)) {
+    return lists
+  }
+  let pts = lists[0]
+  let n = len(pts.items)
+  if (after < -1 || after >= n) {
+    return {"refused": t("refuse.no_arg")}
+  }
+  let edits = [twoway_insert_edit(pts, after, fmt_point(pos))]
+  if (lists[1] != null) {
+    let ps = lists[1]
+    let a = 0.5
+    let b = 0.5
+    if (after >= 0) {
+      a = text.number(ps.items[after].text)
+    }
+    if (after + 1 < n) {
+      b = text.number(ps.items[after + 1].text)
+    }
+    if (a == null) {
+      a = 0.5
+    }
+    if (b == null) {
+      b = a
+    }
+    if (after < 0) {
+      a = b
+    } elif (after + 1 >= n) {
+      b = a
+    }
+    push(edits, twoway_insert_edit(ps, after, fmt_decimal((a + b) / 2.0)))
+  }
+  twoway_apply(m, edits)
+}
+
+-~> The edit that adds `item_text` to an array argument after element `after`.
+function twoway_insert_edit(arr, after, item_text) {
+  if (after < 0) {
+    let first = arr.items[0]
+    return {"l1": first.line, "c1": first.start, "l2": first.line, "c2": first.start, "text": item_text + ", "}
+  }
+  let prev = arr.items[after]
+  {"l1": prev.end_line, "c1": prev.end, "l2": prev.end_line, "c2": prev.end, "text": ", " + item_text}
+}
+
+-~> Adds a point where the curve passes closest to pos (what a double-click on
+-~> the curve does).
+function insert_point_near(m, shape, pos) {
+  let path = shape.path
+  if (shape.kind != "polygon") {
+    path = smooth_path(shape.args[0])
+  }
+  let hit = nearest_on_path(path, pos)
+  let after = len(shape.args[0]) - 1
+  if (hit != null) {
+    after = math.min(hit.command - 1, after)
+  }
+  insert_point(m, shape, math.max(after, 0), pos)
+}
+
+-~> Removes point `index` of a stroke, polygon or brush. At least one point stays.
+function remove_point(m, shape, index) {
+  let lists = twoway_point_lists(m, shape)
+  if (is_refusal(lists)) {
+    return lists
+  }
+  let n = len(lists[0].items)
+  if (index < 0 || index >= n) {
+    return {"refused": t("refuse.no_arg")}
+  }
+  if (n <= 1) {
+    return {"refused": t("refuse.min_points")}
+  }
+  let edits = [twoway_remove_edit(lists[0], index)]
+  if (lists[1] != null) {
+    push(edits, twoway_remove_edit(lists[1], index))
+  }
+  twoway_apply(m, edits)
+}
+
+function twoway_remove_edit(arr, index) {
+  let n = len(arr.items)
+  let it = arr.items[index]
+  if (index < n - 1) {
+    let next = arr.items[index + 1]
+    return {"l1": it.line, "c1": it.start, "l2": next.line, "c2": next.start, "text": ""}
+  }
+  let prev = arr.items[index - 1]
+  {"l1": prev.end_line, "c1": prev.end, "l2": it.end_line, "c2": it.end, "text": ""}
+}
+
+-~> Where a new stroke row goes: the first row inside the layer on `layer` (a
+-~> line number), or the top of the file when layer is null. Returns the model
+-~> with the caret on the new row.
+function twoway_new_row(m, code, layer) {
+  let at = 0
+  let pad = 0
+  if (layer != null) {
+    at = layer
+    pad = leading_ws(m.lines[layer - 1]) + 2
+  }
+  let row = " " * pad + code
+  let lines = list.slice(m.lines, 0, at) + [row] + list.slice(m.lines, at, len(m.lines))
+  doc_with(m, lines, at + 1, len(row))
+}
+
+-~> The canvas points of a list of move samples, each with its pressure and time.
+-~> Samples outside the canvas (no canvas_pos) are skipped.
+function samples_points(samples) {
+  let out = []
+  for (let i = 0; i < len(samples); i = i + 1) {
+    let s = samples[i]
+    if (s.canvas_pos != null) {
+      push(out, {"pos": s.canvas_pos, "pressure": s.pressure, "t": s.t})
+    }
+  }
+  out
+}
+
+-~> A pressure for each sample of a mouse stroke, from its speed: slow is
+-~> heavy, fast is light, smoothed so the width doesn't jump.
+function speed_pressures(pts) {
+  let out = []
+  let speed = 0.0
+  let p = 0.7
+  for (let i = 0; i < len(pts); i = i + 1) {
+    if (i > 0) {
+      let dt = pts[i].t - pts[i - 1].t
+      let d = math.dist(pts[i].pos, pts[i - 1].pos)
+      if (dt > 0) {
+        speed = d / dt
+      }
+      let raw = math.max(0.1, math.min(1.0, 1.2 - speed / 1200.0))
+      p = p * 0.6 + raw * 0.4
+    }
+    push(out, p)
+  }
+  if (len(out) > 1) {
+    out[0] = out[1]
+  }
+  out
+}
+
+-~> Simplifies a recorded stroke: [points, pressures] with whole-number points,
+-~> the ends kept, nothing repeated. `pressures` are matched to the kept points.
+function stroke_simplify(pts, pressures, tolerance) {
+  let raw = []
+  for (let i = 0; i < len(pts); i = i + 1) {
+    push(raw, pts[i].pos)
+  }
+  let kept = simplify(raw, tolerance)
+  let points = []
+  let ps = []
+  let at = 0
+  for (let k = 0; k < len(kept); k = k + 1) {
+    while (at < len(raw) - 1 && raw[at] != kept[k]) {
+      at = at + 1
+    }
+    let q = (math.round(kept[k].x), math.round(kept[k].y))
+    let n = len(points)
+    if (n == 0 || points[n - 1] != q) {
+      push(points, q)
+      push(ps, pressures[at])
+    }
+    at = at + 1
+  }
+  return [points, ps]
+}
+
+-~> The pencil: a recorded drag (move samples) becomes one `stroke(...)` row.
+-~> tolerance 1.5 px. Returns the model, or a refusal when no sample is on the canvas.
+function pencil_insert(m, samples, layer, color, width) {
+  let pts = samples_points(samples)
+  if (len(pts) == 0) {
+    return {"refused": t("refuse.no_samples")}
+  }
+  let pressures = []
+  for (let i = 0; i < len(pts); i = i + 1) {
+    push(pressures, 1.0)
+  }
+  let simple = stroke_simplify(pts, pressures, 1.5)
+  twoway_new_row(m, "stroke(" + fmt_points(simple[0]) + ", " + color + ", " + str(width) + ")", layer)
+}
+
+-~> The brush: like the pencil, but writes `brush(points, pressures, color, pens.NAME)`.
+-~> The pressure of each kept point is the sample's own (2 decimals) when
+-~> `source` is "trackpad" or "tablet", and comes from the speed with a mouse.
+function brush_insert(m, samples, pen_name, source, layer, color) {
+  let pts = samples_points(samples)
+  if (len(pts) == 0) {
+    return {"refused": t("refuse.no_samples")}
+  }
+  if (pens[pen_name] == null) {
+    return {"refused": tf("refuse.no_pen", {"name": pen_name})}
+  }
+  let pressures = []
+  if (source == "mouse") {
+    pressures = speed_pressures(pts)
+  } else {
+    for (let i = 0; i < len(pts); i = i + 1) {
+      push(pressures, pts[i].pressure)
+    }
+  }
+  let simple = stroke_simplify(pts, pressures, 1.5)
+  let texts = []
+  for (let i = 0; i < len(simple[1]); i = i + 1) {
+    push(texts, fmt_decimal(simple[1][i]))
+  }
+  let code = "brush(" + fmt_points(simple[0]) + ", [" + text.join(texts, ", ") + "], " + color + ", pens." + pen_name + ")"
+  twoway_new_row(m, code, layer)
+}

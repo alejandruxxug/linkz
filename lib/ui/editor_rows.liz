@@ -1,0 +1,248 @@
+-~> editor_rows: the rows of the layers panel, made from a model.
+-~> Every line of the file is a row. A row is a hash:
+-~>   line, text, depth    where it is and how far it is indented (in layers/blocks)
+-~>   kind     layer shape call value definition block canvas code comment cont empty
+-~>   callee   the function a call row calls, else ""
+-~>   name     the trailing comment (without the flags), else the callee or the name
+-~>   hidden, locked       the [hidden] and [locked] flags of the comment
+-~>   error    the message of the last run's error on this line, or null
+-~>   layer    the line of the layer this row sits in, 0 when it is loose
+-~>   parent   the line of the statement this row belongs to, 0 at the top
+-~>   end_line the last line of its statement (more than `line` for a layer with a body)
+-~>   foldable, collapsed, visible   whether it can fold, is folded, is shown
+-~>   stmt     the src.parse statement that starts on this line, or null
+
+let shape_calls = ["circle", "ellipse", "rect", "line", "polygon", "stroke", "brush"]
+
+function is_shape_call(name) {
+  list.index(shape_calls, name) >= 0
+}
+
+-~> Walks the statements and records, per start line, the statement, the layer
+-~> it is in and its parent. `flat` collects every statement.
+function rows_walk(stmts, layer, parent, starts, flat) {
+  for (let i = 0; i < len(stmts); i = i + 1) {
+    let s = stmts[i]
+    push(flat, s)
+    if (starts[s.line] == null) {
+      starts[s.line] = {"stmt": s, "layer": layer, "parent": parent}
+    }
+    let inner = layer
+    if (s.kind == "layer") {
+      inner = s.line
+    }
+    rows_walk(s.children, inner, s.line, starts, flat)
+  }
+}
+
+-~> The innermost statement that has `line` strictly inside its range, or null.
+function rows_container(flat, line) {
+  let best = null
+  for (let i = 0; i < len(flat); i = i + 1) {
+    let s = flat[i]
+    if (s.line < line && line <= s.end_line && (best == null || s.line >= best.line)) {
+      best = s
+    }
+  }
+  best
+}
+
+function row_kind(s, li) {
+  if (s == null) {
+    if (is_blank(li.text)) {
+      return "empty"
+    }
+    if (text.starts(text.trim(li.text), "-~>")) {
+      return "comment"
+    }
+    return "cont"
+  }
+  if (s.kind == "layer") {
+    return "layer"
+  }
+  if (s.kind == "call") {
+    if (is_shape_call(s.callee)) {
+      return "shape"
+    }
+    return "call"
+  }
+  if (s.kind == "let") {
+    return "value"
+  }
+  if (s.kind == "function") {
+    return "definition"
+  }
+  if (s.kind == "block") {
+    return "block"
+  }
+  if (s.kind == "assign" && s.name == "canvas") {
+    return "canvas"
+  }
+  "code"
+}
+
+function row_name(s, li) {
+  if (li.name != "") {
+    return li.name
+  }
+  if (s == null) {
+    return ""
+  }
+  s.name
+}
+
+-~> What folding remembers a row by: the layer's name, else its header text.
+function fold_key(s, li) {
+  if (s.kind == "layer") {
+    return "layer:" + s.name
+  }
+  "text:" + text.trim(comment_split(li.text)[0])
+}
+
+-~> The rows of a model. `errors` is the last run's error list and `folded` the
+-~> editor's hash of folded keys (both may be null).
+function doc_rows(m, errors, folded) {
+  let p = doc_parsed(m)
+  let starts = {}
+  let flat = []
+  rows_walk(p.statements, 0, 0, starts, flat)
+  let by_line = {}
+  if (errors != null) {
+    for (let i = 0; i < len(errors); i = i + 1) {
+      let k = errors[i].line
+      if (by_line[k] == null) {
+        by_line[k] = errors[i].message
+      }
+    }
+  }
+  if (folded == null) {
+    folded = {}
+  }
+  let rows = []
+  let hidden_rows = {}
+  for (let n = 1; n <= len(p.lines); n = n + 1) {
+    let li = p.lines[n - 1]
+    let at = starts[n]
+    let s = null
+    let layer = 0
+    let parent = 0
+    if (at != null) {
+      s = at.stmt
+      layer = at.layer
+      parent = at.parent
+    } else {
+      let c = rows_container(flat, n)
+      if (c != null) {
+        parent = c.line
+        layer = 0
+        if (starts[c.line] != null) {
+          layer = starts[c.line].layer
+        }
+        if (c.kind == "layer") {
+          layer = c.line
+        }
+      }
+    }
+    let depth = li.indent // 2
+    let end_line = n
+    let foldable = false
+    let collapsed = false
+    let callee = ""
+    if (s != null) {
+      depth = s.depth
+      end_line = s.end_line
+      foldable = len(s.children) > 0
+      if (foldable) {
+        collapsed = folded[fold_key(s, li)] == true
+      }
+      if (s.kind == "call") {
+        callee = s.callee
+      }
+    }
+    let visible = true
+    if (parent > 0 && (hidden_rows[parent] == true || rows[parent - 1].collapsed)) {
+      visible = false
+    }
+    if (!visible) {
+      hidden_rows[n] = true
+    }
+    let flags = li.flags
+    push(rows, {"line": n, "text": li.text, "depth": depth, "kind": row_kind(s, li), "callee": callee,
+                "name": row_name(s, li), "comment": li.comment, "hidden": list.index(flags, "hidden") >= 0,
+                "locked": list.index(flags, "locked") >= 0, "error": by_line[n], "layer": layer, "parent": parent,
+                "end_line": end_line, "foldable": foldable, "collapsed": collapsed, "visible": visible, "stmt": s})
+  }
+  rows
+}
+
+function doc_row(m, line, errors, folded) {
+  let rows = doc_rows(m, errors, folded)
+  rows[line - 1]
+}
+
+-~> The key under which a row's fold state is kept, or null if it can't fold.
+function row_fold_key(m, line) {
+  let r = doc_row(m, line, null, null)
+  if (!r.foldable) {
+    return null
+  }
+  fold_key(r.stmt, doc_parsed(m).lines[line - 1])
+}
+
+-~> True when the row or any layer around it carries the flag ("hidden" or "locked").
+function row_has_flag(rows, line, flag) {
+  let n = line
+  while (n > 0) {
+    let r = rows[n - 1]
+    if (flag == "hidden" && r.hidden) {
+      return true
+    }
+    if (flag == "locked" && r.locked) {
+      return true
+    }
+    n = r.parent
+  }
+  false
+}
+
+-~> The shapes of a run that should be painted, back to front: the ones in
+-~> hidden rows or hidden layers are left out.
+function shapes_to_paint(shapes, rows) {
+  let out = []
+  let ordered = paint_order(shapes)
+  for (let i = 0; i < len(ordered); i = i + 1) {
+    let s = ordered[i]
+    let skip = false
+    if (type(s.line) == "INTEGER" && s.line >= 1 && s.line <= len(rows)) {
+      skip = row_has_flag(rows, s.line, "hidden")
+    }
+    if (!skip) {
+      push(out, s)
+    }
+  }
+  out
+}
+
+-~> The layer rows of a model, outermost first, as [{"line", "name", "depth"}].
+function doc_layers(m) {
+  let rows = doc_rows(m, null, null)
+  let out = []
+  for (let i = 0; i < len(rows); i = i + 1) {
+    if (rows[i].kind == "layer") {
+      push(out, {"line": rows[i].line, "name": rows[i].stmt.name, "depth": rows[i].depth})
+    }
+  }
+  out
+}
+
+-~> The line of the layer the caret is in (or on), or null when it is loose.
+function doc_current_layer(m) {
+  let r = doc_row(m, m.line, null, null)
+  if (r.kind == "layer") {
+    return r.line
+  }
+  if (r.layer > 0) {
+    return r.layer
+  }
+  null
+}

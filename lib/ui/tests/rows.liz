@@ -1,0 +1,36 @@
+-~> Rows from a drawing: kinds, depth, names, flags, errors, folding, hidden layers.
+let code = "let horizon = 300 -~> sky line
+layer sun -~> Sun [hidden]
+  circle((380, 90), 40, #e0a526) -~> core [locked]
+  circle((380, 90), 60, #e0a52640)
+layer sea
+  for (let i = 0; i < 3; i = i + 1) {
+    rect((0, horizon + i * 20), (512, 20), #2d6a8f)
+  }
+
+function star(center, r) {
+  circle(center, r, #fff)
+}
+canvas = {\"size\": (400, 300)}
+"
+let m = doc_new(code)
+let rows = doc_rows(m, [{"line": 4, "column": 1, "message": "boom"}], null)
+for (let i = 0; i < len(rows); i = i + 1) {
+  let r = rows[i]
+  puts(r.line, r.depth, r.kind, "[" + r.name + "]", r.hidden, r.locked, r.error, r.layer, r.parent, r.end_line)
+}
+-~> Folding a layer hides its rows.
+let key = row_fold_key(m, 5)
+puts(key)
+let folded = {}
+folded[key] = true
+let rows2 = doc_rows(m, null, folded)
+for (let i = 0; i < len(rows2); i = i + 1) {
+  puts(rows2[i].line, rows2[i].visible, rows2[i].collapsed)
+}
+puts(row_fold_key(m, 1), row_fold_key(m, 3))
+-~> A hidden layer's shapes are not painted.
+let r = src.run(doc_text(m))
+puts(len(r.shapes), len(shapes_to_paint(r.shapes, rows)))
+puts(doc_current_layer(doc_at(m, 3, 0)), doc_current_layer(doc_at(m, 1, 0)))
+puts(len(doc_layers(m)), doc_layers(m)[1].name)

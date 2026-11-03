@@ -1,0 +1,11 @@
+-~> t() and tf(): placeholders, the English fallback, and missing keys.
+puts(t("tool.circle"), tf("status.saved", {"file": "a.lzdraw"}))
+lang_use("es")
+puts(t("tool.circle"), tf("status.saved", {"file": "dibujo ñ.lzdraw"}), tf("refuse.position", {"expr": "horizon + 1"}))
+-~> A key only English has falls back to English; one nobody has shows itself.
+lang_register("es", {"lang.name": "Español"})
+puts(t("tool.circle"), t("no.such.key"), tf("no.such {x}", {"x": 1}))
+lang_register("xx", {"tool.circle": "Cercle {n}"})
+lang_use("xx")
+puts(tf("tool.circle", {"n": 3}), t("tool.line"))
+puts(lang_use("zz"), lang_get(), lang_codes())
