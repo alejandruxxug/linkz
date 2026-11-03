@@ -1,0 +1,124 @@
+-~> The incremental parse (doc_splice.liz) against the whole scan: after each of
+-~> many random edits, the parse, the rows and the names worked out from the
+-~> last model's cache must be exactly the ones of a fresh full parse.
+let code = "-~> lzdraw 1
+let horizon = 300 -~> sky line
+
+-~> A star.
+-~> center: where it is
+function star(center, r = 4) {
+  circle(center, r, #fff)
+}
+layer sun -~> Sun [hidden]
+  circle((380, 90), 40, #e0a526) -~> core [locked]
+  circle((380, 90), 60, #e0a52640)
+  layer rays
+    stroke([(10, 10), (20, 30)], #e0a526, 2)
+layer sea
+  for (let i = 0; i < 3; i = i + 1) {
+    rect((0, horizon + i * 20), (512, 20), #2d6a8f)
+  }
+  polygon([(1, 2),
+           (3, 4), (5, 6)], #123456)
+star((40, 40))
+let pal = {\"a\": #fff,
+           \"b\": #000}
+circle((5, 5), 2, #000); rect((1, 1), (2, 2), #fff)
+
+canvas = {\"size\": (400, 300)}"
+
+-~> A fixed pseudo-random sequence, so every run makes the same edits.
+let rnd = {"seed": 12345}
+function rand(k) {
+  rnd.seed = (rnd.seed * 1103515245 + 12345) % 2147483648
+  return (rnd.seed // 65536) % k
+}
+
+-~> Lines that an edit can put in: shapes, layers, broken code, blanks, comments.
+let pieces = ["  circle((10, 10), 5, #000)", "circle((1, 2), 3, #fff)", "layer extra", "  layer inner",
+              "", "-~> a note", "    rect((0, 0), (5, 5), #abc)", "  .x", "let k = 1", "  let k = 2",
+              "function f(a) {", "}", "circle((1, 2),", "  3, #000)", "for (let j = 0; j < 2; j = j + 1) {",
+              "x = 1; y = 2", "circle((1, 2), 3, #fff) -~> named [locked]", "canvas = {\"size\": (10, 10)}"]
+
+-~> One random edit of the lines: change a line, put one in, take one out,
+-~> indent one, or put a character in the middle of one.
+function edit(lines) {
+  let out = list.copy(lines)
+  let n = len(out)
+  let at = rand(n)
+  let what = rand(6)
+  if (what == 0) {
+    out[at] = pieces[rand(len(pieces))]
+  } elif (what == 1) {
+    out = list.slice(out, 0, at) + [pieces[rand(len(pieces))]] + list.slice(out, at, n)
+  } elif (what == 2 && n > 1) {
+    out = list.slice(out, 0, at) + list.slice(out, at + 1, n)
+  } elif (what == 3) {
+    out[at] = "  " + out[at]
+  } elif (what == 4 && text.starts(out[at], "  ")) {
+    out[at] = text.slice(out[at], 2, len(out[at]))
+  } else {
+    let s = out[at]
+    let c = rand(len(s) + 1)
+    out[at] = text.slice(s, 0, c) + ["1", "(", ")", ",", " ", "x", "\""][rand(7)] + text.slice(s, c, len(s))
+  }
+  out
+}
+
+function same_parse(a, b) {
+  a.lines === b.lines && a.statements === b.statements && a.errors === b.errors
+}
+
+let m = doc_new(code)
+doc_parsed(m)
+doc_rows(m, null, null)
+doc_names(m)
+let spliced = 0
+let bad = 0
+let start = doc_text(m)
+for (let round = 0; round < 400; round += 1) {
+  let next = doc_with(m, edit(m.lines), 1, 0)
+  let p = doc_parsed(next)
+  if (next.cache.splice != null) {
+    spliced += 1
+  }
+  let fresh = doc_new(doc_text(next))
+  let full = doc_parsed(fresh)
+  if (!same_parse(p, full)) {
+    bad += 1
+    puts("parse differs after round", round)
+    puts(doc_text(next))
+  } elif (doc_rows(next, null, null) !== doc_rows(fresh, null, null)) {
+    bad += 1
+    puts("rows differ after round", round)
+  } elif (doc_names(next) !== doc_names(fresh)) {
+    bad += 1
+    puts("names differ after round", round)
+  }
+  -~> start over now and then, and mostly after an edit that broke the code (only
+  -~> clean code splices), so the text stays close to a drawing
+  if (round % 25 == 24 || (len(full.errors) > 0 && rand(3) > 0)) {
+    next = doc_with(next, text.lines(start), 1, 0)
+    doc_parsed(next)
+    doc_rows(next, null, null)
+    doc_names(next)
+  }
+  m = next
+}
+puts("spliced", spliced, "of 400, differences", bad)
+
+-~> An edit inside a layer, keeping the line count, splices the rows and keeps the rest.
+let a = doc_new(code)
+let ra = doc_rows(a, null, null)
+let lines = list.copy(a.lines)
+lines[9] = "  circle((380, 90), 41, #e0a526) -~> core [locked]"
+let b = doc_with(a, lines, 10, 0)
+let rb = doc_rows(b, null, null)
+puts(b.cache.rows_from.from, b.cache.rows_from.to, rb[9].text, rb[0] === ra[0], len(rb) == len(ra))
+-~> A changed function definition gives new names; a changed shape keeps them.
+puts(doc_names(b) === doc_names(a))
+lines = list.copy(lines)
+lines[6] = "  circle(center, r, #000)"
+lines[5] = "function star(center, r = 4, spin = 0) {"
+let c = doc_with(b, lines, 1, 0)
+puts(doc_names(c).funcs["star"].params)

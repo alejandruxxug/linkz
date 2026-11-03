@@ -1,0 +1,71 @@
+-~> doc_names: the names a document defines, kept in its cache: what the
+-~> properties panel and the signature hint know about the drawing's own
+-~> functions, and the suggestions autocomplete offers for them. A names hash:
+-~>   funcs  name -> {"params", "param_docs", "summary", "example"}: the first
+-~>          function with that name, searching layers, blocks and bodies too
+-~>   items  the suggestion items for the functions, values and layers (first
+-~>          definition of a name wins, see cmp_user_items)
+-~>   seen   the names in items, as a hash name -> true
+-~> After an edit the old names are kept when the statements scanned again
+-~> define the same names as the ones they replaced.
+
+-~> The model's names, worked out once per text.
+function doc_names(m) {
+  let c = m.cache
+  if (c.names == null) {
+    let p = doc_parsed(m)
+    perf_begin("complete")
+    let sp = c.splice
+    if (sp != null && sp.names != null &&
+        names_part(sp.old) == names_part(list.slice(p.statements, sp.i0, sp.i0 + sp.count))) {
+      c.names = sp.names
+    } else {
+      c.names = names_build(p.statements)
+    }
+    doc_cache_tidy(c)
+    perf_end()
+  }
+  c.names
+}
+
+function names_build(stmts) {
+  let funcs = {}
+  names_funcs(stmts, funcs)
+  let seen = {}
+  let items = cmp_user_items(stmts, [], seen)
+  {"funcs": funcs, "items": items, "seen": seen}
+}
+
+-~> What a function statement tells about itself.
+function names_info(f) {
+  {"params": f.params, "param_docs": f.doc.params, "summary": f.doc.summary, "example": f.doc.example}
+}
+
+-~> Records the first function of every name, in the order the text has them.
+function names_funcs(stmts, funcs) {
+  for (let i = 0; i < len(stmts); i = i + 1) {
+    let s = stmts[i]
+    if (s.kind == "function" && funcs[s.name] == null) {
+      funcs[s.name] = names_info(s)
+    }
+    names_funcs(s.children, funcs)
+  }
+}
+
+-~> Everything some statements define, in order and with repeats: two lists of
+-~> statements with the same part define the same names the same way.
+function names_part(stmts) {
+  let fns = []
+  names_all_funcs(stmts, fns)
+  return [fns, cmp_user_items(stmts, [], {})]
+}
+
+function names_all_funcs(stmts, out) {
+  for (let i = 0; i < len(stmts); i = i + 1) {
+    let s = stmts[i]
+    if (s.kind == "function") {
+      push(out, [s.name, names_info(s)])
+    }
+    names_all_funcs(s.children, out)
+  }
+}

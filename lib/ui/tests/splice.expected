@@ -1,0 +1,4 @@
+spliced 215 of 400, differences 0
+9 19   circle((380, 90), 41, #e0a526) -~> core [locked] true true
+true
+["center", "r", "spin"]

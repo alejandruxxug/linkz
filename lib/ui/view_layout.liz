@@ -12,7 +12,7 @@ let V = {
   "hover": "", "tip": null, "tip_key": "", "tip_since": 0, "tip_due": 0,
   "dialog": null, "focus": null, "drag": null, "flash": 0,
   "keys": {}, "force": {}, "popup_rect": null,
-  "items": null, "items_ver": -1, "items_key": "", "rows": null, "rows_ver": -1,
+  "items": null, "items_key": "", "items_at": null, "pinned": null, "hidden_key": "", "hidden_for": null, 
   "paints": 0, "painted_ms": 0, "pen_note": "", "hover_anchor": null,
   "zoom": 1.0, "host_origin": null, "crect": null, "drawing_rect": null, "hits": {}
 }
@@ -61,23 +61,14 @@ function view_force_rect(r) {
 
 -~> == The rows of the layers panel ==
 
--~> The rows of the document (ed_rows), kept until the editor's state changes.
+-~> The rows of the document (ed_rows): they come from the model's cache.
 function view_rows() {
-  if (V.rows == null || V.rows_ver != V.ver) {
-    V.rows = ed_rows()
-    V.rows_ver = V.ver
-  }
-  V.rows
+  ed_rows()
 }
 
 function view_pinned_row() {
-  let rows = view_rows()
-  for (let i = 0; i < len(rows); i = i + 1) {
-    if (rows[i].kind == "canvas") {
-      return rows[i]
-    }
-  }
-  null
+  view_items()
+  V.pinned
 }
 
 -~> What a row is shown with: its icon.
@@ -113,74 +104,6 @@ function view_hidden_count(rows, r) {
     }
   }
   n
-}
-
--~> The items of the layers panel, top to bottom: {"t": row|gap|add|strip|err,
--~> "line", "row", "h", "gap" (extra room above), "y" (offset from the first item),
--~> "depth"}. A run of blank lines is one 4 pixel gap; the canvas row is pinned
--~> at the bottom so it is not here; an empty row with the caret is the tool strip.
-function view_items() {
-  if (V.items != null && V.items_ver == V.ver) {
-    return V.items
-  }
-  let rows = view_rows()
-  let m = ed_model()
-  let adds = {}
-  for (let i = 0; i < len(rows); i = i + 1) {
-    let r = rows[i]
-    if (r.kind == "layer" && r.visible && !r.collapsed) {
-      if (adds[r.end_line] == null) {
-        adds[r.end_line] = []
-      }
-      push(adds[r.end_line], r)
-    }
-  }
-  let items = []
-  let off = 0
-  for (let i = 0; i < len(rows); i = i + 1) {
-    let r = rows[i]
-    let item = null
-    if (r.visible && r.kind != "canvas") {
-      if (r.kind == "empty") {
-        if (r.line == m.line) {
-          item = {"t": "strip", "line": r.line, "row": r, "h": 22, "gap": 0, "depth": r.depth}
-        } elif (len(items) > 0 && items[len(items) - 1].t != "gap") {
-          item = {"t": "gap", "line": r.line, "row": r, "h": 4, "gap": 0, "depth": 0}
-        }
-      } else {
-        let gap = 0
-        if (r.kind == "layer") {
-          gap = 4
-        }
-        item = {"t": "row", "line": r.line, "row": r, "h": 18, "gap": gap, "depth": r.depth}
-      }
-    }
-    if (item != null) {
-      item.y = off + item.gap
-      off = item.y + item.h
-      push(items, item)
-      if (item.t == "row" && r.error != null) {
-        let e = {"t": "err", "line": r.line, "row": r, "h": 16, "gap": 0, "depth": r.depth, "y": off}
-        off = off + 16
-        push(items, e)
-      }
-    }
-    let ends = adds[r.line]
-    if (ends != null) {
-      for (let k = len(ends) - 1; k >= 0; k = k - 1) {
-        if (i + 1 < len(rows) && rows[i + 1].kind == "empty" && rows[i + 1].line == m.line) {
-          continue
-        }
-        let a = {"t": "add", "line": ends[k].line, "row": ends[k], "h": 10, "gap": 0, "depth": ends[k].depth + 1, "y": off}
-        off = off + 10
-        push(items, a)
-      }
-    }
-  }
-  V.items = items
-  V.items_ver = V.ver
-  V.visible = null
-  items
 }
 
 -~> The items that fit on screen from V.top: [{"item", "y"}] with absolute y.

@@ -7,7 +7,7 @@
 -~>   cmp_sync()            after anything changed: close a stale list, redo the hint
 
 let cmp = {"open": false, "items": [], "sel": 0, "top": 0, "recent": [], "dismissed": null,
-           "ph": null, "word": null, "hint": null, "layout": null}
+           "ph": null, "word": null, "hint": null, "layout": null, "synced": ""}
 
 let cmp_max_visible = 8
 let cmp_max_items = 40
@@ -27,6 +27,7 @@ function cmp_reset() {
   cmp.hint = null
   cmp.dismissed = null
   cmp.layout = null
+  cmp.synced = ""
 }
 
 -~> == Opening ==
@@ -35,6 +36,13 @@ function cmp_reset() {
 -~> typed. The list opens only for a word being typed (or after a dot), and stays
 -~> closed for a word the user dismissed with Esc.
 function cmp_refresh(force) {
+  perf_begin("complete")
+  cmp_refresh_now(force)
+  perf_end()
+  null
+}
+
+function cmp_refresh_now(force) {
   let m = ed_model()
   if (m.sel != null) {
     cmp_close()
@@ -86,7 +94,26 @@ function cmp_force() {
 
 -~> After anything changed: the list closes when the caret left its word, the
 -~> arguments end when the line changed under them, the hint follows the caret.
+-~> Nothing to do when the text, the caret and the list are as at the last sync.
 function cmp_sync() {
+  if (cmp_sync_key() == cmp.synced) {
+    return null
+  }
+  perf_begin("complete")
+  cmp_sync_now()
+  perf_end()
+  cmp.synced = cmp_sync_key()
+  null
+}
+
+-~> What cmp_sync looks at, as a text.
+function cmp_sync_key() {
+  let m = ed_model()
+  str(doc_id(m)) + ":" + str(m.line) + ":" + str(m.col) + ":" + str(m.sel != null) + ":" + lang_get() + ":" +
+    str(cmp.open) + ":" + str(cmp.ph != null)
+}
+
+function cmp_sync_now() {
   let m = ed_model()
   if (cmp.open) {
     let w = cmp_word_at(doc_cur(m), m.col, true)

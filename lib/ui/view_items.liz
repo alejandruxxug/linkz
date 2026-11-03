@@ -1,0 +1,171 @@
+-~> view_items: the items of the layers panel, top to bottom: {"t": row|gap|add|strip|err,
+-~> "line", "row", "h", "gap" (extra room above), "y" (offset from the first item),
+-~> "depth"}. A run of blank lines is one 4 pixel gap; the canvas row is pinned
+-~> at the bottom so it is not here (V.pinned); an empty row with the caret is
+-~> the tool strip.
+-~> They are made again only when the rows change, or the caret goes onto or
+-~> off an empty row (the only rows whose items depend on the caret). After an
+-~> edit that rescanned a few statements in place (editor_rows.liz), only
+-~> their items are made again, when they take the same room as before.
+-~> V.items_at keeps, per row, the index of its first item (and one more
+-~> entry: the number of items), which is what that needs.
+
+function view_items() {
+  let rows = view_rows()
+  let m = ed_model()
+  let caret = ""
+  if (m.line <= len(rows) && rows[m.line - 1].kind == "empty") {
+    caret = str(m.line)
+  }
+  let key = ed_rows_key() + "|" + caret
+  if (V.items != null && V.items_key == key) {
+    return V.items
+  }
+  perf_begin("rows")
+  let from = m.cache.rows_from
+  let done = false
+  if (V.items != null && from != null && rows_key(ed.errors, ed.folded) == "" &&
+      V.items_key == str(from.base) + "||" + caret) {
+    done = view_items_splice(rows, m, from)
+  }
+  if (!done) {
+    view_items_build(rows, m)
+  }
+  perf_end()
+  V.items_key = key
+  V.visible = null
+  V.items
+}
+
+-~> The layer rows among rows i0 .. i1 - 1 that get a ⊕ item, by the line they end on.
+function view_items_adds(rows, i0, i1) {
+  let adds = {}
+  for (let i = i0; i < i1; i = i + 1) {
+    let r = rows[i]
+    if (r.kind == "layer" && r.visible && !r.collapsed) {
+      if (adds[r.end_line] == null) {
+        adds[r.end_line] = []
+      }
+      push(adds[r.end_line], r)
+    }
+  }
+  adds
+}
+
+-~> Every item again.
+function view_items_build(rows, m) {
+  V.pinned = null
+  for (let i = 0; i < len(rows); i = i + 1) {
+    if (rows[i].kind == "canvas") {
+      V.pinned = rows[i]
+      break
+    }
+  }
+  let items = []
+  let at = []
+  view_items_fill(rows, m, view_items_adds(rows, 0, len(rows)), 0, len(rows), items, at, 0, "", 0)
+  push(at, len(items))
+  V.items = items
+  V.items_at = at
+}
+
+-~> Only the items of the rows from.from .. from.to (made again in place, the
+-~> rest of the rows are the same ones). False when they don't fit where the
+-~> old ones were: then everything is made again.
+function view_items_splice(rows, m, from) {
+  let old = V.items
+  let at = V.items_at
+  let i0 = from.from - 1
+  let i1 = from.to
+  if (at == null || len(at) != len(rows) + 1) {
+    return false
+  }
+  for (let i = i0; i < i1; i = i + 1) {
+    if (rows[i].kind == "canvas") {
+      return false
+    }
+  }
+  if (V.pinned != null && V.pinned.line >= from.from && V.pinned.line <= from.to) {
+    return false
+  }
+  let a = at[i0]
+  let b = at[i1]
+  let prev = ""
+  let off = 0
+  if (a > 0) {
+    prev = old[a - 1].t
+    off = old[a - 1].y + old[a - 1].h
+  }
+  let mid = []
+  let mid_at = []
+  let end = view_items_fill(rows, m, view_items_adds(rows, i0, i1), i0, i1, mid, mid_at, a, prev, off)
+  let old_end = 0
+  let old_last = prev
+  if (b > 0) {
+    old_end = old[b - 1].y + old[b - 1].h
+  }
+  if (b > a) {
+    old_last = old[b - 1].t
+  }
+  let new_last = prev
+  if (len(mid) > 0) {
+    new_last = mid[len(mid) - 1].t
+  }
+  if (len(mid) != b - a || end != old_end || new_last != old_last) {
+    return false
+  }
+  V.items = list.slice(old, 0, a) + mid + list.slice(old, b, len(old))
+  V.items_at = list.slice(at, 0, i0) + mid_at + list.slice(at, i1, len(at))
+  true
+}
+
+-~> Puts the items of rows i0 .. i1 - 1 at the end of `items` and, per row, the
+-~> index its items start at into `at` (`base` is the index of items[0]).
+-~> `last` is the kind of the item before them ("" for none) and `off` where
+-~> they start. Returns where they end.
+function view_items_fill(rows, m, adds, i0, i1, items, at, base, last, off) {
+  for (let i = i0; i < i1; i = i + 1) {
+    push(at, base + len(items))
+    let r = rows[i]
+    let item = null
+    if (r.visible && r.kind != "canvas") {
+      if (r.kind == "empty") {
+        if (r.line == m.line) {
+          item = {"t": "strip", "line": r.line, "row": r, "h": 22, "gap": 0, "depth": r.depth}
+        } elif (last != "" && last != "gap") {
+          item = {"t": "gap", "line": r.line, "row": r, "h": 4, "gap": 0, "depth": 0}
+        }
+      } else {
+        let gap = 0
+        if (r.kind == "layer") {
+          gap = 4
+        }
+        item = {"t": "row", "line": r.line, "row": r, "h": 18, "gap": gap, "depth": r.depth}
+      }
+    }
+    if (item != null) {
+      item.y = off + item.gap
+      off = item.y + item.h
+      push(items, item)
+      last = item.t
+      if (item.t == "row" && r.error != null) {
+        push(items, {"t": "err", "line": r.line, "row": r, "h": 16, "gap": 0, "depth": r.depth, "y": off})
+        off = off + 16
+        last = "err"
+      }
+    }
+    let ends = adds[r.line]
+    if (ends != null) {
+      for (let k = len(ends) - 1; k >= 0; k = k - 1) {
+        if (i + 1 < len(rows) && rows[i + 1].kind == "empty" && rows[i + 1].line == m.line) {
+          continue
+        }
+        push(items, {"t": "add", "line": ends[k].line, "row": ends[k], "h": 10, "gap": 0, "depth": ends[k].depth + 1,
+                     "y": off})
+        off = off + 10
+        last = "add"
+      }
+    }
+  }
+  off
+}

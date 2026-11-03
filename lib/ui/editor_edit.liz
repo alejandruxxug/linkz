@@ -193,7 +193,7 @@ function ed_move(m, dir, extend) {
     col = len(m.lines[line - 1])
     want = 1000000
   }
-  let out = {"lines": m.lines, "line": line, "col": col, "want": want, "sel": null, "parse": m.parse}
+  let out = {"lines": m.lines, "line": line, "col": col, "want": want, "sel": null, "cache": m.cache}
   if (extend) {
     let anchor = m.line
     if (m.sel != null) {

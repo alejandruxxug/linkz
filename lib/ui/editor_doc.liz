@@ -5,32 +5,35 @@
 -~>   col    the caret's column, counted from 0: how many characters come before it
 -~>   want   the column Up and Down try to keep
 -~>   sel    null, or {"from", "to", "anchor"}: a range of whole rows
--~>   parse  the cached result of src.parse for this text, or null
+-~>   cache  what is worked out from the text (the parse, the rows, the names it
+-~>          defines), shared by every model with the same text (doc_cache.liz)
 -~> An edit never changes a model, it returns a new one (the old one stays valid,
--~> which is what undo needs). Only `parse` is filled in later, as a cache.
+-~> which is what undo needs). Only the cache is filled in later.
 
 function doc_new(code) {
-  doc_make(text.lines(code), 1, 0)
+  doc_make(text.lines(code), 1, 0, null)
 }
 
-function doc_make(lines, line, col) {
-  doc_at({"lines": lines, "line": 1, "col": 0, "want": 0, "sel": null, "parse": null}, line, col)
+-~> A model of these lines. `before` is the model they were edited from (or
+-~> null): the new text is then worked out from its cache where it changed.
+function doc_make(lines, line, col, before = null) {
+  doc_at({"lines": lines, "line": 1, "col": 0, "want": 0, "sel": null, "cache": doc_cache_new(before)}, line, col)
 }
 
--~> The same text with the caret somewhere else. Keeps the parse cache.
+-~> The same text with the caret somewhere else. Keeps the cache.
 function doc_at(m, line, col) {
   let n = len(m.lines)
   let l = math.max(1, math.min(line, n))
   let c = math.max(0, math.min(col, len(m.lines[l - 1])))
-  {"lines": m.lines, "line": l, "col": c, "want": c, "sel": null, "parse": m.parse}
+  {"lines": m.lines, "line": l, "col": c, "want": c, "sel": null, "cache": m.cache}
 }
 
--~> New text, new caret, no selection, no cache.
+-~> New text, new caret, no selection; its cache starts from m's.
 function doc_with(m, lines, line, col) {
   if (len(lines) == 0) {
     lines = [""]
   }
-  doc_make(lines, line, col)
+  doc_make(lines, line, col, m)
 }
 
 function doc_text(m) {
@@ -45,12 +48,9 @@ function doc_cur(m) {
   m.lines[m.line - 1]
 }
 
--~> The model's src.parse result, computed once per text.
+-~> The model's src.parse result, worked out once per text (doc_cache.liz).
 function doc_parsed(m) {
-  if (m.parse == null) {
-    m.parse = src.parse(doc_text(m))
-  }
-  m.parse
+  doc_cache_parse(m)
 }
 
 -~> A copy of a hash (the language only copies arrays).

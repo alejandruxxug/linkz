@@ -1,0 +1,51 @@
+-~> perf: where the editor's time goes, per phase, so a slow tick says why.
+-~> The work of a phase is wrapped in perf_begin(name) ... perf_end(). Phases
+-~> nest (the rows get built while the properties panel asks for them): each
+-~> phase counts only its own time, without the phases inside it. app_paint
+-~> ends the tick, and the backdoor's Stats shows the last one that did any
+-~> (perf_last).
+-~> The phases: parse, rows, props, run, canvas, complete.
+
+let perf = {"tick": {}, "last": {}, "stack": []}
+
+function perf_begin(name) {
+  push(perf.stack, {"name": name, "t0": time.ms(), "inner": 0})
+}
+
+function perf_end() {
+  if (len(perf.stack) == 0) {
+    return null
+  }
+  let f = pop(perf.stack)
+  let took = time.ms() - f.t0
+  let n = len(perf.stack)
+  if (n > 0) {
+    perf.stack[n - 1].inner += took
+  }
+  let had = perf.tick[f.name]
+  if (had == null) {
+    had = 0
+  }
+  perf.tick[f.name] = had + took - f.inner
+}
+
+-~> Closes the tick: what it spent becomes the last tick's numbers, unless it
+-~> did none of the phases (an idle repaint keeps the numbers of the last work).
+-~> A phase that an error left open is dropped.
+function perf_tick_end() {
+  if (len(perf.tick) > 0) {
+    perf.last = perf.tick
+  }
+  perf.tick = {}
+  perf.stack = []
+}
+
+-~> The last tick's milliseconds per phase, rounded to hundredths.
+function perf_last() {
+  let out = {}
+  let names = keys(perf.last)
+  for (let i = 0; i < len(names); i = i + 1) {
+    out[names[i]] = math.round(perf.last[names[i]] * 100) / 100.0
+  }
+  out
+}

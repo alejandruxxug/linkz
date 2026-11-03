@@ -340,9 +340,9 @@ function cmp_candidates(m, owner, docs) {
   if (owner != null) {
     return cmp_member_items(m, owner)
   }
-  let seen = {}
-  let user = cmp_user_items(doc_parsed(m).statements, [], seen)
-  let out = user
+  let names = doc_names(m)
+  let seen = names.seen
+  let out = list.copy(names.items)
   let lib = cmp_library_items(docs)
   for (let i = 0; i < len(lib); i = i + 1) {
     if (seen[lib[i].name] == null) {

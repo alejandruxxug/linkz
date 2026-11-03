@@ -1,0 +1,65 @@
+-~> doc_cache: what the editor works out from a document's text, kept with it.
+-~> Every model with the same text shares one cache hash (doc_at passes it on),
+-~> so the first one that asks fills it in for all of them. A cache is:
+-~>   id      a number no other cache has: two texts are told apart without comparing them
+-~>   parse   the src.parse result, or null until something asks for it
+-~>   rows    the rows of the layers panel, without errors and folds (editor_rows.liz)
+-~>   shown   {"key", "rows"}: the rows with the errors and folds last asked for
+-~>   folds   the rows that can fold, with their fold keys, once folding asks
+-~>   names   the functions, values and layers the text defines (doc_names.liz)
+-~>   before  the model this text was edited from, until the parse is worked out:
+-~>           only the statements the edit touched are scanned again (doc_splice.liz)
+-~>   splice  what that scan replaced, so the rows and the names follow the same way
+-~>   rows_from  {"base", "from", "to"} when the rows are the ones of cache `base`
+-~>           with only the lines from..to made again (the panel's items follow)
+
+let doc_caches = {"made": 0}
+
+-~> An empty cache for a text edited from `before` (a model, or null). The model
+-~> kept is the nearest one that has its parse, so caches never chain.
+function doc_cache_new(before) {
+  doc_caches.made += 1
+  let base = null
+  if (before != null) {
+    base = before
+    if (before.cache.parse == null) {
+      base = before.cache.before
+    }
+  }
+  {"id": doc_caches.made, "parse": null, "rows": null, "shown": null, "folds": null, "names": null,
+   "before": base, "splice": null, "rows_from": null}
+}
+
+-~> The number of the model's text: equal numbers, equal texts.
+function doc_id(m) {
+  m.cache.id
+}
+
+-~> The model's src.parse result. After an edit only the changed statements are
+-~> scanned again when that is safe; otherwise the whole text is.
+function doc_cache_parse(m) {
+  let c = m.cache
+  if (c.parse == null) {
+    perf_begin("parse")
+    let sp = null
+    if (c.before != null) {
+      sp = splice_parse(c.before, m.lines)
+    }
+    if (sp != null) {
+      c.parse = sp.parse
+      c.splice = sp
+    } else {
+      c.parse = src.parse(doc_text(m))
+    }
+    c.before = null
+    perf_end()
+  }
+  c.parse
+}
+
+-~> Lets go of the splice once the rows and the names have used it.
+function doc_cache_tidy(c) {
+  if (c.rows != null && c.names != null) {
+    c.splice = null
+  }
+}

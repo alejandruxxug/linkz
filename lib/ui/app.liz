@@ -37,6 +37,7 @@ function app_paint() {
   if (s != null) {
     s.paint()
   }
+  perf_tick_end()
   screen_sync()
   if (s != null && screen_value(s.needs_paint) == true) {
     app.needs_paint = true
@@ -94,4 +95,5 @@ app["start"] = app_start
 app["event"] = app_event
 app["paint"] = app_paint
 app["debug_state"] = app_debug_state
+app["debug_perf"] = perf_last
 app["debug_commands"] = app_commands()

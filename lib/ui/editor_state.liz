@@ -24,6 +24,13 @@ function errors_mark_follow(errors) {
 -~> row changed, only that row runs (editor_rerun.liz) and ed.patch says which
 -~> shape it replaced; ed.shapes_ver counts every new list of shapes.
 function ed_run() {
+  perf_begin("run")
+  let r = ed_run_now()
+  perf_end()
+  r
+}
+
+function ed_run_now() {
   let m = ed_model()
   let patch = rerun_row(ed.ran, m)
   if (patch != null) {
@@ -56,7 +63,12 @@ function ed_run_patch(m, patch) {
   let shapes = list.copy(ed.shapes)
   shapes[patch.index] = patch.new
   ed.shapes = shapes
+  -~> the new shape sits where the old one was, on the same line: the index stays right
+  let kept = ed.shape_lines != null && ed.shape_lines.ver == ed.shapes_ver
   ed.shapes_ver += 1
+  if (kept) {
+    ed.shape_lines.ver = ed.shapes_ver
+  }
   patch.ver = ed.shapes_ver
   ed.patch = patch
   ed.ran = {"model": m, "literal": true}
@@ -93,20 +105,54 @@ function ed_rows() {
   doc_rows(ed_model(), ed.errors, ed.folded)
 }
 
+-~> Changes exactly when ed_rows() does.
+function ed_rows_key() {
+  doc_rows_key(ed_model(), ed.errors, ed.folded)
+}
+
 -~> The shapes to paint, back to front, without the hidden ones.
 function ed_paint_shapes() {
   shapes_to_paint(ed.shapes, ed_rows())
 }
 
+-~> Where the shapes of each line are in ed.shapes: line -> [indexes], made
+-~> once per list of shapes.
+function ed_shape_lines() {
+  if (ed.shape_lines == null || ed.shape_lines.ver != ed.shapes_ver) {
+    let lines = {}
+    for (let i = 0; i < len(ed.shapes); i += 1) {
+      let l = ed.shapes[i].line
+      if (type(l) == "INTEGER") {
+        if (lines[l] == null) {
+          lines[l] = []
+        }
+        push(lines[l], i)
+      }
+    }
+    ed.shape_lines = {"ver": ed.shapes_ver, "lines": lines}
+  }
+  ed.shape_lines.lines
+}
+
 -~> The shapes made by the call on this line.
 function ed_shapes_of(line) {
   let out = []
-  for (let i = 0; i < len(ed.shapes); i = i + 1) {
-    if (ed.shapes[i].line == line) {
-      push(out, ed.shapes[i])
+  let at = ed_shape_lines()[line]
+  if (at != null) {
+    for (let i = 0; i < len(at); i += 1) {
+      push(out, ed.shapes[at[i]])
     }
   }
   out
+}
+
+-~> The index in ed.shapes of the only shape made by `line`, or -1.
+function ed_only_shape(line) {
+  let at = ed_shape_lines()[line]
+  if (at == null || len(at) != 1) {
+    return -1
+  }
+  at[0]
 }
 
 -~> What the properties panel shows for the caret's row (or null).

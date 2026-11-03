@@ -158,7 +158,7 @@ function rerun_row(ran, m) {
   if (len(p.errors) > 0 || len(p.statements) != 1 || !rerun_literal_call(p.statements[0])) {
     return null
   }
-  let index = rerun_only_shape(ed.shapes, line)
+  let index = ed_only_shape(line)
   if (index < 0) {
     return null
   }

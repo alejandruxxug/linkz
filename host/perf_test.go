@@ -84,9 +84,12 @@ func TestPerfFixtures(t *testing.T) {
 }
 
 // editorRig is the editor, headless, on one drawing. It ticks the app by
-// hand, so every measurement is one whole tick: events, run, paint.
+// hand, so every measurement is one whole tick: events, run, paint. It adds
+// up the lizard side's own phases of every tick (see lib/ui/perf.liz).
 type editorRig struct {
-	app *App
+	app    *App
+	phases map[string]float64
+	ticks  int
 }
 
 func newEditorRig(tb testing.TB, code string) *editorRig {
@@ -125,7 +128,33 @@ func (r *editorRig) tick(evs ...window.Event) time.Duration {
 	if r.app.lastErr != "" {
 		panic(r.app.lastErr)
 	}
-	return time.Since(start)
+	took := time.Since(start)
+	if r.phases != nil {
+		for k, v := range r.app.phases() {
+			if ms, ok := v.(float64); ok {
+				r.phases[k] += ms
+			}
+		}
+		r.ticks++
+	}
+	return took
+}
+
+// measure starts adding up the phases of the ticks that follow.
+func (r *editorRig) measure() {
+	r.phases = map[string]float64{}
+	r.ticks = 0
+}
+
+// report gives the benchmark each phase's milliseconds per tick.
+func (r *editorRig) report(b *testing.B) {
+	b.StopTimer()
+	for k, v := range r.phases {
+		if r.ticks > 0 {
+			b.ReportMetric(v/float64(r.ticks), k+"-ms")
+		}
+	}
+	r.phases = nil
 }
 
 func (r *editorRig) lizard(tb testing.TB, code string) {
@@ -155,28 +184,33 @@ func BenchmarkEditor(b *testing.B) {
 		heap := heapMB() - before
 		b.Run(fmt.Sprintf("%dk/full_repaint", n/1000), func(b *testing.B) {
 			b.ReportMetric(heap, "heap-MB")
+			r.measure()
 			for i := 0; i < b.N; i++ {
 				// Every pixel of the drawing again (the span cache stays warm).
 				r.lizard(b, "if (V.scene != null) { tiles_mark_all(V.scene.tiles) }\nview_force_all()\napp.needs_paint = true")
 				r.tick()
 			}
+			r.report(b)
 		})
 		b.Run(fmt.Sprintf("%dk/small_edit", n/1000), func(b *testing.B) {
 			r.lizard(b, fmt.Sprintf("ed_select(%d)\nview_after()", perfFirstShape))
 			r.tick()
+			r.measure()
 			for i := 0; i < b.N; i++ {
 				r.lizard(b, fmt.Sprintf("ed_set_prop(\"r\", \"%d\")\nview_after()", 10+i%2))
 				r.tick()
 			}
+			r.report(b)
 		})
 		b.Run(fmt.Sprintf("%dk/drag_frame", n/1000), func(b *testing.B) {
 			x, y := r.window(b, 400, 300)
 			r.tick(window.Event{Type: "down", X: x, Y: y})
+			r.measure()
 			for i := 0; i < b.N; i++ {
 				dx := 4 + 2*(i%8)
 				r.tick(window.Event{Type: "move", X: x + dx, Y: y + dx/2, Injected: true})
 			}
-			b.StopTimer()
+			r.report(b)
 			r.tick(window.Event{Type: "up", X: x, Y: y})
 			r.lizard(b, "ed_undo()\nview_after()")
 			r.tick()
@@ -186,6 +220,7 @@ func BenchmarkEditor(b *testing.B) {
 			// and taking it back alternate, so the drawing stays the same size.
 			r.lizard(b, fmt.Sprintf("ed_set_caret(%d, 23)\nview_after()", perfFirstShape))
 			r.tick()
+			r.measure()
 			for i := 0; i < b.N; i++ {
 				if i%2 == 0 {
 					r.tick(window.Event{Type: "text", Text: "1", Injected: true})
@@ -193,6 +228,7 @@ func BenchmarkEditor(b *testing.B) {
 					r.tick(window.Event{Type: "key", Key: "Backspace", Injected: true})
 				}
 			}
+			r.report(b)
 		})
 	}
 }

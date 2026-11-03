@@ -19,32 +19,23 @@ function is_shape_call(name) {
 }
 
 -~> Walks the statements and records, per start line, the statement, the layer
--~> it is in and its parent. `flat` collects every statement.
-function rows_walk(stmts, layer, parent, starts, flat) {
+-~> it is in and its parent; `inside` gets, per line within a statement but not
+-~> starting one, the innermost statement around it.
+function rows_walk(stmts, layer, parent, starts, inside) {
   for (let i = 0; i < len(stmts); i = i + 1) {
     let s = stmts[i]
-    push(flat, s)
     if (starts[s.line] == null) {
       starts[s.line] = {"stmt": s, "layer": layer, "parent": parent}
+    }
+    for (let l = s.line + 1; l <= s.end_line; l += 1) {
+      inside[l] = s
     }
     let inner = layer
     if (s.kind == "layer") {
       inner = s.line
     }
-    rows_walk(s.children, inner, s.line, starts, flat)
+    rows_walk(s.children, inner, s.line, starts, inside)
   }
-}
-
--~> The innermost statement that has `line` strictly inside its range, or null.
-function rows_container(flat, line) {
-  let best = null
-  for (let i = 0; i < len(flat); i = i + 1) {
-    let s = flat[i]
-    if (s.line < line && line <= s.end_line && (best == null || s.line >= best.line)) {
-      best = s
-    }
-  }
-  best
 }
 
 function row_kind(s, li) {
@@ -100,32 +91,73 @@ function fold_key(s, li) {
 }
 
 -~> The rows of a model. `errors` is the last run's error list and `folded` the
--~> editor's hash of folded keys (both may be null).
+-~> editor's hash of folded keys (both may be null). The rows come from the
+-~> model's cache: worked out once per text, and once more per set of errors
+-~> and folds. Don't change them, they are shared.
 function doc_rows(m, errors, folded) {
-  let p = doc_parsed(m)
-  let starts = {}
-  let flat = []
-  rows_walk(p.statements, 0, 0, starts, flat)
-  let by_line = {}
-  let follow_line = {}
-  if (errors != null) {
-    for (let i = 0; i < len(errors); i = i + 1) {
-      let k = errors[i].line
-      if (by_line[k] == null) {
-        by_line[k] = errors[i].message
-        if (errors[i].follow == true) {
-          by_line[k] = t("err.follow") + ": " + errors[i].message
-          follow_line[k] = true
-        }
+  let base = rows_base(m)
+  let key = rows_key(errors, folded)
+  if (key == "") {
+    return base
+  }
+  let c = m.cache
+  if (c.shown == null || c.shown.key != key) {
+    perf_begin("rows")
+    c.shown = {"key": key, "rows": rows_decorate(m, base, errors, folded)}
+    perf_end()
+  }
+  c.shown.rows
+}
+
+function doc_row(m, line, errors, folded) {
+  doc_rows(m, errors, folded)[line - 1]
+}
+
+-~> The rows without errors and folds: none has an error, none is folded, all
+-~> are visible. After an edit only the rescanned lines are made again (and the
+-~> ones after them when the edit added or took away lines).
+function rows_base(m) {
+  let c = m.cache
+  if (c.rows == null) {
+    let p = doc_parsed(m)
+    perf_begin("rows")
+    let sp = c.splice
+    if (sp != null && sp.rows != null) {
+      c.rows = rows_spliced(p, sp)
+      if (sp.delta == 0) {
+        c.rows_from = {"base": sp.base, "from": sp.from, "to": sp.new_to}
       }
+    } else {
+      c.rows = rows_build(p, p.statements, 1, len(p.lines))
     }
+    doc_cache_tidy(c)
+    perf_end()
   }
-  if (folded == null) {
-    folded = {}
+  c.rows
+}
+
+-~> The rows of a spliced parse: the old ones before the scan, new ones for it,
+-~> and after it the old ones again (or new ones when the lines moved).
+function rows_spliced(p, sp) {
+  let st = p.statements
+  let mid = rows_build(p, list.slice(st, sp.i0, sp.i0 + sp.count), sp.from, sp.new_to)
+  let after = []
+  if (sp.delta == 0) {
+    after = list.slice(sp.rows, sp.old_to, len(sp.rows))
+  } else {
+    after = rows_build(p, list.slice(st, sp.i0 + sp.count, len(st)), sp.new_to + 1, len(p.lines))
   }
+  list.slice(sp.rows, 0, sp.from - 1) + mid + after
+}
+
+-~> The rows of the lines from..to, which hold exactly the top-level statements
+-~> `stmts` (and the blank or comment lines between them).
+function rows_build(p, stmts, from, to) {
+  let starts = {}
+  let inside = {}
+  rows_walk(stmts, 0, 0, starts, inside)
   let rows = []
-  let hidden_rows = {}
-  for (let n = 1; n <= len(p.lines); n = n + 1) {
+  for (let n = from; n <= to; n = n + 1) {
     let li = p.lines[n - 1]
     let at = starts[n]
     let s = null
@@ -136,10 +168,9 @@ function doc_rows(m, errors, folded) {
       layer = at.layer
       parent = at.parent
     } else {
-      let c = rows_container(flat, n)
+      let c = inside[n]
       if (c != null) {
         parent = c.line
-        layer = 0
         if (starts[c.line] != null) {
           layer = starts[c.line].layer
         }
@@ -151,38 +182,127 @@ function doc_rows(m, errors, folded) {
     let depth = li.indent // 2
     let end_line = n
     let foldable = false
-    let collapsed = false
     let callee = ""
     if (s != null) {
       depth = s.depth
       end_line = s.end_line
       foldable = len(s.children) > 0
-      if (foldable) {
-        collapsed = folded[fold_key(s, li)] == true
-      }
       if (s.kind == "call") {
         callee = s.callee
       }
     }
-    let visible = true
-    if (parent > 0 && (hidden_rows[parent] == true || rows[parent - 1].collapsed)) {
-      visible = false
-    }
-    if (!visible) {
-      hidden_rows[n] = true
-    }
     let flags = li.flags
     push(rows, {"line": n, "text": li.text, "depth": depth, "kind": row_kind(s, li), "callee": callee,
                 "name": row_name(s, li), "comment": li.comment, "hidden": list.index(flags, "hidden") >= 0,
-                "locked": list.index(flags, "locked") >= 0, "error": by_line[n], "follow": follow_line[n] == true, "layer": layer, "parent": parent,
-                "end_line": end_line, "foldable": foldable, "collapsed": collapsed, "visible": visible, "stmt": s})
+                "locked": list.index(flags, "locked") >= 0, "error": null, "follow": false, "layer": layer,
+                "parent": parent, "end_line": end_line, "foldable": foldable, "collapsed": false, "visible": true,
+                "stmt": s})
   }
   rows
 }
 
-function doc_row(m, line, errors, folded) {
-  let rows = doc_rows(m, errors, folded)
-  rows[line - 1]
+-~> What the errors and folds change in the rows, as a text: "" for nothing.
+function rows_key(errors, folded) {
+  let ek = rows_errors_key(errors)
+  let fk = rows_folds_key(folded)
+  if (ek == "" && fk == "") {
+    return ""
+  }
+  lang_get() + "|" + ek + "|" + fk
+}
+
+-~> A text that is the same exactly when doc_rows gives the same rows.
+function doc_rows_key(m, errors, folded) {
+  str(doc_id(m)) + "|" + rows_key(errors, folded)
+}
+
+-~> What an error list changes in the rows, as a text ("" for none).
+function rows_errors_key(errors) {
+  if (errors == null || len(errors) == 0) {
+    return ""
+  }
+  let parts = []
+  for (let i = 0; i < len(errors); i = i + 1) {
+    let e = errors[i]
+    push(parts, str(e.line) + ":" + str(e.follow == true) + ":" + str(e.message))
+  }
+  text.join(parts, "\n")
+}
+
+-~> The folded keys, as a text ("" for none).
+function rows_folds_key(folded) {
+  if (folded == null) {
+    return ""
+  }
+  let on = []
+  let ks = keys(folded)
+  for (let i = 0; i < len(ks); i = i + 1) {
+    if (folded[ks[i]] == true) {
+      push(on, ks[i])
+    }
+  }
+  text.join(on, "\n")
+}
+
+-~> The rows that can fold, as [{"line", "end_line", "key"}], once per text.
+function rows_folds(m) {
+  let c = m.cache
+  if (c.folds == null) {
+    let rows = rows_base(m)
+    let lines = doc_parsed(m).lines
+    let out = []
+    for (let i = 0; i < len(rows); i = i + 1) {
+      let r = rows[i]
+      if (r.foldable) {
+        push(out, {"line": r.line, "end_line": r.end_line, "key": fold_key(r.stmt, lines[i])})
+      }
+    }
+    c.folds = out
+  }
+  c.folds
+}
+
+-~> The rows with the errors on their lines and the folds applied: a folded
+-~> row is collapsed and every line inside it is hidden. Only the rows that
+-~> change are copied.
+function rows_decorate(m, base, errors, folded) {
+  let rows = list.copy(base)
+  let n = len(rows)
+  if (errors != null) {
+    let seen = {}
+    for (let i = 0; i < len(errors); i = i + 1) {
+      let k = errors[i].line
+      if (type(k) == "INTEGER" && k >= 1 && k <= n && seen[k] == null) {
+        seen[k] = true
+        let r = hash_copy(rows[k - 1])
+        r.error = errors[i].message
+        if (errors[i].follow == true) {
+          r.error = t("err.follow") + ": " + errors[i].message
+          r.follow = true
+        }
+        rows[k - 1] = r
+      }
+    }
+  }
+  if (folded != null) {
+    let folds = rows_folds(m)
+    for (let i = 0; i < len(folds); i = i + 1) {
+      let f = folds[i]
+      if (folded[f.key] == true) {
+        let r = hash_copy(rows[f.line - 1])
+        r.collapsed = true
+        rows[f.line - 1] = r
+        for (let l = f.line + 1; l <= f.end_line && l <= n; l += 1) {
+          if (rows[l - 1].visible) {
+            let h = hash_copy(rows[l - 1])
+            h.visible = false
+            rows[l - 1] = h
+          }
+        }
+      }
+    }
+  }
+  rows
 }
 
 -~> The key under which a row's fold state is kept, or null if it can't fold.

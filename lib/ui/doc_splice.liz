@@ -1,0 +1,179 @@
+-~> doc_splice: the parse of an edited text made from the parse it was edited
+-~> from, scanning again only the top-level statements the edit touched.
+-~>
+-~> The scanner reads statements one after another, and where one ends depends
+-~> only on its own tokens and the first token after it. So when the lines
+-~> before the change and after it are the same as before:
+-~>   - the statements that end before the one in front of the change stay
+-~>     (that one goes into the scan: the change can make it longer, with an
+-~>     indented line joining a layer or a line that goes on with `.name`);
+-~>   - the scan runs on to the end of the first statement after the change,
+-~>     and when that one comes out exactly as it was (same start, same end,
+-~>     same kind), the scan is back in step: everything after it stays, moved
+-~>     by the lines the edit added or took away.
+-~> Anything else (no clean parse before or after, a statement that ran on
+-~> past the check) gives null, and the whole text is scanned as usual.
+-~> host/scan.go is the scanner; tests/splice.liz checks this against it.
+
+-~> How many lines two line lists share at the start and at the end: [head, tail],
+-~> never more than the shorter list has between them.
+function lines_common(a, b) {
+  let n = math.min(len(a), len(b))
+  let head = 0
+  while (head < n && a[head] === b[head]) {
+    head += 1
+  }
+  let tail = 0
+  let la = len(a)
+  let lb = len(b)
+  while (tail < n - head && a[la - 1 - tail] === b[lb - 1 - tail]) {
+    tail += 1
+  }
+  return [head, tail]
+}
+
+-~> The index of the last statement that starts before `line`, or -1. The
+-~> statements are in order, so it is a binary search.
+function splice_before(st, line) {
+  let lo = 0
+  let hi = len(st)
+  while (lo < hi) {
+    let mid = (lo + hi) // 2
+    if (st[mid].line < line) {
+      lo = mid + 1
+    } else {
+      hi = mid
+    }
+  }
+  lo - 1
+}
+
+-~> The index of the first statement the scan starts with for a change that
+-~> begins on line `first`: the one in front of the change, moved back past any
+-~> that share a line with the one before it.
+function splice_start(st, first) {
+  let i = splice_before(st, first)
+  if (i < 0) {
+    return 0
+  }
+  while (i > 0 && st[i - 1].end_line >= st[i].line) {
+    i -= 1
+  }
+  i
+}
+
+-~> Where the scan ends for a change whose last old line is `last`: {"i", "check"}.
+-~> i is the last old statement scanned again: the first one after the change,
+-~> plus any that start on the line it ends on. check is false when the scan
+-~> runs to the end of the text (there is nothing after it to get in step with).
+function splice_end(st, last) {
+  let i = splice_before(st, last + 1) + 1
+  if (i >= len(st)) {
+    return {"i": len(st) - 1, "check": false}
+  }
+  let end = st[i].end_line
+  while (i + 1 < len(st) && st[i + 1].line <= end) {
+    i += 1
+    end = math.max(end, st[i].end_line)
+  }
+  {"i": i, "check": true}
+}
+
+-~> A statement, an argument list or a line list moved down by d lines.
+function stmt_moved(s, d) {
+  let out = hash_copy(s)
+  out.line = s.line + d
+  out.end_line = s.end_line + d
+  out.args = args_moved(s.args, d)
+  out.children = stmts_moved(s.children, d)
+  out
+}
+
+function stmts_moved(list_in, d) {
+  if (d == 0) {
+    return list_in
+  }
+  let out = []
+  for (let i = 0; i < len(list_in); i += 1) {
+    push(out, stmt_moved(list_in[i], d))
+  }
+  out
+}
+
+function args_moved(args, d) {
+  let out = []
+  for (let i = 0; i < len(args); i += 1) {
+    let a = hash_copy(args[i])
+    a.line = a.line + d
+    a.end_line = a.end_line + d
+    a.items = args_moved(a.items, d)
+    push(out, a)
+  }
+  out
+}
+
+function lines_moved(list_in, d) {
+  if (d == 0) {
+    return list_in
+  }
+  let out = []
+  for (let i = 0; i < len(list_in); i += 1) {
+    let li = hash_copy(list_in[i])
+    li.line = li.line + d
+    push(out, li)
+  }
+  out
+}
+
+-~> Whether a statement of the new scan is the old one, moved by d lines.
+function splice_in_step(s, old, d) {
+  s.line == old.line + d && s.end_line == old.end_line + d && s.column == old.column && s.kind == old.kind
+}
+
+-~> The parse of `lines`, made from the model `before` (whose parse is known),
+-~> or null. The result: {"parse", "from", "old_to", "new_to", "delta", "i0",
+-~> "count", "old", "rows", "names", "base"}: the lines from..new_to (old_to
+-~> before the edit) were scanned again into the statements i0 .. i0 + count - 1,
+-~> which replace `old`; the lines after them moved by delta. rows and names are
+-~> the ones of `before` at that moment (null when it had none yet), base the
+-~> id of its cache.
+function splice_parse(before, lines) {
+  let old = before.cache.parse
+  if (len(old.errors) > 0) {
+    return null
+  }
+  let a = before.lines
+  let ht = lines_common(a, lines)
+  let first = ht[0] + 1
+  let last = len(a) - ht[1]
+  let delta = len(lines) - len(a)
+  let st = old.statements
+  let i0 = splice_start(st, first)
+  let from = 1
+  if (i0 > 0) {
+    from = st[i0 - 1].end_line + 1
+  }
+  let stop = splice_end(st, last)
+  let old_to = len(a)
+  if (stop.check) {
+    old_to = st[stop.i].end_line
+  }
+  let new_to = old_to + delta
+  let scan = src.parse(text.join(list.slice(lines, from - 1, new_to), "\n"))
+  if (len(scan.errors) > 0) {
+    return null
+  }
+  let fresh = stmts_moved(scan.statements, from - 1)
+  if (stop.check && (len(fresh) == 0 || !splice_in_step(fresh[len(fresh) - 1], st[stop.i], delta))) {
+    return null
+  }
+  let parse = {
+    "lines": list.slice(old.lines, 0, from - 1) + lines_moved(scan.lines, from - 1) +
+      lines_moved(list.slice(old.lines, old_to, len(old.lines)), delta),
+    "statements": list.slice(st, 0, i0) + fresh + stmts_moved(list.slice(st, stop.i + 1, len(st)), delta),
+    "errors": []
+  }
+  {"parse": parse, "from": from, "old_to": old_to, "new_to": new_to, "delta": delta, "i0": i0,
+   "count": len(fresh), "old": list.slice(st, i0, stop.i + 1), "rows": before.cache.rows,
+   "names": before.cache.names, "base": before.cache.id}
+}

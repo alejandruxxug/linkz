@@ -123,7 +123,17 @@ function scene_order(shapes, rows, hidden) {
 }
 
 -~> The hidden rows, as a text: when it changes the painted shapes change.
+-~> Worked out once per set of rows (ed_rows_key).
 function scene_hidden_key(rows) {
+  let key = ed_rows_key()
+  if (V.hidden_for != key) {
+    V.hidden_key = scene_hidden_scan(rows)
+    V.hidden_for = key
+  }
+  V.hidden_key
+}
+
+function scene_hidden_scan(rows) {
   let out = ""
   for (let i = 0; i < len(rows); i += 1) {
     if (rows[i].hidden) {

@@ -266,7 +266,25 @@ func (d *Debug) statsMap() map[string]any {
 	return map[string]any{
 		"paint_ms": s.PaintMS, "event_ms": s.EventMS, "run_ms": s.RunMS, "run_errors": s.RunErrors,
 		"frames_painted": s.Frames, "events": s.Events, "events_coalesced": s.Coalesced,
+		"phases": d.App.phases(),
 	}
+}
+
+// phases is the lizard side's own breakdown of the last tick: milliseconds
+// per phase (rows, props, run, canvas, complete, ...), from app.debug_perf.
+// Empty when the UI has none.
+func (a *App) phases() map[string]any {
+	if a.app == nil || hashGet(a.app, "debug_perf") == nil {
+		return map[string]any{}
+	}
+	res, err := a.eval("app.debug_perf()", nil)
+	if err != nil {
+		return map[string]any{}
+	}
+	if m, ok := toGo(res, 0).(map[string]any); ok {
+		return m
+	}
+	return map[string]any{}
 }
 
 func (d *Debug) stats(args []string) (any, error) {

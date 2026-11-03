@@ -251,6 +251,12 @@ function view_paint_canvas_ui(cl) {
 }
 
 function view_paint_canvas() {
+  perf_begin("canvas")
+  view_paint_canvas_now()
+  perf_end()
+}
+
+function view_paint_canvas_now() {
   raster.new_frame()
   let gm = view_geom()
   let cl = view_canvas_layout()
