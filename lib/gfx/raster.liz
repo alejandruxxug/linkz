@@ -23,6 +23,38 @@ let raster_cache = {}
 let raster_cache_size = 0
 let raster_cache_limit = 400
 
+-~> Which paint the cache is on. Every entry remembers the last paint that
+-~> used it, so when the cache is full the entries nobody used in this paint
+-~> (old versions of a shape that was edited or dragged) go first.
+let raster_cache_frame = 0
+
+-~> Starts a new paint for the cache. raster.paint calls it; code that draws
+-~> shapes one by one with raster.shape calls it once per canvas paint.
+function raster_new_frame() {
+  raster_cache_frame += 1
+}
+
+-~> Drops the entries not used in this paint. If the shapes of this paint
+-~> alone fill the cache, it grows instead, so a big drawing never has to be
+-~> rasterized again on every paint.
+function raster_cache_sweep() {
+  let kept = {}
+  let size = 0
+  let ks = keys(raster_cache)
+  for (let i = 0; i < len(ks); i += 1) {
+    let entry = raster_cache[ks[i]]
+    if (entry.frame == raster_cache_frame) {
+      kept[ks[i]] = entry
+      size += 1
+    }
+  }
+  raster_cache = kept
+  raster_cache_size = size
+  if (raster_cache_size * 2 > raster_cache_limit) {
+    raster_cache_limit = raster_cache_size * 2
+  }
+}
+
 -~> How far a curve may stray from its segments, in pixels.
 let raster_tolerance = 0.25
 
@@ -310,13 +342,14 @@ function raster_shape(shape) {
   let key = raster_key(shape)
   let hit = raster_cache[key]
   if (hit !== null) {
+    hit.frame = raster_cache_frame
     return hit
   }
   let rule = "nonzero"
   if (shape.rule == "evenodd") {
     rule = "evenodd"
   }
-  let out = {"fill": null, "stroke": null}
+  let out = {"fill": null, "stroke": null, "frame": raster_cache_frame}
   if (shape.fill != null) {
     out.fill = raster_fill(shape.path, rule)
   }
@@ -324,8 +357,7 @@ function raster_shape(shape) {
     out.stroke = raster_stroke(shape.path, shape.width)
   }
   if (raster_cache_size >= raster_cache_limit) {
-    raster_cache = {}
-    raster_cache_size = 0
+    raster_cache_sweep()
   }
   raster_cache[key] = out
   raster_cache_size = raster_cache_size + 1
@@ -359,6 +391,7 @@ function raster_paint_shape(s, offset) {
 -~> a layer inside it is mixed inside that buffer. Without such layers the
 -~> shapes are drawn straight on the target.
 function raster_paint(shapes, offset) {
+  raster_new_frame()
   let ordered = paint_order(shapes)
   if (!any_styled(ordered)) {
     for (let i = 0; i < len(ordered); i = i + 1) {
@@ -386,3 +419,4 @@ raster.brush = raster_brush
 raster.shape = raster_shape
 raster.draw = raster_draw
 raster.paint = raster_paint
+raster.new_frame = raster_new_frame

@@ -321,8 +321,9 @@ function samples_points(samples) {
 }
 
 -~> A pressure for each sample of a mouse stroke, from its speed: slow is
--~> heavy, fast is light, smoothed so the width doesn't jump.
-function speed_pressures(pts) {
+-~> heavy, fast is light, smoothed so the width doesn't jump. strength (0 to 1)
+-~> says how much of that to use: 0 gives a constant 0.7.
+function speed_pressures(pts, strength = 1.0) {
   let out = []
   let speed = 0.0
   let p = 0.7
@@ -340,6 +341,11 @@ function speed_pressures(pts) {
   }
   if (len(out) > 1) {
     out[0] = out[1]
+  }
+  if (strength < 1) {
+    for (let i = 0; i < len(out); i = i + 1) {
+      out[i] = 0.7 * (1 - strength) + out[i] * strength
+    }
   }
   out
 }
@@ -385,6 +391,16 @@ function pencil_insert(m, samples, layer, color, width) {
   twoway_new_row(m, "stroke(" + fmt_points(simple[0]) + ", " + color + ", " + str(width) + ")", layer)
 }
 
+-~> How strongly a pen wants a mouse stroke's pressure from the speed (its
+-~> pressure.inputs.mouse.speed, 1 when it doesn't say).
+function pen_mouse_speed(pen) {
+  let v = pen_block(pen, "mouse").speed
+  if (type(v) == "INTEGER" || type(v) == "FLOAT") {
+    return math.max(0.0, math.min(1.0, v))
+  }
+  1.0
+}
+
 -~> The brush: like the pencil, but writes `brush(points, pressures, color, pens.NAME)`.
 -~> The pressure of each kept point is the sample's own (2 decimals) when
 -~> `source` is "trackpad" or "tablet", and comes from the speed with a mouse.
@@ -398,7 +414,7 @@ function brush_insert(m, samples, pen_name, source, layer, color) {
   }
   let pressures = []
   if (source == "mouse") {
-    pressures = speed_pressures(pts)
+    pressures = speed_pressures(pts, pen_mouse_speed(pens[pen_name]))
   } else {
     for (let i = 0; i < len(pts); i = i + 1) {
       push(pressures, pts[i].pressure)

@@ -918,29 +918,18 @@ function view_max_top() {
 
 -~> == The canvas ==
 
--~> A press on the canvas area: pick the topmost shape under it. (Dragging shapes and
--~> anchors, and drawing with the pencil and brush, are the canvas gestures.)
+-~> The canvas gestures (selecting, dragging shapes and anchors, the pencil and the
+-~> brush) are in view_tools.liz.
 function view_canvas_down(e) {
-  if (V.tool == "pencil" || V.tool == "brush") {
-    return null
-  }
-  let cl = view_canvas_layout()
-  let p = view_to_drawing(cl, e.pos.x, e.pos.y)
-  if (V.hover_anchor != null) {
-    return null
-  }
-  let s = view_hit_shape(cl, p)
-  if (s != null && type(s.line) == "INTEGER") {
-    view_select_line(s.line)
-  }
+  tools_canvas_down(e)
 }
 
 function view_canvas_move(e) {
-  null
+  tools_canvas_move(e)
 }
 
 function view_canvas_up(e) {
-  null
+  tools_canvas_up(e)
 }
 
 -~> == The keyboard ==
@@ -995,6 +984,9 @@ function view_key(e) {
     V.pen_note = ""
     V.ver = V.ver + 1
     app.needs_paint = true
+    return null
+  }
+  if (view_tools_key(e)) {
     return null
   }
   ed_key(name, mods)

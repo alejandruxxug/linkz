@@ -9,6 +9,7 @@
 -~> says they are old) and the errors go to their rows.
 function ed_run() {
   let r = src.run(doc_text(ed_model()))
+  ed.runs = ed.runs + 1
   ed.errors = r.errors
   ed.printed = r.printed
   ed.stats = {"ms": r.ms, "steps": r.steps}

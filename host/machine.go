@@ -108,6 +108,7 @@ func runCalibration(expr string, stdout io.Writer) (string, error) {
 	env.Define("fb", fb.Builtins())
 	env.Define("time", timeHash())
 	env.Define("os", osHash())
+	env.Define("src", NewSrc(nil).Builtins())
 
 	run := func(name, code string) (object.Object, error) {
 		p := parser.New(lexer.New(code))

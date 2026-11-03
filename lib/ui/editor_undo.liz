@@ -13,7 +13,7 @@ let ed = {
   "docs": null, "status": "", "refusal": null,
   "color": "#1d1d1f", "width": 4, "pen": "ink",
   "undo_labels": [], "redo_labels": [], "label": null, "gesture_label": null,
-  "merge_col": -1, "merge_at": 0, "note": null
+  "merge_col": -1, "merge_at": 0, "note": null, "runs": 0
 }
 
 -~> How many steps the history keeps, and how long a pause (ms) ends a typing step.

@@ -1,0 +1,51 @@
+-~> The pure parts of the canvas gestures and the pen settings they use.
+puts(tools_color("#1d1d1f"), tools_color("#fff"), tools_color("#C0392B"))
+
+-~> A pen decides how much a mouse stroke takes its pressure from the speed.
+puts(pen_mouse_speed(pens.ink), pen_mouse_speed(pens.marker), pen_mouse_speed(pens.pencil))
+function sample(x, y, t) {
+  {"pos": (x, y), "canvas_pos": (x, y), "pressure": 1.0, "t": t}
+}
+let slow = []
+let fast = []
+for (let i = 0; i <= 8; i = i + 1) {
+  push(slow, sample(10 + i * 5, 50 + (i % 3) * 20, i * 0.1))
+  push(fast, sample(10 + i * 50, 50 + (i % 3) * 20, i * 0.01))
+}
+let ps = speed_pressures(samples_points(fast), 1.0)
+let flat = speed_pressures(samples_points(fast), 0)
+puts(ps[4] < 0.7, flat[4] == 0.7, flat[0] == 0.7)
+
+-~> A marker takes no pressure from the speed: its mouse stroke is constant.
+let m = doc_new("")
+let marked = brush_insert(m, fast, "marker", "mouse", null, "#000")
+puts(marked.lines[0])
+let inked = brush_insert(m, fast, "ink", "mouse", null, "#000")
+puts(text.find(inked.lines[0], "0.7,") < 0)
+
+-~> A drag of a whole shape is computed from the text of the start every time:
+-~> moving by 10 and then by 25 gives the same text as moving by 25 once.
+ed_reset("layer a\n  circle((100, 100), 20, #fff)\n", "/d.lzdraw")
+ed_run()
+let c = ed.shapes[0]
+let m0 = ed_model()
+ed_begin_gesture("move_kind", {"kind": "circle"})
+ed_try_at(move_shape(m0, c, (10, 4)), null, c.line)
+ed_try_at(move_shape(m0, c, (25, 9)), null, c.line)
+ed_end_gesture()
+puts(ed_model().lines[1], len(ed.undo), ed_undo_text())
+ed_undo()
+puts(ed_model().lines[1])
+
+-~> A shape whose position is an expression refuses to move and nothing changes.
+ed_reset("let y = 50\ncircle((100, y + 10), 20, #fff)\n", "/d.lzdraw")
+ed_run()
+let before = doc_text(ed_model())
+let moved = ed_try_at(move_shape(ed_model(), ed.shapes[0], (5, 5)), null, 2)
+puts(moved, doc_text(ed_model()) == before, ed.refusal.message, ed.refusal.line)
+
+-~> Removing an anchor of a brush also removes its pressure; the last point stays.
+ed_reset("brush([(10, 10), (50, 40), (90, 10)], [0.2, 0.9, 0.4], #000, pens.ink)\n", "/d.lzdraw")
+ed_run()
+ed_remove_point(ed.shapes[0], ed.shapes[0].anchors[1].item)
+puts(ed_model().lines[0], ed_undo_text())

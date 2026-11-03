@@ -38,7 +38,7 @@ function view_scale_shape(s, k) {
 
 -~> The shapes of the last run scaled to the zoom, kept until the next run or zoom.
 function view_scaled(k) {
-  let key = str(V.run_id) + "|" + str(k)
+  let key = str(V.run_id) + "|" + str(ed.runs) + "|" + str(k)
   if (V.scaled_key != key) {
     let out = []
     for (let i = 0; i < len(ed.shapes); i = i + 1) {
@@ -234,8 +234,8 @@ function view_canvas_key() {
   if (V.hover_anchor != null) {
     anchor = str(V.hover_anchor.line) + "." + str(V.hover_anchor.i) + "." + str(V.hover_anchor.anchor)
   }
-  str(V.run_id) + "|" + sel + "|" + str(ed.stale) + "|" + str(len(ed.errors)) + "|" + anchor + "|" + str(cl.zoom) + "|" +
-    str(cl.crect) + "|" + str(V.w) + "x" + str(V.h) + "|" + str(V.pw) + "|" + str(ed_canvas_size())
+  str(V.run_id) + "|" + str(ed.runs) + "|" + sel + "|" + str(ed.stale) + "|" + str(len(ed.errors)) + "|" + anchor + "|" + str(cl.zoom) + "|" +
+    str(cl.crect) + "|" + str(V.live_n) + str(V.sel_anchor) + "|" + str(V.w) + "x" + str(V.h) + "|" + str(V.pw) + "|" + str(ed_canvas_size())
 }
 
 function view_paint_canvas_ui(cl) {
@@ -260,6 +260,7 @@ function view_paint_canvas_ui(cl) {
 }
 
 function view_paint_canvas() {
+  raster.new_frame()
   let gm = view_geom()
   let cl = view_canvas_layout()
   V.cl = cl
@@ -276,18 +277,22 @@ function view_paint_canvas() {
   let shapes = shapes_to_paint(view_scaled(cl.zoom), view_rows())
   for (let i = 0; i < len(shapes); i = i + 1) {
     let s = shapes[i]
-    let r = raster.shape(s)
-    if (r.fill !== null) {
-      fb.spans(r.fill, off, s.fill)
-    }
-    if (r.stroke !== null) {
-      fb.spans(r.stroke, off, s.stroke)
+    if (!view_tools_lite(s, off)) {
+      let r = raster.shape(s)
+      if (r.fill !== null) {
+        fb.spans(r.fill, off, s.fill)
+      }
+      if (r.stroke !== null) {
+        fb.spans(r.stroke, off, s.stroke)
+      }
     }
   }
+  view_tools_paint(cl, off)
   if (ed.stale && len(ed.errors) > 0) {
     fb.fill(off, (cl.sw, cl.sh), P.veil)
   }
   fb.unclip()
   view_paint_selection(cl)
+  view_tools_paint_ui(cl)
   g_ui()
 }

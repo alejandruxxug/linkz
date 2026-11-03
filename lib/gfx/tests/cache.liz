@@ -1,0 +1,23 @@
+-~> The raster cache keeps what this paint used and drops stale versions.
+raster_cache_limit = 4
+function shape_at(x) {
+  circle((x, 10), 5, #ff0000)
+}
+-~> Dragging one shape through 20 positions: old positions are dropped, the
+-~> cache never wipes the shapes still in use.
+let still = [shape_at(100), shape_at(200)]
+for (let i = 0; i < 20; i += 1) {
+  raster_new_frame()
+  raster_shape(still[0])
+  raster_shape(still[1])
+  raster_shape(shape_at(i))
+}
+puts("size after drag:", raster_cache_size, "limit:", raster_cache_limit)
+let a = raster_shape(still[0])
+puts("still cached:", a.frame == raster_cache_frame)
+-~> A paint that uses more shapes than the limit makes the cache grow.
+raster_new_frame()
+for (let i = 0; i < 10; i += 1) {
+  raster_shape(shape_at(300 + i))
+}
+puts("grew to fit:", raster_cache_limit >= 10, "size:", raster_cache_size)

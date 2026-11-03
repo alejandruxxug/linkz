@@ -80,7 +80,7 @@ func TestCalibrateOutputShape(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, key := range []string{"max_objects", "ms_per_object", "bytes_per_object", "memory_cap", "speed_cap", "limited_by", "measured_at", "app_version"} {
+	for _, key := range []string{"max_objects", "ms_per_object", "warm_ms_per_object", "cold_ms_per_object", "run_ms_per_object", "bytes_per_object", "memory_cap", "speed_cap", "limited_by", "measured_at", "app_version"} {
 		if !strings.Contains(text, `"`+key+`": `) {
 			t.Errorf("missing %s in %s", key, text)
 		}

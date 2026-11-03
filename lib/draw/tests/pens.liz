@@ -1,0 +1,59 @@
+-~> The pressure block of a pen: curve, floor, device overrides, smoothing, speed.
+function r2(x) { math.round(x * 100) / 100.0 }
+
+-~> The curve is piecewise linear through its points.
+let b = pen_block(pens.brush, "mouse")
+puts(r2(pen_curve(b, 0)), r2(pen_curve(b, 0.2)), r2(pen_curve(b, 0.4)), r2(pen_curve(b, 0.7)), r2(pen_curve(b, 1)))
+puts(pen_curve(pen_block(pens.ink), 0.37), pen_curve(pen_block(pens.ink), 5), pen_curve(pen_block(pens.ink), -1))
+
+-~> A device override: the trackpad's floor rescales, the tablet has its own curve.
+let tp = pen_block(pens.brush, "trackpad")
+puts(tp.floor, r2(pen_curve(tp, 0.1)), r2(pen_curve(tp, 0.15)), r2(pen_curve(tp, 1)))
+let tb = pen_block(pens.brush, "tablet")
+puts(tb.floor, r2(pen_curve(tb, 0.1)), r2(pen_curve(tb, 0.2)))
+puts(pen_block(pens.brush, "mouse").speed, pen_block(pens.brush, null).speed)
+
+-~> The same raw pressure gives other widths per device, and the device can be set globally.
+puts(r2(pen_response(pens.brush, 0.5, 0, "mouse")[0]), r2(pen_response(pens.brush, 0.5, 0, "trackpad")[0]))
+pen_set_input("trackpad")
+puts(r2(pen_response(pens.brush, 0.5, 0)[0]))
+pen_set_input(null)
+puts(r2(pen_response(pens.brush, 0.5, 0)[0]))
+
+-~> Retuning a pen restyles a stroke: the raw pressures stay.
+let soft = {"name": "soft", "min": 2, "max": 12, "taper": 0, "opacity": [1, 1], "nib": null, "grain": 0,
+  "pressure": {"curve": [[0, 0], [1, 0.5]], "width": [0.2, 1]}}
+let pts = [(0, 0), (50, 0), (100, 0)]
+let s1 = brush(pts, [0.2, 0.6, 1.0], #000, soft)
+soft.pressure.curve = [[0, 0], [1, 1]]
+let s2 = brush(pts, [0.2, 0.6, 1.0], #000, soft)
+puts(s1.args[1], s2.args[1], s1.widths, s2.widths)
+
+-~> Width and opacity ranges; a pen with no block keeps the plain mapping.
+puts(pen_response(soft, 0, 0), pen_response(soft, 1, 0))
+let plain = {"name": "plain", "min": 1, "max": 5, "taper": 0, "opacity": [0.5, 1], "nib": null, "grain": 0}
+puts(pen_response(plain, 0.5, 0))
+
+-~> Smoothing evens out a jumpy pressure list without moving its mean much.
+let jumpy = [0.1, 0.9, 0.1, 0.9, 0.1, 0.9]
+let line = [(0, 0), (10, 0), (20, 0), (30, 0), (40, 0), (50, 0)]
+let calm = pen_prepare(pens.marker, line, jumpy)
+puts(r2(calm[1] - calm[2]) < 0.8, r2(calm[2]), len(calm))
+puts(pen_prepare(plain, line, jumpy) == [0.1, 0.9, 0.1, 0.9, 0.1, 0.9])
+
+-~> Speed thins: far-apart points get a lower pressure than close ones.
+let near = pen_prepare(pens.brush, [(0, 0), (2, 0), (4, 0), (6, 0)], [0.8, 0.8, 0.8, 0.8])
+let far = pen_prepare(pens.brush, [(0, 0), (200, 0), (400, 0), (600, 0)], [0.8, 0.8, 0.8, 0.8])
+puts(far[1] < near[1], far[1] >= 0.8 * 0.5)
+
+-~> Calligraphy: pressure scales the nib width a little; the tilt turns the nib.
+puts(r2(pen_response(pens.calligraphy, 1, 135deg)[0]), r2(pen_response(pens.calligraphy, 0, 135deg)[0]))
+puts(r2(pen_response(pens.calligraphy, 1, 135deg, null, 0.5)[0]) != r2(pen_response(pens.calligraphy, 1, 135deg)[0]))
+
+-~> Every pen has a block, and the five feel different at the same pressure.
+let widths = []
+for (let i = 0; i < len(pens.list); i = i + 1) {
+  puts(pens.list[i].name, type(pens.list[i].pressure))
+  push(widths, r2(pen_response(pens.list[i], 0.5, 0.3)[0]))
+}
+puts(widths)

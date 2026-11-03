@@ -1,0 +1,9 @@
+#1d1d1f #ffffff #c0392b
+1.0 0.0 0.6
+true true true
+brush([(10, 50), (110, 90), (160, 50), (260, 90), (310, 50), (410, 90)], [0.7, 0.7, 0.7, 0.7, 0.7, 0.7], #000, pens.marker)
+true
+  circle((125, 109), 20, #fff) 1 move circle
+  circle((100, 100), 20, #fff)
+false true position comes from `y + 10` 2
+brush([(10, 10), (90, 10)], [0.2, 0.4], #000, pens.ink) remove point

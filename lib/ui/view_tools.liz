@@ -1,0 +1,364 @@
+-~> view_tools: the canvas gestures. A press on the canvas starts one of
+-~>   pencil / brush   a stroke: every move sample is kept, a light preview is
+-~>                    drawn while dragging, and the mouse-up writes one row
+-~>   anchor           drag a handle of the selected shape (a click selects it)
+-~>   shape            drag the shape body, which moves its literals
+-~>   double-click     on the selected curve: insert a point there
+-~> Each gesture is one undo step. The gesture lives in V.gest; V.drag only
+-~> says "the canvas has the mouse" so moves and the release reach us.
+-~> While a drag runs only the text changes; the drawing is run again once per
+-~> paint (the host hands over the latest position), and a brush that is being
+-~> dragged is shown as a plain polyline until the button is released.
+
+let tools_double_ms = 450
+let tools_chunk = 24
+
+-~> A color text such as "#1d1d1f" as a color value.
+function tools_color(s) {
+  let digits = "0123456789abcdef"
+  let h = text.lower(s)
+  let v = []
+  for (let i = 1; i < len(h); i = i + 1) {
+    push(v, text.find(digits, h[i]))
+  }
+  if (len(v) == 3) {
+    return rgb(v[0] * 17, v[1] * 17, v[2] * 17)
+  }
+  if (len(v) < 6) {
+    return rgb(29, 29, 31)
+  }
+  rgb(v[0] * 16 + v[1], v[2] * 16 + v[3], v[4] * 16 + v[5])
+}
+
+-~> A canvas-buffer point (full resolution) as a point of the drawing.
+function tools_draw_pt(cl, cp) {
+  (cp - cl.offset) / cl.zoom
+}
+
+-~> Where the pointer is on the drawing for an event: its last sample, else its position.
+function tools_pointer(cl, e) {
+  if (e.samples != null && len(e.samples) > 0) {
+    let last = e.samples[len(e.samples) - 1]
+    if (last.canvas_pos != null) {
+      return tools_draw_pt(cl, last.canvas_pos)
+    }
+  }
+  view_to_drawing(cl, e.pos.x, e.pos.y)
+}
+
+-~> == The press ==
+
+function tools_canvas_down(e) {
+  let cl = view_canvas_layout()
+  let now = time.ms()
+  let ld = V.last_down
+  let double = ld != null && now - ld.ms < tools_double_ms && math.dist(ld.pos, e.pos) <= 4
+  V.last_down = {"ms": now, "pos": e.pos}
+  V.sel_anchor = null
+  V.gest = null
+  if (V.tool == "pencil" || V.tool == "brush") {
+    return tools_stroke_begin(e, cl)
+  }
+  let hit = view_anchor_at(cl, e.pos.x, e.pos.y)
+  if (hit != null) {
+    return tools_anchor_begin(e, cl, hit)
+  }
+  let p = view_to_drawing(cl, e.pos.x, e.pos.y)
+  let s = view_hit_shape(cl, p)
+  if (s == null || type(s.line) != "INTEGER") {
+    return null
+  }
+  if (double && tools_is_selected(s.line) && (s.kind == "stroke" || s.kind == "polygon" || s.kind == "brush")) {
+    V.last_down = null
+    ed_insert_point(s, p)
+    return tools_done()
+  }
+  view_select_line(s.line)
+  V.drag = {"kind": "canvas"}
+  V.gest = {"mode": "shape", "shape": s, "line": s.line, "m0": ed_model(), "start": tools_pointer(cl, e),
+            "ui0": e.pos, "moved": false, "lite": s.kind == "brush"}
+}
+
+function tools_is_selected(line) {
+  let m = ed_model()
+  if (m.sel != null) {
+    return line >= m.sel.from && line <= m.sel.to
+  }
+  m.line == line
+}
+
+-~> Runs the drawing and repaints after a canvas edit.
+function tools_done() {
+  view_prepare()
+  view_after()
+  null
+}
+
+function tools_anchor_begin(e, cl, hit) {
+  let shape = ed_shapes_of(hit.line)[hit.i]
+  let m = ed_model()
+  V.sel_anchor = {"line": hit.line, "i": hit.i, "anchor": hit.anchor, "at_line": m.line, "at_col": m.col}
+  V.drag = {"kind": "canvas"}
+  let a = shape.anchors[hit.anchor]
+  V.gest = {"mode": "anchor", "shape": shape, "line": hit.line, "idx": hit.anchor, "anchor": a,
+            "grab": a.pos - tools_pointer(cl, e), "ui0": e.pos, "moved": false, "lite": shape.kind == "brush"}
+  view_touch()
+}
+
+-~> == Moves ==
+
+function tools_canvas_move(e) {
+  let g = V.gest
+  if (g == null) {
+    return null
+  }
+  let cl = view_canvas_layout()
+  if (g.mode == "stroke") {
+    return tools_stroke_move(g, e, cl)
+  }
+  if (!g.moved) {
+    if (math.max(math.abs(e.pos.x - g.ui0.x), math.abs(e.pos.y - g.ui0.y)) < 2) {
+      return null
+    }
+    g.moved = true
+    if (g.mode == "anchor") {
+      ed_begin_gesture("move_point")
+    } else {
+      ed_begin_gesture("move_kind", {"kind": g.shape.kind})
+    }
+  }
+  let p = tools_pointer(cl, e)
+  let ok = true
+  if (g.mode == "anchor") {
+    let target = p + g.grab
+    ok = ed_move_anchor(g.shape, g.anchor, target)
+    V.hover_anchor = {"line": g.line, "i": V.sel_anchor.i, "anchor": g.idx, "pos": target, "role": g.anchor.role}
+  } else {
+    ed_label("move_shape")
+    ok = ed_try_at(move_shape(g.m0, g.shape, p - g.start), null, g.line)
+  }
+  V.flash = 0
+  if (!ok) {
+    V.flash = 1
+  }
+  view_touch()
+}
+
+-~> == Release ==
+
+function tools_canvas_up(e) {
+  let g = V.gest
+  V.gest = null
+  V.live = null
+  V.live_n = null
+  if (g == null) {
+    return null
+  }
+  if (g.mode == "stroke") {
+    tools_stroke_commit(g)
+    return tools_done()
+  }
+  V.hover_anchor = null
+  if (g.moved) {
+    ed_end_gesture()
+  }
+  tools_done()
+}
+
+-~> == The pencil and the brush ==
+
+function tools_stroke_begin(e, cl) {
+  V.drag = {"kind": "canvas"}
+  let source = e.pen.source
+  let cp = null
+  if (e.canvas_pos != null) {
+    cp = tools_draw_pt(cl, e.canvas_pos)
+  }
+  V.gest = {"mode": "stroke", "tool": V.tool, "source": source, "samples": [], "frozen": [], "tail": [], "tail_p": [],
+            "first": {"pos": e.pos, "canvas_pos": cp, "pressure": null, "t": null}}
+  V.live = V.gest
+  V.live_n = 0
+  view_touch()
+}
+
+function tools_stroke_move(g, e, cl) {
+  g.source = e.pen.source
+  let list = e.samples
+  if (list == null) {
+    list = [{"pos": e.pos, "canvas_pos": e.canvas_pos, "pressure": e.pen.pressure, "t": time.ms() / 1000.0}]
+  }
+  for (let i = 0; i < len(list); i = i + 1) {
+    let s = list[i]
+    let cp = null
+    if (s.canvas_pos != null) {
+      cp = tools_draw_pt(cl, s.canvas_pos)
+    }
+    if (g.first != null) {
+      -~> the press itself starts the stroke; it borrows the first move's pressure and time
+      g.first.pressure = s.pressure
+      g.first.t = s.t - 0.008
+      tools_stroke_add(g, cl, g.first)
+      g.first = null
+    }
+    tools_stroke_add(g, cl, {"pos": s.pos, "canvas_pos": cp, "pressure": s.pressure, "t": s.t})
+  }
+  V.live_n = len(g.samples)
+  view_touch()
+}
+
+-~> Keeps a sample and extends the preview with it (samples off the canvas are kept
+-~> for nothing: the row helpers skip them).
+function tools_stroke_add(g, cl, s) {
+  push(g.samples, s)
+  if (s.canvas_pos == null) {
+    return null
+  }
+  let w = s.canvas_pos * cl.zoom
+  let n = len(g.tail)
+  if (n > 0 && math.dist(g.tail[n - 1], w) < 1) {
+    return null
+  }
+  push(g.tail, w)
+  push(g.tail_p, s.pressure)
+  if (len(g.tail) >= tools_chunk) {
+    let spans = raster.stroke(tools_path(g.tail), tools_width(g, cl.zoom))
+    push(g.frozen, spans)
+    g.tail = [g.tail[len(g.tail) - 1]]
+    g.tail_p = [g.tail_p[len(g.tail_p) - 1]]
+  }
+}
+
+function tools_path(pts) {
+  let path = [["M", pts[0]]]
+  if (len(pts) == 1) {
+    push(path, ["L", pts[0]])
+  }
+  for (let i = 1; i < len(pts); i = i + 1) {
+    push(path, ["L", pts[i]])
+  }
+  path
+}
+
+-~> The width (window pixels) the preview uses: the pencil's, or the brush pen's at the
+-~> mean pressure of the tail (a mouse has none yet: a middle one).
+function tools_width(g, zoom) {
+  if (g.tool == "pencil") {
+    return ed.width * zoom
+  }
+  let p = 0.7
+  if (g.source != "mouse" && len(g.tail_p) > 0) {
+    let total = 0.0
+    for (let i = 0; i < len(g.tail_p); i = i + 1) {
+      total = total + g.tail_p[i]
+    }
+    p = total / len(g.tail_p)
+  }
+  pen_response(pens[ed.pen], p, 0.0, g.source)[0] * zoom
+}
+
+-~> The live stroke, painted in the canvas buffer (inside the drawing's clip).
+function view_tools_paint(cl, off) {
+  let g = V.live
+  if (g == null || len(g.tail) == 0) {
+    return null
+  }
+  let c = tools_color(ed.color)
+  for (let i = 0; i < len(g.frozen); i = i + 1) {
+    fb.spans(g.frozen[i], off, c)
+  }
+  fb.spans(raster.stroke(tools_path(g.tail), tools_width(g, cl.zoom)), off, c)
+}
+
+-~> The stroke is over: write the row (a click without a drag writes nothing).
+function tools_stroke_commit(g) {
+  let samples = []
+  if (g.first != null) {
+    return null
+  }
+  for (let i = 0; i < len(g.samples); i = i + 1) {
+    let s = g.samples[i]
+    if (s.canvas_pos != null) {
+      push(samples, {"pos": s.pos, "canvas_pos": s.canvas_pos, "pressure": s.pressure, "t": s.t})
+    }
+  }
+  if (len(samples) < 2) {
+    return null
+  }
+  let layer = doc_current_layer(ed_model())
+  if (g.tool == "pencil") {
+    pencil_commit(samples, layer)
+  } else {
+    if (g.source == "mouse") {
+      pen_set_input(null)
+    } else {
+      pen_set_input(g.source)
+    }
+    brush_commit(samples, ed.pen, g.source, layer)
+  }
+}
+
+-~> == Painting hooks ==
+
+-~> A brush that is being dragged is painted as a polyline through its points.
+-~> True when it painted the shape (the caller then skips the real raster).
+function view_tools_lite(s, off) {
+  let g = V.gest
+  if (g == null || !g.lite || !g.moved || s.kind != "brush" || s.line != g.line) {
+    return false
+  }
+  let k = V.cl.zoom
+  let pts = []
+  for (let i = 0; i < len(s.args[0]); i = i + 1) {
+    push(pts, s.args[0][i] * k)
+  }
+  let widest = 1.0
+  if (s.widths != null && len(s.widths) > 0) {
+    widest = 0.0
+    for (let i = 0; i < len(s.widths); i = i + 1) {
+      widest = widest + s.widths[i] / len(s.widths)
+    }
+  }
+  fb.spans(raster.stroke(tools_path(pts), math.max(1.0, widest)), off, s.fill)
+  true
+}
+
+-~> The selected anchor, drawn like a hovered one.
+function view_tools_paint_ui(cl) {
+  let a = V.sel_anchor
+  if (a == null) {
+    return null
+  }
+  let list = ed_shapes_of(a.line)
+  if (a.i >= len(list) || a.anchor >= len(list[a.i].anchors)) {
+    return null
+  }
+  let an = list[a.i].anchors[a.anchor]
+  let u = view_anchor_ui(cl, an.pos)
+  view_anchor(u[0], u[1], an.role, true)
+}
+
+-~> == The keyboard ==
+
+-~> Delete and Backspace remove the selected anchor. True when the key was used.
+function view_tools_key(e) {
+  let k = text.lower(e.key)
+  let a = V.sel_anchor
+  if (a == null || (k != "delete" && k != "backspace")) {
+    return false
+  }
+  let m = ed_model()
+  if (m.line != a.at_line || m.col != a.at_col) {
+    V.sel_anchor = null
+    return false
+  }
+  let list = ed_shapes_of(a.line)
+  V.sel_anchor = null
+  if (a.i >= len(list) || a.anchor >= len(list[a.i].anchors)) {
+    return false
+  }
+  let shape = list[a.i]
+  ed_remove_point(shape, shape.anchors[a.anchor].item)
+  V.hover_anchor = null
+  tools_done()
+  true
+}

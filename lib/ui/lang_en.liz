@@ -176,5 +176,7 @@ lang_register("en", {
   "undo.undone": "Undone: {what}",
   "undo.redone": "Redone: {what}",
   "undo.nothing": "nothing to undo",
-  "undo.nothing_redo": "nothing to redo"
+  "undo.nothing_redo": "nothing to redo",
+  "undo.move_kind": "move {kind}",
+  "status.anchor_selected": "anchor {n} selected · Delete removes it"
 })

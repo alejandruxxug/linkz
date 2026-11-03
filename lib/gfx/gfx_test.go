@@ -308,3 +308,13 @@ func TestBlend(t *testing.T) {
 		{10, 30, g(64), 0, "below the layers"},
 	})
 }
+
+// The raster cache drops what a paint didn't use (old versions of a dragged
+// shape) instead of wiping everything, and grows when one paint needs more.
+func TestRasterCache(t *testing.T) {
+	_, out := scene(t, "cache", 32, 32)
+	want := "size after drag: 4 limit: 4\nstill cached: true\ngrew to fit: true size: 10\n"
+	if out != want {
+		t.Errorf("got:\n%s\nwant:\n%s", out, want)
+	}
+}

@@ -176,5 +176,7 @@ lang_register("es", {
   "undo.undone": "Deshecho: {what}",
   "undo.redone": "Rehecho: {what}",
   "undo.nothing": "nada que deshacer",
-  "undo.nothing_redo": "nada que rehacer"
+  "undo.nothing_redo": "nada que rehacer",
+  "undo.move_kind": "mover {kind}",
+  "status.anchor_selected": "ancla {n} seleccionada · Supr la quita"
 })
