@@ -11,8 +11,33 @@
 -~>     and when that one comes out exactly as it was (same start, same end,
 -~>     same kind), the scan is back in step: everything after it stays, moved
 -~>     by the lines the edit added or took away.
--~> Anything else (no clean parse before or after, a statement that ran on
--~> past the check) gives null, and the whole text is scanned as usual.
+-~> A statement that stays is never copied to move it: the parse keeps a
+-~> `shift` per top-level statement (null when none moved), the lines to add
+-~> to the line numbers inside it (its own, its arguments', its children's).
+-~> stmt_line / stmt_end read a top-level statement's real lines, and
+-~> parse_flat makes the plain parse src.parse would give. The line records
+-~> of `lines` are kept as they are too: their `line` is not kept up to date
+-~> (a record's line is its place in the list).
+-~>
+-~> Broken code splices too: the errors of a spliced parse are the ones of the
+-~> scans that made it, each inside the statements that scan read (`local`:
+-~> true). A scan again drops the errors in what it reads. So the parse has
+-~> errors when the text does; the messages after the first may differ from a
+-~> full scan's (which only tell the code is broken). A parse with errors
+-~> from a full scan does not splice.
+-~> A scan with errors that does not get back in step (an unclosed bracket
+-~> that would run on into the statements after it) is spliced in anyway: the
+-~> broken statements are the ones of the scan, and the ones after it stay as
+-~> they were, the previous good ones. A full scan would make the rest of the
+-~> text part of the broken statement; the editor keeps showing the rows the
+-~> text had. The parse then keeps `approx`, [first, last]: the lines such
+-~> scans read, and the next splice scans them all again, so once the code is
+-~> mended the parse is exactly the full scan's. The rare text that such a
+-~> parse calls broken but is not (the bracket closes further down) is found
+-~> by the run of the whole drawing, which then scans it all again
+-~> (ed_run_now, doc_cache_rescan).
+-~> Anything else (a clean scan that ran on past the check) gives null, and
+-~> the whole text is scanned as usual.
 -~> host/scan.go is the scanner; tests/splice.liz checks this against it.
 
 -~> How many lines two line lists share at the start and at the end: [head, tail],
@@ -32,14 +57,31 @@ function lines_common(a, b) {
   return [head, tail]
 }
 
+-~> What to add to the line numbers in top-level statement i of a parse.
+function stmt_shift(p, i) {
+  if (p.shift === null) {
+    return 0
+  }
+  p.shift[i]
+}
+
+-~> The real first and last line of top-level statement i.
+function stmt_line(p, i) {
+  p.statements[i].line + stmt_shift(p, i)
+}
+
+function stmt_end(p, i) {
+  p.statements[i].end_line + stmt_shift(p, i)
+}
+
 -~> The index of the last statement that starts before `line`, or -1. The
 -~> statements are in order, so it is a binary search.
-function splice_before(st, line) {
+function splice_before(p, line) {
   let lo = 0
-  let hi = len(st)
+  let hi = len(p.statements)
   while (lo < hi) {
     let mid = (lo + hi) // 2
-    if (st[mid].line < line) {
+    if (stmt_line(p, mid) < line) {
       lo = mid + 1
     } else {
       hi = mid
@@ -51,12 +93,12 @@ function splice_before(st, line) {
 -~> The index of the first statement the scan starts with for a change that
 -~> begins on line `first`: the one in front of the change, moved back past any
 -~> that share a line with the one before it.
-function splice_start(st, first) {
-  let i = splice_before(st, first)
+function splice_start(p, first) {
+  let i = splice_before(p, first)
   if (i < 0) {
     return 0
   }
-  while (i > 0 && st[i - 1].end_line >= st[i].line) {
+  while (i > 0 && stmt_end(p, i - 1) >= stmt_line(p, i)) {
     i -= 1
   }
   i
@@ -66,21 +108,25 @@ function splice_start(st, first) {
 -~> i is the last old statement scanned again: the first one after the change,
 -~> plus any that start on the line it ends on. check is false when the scan
 -~> runs to the end of the text (there is nothing after it to get in step with).
-function splice_end(st, last) {
-  let i = splice_before(st, last + 1) + 1
-  if (i >= len(st)) {
-    return {"i": len(st) - 1, "check": false}
+function splice_end(p, last) {
+  let n = len(p.statements)
+  let i = splice_before(p, last + 1) + 1
+  if (i >= n) {
+    return {"i": n - 1, "check": false}
   }
-  let end = st[i].end_line
-  while (i + 1 < len(st) && st[i + 1].line <= end) {
+  let end = stmt_end(p, i)
+  while (i + 1 < n && stmt_line(p, i + 1) <= end) {
     i += 1
-    end = math.max(end, st[i].end_line)
+    end = math.max(end, stmt_end(p, i))
   }
   {"i": i, "check": true}
 }
 
--~> A statement, an argument list or a line list moved down by d lines.
+-~> A statement, an argument list or a line list moved down by d lines (copies).
 function stmt_moved(s, d) {
+  if (d == 0) {
+    return s
+  }
   let out = hash_copy(s)
   out.line = s.line + d
   out.end_line = s.end_line + d
@@ -112,68 +158,124 @@ function args_moved(args, d) {
   out
 }
 
-function lines_moved(list_in, d) {
+-~> Errors moved down by d lines (copies).
+function errors_moved(errs, d) {
   if (d == 0) {
-    return list_in
+    return errs
   }
   let out = []
-  for (let i = 0; i < len(list_in); i += 1) {
-    let li = hash_copy(list_in[i])
-    li.line = li.line + d
-    push(out, li)
+  for (let i = 0; i < len(errs); i += 1) {
+    push(out, {"line": errs[i].line + d, "column": errs[i].column, "message": errs[i].message})
   }
   out
 }
 
--~> Whether a statement of the new scan is the old one, moved by d lines.
-function splice_in_step(s, old, d) {
-  s.line == old.line + d && s.end_line == old.end_line + d && s.column == old.column && s.kind == old.kind
+-~> The plain parse: every statement at its real lines, every line record with
+-~> its own number, as src.parse gives it (for tests and anything that wants
+-~> the whole tree at once; it copies what moved).
+function parse_flat(p) {
+  let st = []
+  for (let i = 0; i < len(p.statements); i += 1) {
+    push(st, stmt_moved(p.statements[i], stmt_shift(p, i)))
+  }
+  let lines = []
+  for (let i = 0; i < len(p.lines); i += 1) {
+    let li = p.lines[i]
+    if (li.line != i + 1) {
+      li = hash_copy(li)
+      li.line = i + 1
+    }
+    push(lines, li)
+  }
+  {"lines": lines, "statements": st, "errors": p.errors}
+}
+
+-~> Whether a statement of the new scan (moved by `at`) is old statement i, moved by d lines.
+function splice_in_step(s, at, p, i, d) {
+  let old = p.statements[i]
+  s.line + at == stmt_line(p, i) + d && s.end_line + at == stmt_end(p, i) + d && s.column == old.column &&
+    s.kind == old.kind
 }
 
 -~> The parse of `lines`, made from the model `before` (whose parse is known),
--~> or null. The result: {"parse", "from", "old_to", "new_to", "delta", "i0",
--~> "count", "old", "rows", "names", "base"}: the lines from..new_to (old_to
--~> before the edit) were scanned again into the statements i0 .. i0 + count - 1,
--~> which replace `old`; the lines after them moved by delta. rows and names are
--~> the ones of `before` at that moment (null when it had none yet), base the
--~> id of its cache.
-function splice_parse(before, lines) {
+-~> or null. `ht` is [head, tail], the lines the two texts share at the start
+-~> and at the end (lines_common). The result: {"parse", "from", "old_to",
+-~> "new_to", "delta", "i0", "count", "old", "rows", "names", "name_parts",
+-~> "n_old", "base", "hidden"}: the lines from..new_to (old_to before the edit) were scanned
+-~> again into the statements i0 .. i0 + count - 1, which replace `old` (their
+-~> real lines are the scan's moved by from - 1); the lines after them moved
+-~> by delta. rows, names, name_parts and hidden are the ones of `before` at
+-~> that moment (null when it had none yet), n_old how many top-level
+-~> statements it had, base the id of its cache.
+function splice_parse(before, lines, ht) {
   let old = before.cache.parse
-  if (len(old.errors) > 0) {
+  if (len(old.errors) > 0 && old.local !== true) {
     return null
   }
   let a = before.lines
-  let ht = lines_common(a, lines)
   let first = ht[0] + 1
   let last = len(a) - ht[1]
+  if (old.approx != null) {
+    first = math.min(first, old.approx[0])
+    last = math.max(last, old.approx[1])
+  }
   let delta = len(lines) - len(a)
   let st = old.statements
-  let i0 = splice_start(st, first)
+  let i0 = splice_start(old, first)
   let from = 1
   if (i0 > 0) {
-    from = st[i0 - 1].end_line + 1
+    from = stmt_end(old, i0 - 1) + 1
   }
-  let stop = splice_end(st, last)
+  let stop = splice_end(old, last)
   let old_to = len(a)
   if (stop.check) {
-    old_to = st[stop.i].end_line
+    old_to = stmt_end(old, stop.i)
   }
   let new_to = old_to + delta
   let scan = src.parse(text.join(list.slice(lines, from - 1, new_to), "\n"))
-  if (len(scan.errors) > 0) {
-    return null
+  let fresh = scan.statements
+  let approx = null
+  if (stop.check && (len(fresh) == 0 || !splice_in_step(fresh[len(fresh) - 1], from - 1, old, stop.i, delta))) {
+    if (len(scan.errors) == 0) {
+      return null
+    }
+    approx = [from, new_to]
   }
-  let fresh = stmts_moved(scan.statements, from - 1)
-  if (stop.check && (len(fresh) == 0 || !splice_in_step(fresh[len(fresh) - 1], st[stop.i], delta))) {
-    return null
+  let n = len(st)
+  let shift = null
+  if (old.shift !== null || delta != 0 || (from > 1 && len(fresh) > 0)) {
+    shift = []
+    for (let i = 0; i < i0; i += 1) {
+      push(shift, stmt_shift(old, i))
+    }
+    for (let i = 0; i < len(fresh); i += 1) {
+      push(shift, from - 1)
+    }
+    for (let i = stop.i + 1; i < n; i += 1) {
+      push(shift, stmt_shift(old, i) + delta)
+    }
+  }
+  let errors = []
+  for (let i = 0; i < len(old.errors); i += 1) {
+    let e = old.errors[i]
+    if (e.line < from) {
+      push(errors, e)
+    }
+  }
+  errors = errors + errors_moved(scan.errors, from - 1)
+  for (let i = 0; i < len(old.errors); i += 1) {
+    let e = old.errors[i]
+    if (e.line > old_to) {
+      push(errors, {"line": e.line + delta, "column": e.column, "message": e.message})
+    }
   }
   let parse = {
-    "lines": list.slice(old.lines, 0, from - 1) + lines_moved(scan.lines, from - 1) +
-      lines_moved(list.slice(old.lines, old_to, len(old.lines)), delta),
-    "statements": list.slice(st, 0, i0) + fresh + stmts_moved(list.slice(st, stop.i + 1, len(st)), delta),
-    "errors": []
+    "lines": list.slice(old.lines, 0, from - 1) + scan.lines + list.slice(old.lines, old_to, len(old.lines)),
+    "statements": list.slice(st, 0, i0) + fresh + list.slice(st, stop.i + 1, n),
+    "shift": shift, "errors": errors, "local": true, "approx": approx
   }
   {"parse": parse, "from": from, "old_to": old_to, "new_to": new_to, "delta": delta, "i0": i0,
-   "count": len(fresh), "old": list.slice(st, i0, stop.i + 1), "rows": before.cache.rows,
-   "names": before.cache.names, "base": before.cache.id}
+   "count": len(fresh), "old": list.slice(st, i0, stop.i + 1), "rows": doc_cache_rows(before.cache),
+   "names": before.cache.names, "name_parts": before.cache.name_parts, "n_old": n, "base": before.cache.id,
+   "hidden": before.cache.hidden}
 }

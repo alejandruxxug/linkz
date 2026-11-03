@@ -341,9 +341,10 @@ beyond the grid: ["9"] []
 // back from the kept buffers.
 func TestTiles(t *testing.T) {
 	img, out := scene(t, "tiles", 60, 40)
-	want := `tiles: 3 2 6
+	want := `tiles: 3 2 1
 first: 6 1200 0
-second: 3 14 [[14, 10, 16, 12], [16, 10, 19, 12], [38, 28, 40, 30]]
+regions: [[38, 28, 40, 30], [14, 10, 19, 13]]
+second: 3 2 19 [[38, 28, 40, 30], [14, 10, 19, 13]]
 nothing dirty: 0
 `
 	if out != want {
@@ -354,7 +355,7 @@ nothing dirty: 0
 		{24, 15, blue, 0, "the box, left tile"},
 		{28, 16, blue, 0, "the box, right tile"},
 		{29, 16, red, 0, "right of the box"},
-		{26, 17, red, 0, "below the box"},
+		{26, 18, red, 0, "below the box"},
 		{48, 33, blue, 0, "the corner box, cut to the picture"},
 		{49, 34, blue, 0, "the last pixel of the picture"},
 		{47, 34, red, 0, "left of the corner box"},

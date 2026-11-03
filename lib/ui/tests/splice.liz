@@ -1,6 +1,10 @@
 -~> The incremental parse (doc_splice.liz) against the whole scan: after each of
--~> many random edits, the parse, the rows and the names worked out from the
--~> last model's cache must be exactly the ones of a fresh full parse.
+-~> many random edits, the parse, the rows, the hidden rows and the names
+-~> worked out from the last model's cache must be exactly the ones of a fresh
+-~> full parse (with every line number made real: parse_flat, row_stmt). Broken
+-~> code splices too: then it must have errors, whatever they say and whatever
+-~> the statements after the broken one are; once the code is mended, all
+-~> must be exactly the full parse's again.
 let code = "-~> lzdraw 1
 let horizon = 300 -~> sky line
 
@@ -66,46 +70,92 @@ function edit(lines) {
 }
 
 function same_parse(a, b) {
-  a.lines === b.lines && a.statements === b.statements && a.errors === b.errors
+  let fa = parse_flat(a)
+  let fb = parse_flat(b)
+  fa.lines === fb.lines && fa.statements === fb.statements && fa.errors === fb.errors
 }
 
-let m = doc_new(code)
-doc_parsed(m)
-doc_rows(m, null, null)
-doc_names(m)
-let spliced = 0
-let bad = 0
-let start = doc_text(m)
-for (let round = 0; round < 400; round += 1) {
-  let next = doc_with(m, edit(m.lines), 1, 0)
-  let p = doc_parsed(next)
-  if (next.cache.splice != null) {
-    spliced += 1
+-~> Rows with their statements at their real lines (copies, the rows stay as they are).
+function rows_plain(rows) {
+  let out = []
+  for (let i = 0; i < len(rows); i += 1) {
+    let r = hash_copy(rows[i])
+    row_stmt(r)
+    push(out, r)
   }
-  let fresh = doc_new(doc_text(next))
-  let full = doc_parsed(fresh)
-  if (!same_parse(p, full)) {
-    bad += 1
-    puts("parse differs after round", round)
-    puts(doc_text(next))
-  } elif (doc_rows(next, null, null) !== doc_rows(fresh, null, null)) {
-    bad += 1
-    puts("rows differ after round", round)
-  } elif (doc_names(next) !== doc_names(fresh)) {
-    bad += 1
-    puts("names differ after round", round)
-  }
-  -~> start over now and then, and mostly after an edit that broke the code (only
-  -~> clean code splices), so the text stays close to a drawing
-  if (round % 25 == 24 || (len(full.errors) > 0 && rand(3) > 0)) {
-    next = doc_with(next, text.lines(start), 1, 0)
-    doc_parsed(next)
-    doc_rows(next, null, null)
-    doc_names(next)
-  }
-  m = next
+  out
 }
-puts("spliced", spliced, "of 400, differences", bad)
+
+-~> Random edits from code; `keep_broken` lets broken code stay broken for many
+-~> edits (a splice from a broken parse), else it mostly starts over after one.
+function stress(rounds, keep_broken) {
+  let m = doc_new(code)
+  doc_parsed(m)
+  doc_rows(m, null, null)
+  doc_names(m)
+  let spliced = 0
+  let broken = 0
+  let unsure = 0
+  let bad = 0
+  let start = doc_text(m)
+  for (let round = 0; round < rounds; round += 1) {
+    let next = doc_with(m, edit(m.lines), 1, 0)
+    let p = doc_parsed(next)
+    if (next.cache.splice != null) {
+      spliced += 1
+      if (len(p.errors) > 0) {
+        broken += 1
+      }
+    }
+    let fresh = doc_new(doc_text(next))
+    let full = doc_parsed(fresh)
+    if (len(full.errors) > 0) {
+      -~> broken: only that it is (the statements after a broken one may be the old ones)
+      if (len(p.errors) == 0) {
+        bad += 1
+        puts("broken text taken for clean after round", round)
+      }
+    } elif (p.approx != null) {
+      -~> taken for broken, which the editor's run of the drawing finds out
+      unsure += 1
+    } elif (!same_parse(p, full)) {
+      bad += 1
+      puts("parse differs after round", round)
+      puts(doc_text(next))
+    } elif (rows_plain(doc_rows(next, null, null)) !== rows_plain(doc_rows(fresh, null, null))) {
+      bad += 1
+      puts("rows differ after round", round)
+    } elif (doc_hidden_key(next) != doc_hidden_key(fresh)) {
+      bad += 1
+      puts("hidden rows differ after round", round)
+    } elif (doc_names(next) !== doc_names(fresh)) {
+      bad += 1
+      puts("names differ after round", round)
+    }
+    -~> start over now and then, and (unless keep_broken) mostly after an edit
+    -~> that broke the code, so the text stays close to a drawing
+    if (round % 25 == 24 || (!keep_broken && len(full.errors) > 0 && rand(3) > 0)) {
+      next = doc_with(next, text.lines(start), 1, 0)
+      doc_parsed(next)
+      doc_rows(next, null, null)
+      doc_names(next)
+    }
+    m = next
+  }
+  puts("spliced", spliced, "of", rounds, "(" + str(broken) + " broken, " + str(unsure) + " mended but unsure), differences", bad)
+}
+
+stress(400, false)
+stress(300, true)
+
+-~> Undo and redo of an edit that added a line: the rows move back and forth
+-~> between the two texts, and each one still gets its own.
+let u0 = doc_new(code)
+let u0_rows = rows_plain(doc_rows(u0, null, null))
+let u1 = doc_with(u0, list.slice(u0.lines, 0, 10) + ["  circle((1, 1), 1, #000)"] + list.slice(u0.lines, 10, len(u0.lines)), 11, 0)
+let u1_rows = rows_plain(doc_rows(u1, null, null))
+puts(u1.cache.rows_from.delta, rows_plain(doc_rows(u0, null, null)) === u0_rows,
+     rows_plain(doc_rows(u1, null, null)) === u1_rows, doc_rows(u1, null, null)[11].line)
 
 -~> An edit inside a layer, keeping the line count, splices the rows and keeps the rest.
 let a = doc_new(code)

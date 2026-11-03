@@ -1,8 +1,11 @@
 -~> A 40 x 30 picture in 16-pixel tiles (3 x 2, the last ones cut). The first
 -~> render paints everything red; then marks repaint only their boxes (cut
--~> to the tiles and the picture), blue, and the rest is copied from the kept tiles.
+-~> to the picture), blue, each box once however many tiles it covers, and the
+-~> rest is copied from the kept tiles. Overlapping marks make one region.
 let t = tiles_new("test", (40, 30), 16)
-puts("tiles:", t.cols, t.rows, len(t.dirty))
+-~> boxes this small are never worth joining
+t.slack = 0
+puts("tiles:", t.cols, t.rows, len(t.regions))
 let color = #ff0000
 let calls = []
 function paint(box, off) {
@@ -10,13 +13,15 @@ function paint(box, off) {
   fb.fill(off, (40, 30), color)
 }
 tiles_render(t, paint)
-puts("first:", t.painted, t.area, len(t.dirty))
+puts("first:", t.painted, t.area, len(t.regions))
 color = #0000ff
 calls = []
 tiles_mark(t, [14.5, 10, 18.2, 12])
 tiles_mark(t, [38, 28, 50, 50])
+tiles_mark(t, [15, 11, 17, 13])
+puts("regions:", t.regions)
 tiles_render(t, paint)
-puts("second:", t.painted, t.area, calls)
+puts("second:", t.painted, t.regions_painted, t.area, calls)
 tiles_render(t, paint)
 puts("nothing dirty:", t.painted)
 fb.fill((0, 0), (60, 40), #ffffff)

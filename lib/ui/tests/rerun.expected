@@ -23,3 +23,15 @@ a let: patch false same true errors 0
 with a let: patch false same true errors 0
 true false false false
 true false false
+a blank line: range 0+4 -> 4, lines move 1 same true errors 0
+and away again: range 0+4 -> 4, lines move -1 same true errors 0
+delete a row: range 0+4 -> 3, lines move -1 same true errors 0
+paste two rows: range 0+3 -> 5, lines move 2 same true errors 0
+another kind: range 3+3 -> 3, lines move 0 same true errors 0
+into the layer above: whole run same true errors 0
+a new layer: whole run same true errors 0
+a call that draws nothing: whole run same true errors 0
+back: whole run same true errors 0
+the canvas: whole run same true errors 0
+broken: whole run same false errors 1
+mended: whole run same true errors 0

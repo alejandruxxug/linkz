@@ -37,7 +37,9 @@ function view_panel_key(name) {
   view_canvas_key()
 }
 
-function view_panel_paint(name) {
+-~> Paints a panel; `forced` when it must be painted whole. Returns the part
+-~> that changed (UI pixels), or null for all of it (only the canvas tells).
+function view_panel_paint(name, forced) {
   if (name == "toolbar") {
     view_paint_toolbar()
   } elif (name == "tabs") {
@@ -49,8 +51,9 @@ function view_panel_paint(name) {
   } elif (name == "status") {
     view_paint_status()
   } else {
-    view_paint_canvas()
+    return view_paint_canvas(forced)
   }
+  null
 }
 
 -~> Shows the tooltip once the pointer has rested long enough.
@@ -99,10 +102,15 @@ function view_paint() {
       g_ui()
       fb.unclip()
       g_clip(r[0], r[1], r[2], r[3])
-      view_panel_paint(name)
+      let part = view_panel_paint(name, V.force[name] == true)
       g_ui()
       fb.unclip()
-      g_dirty(r[0], r[1], r[2], r[3])
+      if (part != null) {
+        r = part
+      }
+      if (r[2] > 0 && r[3] > 0) {
+        g_dirty(r[0], r[1], r[2], r[3])
+      }
       V.keys[name] = key
       painted = true
     }

@@ -14,7 +14,7 @@ let ed = {
   "color": "#1d1d1f", "width": 4, "pen": "ink",
   "undo_labels": [], "redo_labels": [], "label": null, "gesture_label": null,
   "merge_col": -1, "merge_at": 0, "note": null, "runs": 0,
-  "shapes_ver": 0, "shape_lines": null, "patch": null, "ran": null
+  "shapes_ver": 0, "shapes_rising": true, "shape_lines": null, "patch": null, "ran": null
 }
 
 -~> How many steps the history keeps, and how long a pause (ms) ends a typing step.
@@ -106,6 +106,7 @@ function ed_reset(code, file) {
   ed.folded = {}
   ed.errors = []
   ed.shapes = []
+  ed.shapes_rising = true
   ed.shapes_ver += 1
   ed.patch = null
   ed.ran = null
@@ -123,7 +124,7 @@ function ed_dirty() {
 -~> key on the same row again joins the previous undo step.
 function ed_apply(newm, key) {
   let old = ed_model()
-  let changed = doc_text(newm) != doc_text(old)
+  let changed = !doc_same_text(newm, old)
   if (changed) {
     ed.pending = true
     ed.refusal = null
@@ -227,7 +228,7 @@ function ed_end_gesture() {
   ed.gesture = null
   ed.gesture_label = null
   ed.merge = null
-  if (start != null && doc_text(start) != doc_text(ed_model())) {
+  if (start != null && !doc_same_text(start, ed_model())) {
     if (label == null) {
       label = {"key": "undo.gesture", "vals": null}
     }

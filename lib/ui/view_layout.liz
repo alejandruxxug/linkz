@@ -12,7 +12,7 @@ let V = {
   "hover": "", "tip": null, "tip_key": "", "tip_since": 0, "tip_due": 0,
   "dialog": null, "focus": null, "drag": null, "flash": 0,
   "keys": {}, "force": {}, "popup_rect": null,
-  "items": null, "items_key": "", "items_at": null, "pinned": null, "hidden_key": "", "hidden_for": null, 
+  "items": null, "items_key": "", "items_at": null, "pinned": null, "items_caret": "", 
   "paints": 0, "painted_ms": 0, "pen_note": "", "hover_anchor": null,
   "zoom": 1.0, "host_origin": null, "crect": null, "drawing_rect": null, "hits": {}
 }

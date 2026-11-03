@@ -48,3 +48,45 @@ edit(4, "  circle((300, 90), 47, #e0a526)", "with a let")
 -~> pens.NAME is a literal, anything else after "pens." is not.
 puts(rerun_pen_name("pens.ink"), rerun_pen_name("pens."), rerun_pen_name("pens.ink.min"), rerun_pen_name("pen.ink"))
 puts(rerun_no_call("{\"size\": (400, 300)}"), rerun_no_call("{\"bg\": f (1)}"), rerun_no_call("{\"bg\": g[0](1)}"))
+
+-~> A plain drawing (every call draws a shape): an edit that adds or takes away
+-~> lines runs only the statements it touched, and the result is still what a
+-~> whole run gives.
+let plain = "-~> lzdraw 1
+layer back
+  rect((0, 0), (400, 300), #fbf8ef)
+  circle((100, 100), 30, #3fa34d)
+layer front
+  circle((200, 150), 20, #e0a526)
+  stroke([(10, 10), (60, 40)], #1d1d1f, 3)
+rect((300, 200), (50, 50), #2d6a8f)
+canvas = {\"size\": (400, 300)}
+"
+-~> Puts the lines in place of lines a..b (none when b < a) and runs the drawing.
+function splice_edit(a, b, put, label) {
+  let lines = ed_model().lines
+  ed_apply(doc_with(ed_model(), list.slice(lines, 0, a - 1) + put + list.slice(lines, b, len(lines)), a, 0), null)
+  ed_run()
+  let kind = "whole run"
+  if (ed.patch != null && ed.patch.kind == "range") {
+    kind = "range " + str(ed.patch.start) + "+" + str(ed.patch.removed) + " -> " + str(len(ed.patch.added)) +
+      ", lines move " + str(ed.patch.delta)
+  } elif (ed.patch != null) {
+    kind = "row"
+  }
+  puts(label + ":", kind, "same", same_as_whole_run(), "errors", len(ed.errors))
+}
+ed_reset(plain, "/p.lzdraw")
+ed_run()
+splice_edit(5, 4, [""], "a blank line")
+splice_edit(5, 5, [], "and away again")
+splice_edit(4, 4, [], "delete a row")
+splice_edit(4, 3, ["  circle((100, 100), 30, #3fa34d)", "  circle((120, 100), 10, #000)"], "paste two rows")
+splice_edit(7, 7, ["  ellipse((200, 150), (20, 10), #e0a526)"], "another kind")
+splice_edit(9, 9, ["  rect((300, 200), (50, 50), #2d6a8f)"], "into the layer above")
+splice_edit(9, 8, ["layer top", "  circle((5, 5), 5, #000)"], "a new layer")
+splice_edit(4, 4, ["  opacity(0.5)"], "a call that draws nothing")
+splice_edit(4, 4, ["  circle((100, 100), 30, #3fa34d)"], "back")
+splice_edit(13, 13, ["canvas = {\"size\": (400, 301)}"], "the canvas")
+splice_edit(3, 3, ["  rect((0, 0), (400, 300),"], "broken")
+splice_edit(3, 3, ["  rect((0, 0), (400, 300), #fbf8ef)"], "mended")

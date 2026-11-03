@@ -11,8 +11,15 @@
 -~>   - the changed row is a call of the same kind on one line, keeps its
 -~>     indentation (so its layer), made exactly one shape before and makes
 -~>     exactly one shape alone, without errors or output
--~> Otherwise the whole drawing runs. The patch says which shape changed,
--~> so the canvas repaints only around it (view_scene.liz).
+-~> When the drawing is also plain (every call draws a shape: no opacity(),
+-~> blend() or other call that could reach rows of another statement), an edit
+-~> that changes any rows, adds or takes away lines runs only the top-level
+-~> statements it touched (the splice's region, doc_splice.liz), as one small
+-~> drawing of their own: their shapes replace the old ones of those lines,
+-~> and the shapes after them move by the lines the edit added or took away.
+-~> That needs the region not to hold the canvas, and to be plain too.
+-~> Otherwise the whole drawing runs. The patch says which shapes changed,
+-~> so the canvas repaints only around them (view_scene.liz).
 
 -~> Whether a parsed argument is a literal.
 function rerun_literal(a) {
@@ -76,66 +83,82 @@ function rerun_literal_call(st) {
   true
 }
 
--~> Whether every statement is a layer, a literal call or a call-free canvas assignment.
-function rerun_literal_statements(stmts, lines) {
+-~> Whether every statement is a layer, a literal call or a call-free canvas
+-~> assignment. The statements' real lines are theirs plus d.
+function rerun_literal_statements(stmts, d, lines) {
   for (let i = 0; i < len(stmts); i += 1) {
-    let st = stmts[i]
-    if (st.kind == "layer") {
-      if (!rerun_literal_statements(st.children, lines)) {
-        return false
-      }
-    } elif (st.kind == "assign" && st.name == "canvas") {
-      for (let l = st.line; l <= st.end_line; l += 1) {
-        if (!rerun_no_call(comment_split(lines[l - 1])[0])) {
-          return false
-        }
-      }
-    } elif (!rerun_literal_call(st)) {
+    if (!rerun_literal_statement(stmts[i], d, lines)) {
       return false
     }
   }
   true
 }
 
+function rerun_literal_statement(st, d, lines) {
+  if (st.kind == "layer") {
+    return rerun_literal_statements(st.children, d, lines)
+  }
+  if (st.kind == "assign" && st.name == "canvas") {
+    for (let l = st.line + d; l <= st.end_line + d; l += 1) {
+      if (!rerun_no_call(comment_split(lines[l - 1])[0])) {
+        return false
+      }
+    }
+    return true
+  }
+  rerun_literal_call(st)
+}
+
 -~> Whether a model is all literal rows (kept on the run record, worked out once).
 function rerun_all_literal(ran) {
   if (ran.literal === null) {
     let p = doc_parsed(ran.model)
-    ran.literal = len(p.errors) == 0 && rerun_literal_statements(p.statements, ran.model.lines)
+    let ok = len(p.errors) == 0
+    let plain = ok
+    for (let i = 0; ok && i < len(p.statements); i += 1) {
+      ok = rerun_literal_statement(p.statements[i], stmt_shift(p, i), ran.model.lines)
+      plain = plain && rerun_plain_statement(p.statements[i], true)
+    }
+    ran.literal = ok
+    ran.plain = ok && plain
   }
   ran.literal
 }
 
--~> The one line where two line lists differ (counted from 1), 0 when they are
--~> the same, or -1 when more than one line or the number of lines differs.
-function rerun_changed_line(a, b) {
-  if (len(a) != len(b)) {
-    return -1
-  }
-  let at = 0
-  for (let i = 0; i < len(a); i += 1) {
-    if (a[i] != b[i]) {
-      if (at > 0) {
-        return -1
+-~> Whether a statement of a literal drawing is plain: a layer of plain
+-~> statements or a shape call (or, where `canvas_ok`, the canvas).
+function rerun_plain_statement(st, canvas_ok) {
+  if (st.kind == "layer") {
+    for (let i = 0; i < len(st.children); i += 1) {
+      if (!rerun_plain_statement(st.children[i], false)) {
+        return false
       }
-      at = i + 1
     }
+    return true
   }
-  at
+  if (st.kind == "assign") {
+    return canvas_ok
+  }
+  st.kind == "call" && is_shape_call(st.callee)
 }
 
--~> The index in shapes of the only shape made by `line`, or -1.
-function rerun_only_shape(shapes, line) {
-  let at = -1
-  for (let i = 0; i < len(shapes); i += 1) {
-    if (shapes[i].line == line) {
-      if (at >= 0) {
-        return -1
-      }
-      at = i
-    }
+-~> Whether a model is all literal rows and plain (see the top).
+function rerun_all_plain(ran) {
+  rerun_all_literal(ran) && ran.plain
+}
+
+-~> The same from a doc_diff of texts of na and nb lines.
+function rerun_diff_line(d, na, nb) {
+  if (na != nb) {
+    return -1
   }
-  at
+  if (d.head == na) {
+    return 0
+  }
+  if (d.head + d.tail == na - 1) {
+    return d.head + 1
+  }
+  -1
 }
 
 -~> Runs only the changed row of m when that is safe (see the top). Returns the
@@ -145,7 +168,7 @@ function rerun_row(ran, m) {
   if (ran == null) {
     return null
   }
-  let line = rerun_changed_line(ran.model.lines, m.lines)
+  let line = rerun_diff_line(doc_diff(m, ran.model), len(ran.model.lines), len(m.lines))
   if (line <= 0) {
     return null
   }
@@ -175,4 +198,69 @@ function rerun_row(ran, m) {
   s.layer = old.layer
   s.styles = old.styles
   {"index": index, "old": old, "new": s, "ms": r.ms, "steps": r.steps}
+}
+
+-~> Runs only the top-level statements an edit touched, when that is safe
+-~> (see the top). Returns the patch {"kind": "range", "start", "removed",
+-~> "added", "delta", "after", "ms", "steps"}: the shapes start ..
+-~> start + removed - 1 make way for `added`, and the ones from `after` on (the
+-~> lines after the region, in the old list) move down by delta lines. Or
+-~> null when the whole drawing must run.
+function rerun_region(ran, m) {
+  if (ran == null || !rerun_all_plain(ran) || !ed.shapes_rising) {
+    return null
+  }
+  let p = doc_parsed(m)
+  if (len(p.errors) > 0) {
+    return null
+  }
+  let sp = m.cache.splice
+  if (sp == null || sp.base != ran.model.cache.id) {
+    let base = ran.model
+    doc_parsed(base)
+    let d = doc_diff(m, base)
+    sp = splice_parse(base, m.lines, [d.head, d.tail])
+  }
+  if (sp == null || len(sp.parse.errors) > 0) {
+    return null
+  }
+  for (let i = 0; i < len(sp.old); i += 1) {
+    if (sp.old[i].kind == "assign") {
+      return null
+    }
+  }
+  let fresh = list.slice(sp.parse.statements, sp.i0, sp.i0 + sp.count)
+  for (let i = 0; i < len(fresh); i += 1) {
+    if (!rerun_literal_statement(fresh[i], sp.from - 1, m.lines) || !rerun_plain_statement(fresh[i], false)) {
+      return null
+    }
+  }
+  let r = src.run(text.join(list.slice(m.lines, sp.from - 1, sp.new_to), "\n"))
+  if (len(r.errors) > 0 || r.printed != "") {
+    return null
+  }
+  let added = r.shapes
+  for (let i = 0; i < len(added); i += 1) {
+    added[i].line += sp.from - 1
+  }
+  let start = rerun_first_at(ed.shapes, sp.from)
+  let after = rerun_first_at(ed.shapes, sp.old_to + 1)
+  {"kind": "range", "start": start, "removed": after - start, "added": added, "delta": sp.delta, "after": after,
+   "ms": r.ms, "steps": r.steps}
+}
+
+-~> The index of the first shape on line `line` or after it (shapes in rising
+-~> line order), len(shapes) when there is none.
+function rerun_first_at(shapes, line) {
+  let lo = 0
+  let hi = len(shapes)
+  while (lo < hi) {
+    let mid = (lo + hi) // 2
+    if (shapes[mid].line < line) {
+      lo = mid + 1
+    } else {
+      hi = mid
+    }
+  }
+  lo
 }

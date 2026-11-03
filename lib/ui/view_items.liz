@@ -5,48 +5,141 @@
 -~> the tool strip.
 -~> They are made again only when the rows change, or the caret goes onto or
 -~> off an empty row (the only rows whose items depend on the caret). After an
--~> edit that rescanned a few statements in place (editor_rows.liz), only
--~> their items are made again, when they take the same room as before.
+-~> edit that rescanned a few statements (editor_rows.liz), only their items
+-~> are made again, when the item after them comes out the same; the items
+-~> after them are moved where they are (the lines and the room the edit added
+-~> or took away), as their rows were. The rows whose error or caret changed
+-~> are made again the same way, one by one (with the row before them, whose
+-~> ⊕ item looks at them). Only a change of folds or language, or too many of
+-~> those rows, makes every item again.
 -~> V.items_at keeps, per row, the index of its first item (and one more
 -~> entry: the number of items), which is what that needs.
+
+-~> More error rows than this make all the items again.
+let view_items_max_rows = 8
 
 function view_items() {
   let rows = view_rows()
   let m = ed_model()
-  let caret = ""
+  let caret = 0
   if (m.line <= len(rows) && rows[m.line - 1].kind == "empty") {
-    caret = str(m.line)
+    caret = m.line
   }
-  let key = ed_rows_key() + "|" + caret
+  let key = ed_rows_key() + "|" + str(caret)
   if (V.items != null && V.items_key == key) {
     return V.items
   }
   perf_begin("rows")
-  let from = m.cache.rows_from
+  let looks = lang_get() + "|" + rows_folds_key(ed.folded)
+  let errs = view_items_errors(len(rows))
   let done = false
-  if (V.items != null && from != null && rows_key(ed.errors, ed.folded) == "" &&
-      V.items_key == str(from.base) + "||" + caret) {
-    done = view_items_splice(rows, m, from)
+  if (V.items != null && V.items_looks == looks) {
+    done = view_items_update(rows, m, caret, errs)
   }
   if (!done) {
     view_items_build(rows, m)
   }
   perf_end()
   V.items_key = key
+  V.items_id = doc_id(m)
+  V.items_looks = looks
+  V.items_caret = caret
+  V.items_errs = errs
   V.visible = null
   V.items
 }
 
--~> The layer rows among rows i0 .. i1 - 1 that get a ⊕ item, by the line they end on.
+-~> The lines of the rows that show an error (ed.errors, as rows_decorate puts them).
+function view_items_errors(n) {
+  let out = []
+  for (let i = 0; i < len(ed.errors); i += 1) {
+    let k = ed.errors[i].line
+    if (type(k) == "INTEGER" && k >= 1 && k <= n) {
+      push(out, k)
+    }
+  }
+  out
+}
+
+-~> Brings the items from the last text (V.items_id) to this one, when the
+-~> rows are its rows with a rescanned part (rows_from) or the very same,
+-~> making again only that part and the rows whose error or caret changed.
+-~> False when it can't: then everything is made again.
+function view_items_update(rows, m, caret, errs) {
+  let from = null
+  if (V.items_id != doc_id(m)) {
+    from = m.cache.rows_from
+    if (from == null || from.base != V.items_id) {
+      return false
+    }
+  }
+  -~> the rows that changed outside the rescanned part, at their new lines
+  let lines = []
+  let old = V.items_errs
+  if (V.items_caret > 0) {
+    old = old + [V.items_caret]
+  }
+  for (let i = 0; i < len(old); i += 1) {
+    let l = old[i]
+    if (from != null) {
+      if (l >= from.from && l <= from.old_to) {
+        continue
+      }
+      if (l > from.old_to) {
+        l += from.delta
+      }
+    }
+    push(lines, l)
+  }
+  lines = lines + errs
+  if (caret > 0) {
+    push(lines, caret)
+  }
+  if (len(lines) > view_items_max_rows) {
+    return false
+  }
+  if (from != null && !view_items_splice(rows, m, from)) {
+    return false
+  }
+  lines = list.sort(lines)
+  let done = 0
+  for (let i = 0; i < len(lines); i += 1) {
+    let l = lines[i]
+    if (l > done) {
+      let a = math.max(math.max(1, l - 1), done + 1)
+      if (!view_items_splice(rows, m, {"from": a, "to": l, "old_to": l, "delta": 0})) {
+        return false
+      }
+      done = l
+    }
+  }
+  true
+}
+
+-~> The layer rows that get a ⊕ item after one of the rows i0 .. i1 - 1, by
+-~> the line they end on, outermost first: the layers among those rows and
+-~> the ones around them (a row can end a layer that starts above it).
 function view_items_adds(rows, i0, i1) {
   let adds = {}
+  let seen = {}
   for (let i = i0; i < i1; i = i + 1) {
-    let r = rows[i]
-    if (r.kind == "layer" && r.visible && !r.collapsed) {
-      if (adds[r.end_line] == null) {
-        adds[r.end_line] = []
+    let n = i + 1
+    while (n > 0 && seen[n] == null) {
+      seen[n] = true
+      let r = rows[n - 1]
+      if (r.kind == "layer" && r.visible && !r.collapsed && r.end_line > i0 && r.end_line <= i1) {
+        if (adds[r.end_line] == null) {
+          adds[r.end_line] = []
+        }
+        push(adds[r.end_line], r)
       }
-      push(adds[r.end_line], r)
+      n = r.parent
+    }
+  }
+  let ends = keys(adds)
+  for (let i = 0; i < len(ends); i += 1) {
+    if (len(adds[ends[i]]) > 1) {
+      adds[ends[i]] = list.sort(adds[ends[i]], function(a, b) { a.line < b.line })
     }
   }
   adds
@@ -69,15 +162,18 @@ function view_items_build(rows, m) {
   V.items_at = at
 }
 
--~> Only the items of the rows from.from .. from.to (made again in place, the
--~> rest of the rows are the same ones). False when they don't fit where the
--~> old ones were: then everything is made again.
+-~> Only the items of the rows from.from .. from.to (from.old_to before the
+-~> edit) made again; the rest of the rows are the same ones, the ones after
+-~> moved by from.delta lines. False when the items after them would not come
+-~> out the same: then everything is made again.
 function view_items_splice(rows, m, from) {
   let old = V.items
   let at = V.items_at
+  let d = from.delta
   let i0 = from.from - 1
   let i1 = from.to
-  if (at == null || len(at) != len(rows) + 1) {
+  let old_i1 = from.old_to
+  if (at == null || len(at) != len(rows) - d + 1) {
     return false
   }
   for (let i = i0; i < i1; i = i + 1) {
@@ -89,7 +185,7 @@ function view_items_splice(rows, m, from) {
     return false
   }
   let a = at[i0]
-  let b = at[i1]
+  let b = at[old_i1]
   let prev = ""
   let off = 0
   if (a > 0) {
@@ -99,23 +195,46 @@ function view_items_splice(rows, m, from) {
   let mid = []
   let mid_at = []
   let end = view_items_fill(rows, m, view_items_adds(rows, i0, i1), i0, i1, mid, mid_at, a, prev, off)
-  let old_end = 0
+  let old_end = off
   let old_last = prev
-  if (b > 0) {
-    old_end = old[b - 1].y + old[b - 1].h
-  }
   if (b > a) {
+    old_end = old[b - 1].y + old[b - 1].h
     old_last = old[b - 1].t
   }
   let new_last = prev
   if (len(mid) > 0) {
     new_last = mid[len(mid) - 1].t
   }
-  if (len(mid) != b - a || end != old_end || new_last != old_last) {
+  if (new_last != old_last) {
     return false
   }
-  V.items = list.slice(old, 0, a) + mid + list.slice(old, b, len(old))
-  V.items_at = list.slice(at, 0, i0) + mid_at + list.slice(at, i1, len(at))
+  let after = list.slice(old, b, len(old))
+  let dy = end - old_end
+  if (d != 0) {
+    -~> a row with an error or a fold is a copy of its own (rows_decorate): the
+    -~> moved items take the rows of this text
+    for (let i = 0; i < len(after); i += 1) {
+      let it = after[i]
+      it.line += d
+      it.y += dy
+      it.row = rows[it.line - 1]
+    }
+  } elif (dy != 0) {
+    for (let i = 0; i < len(after); i += 1) {
+      after[i].y += dy
+    }
+  }
+  let after_at = list.slice(at, old_i1, len(at))
+  let dn = len(mid) - (b - a)
+  if (dn != 0) {
+    let moved = []
+    for (let i = 0; i < len(after_at); i += 1) {
+      push(moved, after_at[i] + dn)
+    }
+    after_at = moved
+  }
+  V.items = list.slice(old, 0, a) + mid + after
+  V.items_at = list.slice(at, 0, i0) + mid_at + after_at
   true
 }
 

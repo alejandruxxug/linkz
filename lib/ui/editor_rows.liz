@@ -10,7 +10,9 @@
 -~>   parent   the line of the statement this row belongs to, 0 at the top
 -~>   end_line the last line of its statement (more than `line` for a layer with a body)
 -~>   foldable, collapsed, visible   whether it can fold, is folded, is shown
--~>   stmt     the src.parse statement that starts on this line, or null
+-~>   stmt     the src.parse statement that starts on this line, or null. After an
+-~>            edit that moved it, its line numbers are the old ones until
+-~>            row_stmt(row) is asked for it (the panel only reads its kind and name)
 
 let shape_calls = ["circle", "ellipse", "rect", "line", "polygon", "stroke", "brush"]
 
@@ -18,23 +20,39 @@ function is_shape_call(name) {
   list.index(shape_calls, name) >= 0
 }
 
--~> Walks the statements and records, per start line, the statement, the layer
--~> it is in and its parent; `inside` gets, per line within a statement but not
--~> starting one, the innermost statement around it.
-function rows_walk(stmts, layer, parent, starts, inside) {
+-~> The statement of a row with its real line numbers (see stmt above). The
+-~> moved copy is made once and kept on the row.
+function row_stmt(r) {
+  let s = r.stmt
+  if (s !== null && s.line != r.line) {
+    s = stmt_moved(s, r.line - s.line)
+    r.stmt = s
+  }
+  s
+}
+
+-~> Walks the statements, whose real lines are theirs plus d, and records, per
+-~> start line, the statement, the layer it is in and its parent; `inside`
+-~> gets, per line within a statement but not starting one, the innermost
+-~> statement around it as [line, kind].
+function rows_walk(stmts, d, layer, parent, starts, inside) {
   for (let i = 0; i < len(stmts); i = i + 1) {
     let s = stmts[i]
-    if (starts[s.line] == null) {
-      starts[s.line] = {"stmt": s, "layer": layer, "parent": parent}
+    let line = s.line + d
+    if (starts[line] == null) {
+      starts[line] = {"stmt": s, "layer": layer, "parent": parent, "end_line": s.end_line + d}
     }
-    for (let l = s.line + 1; l <= s.end_line; l += 1) {
-      inside[l] = s
+    if (s.end_line > s.line) {
+      let at = [line, s.kind]
+      for (let l = line + 1; l <= s.end_line + d; l += 1) {
+        inside[l] = at
+      }
     }
     let inner = layer
     if (s.kind == "layer") {
-      inner = s.line
+      inner = line
     }
-    rows_walk(s.children, inner, s.line, starts, inside)
+    rows_walk(s.children, d, inner, line, starts, inside)
   }
 }
 
@@ -114,22 +132,27 @@ function doc_row(m, line, errors, folded) {
 }
 
 -~> The rows without errors and folds: none has an error, none is folded, all
--~> are visible. After an edit only the rescanned lines are made again (and the
--~> ones after them when the edit added or took away lines).
+-~> are visible. After an edit only the rescanned lines are made again; the
+-~> rows after them are the old ones (moved, when the edit added or took away
+-~> lines, see doc_cache.liz).
 function rows_base(m) {
   let c = m.cache
+  doc_cache_check(m)
   if (c.rows == null) {
     let p = doc_parsed(m)
     perf_begin("rows")
     let sp = c.splice
     if (sp != null && sp.rows != null) {
       c.rows = rows_spliced(p, sp)
-      if (sp.delta == 0) {
-        c.rows_from = {"base": sp.base, "from": sp.from, "to": sp.new_to}
+      c.rows_from = {"base": sp.base, "from": sp.from, "to": sp.new_to, "old_to": sp.old_to, "delta": sp.delta}
+      if (sp.delta != 0) {
+        doc_cache_own(m)
       }
     } else {
-      c.rows = rows_build(p, p.statements, 1, len(p.lines))
+      c.rows = rows_build(p, 0, len(p.statements), 1, len(p.lines))
     }
+    c.rows_epoch = doc_caches.epoch
+    c.hidden = rows_hidden(c.rows, sp)
     doc_cache_tidy(c)
     perf_end()
   }
@@ -137,25 +160,81 @@ function rows_base(m) {
 }
 
 -~> The rows of a spliced parse: the old ones before the scan, new ones for it,
--~> and after it the old ones again (or new ones when the lines moved).
+-~> and after it the old ones again. When the lines moved, those are moved
+-~> where they are: the rows belong to this text from now on (doc_cache_own).
 function rows_spliced(p, sp) {
-  let st = p.statements
-  let mid = rows_build(p, list.slice(st, sp.i0, sp.i0 + sp.count), sp.from, sp.new_to)
-  let after = []
-  if (sp.delta == 0) {
-    after = list.slice(sp.rows, sp.old_to, len(sp.rows))
-  } else {
-    after = rows_build(p, list.slice(st, sp.i0 + sp.count, len(st)), sp.new_to + 1, len(p.lines))
+  let mid = rows_build(p, sp.i0, sp.i0 + sp.count, sp.from, sp.new_to)
+  let after = list.slice(sp.rows, sp.old_to, len(sp.rows))
+  let d = sp.delta
+  if (d != 0) {
+    for (let i = 0; i < len(after); i += 1) {
+      let r = after[i]
+      r.line += d
+      r.end_line += d
+      if (r.layer > 0) {
+        r.layer += d
+      }
+      if (r.parent > 0) {
+        r.parent += d
+      }
+    }
   }
   list.slice(sp.rows, 0, sp.from - 1) + mid + after
 }
 
+-~> The lines of the hidden rows, in order. After a splice the old list is
+-~> moved like the rows, and only the rescanned rows are looked at.
+function rows_hidden(rows, sp) {
+  if (sp == null || sp.hidden == null) {
+    let out = []
+    for (let i = 0; i < len(rows); i += 1) {
+      if (rows[i].hidden) {
+        push(out, rows[i].line)
+      }
+    }
+    return out
+  }
+  let out = []
+  for (let i = 0; i < len(sp.hidden); i += 1) {
+    if (sp.hidden[i] < sp.from) {
+      push(out, sp.hidden[i])
+    }
+  }
+  for (let n = sp.from; n <= sp.new_to; n += 1) {
+    if (rows[n - 1].hidden) {
+      push(out, n)
+    }
+  }
+  for (let i = 0; i < len(sp.hidden); i += 1) {
+    if (sp.hidden[i] > sp.old_to) {
+      push(out, sp.hidden[i] + sp.delta)
+    }
+  }
+  out
+}
+
+-~> The hidden rows of a model as a text ("" for none): when it changes the
+-~> painted shapes change.
+function doc_hidden_key(m) {
+  let c = m.cache
+  rows_base(m)
+  if (c.hidden_key === null) {
+    c.hidden_key = ""
+    for (let i = 0; i < len(c.hidden); i += 1) {
+      c.hidden_key = c.hidden_key + str(c.hidden[i]) + ","
+    }
+  }
+  c.hidden_key
+}
+
 -~> The rows of the lines from..to, which hold exactly the top-level statements
--~> `stmts` (and the blank or comment lines between them).
-function rows_build(p, stmts, from, to) {
+-~> i0 .. i1 - 1 of the parse (and the blank or comment lines between them).
+function rows_build(p, i0, i1, from, to) {
   let starts = {}
   let inside = {}
-  rows_walk(stmts, 0, 0, starts, inside)
+  for (let i = i0; i < i1; i += 1) {
+    rows_walk([p.statements[i]], stmt_shift(p, i), 0, 0, starts, inside)
+  }
   let rows = []
   for (let n = from; n <= to; n = n + 1) {
     let li = p.lines[n - 1]
@@ -170,12 +249,12 @@ function rows_build(p, stmts, from, to) {
     } else {
       let c = inside[n]
       if (c != null) {
-        parent = c.line
-        if (starts[c.line] != null) {
-          layer = starts[c.line].layer
+        parent = c[0]
+        if (starts[c[0]] != null) {
+          layer = starts[c[0]].layer
         }
-        if (c.kind == "layer") {
-          layer = c.line
+        if (c[1] == "layer") {
+          layer = c[0]
         }
       }
     }
@@ -185,7 +264,7 @@ function rows_build(p, stmts, from, to) {
     let callee = ""
     if (s != null) {
       depth = s.depth
-      end_line = s.end_line
+      end_line = at.end_line
       foldable = len(s.children) > 0
       if (s.kind == "call") {
         callee = s.callee
@@ -247,8 +326,8 @@ function rows_folds_key(folded) {
 -~> The rows that can fold, as [{"line", "end_line", "key"}], once per text.
 function rows_folds(m) {
   let c = m.cache
+  let rows = rows_base(m)
   if (c.folds == null) {
-    let rows = rows_base(m)
     let lines = doc_parsed(m).lines
     let out = []
     for (let i = 0; i < len(rows); i = i + 1) {

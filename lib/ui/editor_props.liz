@@ -65,7 +65,7 @@ function props_build(m, line, docs) {
   if (row.stmt == null || row.stmt.kind != "call") {
     return null
   }
-  let args = row.stmt.args
+  let args = row_stmt(row).args
   let info = props_function_info(m, row.callee, docs)
   let n = len(args)
   if (info != null) {
@@ -128,7 +128,7 @@ function set_prop(m, line, name, value, docs) {
   if (!f.missing) {
     return rewrite_arg(m, line, f.index, null, v)
   }
-  let stmt = doc_row(m, line, null, null).stmt
+  let stmt = row_stmt(doc_row(m, line, null, null))
   let n = len(stmt.args)
   let lines = m.lines
   if (f.index > n) {

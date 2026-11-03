@@ -22,10 +22,10 @@ type FB struct {
 	off        *Buf            // set while an offscreen buffer is the target
 	target     string          // "ui" or "canvas" (the named target)
 
-	// Per target: the region changed since the last present, and whether
+	// Per target: the regions changed since the last present, and whether
 	// anything was drawn at all. A draw with no declared region counts as
 	// the whole buffer.
-	dirty   map[string]image.Rectangle
+	dirty   map[string][]image.Rectangle
 	touched map[string]bool
 	final   *image.RGBA     // the composited window image
 	all     bool            // present everything next time
@@ -36,7 +36,7 @@ type FB struct {
 // NewFB makes a framebuffer for a window of w by h pixels. The UI buffer is
 // half that size.
 func NewFB(w, h int) *FB {
-	f := &FB{target: "ui", dirty: map[string]image.Rectangle{}, touched: map[string]bool{}}
+	f := &FB{target: "ui", dirty: map[string][]image.Rectangle{}, touched: map[string]bool{}}
 	f.Resize(w, h)
 	return f
 }
@@ -96,46 +96,80 @@ func (f *FB) Screenshot() *image.RGBA {
 }
 
 // Compose builds the window image for what changed. It returns the image and
-// the changed rectangle (empty if nothing changed).
+// the changed rectangle (empty if nothing changed). Each changed region is
+// composed on its own, so two small ones far apart don't cost the window
+// between them.
 func (f *FB) Compose() (*image.RGBA, image.Rectangle) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	full := f.final.Rect
-	var region image.Rectangle
+	var regions []image.Rectangle
 	if f.all {
-		region = full
+		regions = []image.Rectangle{full}
 	} else {
-		region = f.regionOf("ui", 2, image.Point{}).Union(f.regionOf("canvas", 1, f.canvasRect.Min.Mul(2)))
+		regions = append(f.regionsOf("ui", 2, image.Point{}), f.regionsOf("canvas", 1, f.canvasRect.Min.Mul(2))...)
 	}
 	f.all = false
 	f.touched = map[string]bool{}
-	f.dirty = map[string]image.Rectangle{}
-	region = region.Intersect(full)
-	if !region.Empty() {
-		f.compose(region)
+	f.dirty = map[string][]image.Rectangle{}
+	var region image.Rectangle
+	for _, r := range disjoint(regions) {
+		r = r.Intersect(full)
+		if !r.Empty() {
+			f.compose(r)
+			region = region.Union(r)
+		}
 	}
 	return f.final, region
 }
 
-// regionOf is the changed part of a target in window pixels: its dirty rect
-// scaled by scale and moved by origin.
-func (f *FB) regionOf(name string, scale int, origin image.Point) image.Rectangle {
+// regionsOf is the changed part of a target in window pixels: its dirty
+// rects scaled by scale and moved by origin.
+func (f *FB) regionsOf(name string, scale int, origin image.Point) []image.Rectangle {
 	if !f.touched[name] {
-		return image.Rectangle{}
+		return nil
 	}
 	buf := f.ui
 	if name == "canvas" {
 		buf = f.canvas
 	}
 	if buf == nil {
-		return image.Rectangle{}
+		return nil
 	}
-	r, declared := f.dirty[name]
+	rs, declared := f.dirty[name]
 	if !declared {
-		r = buf.Img.Rect
+		rs = []image.Rectangle{buf.Img.Rect}
 	}
-	r = r.Intersect(buf.Img.Rect)
-	return image.Rect(r.Min.X*scale, r.Min.Y*scale, r.Max.X*scale, r.Max.Y*scale).Add(origin)
+	var out []image.Rectangle
+	for _, r := range rs {
+		r = r.Intersect(buf.Img.Rect)
+		out = append(out, image.Rect(r.Min.X*scale, r.Min.Y*scale, r.Max.X*scale, r.Max.Y*scale).Add(origin))
+	}
+	return out
+}
+
+// disjoint joins the rectangles that overlap until none do, so no pixel is
+// composed twice.
+func disjoint(rs []image.Rectangle) []image.Rectangle {
+	var out []image.Rectangle
+	for _, r := range rs {
+		if r.Empty() {
+			continue
+		}
+		for joined := true; joined; {
+			joined = false
+			for i := 0; i < len(out); i++ {
+				if out[i].Overlaps(r) {
+					r = r.Union(out[i])
+					out = append(out[:i], out[i+1:]...)
+					joined = true
+					break
+				}
+			}
+		}
+		out = append(out, r)
+	}
+	return out
 }
 
 // compose rebuilds the window pixels in region: the UI scaled by two with
@@ -464,10 +498,7 @@ func (f *FB) markDirty(args ...object.Object) object.Object {
 	}
 	r := image.Rect(int(math.Floor(x)), int(math.Floor(y)), int(math.Ceil(x+w)), int(math.Ceil(y+h)))
 	f.touched[f.target] = true
-	if old, ok := f.dirty[f.target]; ok {
-		r = old.Union(r)
-	}
-	f.dirty[f.target] = r
+	f.dirty[f.target] = append(f.dirty[f.target], r)
 	return null
 }
 

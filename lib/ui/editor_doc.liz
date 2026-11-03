@@ -36,8 +36,18 @@ function doc_with(m, lines, line, col) {
   doc_make(lines, line, col, m)
 }
 
+-~> The whole text, joined once per text (it is kept in the cache).
 function doc_text(m) {
-  text.join(m.lines, "\n")
+  let c = m.cache
+  if (c.text === null) {
+    c.text = text.join(m.lines, "\n")
+  }
+  c.text
+}
+
+-~> Whether two models have the same text. Models of one cache always do.
+function doc_same_text(a, b) {
+  a.cache.id == b.cache.id || a.lines === b.lines
 }
 
 function doc_line(m, n) {

@@ -32,11 +32,22 @@ function ed_run() {
 
 function ed_run_now() {
   let m = ed_model()
+  if (ed.ran != null && doc_same_text(ed.ran.model, m)) {
+    return ed_run_same(m)
+  }
   let patch = rerun_row(ed.ran, m)
   if (patch != null) {
     return ed_run_patch(m, patch)
   }
+  patch = rerun_region(ed.ran, m)
+  if (patch != null) {
+    return ed_run_range(m, patch)
+  }
   let r = src.run(doc_text(m))
+  if (len(r.errors) == 0 && len(doc_parsed(m).errors) > 0) {
+    -~> a spliced parse took the text for broken (see doc_splice.liz)
+    doc_cache_rescan(m)
+  }
   ed.runs = ed.runs + 1
   ed.errors = errors_mark_follow(r.errors)
   ed.printed = r.printed
@@ -44,18 +55,34 @@ function ed_run_now() {
   ed.patch = null
   if (len(r.errors) == 0) {
     ed.shapes = r.shapes
+    ed.shapes_rising = shapes_rising(r.shapes)
     ed.shapes_ver += 1
-    ed.ran = {"model": m, "literal": null}
+    ed.ran = {"model": m, "literal": null, "printed": r.printed}
     if (type(r.canvas) == "HASH" && type(r.canvas.size) == "POINT") {
       ed.canvas = r.canvas
     }
     ed.stale = false
   } else {
-    ed.ran = null
+    -~> the shapes stay the last good ones, so ed.ran still says what made them
     ed.stale = true
   }
   ed.pending = false
   r
+}
+
+-~> The text is the one of the last good run again (an error typed and taken
+-~> back): its shapes are the ones on the canvas, nothing runs.
+function ed_run_same(m) {
+  let printed = ed.ran.printed
+  if (printed == null) {
+    printed = ""
+  }
+  ed.ran = {"model": m, "literal": ed.ran.literal, "plain": ed.ran.plain, "printed": printed}
+  ed.errors = []
+  ed.printed = printed
+  ed.stale = false
+  ed.pending = false
+  {"shapes": ed.shapes, "canvas": ed.canvas, "errors": [], "printed": printed, "ms": 0, "steps": 0, "rerun": true}
 }
 
 -~> Puts a patch's shape in place of the old one, like a run that made it.
@@ -72,11 +99,50 @@ function ed_run_patch(m, patch) {
   patch.ver = ed.shapes_ver
   ed.patch = patch
   ed.ran = {"model": m, "literal": true}
+  ed.errors = []
+  ed.printed = ""
+  ed.stale = false
   ed.runs = ed.runs + 1
   ed.stats = {"ms": patch.ms, "steps": patch.steps}
   ed.pending = false
   {"shapes": ed.shapes, "canvas": ed.canvas, "errors": [], "printed": ed.printed, "ms": patch.ms,
    "steps": patch.steps, "rerun": true}
+}
+
+-~> Puts the shapes of a region run (rerun_region) in place of the old ones of
+-~> those lines; the shapes after them are moved down by the lines the edit
+-~> added or took away, where they are (no one keeps the old list).
+function ed_run_range(m, patch) {
+  let old = ed.shapes
+  if (patch.delta != 0) {
+    for (let i = patch.after; i < len(old); i += 1) {
+      old[i].line += patch.delta
+    }
+  }
+  ed.shapes = list.slice(old, 0, patch.start) + patch.added + list.slice(old, patch.after, len(old))
+  ed.shapes_ver += 1
+  patch.ver = ed.shapes_ver
+  ed.patch = patch
+  ed.ran = {"model": m, "literal": true, "plain": true}
+  ed.errors = []
+  ed.printed = ""
+  ed.stale = false
+  ed.runs = ed.runs + 1
+  ed.stats = {"ms": patch.ms, "steps": patch.steps}
+  ed.pending = false
+  {"shapes": ed.shapes, "canvas": ed.canvas, "errors": [], "printed": ed.printed, "ms": patch.ms,
+   "steps": patch.steps, "rerun": true}
+}
+
+-~> Whether every shape has a line and the lines never go down (one shape per
+-~> row, top to bottom: the shapes of a literal drawing).
+function shapes_rising(shapes) {
+  for (let i = 0; i < len(shapes); i += 1) {
+    if (type(shapes[i].line) != "INTEGER" || (i > 0 && shapes[i].line < shapes[i - 1].line)) {
+      return false
+    }
+  }
+  true
 }
 
 -~> Runs the drawing if it changed since the last run. The view calls this once
@@ -134,22 +200,39 @@ function ed_shape_lines() {
   ed.shape_lines.lines
 }
 
+-~> The indexes in ed.shapes of the shapes made by the call on this line.
+-~> When the lines rise through the list it is a binary search, else the
+-~> index above.
+function ed_shape_indexes(line) {
+  if (!ed.shapes_rising) {
+    let at = ed_shape_lines()[line]
+    if (at == null) {
+      return []
+    }
+    return at
+  }
+  let out = []
+  let shapes = ed.shapes
+  for (let i = rerun_first_at(shapes, line); i < len(shapes) && shapes[i].line == line; i += 1) {
+    push(out, i)
+  }
+  out
+}
+
 -~> The shapes made by the call on this line.
 function ed_shapes_of(line) {
   let out = []
-  let at = ed_shape_lines()[line]
-  if (at != null) {
-    for (let i = 0; i < len(at); i += 1) {
-      push(out, ed.shapes[at[i]])
-    }
+  let at = ed_shape_indexes(line)
+  for (let i = 0; i < len(at); i += 1) {
+    push(out, ed.shapes[at[i]])
   }
   out
 }
 
 -~> The index in ed.shapes of the only shape made by `line`, or -1.
 function ed_only_shape(line) {
-  let at = ed_shape_lines()[line]
-  if (at == null || len(at) != 1) {
+  let at = ed_shape_indexes(line)
+  if (len(at) != 1) {
     return -1
   }
   at[0]

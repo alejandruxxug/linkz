@@ -6,18 +6,31 @@
 -~>   tiles_new(name, size, side)   no tile painted yet: every tile is dirty
 -~>   tiles_mark(t, box)            box [x0, y0, x1, y1] (picture pixels) must be repainted
 -~>   tiles_mark_all(t)             the whole picture must be repainted
--~>   tiles_render(t, paint)        repaints what is dirty: for each tile it calls
--~>                                 paint(box, offset) with the target being the tile's
--~>                                 buffer, clipped to box and cleared there; a picture
--~>                                 pixel (x, y) is (x, y) + offset in that buffer
+-~>   tiles_render(t, paint)        repaints what is dirty: for each dirty region it calls
+-~>                                 paint(box, offset) once, with the target being a buffer
+-~>                                 of the region's own size, cleared; a picture pixel
+-~>                                 (x, y) is (x, y) + offset in that buffer. The region is
+-~>                                 then copied into the tiles it covers
 -~>   tiles_blit(t, pos)            draws every tile on the current target, the picture's
 -~>                                 top left at pos
--~> After tiles_render, t.painted is how many tiles it repainted and t.area how
--~> many pixels.
+-~> The marked boxes are kept as regions: whole pixels, cut to the picture, a box
+-~> that overlaps a region joining it. So an edit paints each thing once, however
+-~> many tiles it covers. A region wider or taller than tiles_chunk is painted in
+-~> pieces, so a buffer never gets too big.
+-~> After tiles_render, t.painted is how many tiles it repainted, t.regions_painted
+-~> how many regions, t.area how many pixels and t.box the box around them all
+-~> (null when nothing was dirty).
+
+-~> At most this many regions are kept apart; past it a new box joins the one it
+-~> grows least.
+let tiles_max_regions = 24
+let tiles_slack = 64 * 64
+let tiles_chunk = 1024
 
 function tiles_new(name, size, side) {
   let t = {"name": name, "size": size, "side": side, "cols": math.ceil(size.x / float(side)),
-           "rows": math.ceil(size.y / float(side)), "dirty": {}, "made": {}, "painted": 0, "area": 0}
+           "rows": math.ceil(size.y / float(side)), "regions": [], "made": {}, "painted": 0, "regions_painted": 0,
+           "area": 0, "box": null, "slack": tiles_slack}
   tiles_mark_all(t)
   t
 }
@@ -58,48 +71,146 @@ function tiles_mark(t, box) {
   if (x1 <= x0 || y1 <= y0) {
     return null
   }
-  for (let row = y0 // t.side; row <= (y1 - 1) // t.side; row += 1) {
-    for (let col = x0 // t.side; col <= (x1 - 1) // t.side; col += 1) {
-      let r = tiles_rect(t, col, row)
-      let part = [math.max(x0, r[0]), math.max(y0, r[1]), math.min(x1, r[2]), math.min(y1, r[3])]
-      let k = tiles_key(t, col, row)
-      t.dirty[k] = tiles_union(t.dirty[k], part)
-    }
-  }
-  null
+  tiles_add_region(t, [x0, y0, x1, y1])
 }
 
 function tiles_mark_all(t) {
   tiles_mark(t, [0, 0, t.size.x, t.size.y])
 }
 
+-~> Whether two boxes are worth painting as one: the box around both is not
+-~> much bigger than the two (a region has a cost of its own, about that of
+-~> tiles_slack pixels).
+function tiles_close(t, a, b) {
+  tiles_area(tiles_union(a, b)) <= tiles_area(a) + tiles_area(b) + t.slack
+}
+
+-~> Whether two boxes share some pixels.
+function tiles_overlap(a, b) {
+  a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3]
+}
+
+function tiles_area(b) {
+  (b[2] - b[0]) * (b[3] - b[1])
+}
+
+-~> Adds a box to the regions: it swallows every region it overlaps or is close
+-~> to (growing as it does, so the regions never overlap); past
+-~> tiles_max_regions it joins the region it makes grow least.
+function tiles_add_region(t, box) {
+  let rs = t.regions
+  let grown = true
+  while (grown) {
+    grown = false
+    let keep = []
+    for (let i = 0; i < len(rs); i += 1) {
+      if (tiles_overlap(rs[i], box) || tiles_close(t, rs[i], box)) {
+        box = tiles_union(rs[i], box)
+        grown = true
+      } else {
+        push(keep, rs[i])
+      }
+    }
+    rs = keep
+  }
+  if (len(rs) >= tiles_max_regions) {
+    let best = 0
+    let cost = null
+    for (let i = 0; i < len(rs); i += 1) {
+      let c = tiles_area(tiles_union(rs[i], box)) - tiles_area(rs[i])
+      if (cost === null || c < cost) {
+        best = i
+        cost = c
+      }
+    }
+    let joined = tiles_union(rs[best], box)
+    list.remove(rs, best)
+    t.regions = rs
+    return tiles_add_region(t, joined)
+  }
+  push(rs, box)
+  t.regions = rs
+  null
+}
+
 function tiles_render(t, paint) {
   t.painted = 0
+  t.regions_painted = 0
   t.area = 0
-  let ks = keys(t.dirty)
-  for (let i = 0; i < len(ks); i += 1) {
-    let k = ks[i]
-    let col = k % t.cols
-    let row = k // t.cols
-    let r = tiles_rect(t, col, row)
-    let box = t.dirty[k]
-    let at = (r[0], r[1])
-    fb.offscreen((r[2] - r[0], r[3] - r[1]))
-    -~> the new buffer starts as a copy of the old one, then only box is repainted
-    if (t.made[k] == true && box != r) {
-      fb.blit(tiles_buffer(t, k), (0, 0))
+  t.box = null
+  let rs = t.regions
+  t.regions = []
+  let parts = []
+  for (let i = 0; i < len(rs); i += 1) {
+    let r = rs[i]
+    -~> in pieces of at most tiles_chunk pixels a side, on the chunk grid
+    for (let cy = r[1] // tiles_chunk; cy <= (r[3] - 1) // tiles_chunk; cy += 1) {
+      for (let cx = r[0] // tiles_chunk; cx <= (r[2] - 1) // tiles_chunk; cx += 1) {
+        push(parts, [math.max(r[0], cx * tiles_chunk), math.max(r[1], cy * tiles_chunk),
+                     math.min(r[2], (cx + 1) * tiles_chunk), math.min(r[3], (cy + 1) * tiles_chunk)])
+      }
     }
-    fb.clip((box[0], box[1]) - at, (box[2] - box[0], box[3] - box[1]))
-    fb.clear((box[0], box[1]) - at, (box[2] - box[0], box[3] - box[1]))
-    paint(box, -at)
-    fb.unclip()
-    fb.keep(tiles_buffer(t, k))
-    t.made[k] = true
-    t.painted += 1
-    t.area += (box[2] - box[0]) * (box[3] - box[1])
   }
-  t.dirty = {}
+  -~> each piece painted in a buffer of its own; then each tile takes its parts in one go
+  let per_tile = {}
+  for (let i = 0; i < len(parts); i += 1) {
+    let box = parts[i]
+    fb.offscreen((box[2] - box[0], box[3] - box[1]))
+    paint(box, -(box[0], box[1]))
+    fb.keep(tiles_region_buffer(t, i))
+    t.regions_painted += 1
+    t.area += (box[2] - box[0]) * (box[3] - box[1])
+    t.box = tiles_union(t.box, box)
+    for (let row = box[1] // t.side; row <= (box[3] - 1) // t.side; row += 1) {
+      for (let col = box[0] // t.side; col <= (box[2] - 1) // t.side; col += 1) {
+        let k = tiles_key(t, col, row)
+        if (per_tile[k] == null) {
+          per_tile[k] = []
+        }
+        push(per_tile[k], i)
+      }
+    }
+  }
+  let ks = keys(per_tile)
+  for (let i = 0; i < len(ks); i += 1) {
+    tiles_copy_in(t, ks[i], parts, per_tile[ks[i]])
+  }
   null
+}
+
+function tiles_region_buffer(t, i) {
+  "tiles:" + t.name + ":region:" + str(i)
+}
+
+-~> Copies the parts of the painted pieces `which` (indexes into parts) that
+-~> fall in tile k into the tile's buffer. The new buffer starts as a copy of
+-~> the old one; each part is cleared and its piece drawn over it (onto clear
+-~> pixels that is an exact copy).
+function tiles_copy_in(t, k, parts, which) {
+  let r = tiles_rect(t, k % t.cols, k // t.cols)
+  let at = (r[0], r[1])
+  fb.offscreen((r[2] - r[0], r[3] - r[1]))
+  let whole = false
+  for (let i = 0; i < len(which); i += 1) {
+    let box = parts[which[i]]
+    whole = whole || (box[0] <= r[0] && box[1] <= r[1] && box[2] >= r[2] && box[3] >= r[3])
+  }
+  if (t.made[k] == true && !whole) {
+    fb.blit(tiles_buffer(t, k), (0, 0))
+  }
+  for (let i = 0; i < len(which); i += 1) {
+    let box = parts[which[i]]
+    let part = [math.max(box[0], r[0]), math.max(box[1], r[1]), math.min(box[2], r[2]), math.min(box[3], r[3])]
+    let ppos = (part[0], part[1]) - at
+    let psize = (part[2] - part[0], part[3] - part[1])
+    fb.clip(ppos, psize)
+    fb.clear(ppos, psize)
+    fb.blit(tiles_region_buffer(t, which[i]), (box[0], box[1]) - at)
+    fb.unclip()
+  }
+  fb.keep(tiles_buffer(t, k))
+  t.made[k] = true
+  t.painted += 1
 }
 
 function tiles_blit(t, pos) {

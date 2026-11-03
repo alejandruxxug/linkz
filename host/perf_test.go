@@ -90,6 +90,7 @@ type editorRig struct {
 	app    *App
 	phases map[string]float64
 	ticks  int
+	took   time.Duration // the measured ticks, all of them
 }
 
 func newEditorRig(tb testing.TB, code string) *editorRig {
@@ -136,6 +137,7 @@ func (r *editorRig) tick(evs ...window.Event) time.Duration {
 			}
 		}
 		r.ticks++
+		r.took += took
 	}
 	return took
 }
@@ -144,15 +146,20 @@ func (r *editorRig) tick(evs ...window.Event) time.Duration {
 func (r *editorRig) measure() {
 	r.phases = map[string]float64{}
 	r.ticks = 0
+	r.took = 0
 }
 
-// report gives the benchmark each phase's milliseconds per tick.
+// report gives the benchmark each phase's milliseconds per tick, and the
+// whole tick's as tick-ms (ns/op also counts the ticks quiet leaves out).
 func (r *editorRig) report(b *testing.B) {
 	b.StopTimer()
 	for k, v := range r.phases {
 		if r.ticks > 0 {
 			b.ReportMetric(v/float64(r.ticks), k+"-ms")
 		}
+	}
+	if r.ticks > 0 {
+		b.ReportMetric(float64(r.took.Microseconds())/1000/float64(r.ticks), "tick-ms")
 	}
 	r.phases = nil
 }
@@ -162,6 +169,23 @@ func (r *editorRig) lizard(tb testing.TB, code string) {
 	if err := r.app.call(code, nil); err != nil {
 		tb.Fatal(err)
 	}
+}
+
+// quiet runs f without adding its ticks to the measurement (taking an edit
+// back between two measured ones).
+func (r *editorRig) quiet(f func()) {
+	phases, ticks, took := r.phases, r.ticks, r.took
+	r.phases = nil
+	f()
+	r.phases, r.ticks, r.took = phases, ticks, took
+}
+
+// fakeClipboard puts a clipboard of its own in the editor, so a benchmark
+// pastes without touching the system's.
+func (r *editorRig) fakeClipboard(tb testing.TB) {
+	tb.Helper()
+	r.lizard(tb, "let __clip = {\"text\": \"\"}\n"+
+		"clip = {\"get\": function() { __clip.text }, \"set\": function(s) { __clip.text = s }}")
 }
 
 // heapMB is the live heap after a collection, in megabytes. The benchmark
@@ -176,6 +200,13 @@ func heapMB() float64 {
 // The line of the dragged circle: the first shape row, after the header and
 // its layer line.
 const perfFirstShape = 5
+
+// perfMiddle is the line of a shape row in the middle of a drawing of n
+// shapes (shape i is on line 5 + i + i/50: one layer line per 50 shapes).
+func perfMiddle(n int) int {
+	i := n/2 + 10
+	return perfFirstShape + i + i/50
+}
 
 func BenchmarkEditor(b *testing.B) {
 	for _, n := range []int{2000, 10000} {
@@ -216,9 +247,10 @@ func BenchmarkEditor(b *testing.B) {
 			r.tick()
 		})
 		b.Run(fmt.Sprintf("%dk/keystroke", n/1000), func(b *testing.B) {
-			// The caret goes right after the circle's radius; typing a digit
-			// and taking it back alternate, so the drawing stays the same size.
-			r.lizard(b, fmt.Sprintf("ed_set_caret(%d, 23)\nview_after()", perfFirstShape))
+			// The circle gets its radius of 20 back (small_edit changed it), the
+			// caret goes right after it; typing a digit (201) and taking it back
+			// alternate, so the drawing stays the same size.
+			r.lizard(b, fmt.Sprintf("ed_select(%d)\ned_set_prop(\"r\", \"20\")\ned_set_caret(%d, 23)\nview_after()", perfFirstShape, perfFirstShape))
 			r.tick()
 			r.measure()
 			for i := 0; i < b.N; i++ {
@@ -229,6 +261,56 @@ func BenchmarkEditor(b *testing.B) {
 				}
 			}
 			r.report(b)
+			// The benchmark runs this more than once (b.N = 1 first): an odd N
+			// leaves the digit in, so it is taken back for the next round.
+			if b.N%2 == 1 {
+				r.tick(window.Event{Type: "key", Key: "Backspace", Injected: true})
+			}
+		})
+		mid := perfMiddle(n)
+		// The edits that add or take away lines, each taken back (unmeasured)
+		// before the next one.
+		lineEdit := func(name, setup string, ev window.Event) {
+			b.Run(fmt.Sprintf("%dk/%s", n/1000, name), func(b *testing.B) {
+				r.fakeClipboard(b)
+				r.measure()
+				for i := 0; i < b.N; i++ {
+					r.quiet(func() {
+						r.lizard(b, setup)
+						r.tick()
+					})
+					r.tick(ev)
+					r.quiet(func() {
+						r.lizard(b, "ed_undo()\nview_after()")
+						r.tick()
+					})
+				}
+				r.report(b)
+			})
+		}
+		lineEdit("enter", fmt.Sprintf("ed_set_caret(%d, 1000)\nview_after()", mid),
+			window.Event{Type: "key", Key: "Enter", Injected: true})
+		lineEdit("delete_line", fmt.Sprintf("ed_select_range(%d, %d)\nview_after()", mid, mid),
+			window.Event{Type: "key", Key: "Backspace", Injected: true})
+		lineEdit("paste_20", fmt.Sprintf("clip.set(edit_rows_text(ed_model(), %d, %d))\ned_set_caret(%d, 0)\nview_after()", mid+3, mid+22, mid),
+			window.Event{Type: "key", Key: "V", Mods: window.Mods{Cmd: true}, Injected: true})
+		b.Run(fmt.Sprintf("%dk/broken_keystroke", n/1000), func(b *testing.B) {
+			// Taking the closing bracket off a row in the middle breaks the
+			// code (the row runs on into the next layer); typing it back mends it.
+			r.lizard(b, fmt.Sprintf("ed_set_caret(%d, 1000)\nview_after()", mid))
+			r.tick()
+			r.measure()
+			for i := 0; i < b.N; i++ {
+				if i%2 == 0 {
+					r.tick(window.Event{Type: "key", Key: "Backspace", Injected: true})
+				} else {
+					r.tick(window.Event{Type: "text", Text: ")", Injected: true})
+				}
+			}
+			r.report(b)
+			if b.N%2 == 1 {
+				r.tick(window.Event{Type: "text", Text: ")", Injected: true})
+			}
 		})
 	}
 }

@@ -1,4 +1,6 @@
-spliced 215 of 400, differences 0
+spliced 399 of 400 (184 broken, 0 mended but unsure), differences 0
+spliced 279 of 300 (265 broken, 0 mended but unsure), differences 0
+1 true true 12
 9 19   circle((380, 90), 41, #e0a526) -~> core [locked] true true
 true
 ["center", "r", "spin"]

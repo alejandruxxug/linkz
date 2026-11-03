@@ -36,7 +36,7 @@ function twoway_target(m, line, arg, item) {
   if (arg < 0 || arg >= len(row.stmt.args)) {
     return {"refused": t("refuse.no_arg")}
   }
-  let a = row.stmt.args[arg]
+  let a = row_stmt(row).args[arg]
   if (item == null) {
     return a
   }
@@ -106,7 +106,7 @@ function twoway_shape_row(m, shape) {
 
 -~> The edits that put one anchor at new_pos, or a refusal.
 function twoway_anchor_edits(row, shape, anchor, new_pos) {
-  let args = row.stmt.args
+  let args = row_stmt(row).args
   if (anchor.arg >= len(args)) {
     return {"refused": t("refuse.no_arg")}
   }
@@ -179,7 +179,7 @@ function twoway_point_lists(m, shape) {
   if (shape.kind != "stroke" && shape.kind != "polygon" && shape.kind != "brush") {
     return {"refused": t("refuse.no_points")}
   }
-  let args = row.stmt.args
+  let args = row_stmt(row).args
   if (len(args) == 0 || args[0].kind != "array") {
     let expr = "?"
     if (len(args) > 0) {

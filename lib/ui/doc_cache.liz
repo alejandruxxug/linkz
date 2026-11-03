@@ -2,37 +2,98 @@
 -~> Every model with the same text shares one cache hash (doc_at passes it on),
 -~> so the first one that asks fills it in for all of them. A cache is:
 -~>   id      a number no other cache has: two texts are told apart without comparing them
+-~>   text    the lines joined, once something asks for it (doc_text)
 -~>   parse   the src.parse result, or null until something asks for it
 -~>   rows    the rows of the layers panel, without errors and folds (editor_rows.liz)
 -~>   shown   {"key", "rows"}: the rows with the errors and folds last asked for
 -~>   folds   the rows that can fold, with their fold keys, once folding asks
--~>   names   the functions, values and layers the text defines (doc_names.liz)
+-~>   hidden  the lines of the hidden rows, made with the rows; hidden_key the same as a text
+-~>   names   the functions, values and layers the text defines (doc_names.liz);
+-~>           name_parts what each top-level statement adds to them
 -~>   before  the model this text was edited from, until the parse is worked out:
 -~>           only the statements the edit touched are scanned again (doc_splice.liz)
+-~>   diff    {"base", "head", "tail"}: how many lines this text shares at the start
+-~>           and at the end with the text of cache `base` (the one it was spliced
+-~>           from); the re-run of the drawing reads it too (editor_rerun.liz)
 -~>   splice  what that scan replaced, so the rows and the names follow the same way
--~>   rows_from  {"base", "from", "to"} when the rows are the ones of cache `base`
--~>           with only the lines from..to made again (the panel's items follow)
+-~>   rows_from  {"base", "from", "to", "old_to", "delta"} when the rows are the ones
+-~>           of cache `base` with only the lines from..to (from..old_to there) made
+-~>           again, the ones after moved by delta (the panel's items follow)
+-~>
+-~> Rows are shared between texts: a splice keeps the row hashes it did not
+-~> scan again. When the edit added or took away lines, the rows after it are
+-~> moved where they are instead of being copied, so from then on they belong
+-~> to the new text. doc_caches.epoch counts those moves: rows made in an
+-~> older epoch (rows_epoch) may have been moved under them, so a cache that
+-~> finds its rows out of date drops them (and the parse, which goes with
+-~> them) and is spliced again from the text that moved them last
+-~> (doc_caches.owner). Undo and redo of such an edit move the rows back.
 
-let doc_caches = {"made": 0}
+let doc_caches = {"made": 0, "epoch": 0, "owner": null}
 
--~> An empty cache for a text edited from `before` (a model, or null). The model
--~> kept is the nearest one that has its parse, so caches never chain.
+-~> How many caches doc_cache_base looks back through for one with a parse.
+let doc_cache_hops = 16
+
+-~> An empty cache for a text edited from `before` (a model, or null).
 function doc_cache_new(before) {
   doc_caches.made += 1
-  let base = null
-  if (before != null) {
-    base = before
-    if (before.cache.parse == null) {
-      base = before.cache.before
-    }
+  {"id": doc_caches.made, "text": null, "parse": null, "rows": null, "rows_epoch": -1, "shown": null,
+   "folds": null, "hidden": null, "hidden_key": null, "names": null, "name_parts": null, "before": doc_cache_base(before),
+   "diff": null, "splice": null, "rows_from": null}
+}
+
+-~> The nearest model, from m back through the ones it was edited from, that
+-~> has its parse (or null), so caches never chain far.
+function doc_cache_base(m) {
+  let hops = 0
+  while (m != null && m.cache.parse == null && hops < doc_cache_hops) {
+    m = m.cache.before
+    hops += 1
   }
-  {"id": doc_caches.made, "parse": null, "rows": null, "shown": null, "folds": null, "names": null,
-   "before": base, "splice": null, "rows_from": null}
+  if (m != null && m.cache.parse == null) {
+    return null
+  }
+  m
 }
 
 -~> The number of the model's text: equal numbers, equal texts.
 function doc_id(m) {
   m.cache.id
+}
+
+-~> The rows of a cache, or null when it has none or they are out of date.
+function doc_cache_rows(c) {
+  if (c.rows_epoch != doc_caches.epoch) {
+    return null
+  }
+  c.rows
+}
+
+-~> Drops what is out of date in m's cache (see the top): the rows and all
+-~> that holds rows or their lines, and the parse, which is spliced again
+-~> from the text that owns the rows now.
+function doc_cache_check(m) {
+  let c = m.cache
+  if (c.rows == null || c.rows_epoch == doc_caches.epoch) {
+    return null
+  }
+  c.rows = null
+  c.shown = null
+  c.folds = null
+  c.rows_from = null
+  c.splice = null
+  let owner = doc_caches.owner
+  if (owner != null && owner.cache.id != c.id) {
+    c.parse = null
+    c.diff = null
+    c.before = owner
+  }
+}
+
+-~> m's rows were moved where they were: they are m's now.
+function doc_cache_own(m) {
+  doc_caches.epoch += 1
+  doc_caches.owner = m
 }
 
 -~> The model's src.parse result. After an edit only the changed statements are
@@ -42,8 +103,10 @@ function doc_cache_parse(m) {
   if (c.parse == null) {
     perf_begin("parse")
     let sp = null
-    if (c.before != null) {
-      sp = splice_parse(c.before, m.lines)
+    let before = doc_cache_base(c.before)
+    if (before != null) {
+      let d = doc_diff(m, before)
+      sp = splice_parse(before, m.lines, [d.head, d.tail])
     }
     if (sp != null) {
       c.parse = sp.parse
@@ -55,6 +118,41 @@ function doc_cache_parse(m) {
     perf_end()
   }
   c.parse
+}
+
+-~> How m's text differs from base's: {"base", "head", "tail"} (see diff at
+-~> the top), worked out once per pair, for the splice and the re-run alike.
+function doc_diff(m, base) {
+  let c = m.cache
+  if (c.diff === null || c.diff.base != base.cache.id) {
+    let ht = [len(m.lines), 0]
+    if (c.id != base.cache.id) {
+      ht = lines_common(base.lines, m.lines)
+    }
+    c.diff = {"base": base.cache.id, "head": ht[0], "tail": ht[1]}
+  }
+  c.diff
+}
+
+-~> Scans m's whole text again, dropping all that was worked out from the
+-~> spliced parse. The cache gets a new id, so what was kept by the old one
+-~> (the panel's items) is made again.
+function doc_cache_rescan(m) {
+  let c = m.cache
+  doc_caches.made += 1
+  c.id = doc_caches.made
+  c.rows = null
+  c.shown = null
+  c.folds = null
+  c.hidden = null
+  c.hidden_key = null
+  c.names = null
+  c.name_parts = null
+  c.rows_from = null
+  c.splice = null
+  c.diff = null
+  c.before = null
+  c.parse = src.parse(doc_text(m))
 }
 
 -~> Lets go of the splice once the rows and the names have used it.

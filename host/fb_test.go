@@ -243,3 +243,46 @@ func TestCanvasDirtyIsPerTarget(t *testing.T) {
 		t.Errorf("canvas dirty region = %v, want (12,12)-(15,15)", region)
 	}
 }
+
+// Two dirty rectangles far apart are composed each on its own: what lies
+// between them is left as it was.
+func TestComposeEachDirtyRect(t *testing.T) {
+	f := NewFB(40, 40)
+	h := f.Builtins()
+	f.Compose()
+	call(t, h, "fill", newPoint(0, 0), newPoint(20, 20), color(9, 9, 9, 255))
+	call(t, h, "dirty", newPoint(0, 0), newPoint(1, 1))
+	call(t, h, "dirty", newPoint(18, 18), newPoint(1, 1))
+	img, region := f.Compose()
+	if region != image.Rect(0, 0, 38, 38) {
+		t.Errorf("region = %v, want the box around both (0,0)-(38,38)", region)
+	}
+	px := func(x, y int) uint8 { return img.Pix[y*img.Stride+x*4] }
+	if px(1, 1) != 9 || px(37, 37) != 9 {
+		t.Error("the dirty rectangles were not composed")
+	}
+	if px(20, 20) != 0 {
+		t.Error("a pixel between the dirty rectangles was composed")
+	}
+}
+
+func TestDisjoint(t *testing.T) {
+	r := image.Rect
+	tests := []struct {
+		name string
+		in   []image.Rectangle
+		want int
+	}{
+		{"apart", []image.Rectangle{r(0, 0, 2, 2), r(5, 5, 6, 6)}, 2},
+		{"overlapping", []image.Rectangle{r(0, 0, 4, 4), r(2, 2, 6, 6)}, 1},
+		{"a chain", []image.Rectangle{r(0, 0, 3, 3), r(10, 10, 12, 12), r(2, 2, 11, 11)}, 1},
+		{"empty ones", []image.Rectangle{{}, r(1, 1, 2, 2)}, 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := disjoint(tt.in); len(got) != tt.want {
+				t.Errorf("disjoint(%v) = %v, want %d rectangles", tt.in, got, tt.want)
+			}
+		})
+	}
+}

@@ -6,8 +6,11 @@
 -~>   items  the suggestion items for the functions, values and layers (first
 -~>          definition of a name wins, see cmp_user_items)
 -~>   seen   the names in items, as a hash name -> true
--~> After an edit the old names are kept when the statements scanned again
--~> define the same names as the ones they replaced.
+-~> The cache also keeps, per top-level statement, the part of the names it
+-~> defines (names_part), so after an edit only the statements scanned again
+-~> are looked at: the old names are kept when they define the same names as
+-~> the ones they replaced, and else the names are put together again from
+-~> the parts.
 
 -~> The model's names, worked out once per text.
 function doc_names(m) {
@@ -16,11 +19,20 @@ function doc_names(m) {
     let p = doc_parsed(m)
     perf_begin("complete")
     let sp = c.splice
-    if (sp != null && sp.names != null &&
-        names_part(sp.old) == names_part(list.slice(p.statements, sp.i0, sp.i0 + sp.count))) {
+    let fresh = null
+    if (sp != null) {
+      fresh = names_parts(list.slice(p.statements, sp.i0, sp.i0 + sp.count))
+    }
+    if (sp != null && sp.name_parts != null && len(sp.name_parts) == sp.n_old) {
+      c.name_parts = list.slice(sp.name_parts, 0, sp.i0) + fresh +
+        list.slice(sp.name_parts, sp.i0 + len(sp.old), len(sp.name_parts))
+    } else {
+      c.name_parts = names_parts(p.statements)
+    }
+    if (sp != null && sp.names != null && names_part(sp.old) == names_joined(fresh)) {
       c.names = sp.names
     } else {
-      c.names = names_build(p.statements)
+      c.names = names_merge(c.name_parts)
     }
     doc_cache_tidy(c)
     perf_end()
@@ -29,10 +41,51 @@ function doc_names(m) {
 }
 
 function names_build(stmts) {
+  names_merge(names_parts(stmts))
+}
+
+-~> The names part of each statement, in order.
+function names_parts(stmts) {
+  let out = []
+  for (let i = 0; i < len(stmts); i += 1) {
+    push(out, names_part([stmts[i]]))
+  }
+  out
+}
+
+-~> The parts one after another, as one part (what names_part of all their
+-~> statements gives).
+function names_joined(parts) {
+  let fns = []
+  let items = []
+  for (let i = 0; i < len(parts); i += 1) {
+    fns = fns + parts[i][0]
+    items = items + parts[i][1]
+  }
+  [fns, items]
+}
+
+-~> The names hash from the parts: the first function and the first
+-~> definition of every name win, in the order of the text.
+function names_merge(parts) {
   let funcs = {}
-  names_funcs(stmts, funcs)
   let seen = {}
-  let items = cmp_user_items(stmts, [], seen)
+  let items = []
+  for (let i = 0; i < len(parts); i += 1) {
+    let fns = parts[i][0]
+    for (let k = 0; k < len(fns); k += 1) {
+      if (funcs[fns[k][0]] == null) {
+        funcs[fns[k][0]] = fns[k][1]
+      }
+    }
+    let its = parts[i][1]
+    for (let k = 0; k < len(its); k += 1) {
+      if (seen[its[k].name] == null) {
+        seen[its[k].name] = true
+        push(items, its[k])
+      }
+    }
+  }
   {"funcs": funcs, "items": items, "seen": seen}
 }
 
