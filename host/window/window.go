@@ -57,10 +57,20 @@ type Frame struct {
 	Dirty image.Rectangle
 }
 
+// Chrome is a change of the window's frame, made while it runs: the splash
+// screen becoming the editor window.
+type Chrome struct {
+	Decorated bool   // title bar and border
+	Floating  bool   // above all other windows
+	Size      [2]int // new size, if both are positive
+	Center    bool   // move to the middle of the screen after resizing
+}
+
 // Output is what the handler wants back.
 type Output struct {
 	Frame    *Frame
-	ResizeTo [2]int // new window size, if both are positive
+	ResizeTo [2]int  // new window size, if both are positive
+	Chrome   *Chrome // change the window frame, if set
 	Quit     bool
 }
 

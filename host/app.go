@@ -74,7 +74,13 @@ func NewApp(w, h int) *App {
 
 // Load builds the UI environment from the embedded libraries and starts the
 // app on path.
-func (a *App) Load(path string) error {
+func (a *App) Load(path string) error { return a.LoadWith(path, nil) }
+
+// LoadWith is Load that reports how far it got: progress is called with a
+// number from 0 to 1 (by bytes of library source) as the libraries load, and
+// with 1 when the app has started. It may be called from another goroutine
+// than Tick's, as long as nothing else uses the App until it returns.
+func (a *App) LoadWith(path string, progress func(float64)) error {
 	evaluator.Output = os.Stderr
 	a.env = object.NewEnvironment()
 	a.env.Define("fb", a.FB.Builtins())
@@ -84,14 +90,29 @@ func (a *App) Load(path string) error {
 	a.env.Define("clip", clipHash())
 	a.env.Define("os", osHash())
 
-	for _, name := range lib.UIFiles() {
-		code, err := lib.Files.ReadFile(name)
+	names := lib.UIFiles()
+	codes := make([][]byte, len(names))
+	total := 0
+	for i, name := range names {
+		code, err := lib.ReadUI(name)
 		if err != nil {
 			return err
 		}
-		if err := a.exec(name, string(code)); err != nil {
+		codes[i] = code
+		total += len(code)
+	}
+	report := func(f float64) {
+		if progress != nil {
+			progress(f)
+		}
+	}
+	done := 0
+	for i, name := range names {
+		if err := a.exec(name, string(codes[i])); err != nil {
 			return err
 		}
+		done += len(codes[i])
+		report(0.95 * float64(done) / float64(max(total, 1)))
 	}
 	v, ok := a.env.Get("app")
 	h, isHash := v.(*object.Hash)
@@ -99,7 +120,11 @@ func (a *App) Load(path string) error {
 		return fmt.Errorf("the UI libraries must define a hash called app")
 	}
 	a.app, a.path = h, path
-	return a.call("app.start(__path)", map[string]object.Object{"__path": newStr(path)})
+	err := a.call("app.start(__path)", map[string]object.Object{"__path": newStr(path)})
+	if err == nil {
+		report(1)
+	}
+	return err
 }
 
 // exec runs library code in the UI environment.

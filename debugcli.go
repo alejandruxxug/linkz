@@ -6,31 +6,30 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
-	"path/filepath"
+	"strconv"
 	"time"
 
 	"linkz/host"
 )
 
-// debug sends one command to the running editor and prints the JSON reply.
+// debug sends one command to the newest running editor (or --pid N) and prints the JSON reply.
 func debug(args []string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: linkz debug Command [args...] (try List)")
+		return fmt.Errorf("usage: linkz debug [--pid N] Command [args...] (try List)")
 	}
-	home, err := os.UserHomeDir()
+	pid := 0
+	if len(args) >= 2 && args[0] == "--pid" {
+		n, err := strconv.Atoi(args[1])
+		if err != nil || n <= 0 {
+			return fmt.Errorf("--pid wants a process id, got %q", args[1])
+		}
+		pid, args = n, args[2:]
+		if len(args) < 1 {
+			return fmt.Errorf("usage: linkz debug [--pid N] Command [args...]")
+		}
+	}
+	info, err := host.FindBackdoor(pid)
 	if err != nil {
-		return err
-	}
-	data, err := os.ReadFile(filepath.Join(home, ".linkz", "debug.json"))
-	if err != nil {
-		return fmt.Errorf("no running editor (%v)", err)
-	}
-	var info struct {
-		Port  int    `json:"port"`
-		Token string `json:"token"`
-	}
-	if err := json.Unmarshal(data, &info); err != nil {
 		return err
 	}
 	body, _ := json.Marshal(map[string]any{"cmd": args[0], "args": args[1:]})

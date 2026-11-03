@@ -27,8 +27,9 @@ type FB struct {
 	// the whole buffer.
 	dirty   map[string]image.Rectangle
 	touched map[string]bool
-	final   *image.RGBA // the composited window image
-	all     bool        // present everything next time
+	final   *image.RGBA     // the composited window image
+	all     bool            // present everything next time
+	kept    map[string]*Buf // offscreen buffers lizard asked to keep
 }
 
 // NewFB makes a framebuffer for a window of w by h pixels. The UI buffer is
@@ -213,6 +214,7 @@ func (f *FB) Builtins() *object.Hash {
 		"clip":      f.clip,
 		"unclip":    f.unclip,
 		"offscreen": f.offscreen,
+		"keep":      f.keep,
 		"screen":    f.screen,
 		"target":    f.setTarget,
 		"canvas":    f.setCanvas,
@@ -348,6 +350,34 @@ func (f *FB) offscreen(args ...object.Object) object.Object {
 	}
 	f.off = NewBuf(int(w), int(h))
 	return null
+}
+
+// keep stores the current offscreen buffer under a name, so the host can show
+// it later (the splash frames). Keeping again under a name replaces it.
+func (f *FB) keep(args ...object.Object) object.Object {
+	name, ok := object.Object(nil), false
+	if len(args) == 1 {
+		name = args[0]
+		_, ok = name.(*object.String)
+	}
+	if !ok || f.off == nil {
+		return errorf("want (STRING name) while an offscreen buffer is the target")
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.kept == nil {
+		f.kept = map[string]*Buf{}
+	}
+	f.kept[name.(*object.String).Value] = f.off
+	f.off = nil // the kept buffer is no longer drawn on
+	return null
+}
+
+// Kept is the buffer stored by fb.keep under name, or nil.
+func (f *FB) Kept(name string) *Buf {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.kept[name]
 }
 
 // screen goes back to the named target (ui unless fb.target changed it).

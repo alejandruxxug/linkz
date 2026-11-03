@@ -25,7 +25,7 @@ import (
 // inspect the running editor. Input commands go through the same event path
 // as real input and reply after the resulting paint.
 
-// TokenHeader carries the secret from ~/.linkz/debug.json.
+// TokenHeader carries the secret from ~/.linkz/debug-<pid>.json.
 const TokenHeader = "X-Linkz-Token"
 
 // Debug serves the backdoor for an App.
@@ -58,8 +58,10 @@ func NewDebug(app *App) *Debug {
 	return d
 }
 
-// Start listens on 127.0.0.1 on a free port and writes ~/.linkz/debug.json.
+// Start listens on 127.0.0.1 on a free port and writes this window's own
+// ~/.linkz/debug-<pid>.json (0600). Files of dead windows are cleaned first.
 func (d *Debug) Start() error {
+	CleanStaleBackdoors()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return err
@@ -74,12 +76,12 @@ func (d *Debug) Start() error {
 	if err != nil {
 		return err
 	}
-	d.file = filepath.Join(dir, "debug.json")
+	d.file = filepath.Join(dir, fmt.Sprintf("debug-%d.json", os.Getpid()))
 	info, _ := json.Marshal(map[string]any{"port": ln.Addr().(*net.TCPAddr).Port, "token": d.Token, "pid": os.Getpid()})
 	return os.WriteFile(d.file, info, 0o600)
 }
 
-// Stop closes the server and removes debug.json.
+// Stop closes the server and removes its debug file.
 func (d *Debug) Stop() {
 	if d.srv != nil {
 		d.srv.Close()

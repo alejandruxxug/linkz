@@ -1,7 +1,9 @@
 package window
 
 import (
+	"fmt"
 	"image"
+	"os"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
@@ -11,18 +13,32 @@ import (
 
 // Ebiten is the Ebitengine window. Only WritePixels is used to show pixels;
 // none of Ebitengine's drawing, text or vector APIs are called.
-type Ebiten struct{}
+type Ebiten struct {
+	// Frameless opens the window without a title bar, transparent, floating
+	// above other windows and not resizable: the splash screen. A Chrome
+	// output turns it into a normal window. Transparency can only be chosen
+	// before the window opens, so the window stays "transparent" for its
+	// whole life; that only matters for pixels the app leaves clear.
+	Frameless bool
+}
 
 // Run implements Window.
-func (Ebiten) Run(title string, w, h int, handler Handler) error {
+func (e Ebiten) Run(title string, w, h int, handler Handler) error {
 	g := &game{handler: handler, w: w, h: h}
 	ebiten.SetWindowTitle(title)
 	ebiten.SetWindowSize(w, h)
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
+	if e.Frameless {
+		ebiten.SetWindowDecorated(false)
+		ebiten.SetWindowFloating(true)
+		ebiten.SetWindowResizingMode(ebiten.WindowResizingModeDisabled)
+		center(w, h)
+	}
 	ebiten.SetScreenClearedEveryFrame(false)
 	ebiten.SetRunnableOnUnfocused(true)
 	ebiten.SetTPS(30)
-	if err := ebiten.RunGame(g); err != nil && err != ebiten.Termination {
+	opts := &ebiten.RunGameOptions{ScreenTransparent: e.Frameless}
+	if err := ebiten.RunGameWithOptions(g, opts); err != nil && err != ebiten.Termination {
 		return err
 	}
 	return nil
@@ -35,6 +51,8 @@ type game struct {
 	frame   *Frame // waiting to be shown
 	shownW  int    // width of the screen the last full frame went to
 	shownH  int
+
+	chromeLog int
 
 	lastX, lastY int
 	held         map[int]bool
@@ -70,10 +88,43 @@ func (g *game) Update() error {
 	if out.ResizeTo[0] > 0 && out.ResizeTo[1] > 0 {
 		ebiten.SetWindowSize(out.ResizeTo[0], out.ResizeTo[1])
 	}
+	if out.Chrome != nil {
+		g.applyChrome(out.Chrome)
+	} else if g.chromeLog > 0 {
+		g.chromeLog--
+		if g.chromeLog == 0 {
+			fmt.Fprintf(os.Stderr, "window: decorated=%v floating=%v\n",
+				ebiten.IsWindowDecorated(), ebiten.IsWindowFloating())
+		}
+	}
 	if out.Quit {
 		return ebiten.Termination
 	}
 	return nil
+}
+
+// center puts a window of w by h in the middle of the screen.
+func center(w, h int) {
+	if m := ebiten.Monitor(); m != nil {
+		mw, mh := m.Size()
+		ebiten.SetWindowPosition(max(0, (mw-w)/2), max(0, (mh-h)/2))
+	}
+}
+
+// applyChrome changes the window frame while the window runs.
+func (g *game) applyChrome(c *Chrome) {
+	ebiten.SetWindowDecorated(c.Decorated)
+	ebiten.SetWindowFloating(c.Floating)
+	if c.Decorated {
+		ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
+	}
+	if c.Size[0] > 0 && c.Size[1] > 0 {
+		ebiten.SetWindowSize(c.Size[0], c.Size[1])
+		if c.Center {
+			center(c.Size[0], c.Size[1])
+		}
+	}
+	g.chromeLog = 3 // report what the system made of it, a few ticks later
 }
 
 // Draw writes the pixels lizard produced. When the screen size changed the

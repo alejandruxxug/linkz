@@ -6,12 +6,15 @@ import (
 	"embed"
 	"sort"
 	"strings"
+
+	"linkz/lib/draw"
 )
 
 // Files holds the source of the graphics support (gfx) and the editor (ui).
-// The drawing libraries live in their own package, lib/draw.
+// Only the top-level .liz files of gfx are embedded, not its tests. The
+// drawing libraries live in their own package, lib/draw.
 //
-//go:embed gfx ui
+//go:embed gfx/*.liz gfx/FONT_LICENSE ui
 var Files embed.FS
 
 // Dir lists the .liz files of a folder, in the order they load: by name,
@@ -48,17 +51,40 @@ func Dir(dir string, first ...string) []string {
 	return names
 }
 
-// UIFiles are the libraries the editor's UI environment loads: the graphics
-// support first, then the UI, with app.liz last.
+// DrawPrefix marks a UIFiles name that lives in lib/draw, not in Files.
+const DrawPrefix = "draw/"
+
+// splashFiles belong to the splash screen, which has its own environment;
+// the editor's environment doesn't load them.
+var splashFiles = map[string]bool{"ui/splash.liz": true, "ui/splash_art.liz": true}
+
+// UIFiles are the libraries the editor's UI environment loads, in order: the
+// drawing libraries (geometry, shapes, paint_order), which the graphics
+// support uses, then the graphics support, then the UI, with app.liz last.
+// Names starting with DrawPrefix are read with ReadUI.
 func UIFiles() []string {
-	files := Dir("gfx")
+	var files []string
+	for _, f := range draw.Order {
+		files = append(files, DrawPrefix+f)
+	}
+	files = append(files, Dir("gfx")...)
 	var app []string
 	for _, f := range Dir("ui") {
-		if f == "ui/app.liz" {
+		switch {
+		case splashFiles[f]:
+		case f == "ui/app.liz":
 			app = append(app, f)
-		} else {
+		default:
 			files = append(files, f)
 		}
 	}
 	return append(files, app...)
+}
+
+// ReadUI reads a file named by UIFiles.
+func ReadUI(name string) ([]byte, error) {
+	if rest, ok := strings.CutPrefix(name, DrawPrefix); ok {
+		return draw.Files.ReadFile(rest)
+	}
+	return Files.ReadFile(name)
 }

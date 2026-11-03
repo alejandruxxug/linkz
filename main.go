@@ -1,9 +1,9 @@
 // Command linkz draws vector art written in lizard-script.
 //
-//	linkz edit [drawing.lzdraw]            opens the native editor
+//	linkz edit [--no-splash] [drawing.lzdraw]  opens the native editor
 //	linkz render drawing.lzdraw [out.svg]  writes the SVG
 //	linkz paint prog.liz out.png [WxH]     runs a program headless on a buffer
-//	linkz debug Command [args]             drives a running editor
+//	linkz debug [--pid N] Command [args]   drives a running editor
 package main
 
 import (
@@ -20,10 +20,10 @@ import (
 )
 
 const usage = `usage:
-  linkz edit [file.lzdraw]
+  linkz edit [--no-splash] [file.lzdraw]
   linkz render file.lzdraw [out.svg]
   linkz paint prog.liz out.png [WxH]
-  linkz debug Command [args...]`
+  linkz debug [--pid N] Command [args...]`
 
 func main() {
 	if len(os.Args) < 2 {
@@ -96,21 +96,21 @@ func paint(args []string) error {
 }
 
 func edit(args []string) error {
-	path := ""
-	if len(args) > 0 {
-		path = args[0]
+	path, splash := "", true
+	for _, a := range args {
+		switch {
+		case a == "--no-splash":
+			splash = false
+		case strings.HasPrefix(a, "--"):
+			return fmt.Errorf("unknown flag %s (usage: linkz edit [--no-splash] [file.lzdraw])", a)
+		default:
+			path = a
+		}
 	}
 	app := host.NewApp(1024, 720)
-	if err := app.Load(path); err != nil {
-		return err
-	}
 	dbg := host.NewDebug(app)
-	if err := dbg.Start(); err != nil {
-		return err
-	}
-	defer dbg.Stop()
 
-	// A kill must not leave debug.json behind.
+	// A kill must not leave its debug file behind.
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 	go func() {
@@ -118,12 +118,46 @@ func edit(args []string) error {
 		dbg.Stop()
 		os.Exit(130)
 	}()
+	defer dbg.Stop()
 
 	title := "Linkz"
 	if path != "" {
 		title += " - " + path
 	}
-	err := window.Ebiten{}.Run(title, 1024, 720, app)
+
+	var handler window.Handler = app
+	win := window.Ebiten{}
+	var launcher *host.Launcher
+	if splash {
+		sp, err := host.NewSplash()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "linkz: no splash:", err)
+			splash = false
+		} else {
+			launcher = host.NewLauncher(sp, app, path)
+			launcher.OnReady = func() {
+				if err := dbg.Start(); err != nil {
+					fmt.Fprintln(os.Stderr, "linkz: backdoor:", err)
+				}
+			}
+			handler, win = launcher, window.Ebiten{Frameless: true}
+		}
+	}
+	w, h := 1024, 720
+	if splash {
+		w, h = launcher.Splash.WindowSize()
+	} else {
+		if err := app.Load(path); err != nil {
+			return err
+		}
+		if err := dbg.Start(); err != nil {
+			return err
+		}
+	}
+	err := win.Run(title, w, h, handler)
 	time.Sleep(150 * time.Millisecond) // let the Quit reply go out
+	if err == nil && launcher != nil {
+		err = launcher.Err
+	}
 	return err
 }

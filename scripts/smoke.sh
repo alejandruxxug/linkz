@@ -7,22 +7,24 @@ cd "$(dirname "$0")/.."
 TMP="${TMPDIR:-/tmp}"; TMP="${TMP%/}"
 SHOT="${1:-$TMP/linkz-smoke.png}"
 BIN="$TMP/linkz-smoke-bin"
-rm -f "$HOME/.linkz/debug.json"
 go build -o "$BIN" . 
 
-"$BIN" edit &
+# Our own window only: the debug file is per pid, and every command below
+# names it, so a window the developer has open is never touched.
+"$BIN" edit --no-splash &
 PID=$!
-cleanup() { kill "$PID" 2>/dev/null || true; rm -f "$HOME/.linkz/debug.json"; }
+DBG="$HOME/.linkz/debug-$PID.json"
+cleanup() { kill "$PID" 2>/dev/null || true; rm -f "$DBG"; }
 trap cleanup EXIT
 
 # wait for the backdoor
 i=0
-while [ ! -f "$HOME/.linkz/debug.json" ]; do
+while [ ! -f "$DBG" ]; do
   i=$((i + 1)); [ "$i" -gt 100 ] && { echo "editor did not start"; exit 1; }
   sleep 0.1
 done
 
-d() { "$BIN" debug "$@"; echo; }
+d() { "$BIN" debug --pid "$PID" "$@"; echo; }
 d Wait
 has() { case "$1" in *"$2"*) ;; *) echo "expected $2 in: $1"; exit 1;; esac; }
 has "$(d Call Ping hello)" '"pong":true'
@@ -33,5 +35,5 @@ d Stats
 d Quit
 wait "$PID" || true
 trap - EXIT
-rm -f "$HOME/.linkz/debug.json"
+rm -f "$DBG"
 echo "smoke ok: $SHOT"

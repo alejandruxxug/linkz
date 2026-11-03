@@ -1,0 +1,103 @@
+-~> splash: pre-renders the pieces of the startup banner (B012) into
+-~> offscreen buffers the host keeps. The host stacks them per frame:
+-~> a lizard frame, then the logo and tagline, then a vine stage, then a
+-~> bloom frame. It needs font.liz and splash_art.liz loaded first.
+-~>   splash_render()    draws every piece and keeps it by name; returns the
+-~>                      info hash the host reads (size, fps, step, counts)
+-~>   splash_error(msg)  keeps "error": msg in ember under the tagline
+-~> Kept names: "lizard0".."lizardN", "logo", "vine0".., "bloom0..".
+-~> "vines" and "bloom" are optional in the art; without them nothing is kept
+-~> for them and the info counts are 0.
+
+-~> Draws a sprite's runs [y, x0, x1, color] at a point.
+function splash_sprite(sprite, at) {
+  let runs = sprite["runs"]
+  for (let i = 0; i < len(runs); i = i + 1) {
+    let r = runs[i]
+    fb.span(at.y + r[0], at.x + r[1], at.x + r[2], r[3])
+  }
+}
+
+-~> Where an overlay sprite (vine stage, bloom frame) goes: its own "at" if it
+-~> has one, the corner when it is as big as the banner, else on the logo.
+function splash_overlay_at(sprite) {
+  let b = splash_art["banner"]
+  if (sprite["at"] !== null) {
+    return sprite["at"]
+  }
+  if (sprite["size"] == b["size"]) {
+    return (0, 0)
+  }
+  b["logo_at"]
+}
+
+-~> Renders a list of overlay sprites as banner-sized layers named prefix+i.
+function splash_overlays(frames, prefix) {
+  let size = splash_art["banner"]["size"]
+  for (let i = 0; i < len(frames); i = i + 1) {
+    fb.offscreen(size)
+    splash_sprite(frames[i], splash_overlay_at(frames[i]))
+    fb.keep(prefix + str(i))
+  }
+}
+
+function splash_logo() {
+  let b = splash_art["banner"]
+  fb.offscreen(b["size"])
+  splash_sprite(splash_art["logo"], b["logo_at"])
+  let t = b["tagline"]
+  let w = font.measure(t, 1).x
+  let x = math.floor((b["size"].x - w) / 2)
+  font.draw(t, (x + 1, b["tagline_y"] + 1), b["tagline_shadow"], 1)
+  font.draw(t, (x, b["tagline_y"]), b["tagline_color"], 1)
+  fb.keep("logo")
+}
+
+function splash_render() {
+  let frames = splash_art["lizard"]
+  for (let i = 0; i < len(frames); i = i + 1) {
+    fb.offscreen(frames[i]["size"])
+    splash_sprite(frames[i], (0, 0))
+    fb.keep("lizard" + str(i))
+  }
+  splash_logo()
+  let vines = splash_art["vines"]
+  let bloom = splash_art["bloom"]
+  let nv = 0
+  let nb = 0
+  if (vines !== null) {
+    nv = len(vines["frames"])
+    splash_overlays(vines["frames"], "vine")
+  }
+  if (bloom !== null) {
+    nb = len(bloom["frames"])
+    splash_overlays(bloom["frames"], "bloom")
+  }
+  let b = splash_art["banner"]
+  let info = {
+    "size": b["size"],
+    "fps": splash_art["fps"],
+    "step": splash_art["lizard_step"],
+    "lizard_y": b["lizard_y"],
+    "lizard_size": frames[0]["size"],
+    "lizards": len(frames),
+    "vines": nv,
+    "bloom": nb
+  }
+  info
+}
+
+-~> One line of error text in ember, centered under the tagline. It is cut to
+-~> fit the banner (the full text is printed to the terminal by the host).
+function splash_error(msg) {
+  let b = splash_art["banner"]
+  let max = math.floor(b["size"].x / 7) - 1
+  let line = msg
+  if (len(line) > max) {
+    line = text.slice(line, 0, max - 3) + "..."
+  }
+  fb.offscreen(b["size"])
+  let x = math.floor((b["size"].x - font.measure(line, 1).x) / 2)
+  font.draw(line, (x, b["tagline_y"] + 12), #d94a3a, 1)
+  fb.keep("error")
+}
