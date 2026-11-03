@@ -2,6 +2,8 @@
 
 Milestone: M3 Editor · Repo: `linkz` · Lane: lizard (`lib/ui/`) · Needs: B005, B006, B008, lizard-script B004 (layers, text/list helpers)
 
+**Build from the approved Figma frames** (file "Linkz", page ✅ Approved / 🧪 Reviews → R001 – Editor views; read them with the Figwright MCP `get_design_context` for exact sizes and colors, and re-read before building since the developer may have edited them). The palette is **Linkz Dark** (Style Guide), not Lizard 16. Each window also writes its own backdoor file (`~/.linkz/debug-<pid>.json`), and `linkz debug` targets the newest one unless `--pid` is given, so test runs never quit the developer's window (host change; the orchestrator assigns it).
+
 Read first: `docs/Linkz – Editor Design.md` (the whole thing: rows, rules, creating, properties, the host contract) and `docs/Linkz – Style Guide.md`.
 
 ## Goal
