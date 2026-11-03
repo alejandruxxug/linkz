@@ -5,7 +5,7 @@ puts(svg_num(3), svg_num(3.0), svg_num(2.5), svg_num(0.123456), svg_num(-0.004),
 puts(path_data([["M", (1, 2)], ["L", (3.5, 4)], ["C", (1, 1), (2, 2), (3, 3)], ["Z"]]))
 puts(paint_attrs("fill", #3fa34d))
 puts(paint_attrs("fill", #3fa34d80))
-puts(paint_attrs("stroke", nothing))
+puts(paint_attrs("stroke", null))
 
 -~> Without lines from a host, a document paints the last shape drawn first.
 canvas = {"size": (100, 60), "background": #f4f1e8}

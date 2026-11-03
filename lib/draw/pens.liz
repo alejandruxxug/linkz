@@ -14,18 +14,18 @@ let pens = {}
 
 -~> ink: crisp line, pressure changes the width a lot, both ends taper to a
 -~> point. Uses min, max, taper.
-pens.ink = {"name": "ink", "min": 1, "max": 10, "taper": 0.3, "opacity": [1, 1], "nib": nothing, "grain": 0}
+pens.ink = {"name": "ink", "min": 1, "max": 10, "taper": 0.3, "opacity": [1, 1], "nib": null, "grain": 0}
 
 -~> pencil: thin and light, pressure changes the opacity more than the width,
 -~> and the edge is slightly grainy. Uses min, max, opacity, grain.
-pens.pencil = {"name": "pencil", "min": 1, "max": 2.5, "taper": 0.1, "opacity": [0.3, 0.95], "nib": nothing, "grain": 0.4}
+pens.pencil = {"name": "pencil", "min": 1, "max": 2.5, "taper": 0.1, "opacity": [0.3, 0.95], "nib": null, "grain": 0.4}
 
 -~> marker: constant width, see-through, flat ends. Uses min (= max), opacity.
-pens.marker = {"name": "marker", "min": 10, "max": 10, "taper": 0, "opacity": [0.55, 0.55], "nib": nothing, "grain": 0}
+pens.marker = {"name": "marker", "min": 10, "max": 10, "taper": 0, "opacity": [0.55, 0.55], "nib": null, "grain": 0}
 
 -~> brush: wide width range, soft taper, fades out at low pressure. Uses min,
 -~> max, taper, opacity.
-pens.brush = {"name": "brush", "min": 2, "max": 28, "taper": 0.4, "opacity": [0.35, 1], "nib": nothing, "grain": 0}
+pens.brush = {"name": "brush", "min": 2, "max": 28, "taper": 0.4, "opacity": [0.35, 1], "nib": null, "grain": 0}
 
 -~> calligraphy: a flat nib held at 45 degrees; strokes along the nib are thin
 -~> and across it are thick, whatever the pressure. Uses min, max, nib.

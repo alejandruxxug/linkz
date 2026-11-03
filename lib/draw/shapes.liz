@@ -28,12 +28,9 @@ function draw(shape) {
   shape
 }
 
--~> TODO(B011): replace the puts and the `bad_argument` line with error(call + ": " + message).
--~> lizard-script has no error() yet. The message is printed and then an
--~> unknown name stops the program, so the error says `bad_argument`.
+-~> Stops the drawing with a message that names the call that went wrong.
 function reject(call, message) {
-  puts("draw error: " + call + ": " + message)
-  bad_argument
+  error(call + ": " + message)
 }
 
 function is_number(v) {
@@ -71,7 +68,7 @@ function need_points(call, name, v) {
 
 function make_shape(kind, args, path, fill, stroke_color, width, anchors) {
   draw({"kind": kind, "args": args, "path": path, "fill": fill, "stroke": stroke_color, "width": width,
-        "widths": nothing, "opacities": nothing, "anchors": anchors, "line": nothing, "layer": nothing})
+        "widths": null, "opacities": null, "anchors": anchors, "line": null, "layer": null})
 }
 
 function make_anchor(pos, arg, item, role) {
@@ -124,8 +121,8 @@ function circle(center, r, fill) {
   need_point("circle", "center", center)
   need_number("circle", "r", r)
   need_color("circle", "fill", fill)
-  make_shape("circle", [center, r, fill], ellipse_path(center, (r, r)), fill, nothing, 0,
-             [make_anchor(center, 0, nothing, "move"), make_anchor(center + (r, 0), 1, nothing, "radius")])
+  make_shape("circle", [center, r, fill], ellipse_path(center, (r, r)), fill, null, 0,
+             [make_anchor(center, 0, null, "move"), make_anchor(center + (r, 0), 1, null, "radius")])
 }
 
 -~> Draws a filled ellipse.
@@ -137,8 +134,8 @@ function ellipse(center, radii, fill) {
   need_point("ellipse", "center", center)
   need_point("ellipse", "radii", radii)
   need_color("ellipse", "fill", fill)
-  make_shape("ellipse", [center, radii, fill], ellipse_path(center, radii), fill, nothing, 0,
-             [make_anchor(center, 0, nothing, "move"), make_anchor(center + radii, 1, nothing, "corner")])
+  make_shape("ellipse", [center, radii, fill], ellipse_path(center, radii), fill, null, 0,
+             [make_anchor(center, 0, null, "move"), make_anchor(center + radii, 1, null, "corner")])
 }
 
 -~> Draws a filled rectangle.
@@ -151,8 +148,8 @@ function rect(pos, size, fill) {
   need_point("rect", "size", size)
   need_color("rect", "fill", fill)
   let path = [["M", pos], ["L", (pos.x + size.x, pos.y)], ["L", pos + size], ["L", (pos.x, pos.y + size.y)], ["Z"]]
-  make_shape("rect", [pos, size, fill], path, fill, nothing, 0,
-             [make_anchor(pos, 0, nothing, "move"), make_anchor(pos + size, 1, nothing, "corner")])
+  make_shape("rect", [pos, size, fill], path, fill, null, 0,
+             [make_anchor(pos, 0, null, "move"), make_anchor(pos + size, 1, null, "corner")])
 }
 
 -~> Draws a straight line with round ends.
@@ -166,8 +163,8 @@ function line(a, b, color, width) {
   need_point("line", "b", b)
   need_color("line", "color", color)
   need_number("line", "width", width)
-  make_shape("line", [a, b, color, width], [["M", a], ["L", b]], nothing, color, width,
-             [make_anchor(a, 0, nothing, "point"), make_anchor(b, 1, nothing, "point")])
+  make_shape("line", [a, b, color, width], [["M", a], ["L", b]], null, color, width,
+             [make_anchor(a, 0, null, "point"), make_anchor(b, 1, null, "point")])
 }
 
 -~> Draws a filled shape with straight sides.
@@ -182,7 +179,7 @@ function polygon(points, fill) {
     push(path, ["L", points[i]])
   }
   push(path, ["Z"])
-  make_shape("polygon", [points, fill], path, fill, nothing, 0, anchors_of(points))
+  make_shape("polygon", [points, fill], path, fill, null, 0, anchors_of(points))
 }
 
 -~> Draws a smooth curve that passes through every point. One point is a
@@ -195,7 +192,7 @@ function stroke(points, color, width) {
   need_points("stroke", "points", points)
   need_color("stroke", "color", color)
   need_number("stroke", "width", width)
-  make_shape("stroke", [points, color, width], smooth_path(points), nothing, color, width, anchors_of(points))
+  make_shape("stroke", [points, color, width], smooth_path(points), null, color, width, anchors_of(points))
 }
 
 -~> Where the outline of a brush stroke gets its points: a list of
@@ -329,13 +326,13 @@ function brush(points, pressures, color, pen) {
     widest = math.max(widest, widths[i])
   }
 
-  let path = nothing
+  let path = null
   if (n == 1) {
     path = ellipse_path(points[0], (math.max(0.1, widths[0] / 2.0), math.max(0.1, widths[0] / 2.0)))
   } else {
     path = brush_outline(brush_samples(points, widths, opacities), pen)
   }
-  let shape = make_shape("brush", [points, pressures, color, pen], path, fade_color(color, mean), nothing, widest, anchors_of(points))
+  let shape = make_shape("brush", [points, pressures, color, pen], path, fade_color(color, mean), null, widest, anchors_of(points))
   shape.widths = widths
   shape.opacities = opacities
   shape

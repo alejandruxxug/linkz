@@ -1,2 +1,1 @@
-draw error: stroke: points must be a list of points like [(0, 0), (10, 5)] with at least one
-[line 36, column 3] runtime error: identifier not found: bad_argument
+[line 33, column 8] runtime error: stroke: points must be a list of points like [(0, 0), (10, 5)] with at least one

@@ -145,8 +145,8 @@ function flatten_path(path, tolerance) {
 -~> empty path.
 function path_bounds(path) {
   let subs = flatten_path(path, flatten_tolerance)
-  let lo = nothing
-  let hi = nothing
+  let lo = null
+  let hi = null
   for (let i = 0; i < len(subs); i = i + 1) {
     let pts = subs[i].points
     for (let j = 0; j < len(pts); j = j + 1) {
@@ -161,7 +161,7 @@ function path_bounds(path) {
     }
   }
   if (type(lo) == "NULL") {
-    return nothing
+    return null
   }
   {"min": lo, "max": hi}
 }
@@ -216,7 +216,7 @@ function distance_to_polyline(points, p, closed) {
 -~> The distance from p to the outline of a path.
 function distance_to_path(path, p) {
   let subs = flatten_path(path, flatten_tolerance)
-  let best = nothing
+  let best = null
   for (let i = 0; i < len(subs); i = i + 1) {
     let d = distance_to_polyline(subs[i].points, p, subs[i].closed)
     if (type(best) == "NULL" || d < best) {
@@ -230,7 +230,7 @@ function distance_to_path(path, p) {
 -~> {"point": q, "dist": d, "command": index in the path of the L, C or Z that
 -~> holds it, "t": 0 to 1 along that command}. Null for an empty path.
 function nearest_on_path(path, p) {
-  let best = nothing
+  let best = null
   let start = (0, 0)
   let cur = (0, 0)
   for (let i = 0; i < len(path); i = i + 1) {

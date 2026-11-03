@@ -7,7 +7,3 @@ function here() {
   return
 }
 
--~> TODO(B011): replace this with the null value the language is getting.
--~> lizard-script has no null literal yet, so this is one: an `if` that does
--~> not run gives null.
-let nothing = if (false) { 1 }

@@ -45,6 +45,6 @@ let pc = brush(pts, [0.5, 0.5, 0.5, 0.5], #000, pens.pencil)
 puts(len(pc.path) == len(b.path), pc.fill)
 
 -~> A pen you write yourself works too.
-let mine = {"name": "mine", "min": 2, "max": 2, "taper": 0, "opacity": [1, 1], "nib": nothing, "grain": 0}
+let mine = {"name": "mine", "min": 2, "max": 2, "taper": 0, "opacity": [1, 1], "nib": null, "grain": 0}
 let own = brush([(0, 0), (30, 0)], [0.5, 0.5], #fff, mine)
 puts(own.widths, path_bounds(own.path))
