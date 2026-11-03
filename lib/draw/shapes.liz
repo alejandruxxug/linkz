@@ -308,13 +308,14 @@ function brush(points, pressures, color, pen) {
   let n = len(points)
   let widths = []
   let opacities = []
+  let ps = pen_prepare(pen, points, pressures)
   for (let i = 0; i < n; i = i + 1) {
     let a = points[math.min(i + 1, n - 1)] - points[math.max(i - 1, 0)]
     let angle = 0.0
     if (a.x != 0 || a.y != 0) {
       angle = math.atan2(a.y, a.x)
     }
-    let r = pen_response(pen, pressures[i], angle)
+    let r = pen_response(pen, ps[i], angle)
     push(widths, r[0])
     push(opacities, r[1])
   }

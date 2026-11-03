@@ -62,3 +62,11 @@ puts(resolve_gradient(radial_gradient([#fff, #000], (0, 0), 1), box).center)
 -~> A line has no height: the gradient still resolves.
 puts(resolve_paint(line((0, 10), (40, 10), gradient([#000, #fff], 0deg), 2), "fill"))
 puts(resolve_paint(line((0, 10), (40, 10), gradient([#000, #fff], 0deg), 2), "stroke").to)
+
+-~> scale_paint moves pinned gradients with their shape; the rest stays.
+let sp1 = scale_paint(linear((10, 20), (110, 20), [#fff, #000]), 0.5, (4, 6))
+puts(sp1.from, sp1.to, sp1.kind)
+let sp2 = scale_paint(radial((100, 100), 80, [#fff, #000]), 0.75)
+puts(sp2.center, sp2.r, sp2.scale)
+let sp3 = gradient([#fff, #000])
+puts(scale_paint(sp3, 2) === sp3, scale_paint(#123456, 2), scale_paint(null, 2))

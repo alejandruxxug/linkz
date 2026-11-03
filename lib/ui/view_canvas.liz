@@ -23,6 +23,9 @@ function view_scale_shape(s, k) {
     }
   }
   out.path = path
+  out.fill = scale_paint(s.fill, k)
+  out.stroke = scale_paint(s.stroke, k)
+  out.paint_cache = null
   if (type(s.width) == "INTEGER" || type(s.width) == "FLOAT") {
     out.width = s.width * k
   }
@@ -259,6 +262,42 @@ function view_paint_canvas_ui(cl) {
   }
 }
 
+-~> One shape's fill and stroke, from the span cache.
+function view_paint_shape(s, off) {
+  if (!view_tools_lite(s, off)) {
+    let r = raster.shape(s)
+    if (r.fill !== null) {
+      raster.draw(r.fill, off, resolve_paint(s, "fill"))
+    }
+    if (r.stroke !== null) {
+      raster.draw(r.stroke, off, resolve_paint(s, "stroke"))
+    }
+  }
+}
+
+-~> The shapes (back to front) on the canvas. Layers with a blend mode or an
+-~> opacity are drawn in a buffer of their own and mixed, as raster.paint does.
+function view_paint_shapes(shapes, off) {
+  if (!any_styled(shapes)) {
+    for (let i = 0; i < len(shapes); i = i + 1) {
+      view_paint_shape(shapes[i], off)
+    }
+    return null
+  }
+  let events = layer_events(shapes)
+  for (let i = 0; i < len(events); i = i + 1) {
+    let kind = events[i][0]
+    if (kind == "shape") {
+      view_paint_shape(events[i][1], off)
+    } elif (kind == "open") {
+      fb.push_layer()
+    } else {
+      fb.pop_layer(events[i][1].mode, events[i][1].opacity)
+    }
+  }
+  null
+}
+
 function view_paint_canvas() {
   raster.new_frame()
   let gm = view_geom()
@@ -275,18 +314,7 @@ function view_paint_canvas() {
   fb.clip(off, (cl.sw, cl.sh))
   fb.fill(off, (cl.sw, cl.sh), ed.canvas.background)
   let shapes = shapes_to_paint(view_scaled(cl.zoom), view_rows())
-  for (let i = 0; i < len(shapes); i = i + 1) {
-    let s = shapes[i]
-    if (!view_tools_lite(s, off)) {
-      let r = raster.shape(s)
-      if (r.fill !== null) {
-        raster.draw(r.fill, off, resolve_paint(s, "fill"))
-      }
-      if (r.stroke !== null) {
-        raster.draw(r.stroke, off, resolve_paint(s, "stroke"))
-      }
-    }
-  }
+  view_paint_shapes(shapes, off)
   view_tools_paint(cl, off)
   if (ed.stale && len(ed.errors) > 0) {
     fb.fill(off, (cl.sw, cl.sh), P.veil)

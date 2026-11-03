@@ -250,6 +250,23 @@ function resolve_gradient(g, box) {
   radial((box.min.x + g.center.x * w, box.min.y + g.center.y * h), r, g.stops, g.steps)
 }
 
+-~> A paint moved with its shape when the shape is scaled by k and then moved
+-~> by offset (a point): a pinned linear() or radial() gets its numbers
+-~> scaled the same way; a color or a relative gradient is returned as it is
+-~> (a relative one is resolved against the shape's own bounds later).
+function scale_paint(paint, k, offset = (0, 0)) {
+  if (!is_gradient(paint) || is_relative_gradient(paint)) {
+    return paint
+  }
+  if (k == 1 && offset.x == 0 && offset.y == 0) {
+    return paint
+  }
+  if (paint.kind == "linear") {
+    return linear(paint.from * k + offset, paint.to * k + offset, paint.stops, paint.steps)
+  }
+  radial(paint.center * k + offset, paint.r * k, paint.stops, paint.steps)
+}
+
 -~> The paint of a shape's "fill" or "stroke" ready to draw: a color or a
 -~> pinned gradient is returned as it is; a relative one is resolved against
 -~> the shape's path bounds. The result is kept on the shape, and used again
