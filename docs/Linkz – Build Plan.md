@@ -37,6 +37,7 @@ Order: finish B007b (editor view) + B015 (home) → **B009** pencil/brush/anchor
 ## 🗃️ Later (parked ideas)
 | Idea | Why parked |
 |---|---|
+| Brush creator (Procreate-style) + `.lzbrush` import/export + Procreate/ABR import | See [[Linkz – Brushes]]; after v1.1 |
 | Mini videos in pen/tool tooltips | Needs a solid tooltip + animation structure first |
 | Own Cocoa window layer (drop Ebitengine) | After v1 |
 | Tablet pressure tested on real hardware | No tablet here |
