@@ -21,6 +21,14 @@
 | M8 | Tracing | `trace.image(...)` turns a PNG into editable shapes |
 | M9 | Release | GoReleaser binaries for macOS/Windows/Linux + install script; the reveal |
 
+## 🗃️ Later (parked ideas)
+| Idea | Why parked |
+|---|---|
+| Mini videos in pen/tool tooltips | Needs a solid tooltip + animation structure first |
+| Own Cocoa window layer (drop Ebitengine) | After v1 |
+| Tablet pressure tested on real hardware | No tablet here |
+| Pressure on Windows/Linux | macOS first |
+
 ## 📦 Batches
 
 Briefs live in `docs/Batches/B<nnn> – <name>.md`.

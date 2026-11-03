@@ -45,5 +45,7 @@ Write lizard-script → see the drawing update → tweak (code or, later, drag o
 | 2026-11-02 | **v1 finish line: draw a line with the mouse and edit it like a vector line** | The developer's goal; two-way canvas editing is protected over panel polish |
 | 2026-11-02 | Pressure-sensitive `brush` (Force Touch trackpad + drawing tablets via an NSEvent monitor; speed-based with a mouse) | Trackpad pressure confirmed working by the developer |
 | 2026-11-02 | **Default pen styles** (ink, pencil, marker, brush, calligraphy); `brush` stores raw pressures and a pen style shapes them | "add some pen styles for default as to have some brush styles"; changing the pen re-styles a stroke without redrawing it |
+| 2026-11-02 | **Tooltips** on functions, properties, tools and pens, from `-~>` doc comments above each function (the user's own functions get them too) | "when we hover over a function or a property make it give a small tooltip" |
+| 2026-11-02 | Mini videos in tool/pen tooltips: **later**, once the structure is solid | The developer's call |
 | 2026-11-02 | Named **Linkz** (lizard inkz); files stay `.lzdraw` | The developer's pick |
 | 2026-11-02 | lizard-script stays its own repo; Linkz imports it | Language work counts for the course; Linkz stays private until the reveal |

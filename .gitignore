@@ -3,3 +3,5 @@
 /linkz.exe
 *.svg
 *.test
+go.work
+go.work.sum

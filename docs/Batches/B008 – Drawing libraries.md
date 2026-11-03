@@ -29,6 +29,18 @@ The drawing API a `.lzdraw` file uses, written in lizard with points and colors.
 | `canvas` | `{"size": (512, 512), "background": #ffffff}`, a variable the drawing reassigns | — |
 `stroke`/`brush` with 1 point → a dot; 2 → a straight segment. Wrong argument types → a lizard runtime error with a clear message (the language has no `error()` builtin yet; if you need one, report it as a language need instead of faking it).
 
+## Doc comments (tooltips)
+Every public function gets a doc comment right above it, in this exact format (the editor shows it as a tooltip; B005's `src.parse` reads it):
+```
+-~> Draws a filled circle.
+-~> center: the middle of the circle, a point
+-~> r: the radius in pixels
+-~> fill: the color inside
+-~> example: circle((256, 256), 40, #3fa34d)
+function circle(center, r, fill) { ... }
+```
+Pens get one too (above each `pens.*` entry): what it feels like and which keys it uses.
+
 ## Pen styles (`lib/draw/pens.liz`)
 A pen is a hash that turns pressure (and direction) into width and opacity per point; the stroke stores raw pressures, so changing the pen re-styles it. Defaults: `pens.ink` (pressure → width strongly, tapered ends), `pens.pencil` (thin; pressure → opacity more than width; slightly grainy edge from deterministic noise), `pens.marker` (constant width, semi-transparent, flat), `pens.brush` (wide width range, soft taper, fades at low pressure), `pens.calligraphy` (width from the angle between stroke direction and a nib angle). Shape: `{"name": "ink", "min": 1, "max": 10, "taper": 0.3, "opacity": [1, 1], "nib": null}` (document every key); users can write their own. `pens.list` for the editor's picker.
 
