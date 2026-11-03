@@ -32,6 +32,8 @@ So a typical shape costs a few ms and is rasterized once (`raster.shape` caches 
 | Optional/default parameters | `t()` + `tf()` in i18n | Two functions | B014 in progress |
 | try/catch | Failed file writes kill the call | `fs.exists` guards | B014 in progress |
 
+| Parser error recovery cascades (a bad token on one line yields a fake error on a later valid line) | Editor error rows (QA BUG-6) | Editor marks later parse errors as "may be caused by the error above" | Medium — the real fix (recover at the next statement on a new line) changes the team's `syntax_several_errors.expected`, so it **needs the team's agreement** |
+
 ## 📓 Log
 
 | Date | Need | What happened |
