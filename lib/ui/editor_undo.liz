@@ -13,7 +13,8 @@ let ed = {
   "docs": null, "docs_lang": "", "status": "", "refusal": null,
   "color": "#1d1d1f", "width": 4, "pen": "ink",
   "undo_labels": [], "redo_labels": [], "label": null, "gesture_label": null,
-  "merge_col": -1, "merge_at": 0, "note": null, "runs": 0
+  "merge_col": -1, "merge_at": 0, "note": null, "runs": 0,
+  "shapes_ver": 0, "patch": null, "ran": null
 }
 
 -~> How many steps the history keeps, and how long a pause (ms) ends a typing step.
@@ -105,6 +106,9 @@ function ed_reset(code, file) {
   ed.folded = {}
   ed.errors = []
   ed.shapes = []
+  ed.shapes_ver += 1
+  ed.patch = null
+  ed.ran = null
   ed.stale = false
   ed.pending = true
   ed.status = ""

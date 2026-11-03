@@ -20,24 +20,51 @@ function errors_mark_follow(errors) {
 }
 
 -~> Runs the drawing. A run with errors keeps the last good shapes (ed.stale
--~> says they are old) and the errors go to their rows.
+-~> says they are old) and the errors go to their rows. When only one literal
+-~> row changed, only that row runs (editor_rerun.liz) and ed.patch says which
+-~> shape it replaced; ed.shapes_ver counts every new list of shapes.
 function ed_run() {
-  let r = src.run(doc_text(ed_model()))
+  let m = ed_model()
+  let patch = rerun_row(ed.ran, m)
+  if (patch != null) {
+    return ed_run_patch(m, patch)
+  }
+  let r = src.run(doc_text(m))
   ed.runs = ed.runs + 1
   ed.errors = errors_mark_follow(r.errors)
   ed.printed = r.printed
   ed.stats = {"ms": r.ms, "steps": r.steps}
+  ed.patch = null
   if (len(r.errors) == 0) {
     ed.shapes = r.shapes
+    ed.shapes_ver += 1
+    ed.ran = {"model": m, "literal": null}
     if (type(r.canvas) == "HASH" && type(r.canvas.size) == "POINT") {
       ed.canvas = r.canvas
     }
     ed.stale = false
   } else {
+    ed.ran = null
     ed.stale = true
   }
   ed.pending = false
   r
+}
+
+-~> Puts a patch's shape in place of the old one, like a run that made it.
+function ed_run_patch(m, patch) {
+  let shapes = list.copy(ed.shapes)
+  shapes[patch.index] = patch.new
+  ed.shapes = shapes
+  ed.shapes_ver += 1
+  patch.ver = ed.shapes_ver
+  ed.patch = patch
+  ed.ran = {"model": m, "literal": true}
+  ed.runs = ed.runs + 1
+  ed.stats = {"ms": patch.ms, "steps": patch.steps}
+  ed.pending = false
+  {"shapes": ed.shapes, "canvas": ed.canvas, "errors": [], "printed": ed.printed, "ms": patch.ms,
+   "steps": patch.steps, "rerun": true}
 }
 
 -~> Runs the drawing if it changed since the last run. The view calls this once

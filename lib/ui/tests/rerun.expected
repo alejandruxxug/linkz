@@ -1,0 +1,25 @@
+first run patch false 3
+move the circle: patch true same true errors 0
+  line 4 layer ["sun"] opacity 0.5 index 0
+a brush with a pen: patch true same true errors 0
+a flag in the comment: patch true same true errors 0
+indent into the layer: patch false same true errors 0
+an expression: patch false same true errors 0
+back to a literal: patch false same true errors 0
+nothing changed: patch false same true errors 0
+a row with no shape: patch false same true errors 0
+another kind: patch false same true errors 0
+an error: patch false same false errors 1
+after an error: patch false same true errors 0
+fixed: patch true same true errors 0
+a call in the canvas: patch false same true errors 0
+with that canvas: patch false same true errors 0
+plain canvas: patch false same true errors 0
+again: patch true same true errors 0
+rename the layer: patch false same true errors 0
+in the renamed layer: patch true same true errors 0
+  layer ["moon"]
+a let: patch false same true errors 0
+with a let: patch false same true errors 0
+true false false false
+true false false

@@ -1,0 +1,50 @@
+-~> Running only the row that changed: used when every row is a literal row,
+-~> and the result is always what a whole run gives.
+let code = "-~> lzdraw 1
+layer sun
+  opacity(0.5)
+  circle((380, 90), 40, #e0a526) -~> core
+  brush([(0, 0), (10, 10), (20, 0)], [0.2, 0.9, 0.4], #1d1d1f, pens.ink)
+rect((10, 20), (120, 60), #2d6a8f)
+canvas = {\"size\": (400, 300), \"background\": #fbf8ef}
+"
+function same_as_whole_run() {
+  let r = src.run(doc_text(ed_model()))
+  ed.shapes === r.shapes
+}
+-~> Replaces line n and runs the drawing; prints whether it was a patch.
+function edit(n, s, label) {
+  let lines = list.copy(ed_model().lines)
+  lines[n - 1] = s
+  ed_apply(doc_with(ed_model(), lines, n, 0), null)
+  ed_run()
+  puts(label + ":", "patch", ed.patch != null, "same", same_as_whole_run(), "errors", len(ed.errors))
+}
+ed_reset(code, "/r.lzdraw")
+ed_run()
+puts("first run patch", ed.patch != null, len(ed.shapes))
+edit(4, "  circle((300, 90), 40, #e0a526) -~> core", "move the circle")
+puts("  line", ed.patch.new.line, "layer", ed.patch.new.layer, "opacity", ed.patch.new.styles[0].opacity, "index", ed.patch.index)
+edit(5, "  brush([(0, 0), (10, 10), (30, 5)], [0.2, 0.9, 0.4], #1d1d1f, pens.marker)", "a brush with a pen")
+edit(6, "rect((10, 20), (120, 61), #2d6a8f) -~> [hidden]", "a flag in the comment")
+edit(6, "  rect((10, 20), (120, 61), #2d6a8f)", "indent into the layer")
+edit(4, "  circle((300, 90), 40 + 1, #e0a526)", "an expression")
+edit(4, "  circle((300, 90), 41, #e0a526)", "back to a literal")
+edit(4, "  circle((300, 90), 41, #e0a526)", "nothing changed")
+edit(3, "  opacity(0.25)", "a row with no shape")
+edit(4, "  ellipse((300, 90), (41, 20), #e0a526)", "another kind")
+edit(4, "  circle((300, 90), \"big\", #e0a526)", "an error")
+edit(4, "  circle((300, 90), 42, #e0a526)", "after an error")
+edit(4, "  circle((300, 90), 43, #e0a526)", "fixed")
+edit(7, "canvas = {\"size\": (400, 300), \"background\": rgb(1, 2, 3)}", "a call in the canvas")
+edit(4, "  circle((300, 90), 44, #e0a526)", "with that canvas")
+edit(7, "canvas = {\"size\": (400, 300), \"background\": #fbf8ef}", "plain canvas")
+edit(4, "  circle((300, 90), 45, #e0a526)", "again")
+edit(2, "layer moon", "rename the layer")
+edit(4, "  circle((300, 90), 46, #e0a526)", "in the renamed layer")
+puts("  layer", ed.patch.new.layer)
+edit(6, "let x = 5", "a let")
+edit(4, "  circle((300, 90), 47, #e0a526)", "with a let")
+-~> pens.NAME is a literal, anything else after "pens." is not.
+puts(rerun_pen_name("pens.ink"), rerun_pen_name("pens."), rerun_pen_name("pens.ink.min"), rerun_pen_name("pen.ink"))
+puts(rerun_no_call("{\"size\": (400, 300)}"), rerun_no_call("{\"bg\": f (1)}"), rerun_no_call("{\"bg\": g[0](1)}"))

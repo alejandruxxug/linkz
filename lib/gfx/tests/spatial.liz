@@ -1,0 +1,27 @@
+-~> The spatial index finds boxes by rectangle and by point, and keeps up when
+-~> they move or go.
+let ix = spatial_new(10)
+spatial_insert(ix, 1, [0, 0, 5, 5])
+spatial_insert(ix, 2, [12, 3, 40, 8])
+spatial_insert(ix, "far", [-500.5, -500.5, -490, -490])
+spatial_insert(ix, 4, [30, 30, 30, 30])
+function sorted(ids) {
+  let out = []
+  for (let i = 0; i < len(ids); i += 1) {
+    push(out, str(ids[i]))
+  }
+  list.sort(out)
+}
+puts("query:", sorted(spatial_query(ix, [4, 4, 13, 4])))
+puts("edge touches:", sorted(spatial_query(ix, [5, 5, 6, 6])))
+puts("same cell, no touch:", sorted(spatial_query(ix, [6, 6, 9, 9])))
+puts("at:", sorted(spatial_at(ix, (30, 30))), sorted(spatial_at(ix, (20, 5))))
+puts("negative:", sorted(spatial_at(ix, (-495, -495.0))))
+spatial_update(ix, 1, [100, 100, 110, 110])
+puts("moved:", sorted(spatial_at(ix, (2, 2))), sorted(spatial_at(ix, (105, 105))))
+spatial_remove(ix, 2)
+spatial_remove(ix, 2)
+puts("removed:", sorted(spatial_query(ix, [0, 0, 50, 50])), len(ix.boxes))
+-~> Far outside the grid, boxes land in the border cells and are still found.
+spatial_insert(ix, 9, [1000000, 1000000, 1000001, 1000001])
+puts("beyond the grid:", sorted(spatial_at(ix, (1000000, 1000000))), sorted(spatial_at(ix, (999990, 1000000))))

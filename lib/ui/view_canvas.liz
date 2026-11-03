@@ -1,8 +1,9 @@
 -~> view_canvas: the canvas area. The surround and the frame are drawn in the UI
 -~> buffer; the drawing and the selection (outline, anchors) go into the
 -~> full-resolution canvas buffer, where one UI pixel is a 2x2 block so the
--~> overlay looks like the rest of the UI. Errors keep the last good drawing,
--~> dimmed, with a badge under it.
+-~> overlay looks like the rest of the UI. The drawing itself comes from the
+-~> scene's tiles (view_scene.liz), so a paint only repaints what changed.
+-~> Errors keep the last good drawing, dimmed, with a badge under it.
 
 -~> A shape with its path and width multiplied by k (the zoom). Shapes at 100%
 -~> are used as they are.
@@ -37,20 +38,6 @@ function view_scale_shape(s, k) {
     out.widths = ws
   }
   out
-}
-
--~> The shapes of the last run scaled to the zoom, kept until the next run or zoom.
-function view_scaled(k) {
-  let key = str(V.run_id) + "|" + str(ed.runs) + "|" + str(k)
-  if (V.scaled_key != key) {
-    let out = []
-    for (let i = 0; i < len(ed.shapes); i = i + 1) {
-      push(out, view_scale_shape(ed.shapes[i], k))
-    }
-    V.scaled = out
-    V.scaled_key = key
-  }
-  V.scaled
 }
 
 -~> == The selection ==
@@ -179,12 +166,13 @@ function view_anchor_at(cl, ux, uy) {
 
 -~> == The shape under a point of the drawing ==
 
--~> The topmost visible, unlocked shape at p (drawing pixels), or null.
+-~> The topmost visible, unlocked shape at p (drawing pixels), or null. The
+-~> scene's index gives the shapes near p, frontmost first.
 function view_hit_shape(cl, p) {
   let rows = view_rows()
-  let list = shapes_to_paint(ed.shapes, rows)
   let slack = 3 / cl.zoom
-  for (let i = len(list) - 1; i >= 0; i = i - 1) {
+  let list = scene_near(scene_sync(cl), p, slack)
+  for (let i = 0; i < len(list); i = i + 1) {
     let s = list[i]
     let locked = false
     if (type(s.line) == "INTEGER" && s.line >= 1 && s.line <= len(rows)) {
@@ -262,42 +250,6 @@ function view_paint_canvas_ui(cl) {
   }
 }
 
--~> One shape's fill and stroke, from the span cache.
-function view_paint_shape(s, off) {
-  if (!view_tools_lite(s, off)) {
-    let r = raster.shape(s)
-    if (r.fill !== null) {
-      raster.draw(r.fill, off, resolve_paint(s, "fill"))
-    }
-    if (r.stroke !== null) {
-      raster.draw(r.stroke, off, resolve_paint(s, "stroke"))
-    }
-  }
-}
-
--~> The shapes (back to front) on the canvas. Layers with a blend mode or an
--~> opacity are drawn in a buffer of their own and mixed, as raster.paint does.
-function view_paint_shapes(shapes, off) {
-  if (!any_styled(shapes)) {
-    for (let i = 0; i < len(shapes); i = i + 1) {
-      view_paint_shape(shapes[i], off)
-    }
-    return null
-  }
-  let events = layer_events(shapes)
-  for (let i = 0; i < len(events); i = i + 1) {
-    let kind = events[i][0]
-    if (kind == "shape") {
-      view_paint_shape(events[i][1], off)
-    } elif (kind == "open") {
-      fb.push_layer()
-    } else {
-      fb.pop_layer(events[i][1].mode, events[i][1].opacity)
-    }
-  }
-  null
-}
-
 function view_paint_canvas() {
   raster.new_frame()
   let gm = view_geom()
@@ -310,12 +262,11 @@ function view_paint_canvas() {
   V.host_origin = (cr[0], cr[1])
   g_canvas((cr[0], cr[1]))
   fb.unclip()
+  let sc = scene_sync(cl)
   fb.clear((0, 0), (cr[2] * 2, cr[3] * 2))
   let off = cl.offset
   fb.clip(off, (cl.sw, cl.sh))
-  fb.fill(off, (cl.sw, cl.sh), ed.canvas.background)
-  let shapes = shapes_to_paint(view_scaled(cl.zoom), view_rows())
-  view_paint_shapes(shapes, off)
+  scene_paint(sc, off)
   view_tools_paint(cl, off)
   if (ed.stale && len(ed.errors) > 0) {
     fb.fill(off, (cl.sw, cl.sh), P.veil)

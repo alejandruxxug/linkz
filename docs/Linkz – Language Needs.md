@@ -14,6 +14,8 @@ Every time Linkz hits something lizard-script can't do (or does slowly), it goes
 | No error handling (`try`) | The MCP server must survive bad requests | None yet | Medium (before the MCP) |
 | Tree-walking speed | Rasterizer, tracing | Measured in B006 (table below): fine for one shape, slow for a long stroke redone every frame. Spans are cached per shape | Medium, see *Speed* |
 | No string builder / bytes | PNG and JSON output | `+` on strings | Medium |
+| A line that starts with `[` continues the line before it as an index: `let y0 = row * side` then `[x0, y0]` on the next line is read as `side[x0, y0]` (a syntax error) | `lib/gfx/tiles.liz`, `spatial.liz`, `lib/ui/view_scene.liz` (B035) | `return [...]` | Low |
+| Garbage collection of boxed values: in the editor benchmark (B035, `host/perf_test.go`) Go's GC mark is ~45% of all CPU samples; a 10k-shape drawing keeps ~250 MB live (every number boxed, every span a 3-element array, every parsed row a hash). Per-op costs measured on the VM: an empty `for` over a list ~70 ns per turn, `raster.same_look` (9 field `===`) ~1.7 µs, one literal `circle(...)` row in `src.run` ~11 µs | Every big drawing: the run, the rows, the span cache | Linkz avoids the work (tiles, single-row re-run); the cost per object stays | High, see B033 (profiler, quickening) and packed number arrays |
 
 ## ⏱ Speed
 

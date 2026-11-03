@@ -10,6 +10,7 @@
 -~>   raster.shape(shape)          {"fill": spans or null, "stroke": spans or null}, cached
 -~>   raster.draw(spans, offset, color)
 -~>   raster.paint(shapes, offset) draws a whole drawing, back to front
+-~>   raster.same_look(a, b)       whether two shapes paint the same pixels
 
 let raster = {}
 
@@ -334,6 +335,15 @@ function raster_key(shape) {
   str(shape.path) + "|" + str(shape.width) + "|" + str(shape.widths) + "|" + str(shape.rule) + "|" + str(shape.fill != null) + str(shape.stroke != null)
 }
 
+-~> True when two shape records paint the very same pixels: the same path,
+-~> paints and widths, in the same layers with the same blend and opacity.
+-~> Where the shapes come from (line, args, anchors) does not count.
+function raster_same_look(a, b) {
+  a.path === b.path && a.fill === b.fill && a.stroke === b.stroke && a.width === b.width &&
+    a.widths === b.widths && a.rule === b.rule && a.kind === b.kind && a.layer === b.layer &&
+    a.styles === b.styles
+}
+
 -~> The spans of a shape record: {"fill": spans or null, "stroke": spans or
 -~> null}. A brush shape is its outline, filled. The result is kept by path
 -~> and widths, so a shape that did not change is never rasterized again. A
@@ -420,3 +430,4 @@ raster.shape = raster_shape
 raster.draw = raster_draw
 raster.paint = raster_paint
 raster.new_frame = raster_new_frame
+raster.same_look = raster_same_look

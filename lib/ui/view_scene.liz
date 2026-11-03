@@ -1,0 +1,324 @@
+-~> view_scene: the drawing on the canvas, kept between paints. The painted
+-~> shapes are a list of entries in paint order, with a spatial index of their
+-~> boxes (gfx/spatial.liz), and the pixels are kept as tiles (gfx/tiles.liz).
+-~> When the shapes change only the boxes of what changed are repainted, and in
+-~> them only the shapes the index finds there:
+-~>   a patch from the editor (one shape of a literal row, editor_rerun.liz)
+-~>     replaces that one entry
+-~>   any other run is lined up with the last one: shapes that paint the same
+-~>     pixels keep their entry (and their spans), the others mark their boxes
+-~>   a new zoom, canvas size or background starts over
+-~> An entry is {"id" (its key in the index), "j" (its place in the paint
+-~> order), "shape" (scaled to the zoom), "src" (the shape of the run), "box"
+-~> (canvas pixels, with a margin for the stroke and the soft edge), "r"
+-~> (raster.shape's spans, filled in when first painted), "layer", "styles"}. It carries the shape's layer and styles so layer_events and
+-~> any_styled take entries as they take shapes.
+
+let scene_tile = 256
+let scene_cell = 64
+
+-~> == Boxes ==
+
+-~> The box of a scaled shape: the points of its path (a Bezier curve stays
+-~> inside its control points), grown by half its width and two pixels.
+function scene_box(s) {
+  let x0 = null
+  let y0 = 0
+  let x1 = 0
+  let y1 = 0
+  for (let i = 0; i < len(s.path); i += 1) {
+    let c = s.path[i]
+    for (let k = 1; k < len(c); k += 1) {
+      let p = c[k]
+      if (x0 === null) {
+        x0 = p.x
+        y0 = p.y
+        x1 = p.x
+        y1 = p.y
+      } else {
+        x0 = math.min(x0, p.x)
+        y0 = math.min(y0, p.y)
+        x1 = math.max(x1, p.x)
+        y1 = math.max(y1, p.y)
+      }
+    }
+  }
+  if (x0 === null) {
+    return [0, 0, -1, -1]
+  }
+  let m = 2.0
+  if (type(s.width) == "INTEGER" || type(s.width) == "FLOAT") {
+    m += s.width / 2.0
+  }
+  return [x0 - m, y0 - m, x1 + m, y1 + m]
+}
+
+-~> == Entries ==
+
+-~> A new entry for a shape of the run, with an id of its own in the index.
+function scene_entry(sc, src, j) {
+  let s = view_scale_shape(src, sc.zoom)
+  let e = {"id": sc.next_id, "j": j, "shape": s, "src": src, "box": scene_box(s), "r": null,
+           "layer": s.layer, "styles": s.styles}
+  sc.next_id += 1
+  sc.byid[e.id] = e
+  spatial_insert(sc.index, e.id, e.box)
+  tiles_mark(sc.tiles, e.box)
+  e
+}
+
+-~> An entry that leaves the scene: its box is repainted without it.
+function scene_drop(sc, e) {
+  spatial_remove(sc.index, e.id)
+  delete(sc.byid, e.id)
+  tiles_mark(sc.tiles, e.box)
+}
+
+-~> An entry that stays for a shape that paints the same pixels: its box,
+-~> spans and id are kept. The scaled shape is made again when its line moved,
+-~> so what reads shape.line (the brush preview) sees the new one.
+function scene_carry(sc, e, src, j) {
+  if (e.shape.line !== src.line) {
+    e.shape = view_scale_shape(src, sc.zoom)
+  }
+  e.src = src
+  e.j = j
+  e
+}
+
+-~> The indexes into shapes in paint order (see paint_order), without the
+-~> shapes of hidden rows (when there are any).
+function scene_order(shapes, rows, hidden) {
+  let idx = range(len(shapes))
+  let tagged = true
+  let rising = true
+  for (let i = 0; i < len(shapes); i += 1) {
+    if (type(shapes[i].line) != "INTEGER") {
+      tagged = false
+    } elif (i > 0 && rising && shapes[i].line <= shapes[i - 1].line) {
+      rising = false
+    }
+  }
+  if (tagged && !rising) {
+    idx = list.sort(idx, function(a, b) { shapes[a].line > shapes[b].line })
+  } else {
+    -~> one shape per line, top to bottom (or no lines): back to front is the reverse
+    idx = list.reverse(idx)
+  }
+  if (hidden == "") {
+    return idx
+  }
+  let out = []
+  for (let j = 0; j < len(idx); j += 1) {
+    let s = shapes[idx[j]]
+    let skip = false
+    if (type(s.line) == "INTEGER" && s.line >= 1 && s.line <= len(rows)) {
+      skip = row_has_flag(rows, s.line, "hidden")
+    }
+    if (!skip) {
+      push(out, idx[j])
+    }
+  }
+  out
+}
+
+-~> The hidden rows, as a text: when it changes the painted shapes change.
+function scene_hidden_key(rows) {
+  let out = ""
+  for (let i = 0; i < len(rows); i += 1) {
+    if (rows[i].hidden) {
+      out = out + str(rows[i].line) + ","
+    }
+  }
+  out
+}
+
+-~> The entries whose boxes touch box, back to front.
+function scene_entries_in(sc, box) {
+  let ids = spatial_query(sc.index, box)
+  let js = []
+  for (let i = 0; i < len(ids); i += 1) {
+    push(js, sc.byid[ids[i]].j)
+  }
+  js = list.sort(js)
+  let out = []
+  for (let i = 0; i < len(js); i += 1) {
+    push(out, sc.list[js[i]])
+  }
+  out
+}
+
+-~> == Keeping up with the editor ==
+
+function scene_new(cl, rows) {
+  let sc = {"zoom": cl.zoom, "size": (cl.sw, cl.sh), "bg": ed.canvas.background, "ver": ed.shapes_ver,
+            "hidden": scene_hidden_key(rows), "list": [], "pos": [], "lite": null, "next_id": 0, "byid": {},
+            "index": spatial_new(scene_cell), "tiles": tiles_new("canvas", (cl.sw, cl.sh), scene_tile)}
+  scene_rebuild(sc, rows)
+  sc
+}
+
+-~> Brings the scene up to the editor's shapes, rows and zoom, marking what
+-~> must be repainted. Painting and hit-testing call it first.
+function scene_sync(cl) {
+  let rows = view_rows()
+  let sc = V.scene
+  if (sc == null || sc.zoom != cl.zoom || sc.size != (cl.sw, cl.sh) || sc.bg != ed.canvas.background) {
+    V.scene = scene_new(cl, rows)
+    return V.scene
+  }
+  let hidden = scene_hidden_key(rows)
+  if (sc.ver != ed.shapes_ver || sc.hidden != hidden) {
+    let p = ed.patch
+    if (p != null && p.ver == ed.shapes_ver && sc.ver == p.ver - 1 && sc.hidden == hidden) {
+      scene_patch(sc, p)
+    } else {
+      sc.hidden = hidden
+      scene_rebuild(sc, rows)
+    }
+    sc.ver = ed.shapes_ver
+  }
+  scene_sync_lite(sc)
+  sc
+}
+
+-~> One shape changed (an editor patch): it takes the old one's place.
+function scene_patch(sc, p) {
+  let j = sc.pos[p.index]
+  if (j < 0) {
+    return null
+  }
+  scene_drop(sc, sc.list[j])
+  sc.list[j] = scene_entry(sc, p.new, j)
+}
+
+-~> Lines up the new paint order with the old one: a shape that paints what
+-~> the old one in its place painted keeps its entry; one that was taken out,
+-~> put in or changed marks its box. A pixel outside every marked box is
+-~> covered by the same shapes, in the same order, as before.
+function scene_rebuild(sc, rows) {
+  let shapes = ed.shapes
+  let order = scene_order(shapes, rows, sc.hidden)
+  let old = sc.list
+  let list = []
+  let pos = []
+  for (let i = 0; i < len(shapes); i += 1) {
+    push(pos, -1)
+  }
+  let a = 0
+  for (let b = 0; b < len(order); b += 1) {
+    let src = shapes[order[b]]
+    pos[order[b]] = b
+    if (a < len(old) && raster_same_look(old[a].src, src)) {
+      push(list, scene_carry(sc, old[a], src, b))
+      a += 1
+    } elif (a + 1 < len(old) && raster_same_look(old[a + 1].src, src)) {
+      -~> the old one was taken out
+      scene_drop(sc, old[a])
+      push(list, scene_carry(sc, old[a + 1], src, b))
+      a += 2
+    } else {
+      -~> this one is new; the old one was changed into it, unless it is the next new shape
+      let next = null
+      if (b + 1 < len(order)) {
+        next = shapes[order[b + 1]]
+      }
+      if (a < len(old) && (next === null || !raster_same_look(old[a].src, next))) {
+        scene_drop(sc, old[a])
+        a += 1
+      }
+      push(list, scene_entry(sc, src, b))
+    }
+  }
+  while (a < len(old)) {
+    scene_drop(sc, old[a])
+    a += 1
+  }
+  sc.list = list
+  sc.pos = pos
+}
+
+-~> A brush being dragged is painted as a light polyline (view_tools_lite):
+-~> when that starts or stops its box is repainted.
+function scene_sync_lite(sc) {
+  let g = V.gest
+  let line = null
+  if (g != null && g.lite && g.moved) {
+    line = g.line
+  }
+  if (line === sc.lite) {
+    return null
+  }
+  for (let j = 0; j < len(sc.list); j += 1) {
+    let l = sc.list[j].src.line
+    if (l === line || l === sc.lite) {
+      tiles_mark(sc.tiles, sc.list[j].box)
+    }
+  }
+  sc.lite = line
+}
+
+-~> == Painting ==
+
+-~> One entry: its fill and then its stroke, from its spans.
+function scene_paint_entry(e, off) {
+  if (view_tools_lite(e.shape, off)) {
+    return null
+  }
+  if (e.r === null) {
+    e.r = raster.shape(e.shape)
+  }
+  if (e.r.fill !== null) {
+    raster.draw(e.r.fill, off, resolve_paint(e.shape, "fill"))
+  }
+  if (e.r.stroke !== null) {
+    raster.draw(e.r.stroke, off, resolve_paint(e.shape, "stroke"))
+  }
+}
+
+-~> The part `box` of the drawing: the background, then the entries the index
+-~> finds there, back to front. Layers with a blend mode or an opacity are
+-~> drawn in a buffer of their own and mixed, as raster.paint does.
+function scene_paint_box(sc, box, off) {
+  fb.fill(off, sc.size, sc.bg)
+  let entries = scene_entries_in(sc, box)
+  if (!any_styled(entries)) {
+    for (let i = 0; i < len(entries); i += 1) {
+      scene_paint_entry(entries[i], off)
+    }
+    return null
+  }
+  let events = layer_events(entries)
+  for (let i = 0; i < len(events); i += 1) {
+    let kind = events[i][0]
+    if (kind == "shape") {
+      scene_paint_entry(events[i][1], off)
+    } elif (kind == "open") {
+      fb.push_layer()
+    } else {
+      fb.pop_layer(events[i][1].mode, events[i][1].opacity)
+    }
+  }
+  null
+}
+
+-~> Repaints the dirty parts of the tiles and draws them all at off on the
+-~> current target (the canvas buffer).
+function scene_paint(sc, off) {
+  tiles_render(sc.tiles, function(box, o) { scene_paint_box(sc, box, o) })
+  tiles_blit(sc.tiles, off)
+}
+
+-~> == Hit-testing ==
+
+-~> The shapes of the run near p (drawing pixels, within slack), frontmost first.
+function scene_near(sc, p, slack) {
+  let q = p * sc.zoom
+  let d = slack * sc.zoom
+  let near = scene_entries_in(sc, [q.x - d, q.y - d, q.x + d, q.y + d])
+  let out = []
+  for (let i = len(near) - 1; i >= 0; i -= 1) {
+    push(out, near[i].src)
+  }
+  out
+}

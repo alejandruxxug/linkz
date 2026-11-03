@@ -318,3 +318,46 @@ func TestRasterCache(t *testing.T) {
 		t.Errorf("got:\n%s\nwant:\n%s", out, want)
 	}
 }
+
+// The spatial index finds boxes by rectangle and point (closed boxes, any
+// coordinates), and follows moves and removals.
+func TestSpatialIndex(t *testing.T) {
+	_, out := scene(t, "spatial", 8, 8)
+	want := `query: ["1", "2"]
+edge touches: ["1"]
+same cell, no touch: []
+at: ["4"] ["2"]
+negative: ["far"]
+moved: [] ["1"]
+removed: ["4"] 3
+beyond the grid: ["9"] []
+`
+	if out != want {
+		t.Errorf("got:\n%s\nwant:\n%s", out, want)
+	}
+}
+
+// Tiles repaint only the marked part of the tiles it touches; the rest comes
+// back from the kept buffers.
+func TestTiles(t *testing.T) {
+	img, out := scene(t, "tiles", 60, 40)
+	want := `tiles: 3 2 6
+first: 6 1200 0
+second: 3 14 [[14, 10, 16, 12], [16, 10, 19, 12], [38, 28, 40, 30]]
+nothing dirty: 0
+`
+	if out != want {
+		t.Errorf("got:\n%s\nwant:\n%s", out, want)
+	}
+	check(t, img, []px{
+		{10, 5, red, 0, "the first pixel, not marked"},
+		{24, 15, blue, 0, "the box, left tile"},
+		{28, 16, blue, 0, "the box, right tile"},
+		{29, 16, red, 0, "right of the box"},
+		{26, 17, red, 0, "below the box"},
+		{48, 33, blue, 0, "the corner box, cut to the picture"},
+		{49, 34, blue, 0, "the last pixel of the picture"},
+		{47, 34, red, 0, "left of the corner box"},
+		{50, 34, white, 0, "outside the picture"},
+	})
+}

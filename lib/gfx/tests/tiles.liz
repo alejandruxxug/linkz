@@ -1,0 +1,23 @@
+-~> A 40 x 30 picture in 16-pixel tiles (3 x 2, the last ones cut). The first
+-~> render paints everything red; then marks repaint only their boxes (cut
+-~> to the tiles and the picture), blue, and the rest is copied from the kept tiles.
+let t = tiles_new("test", (40, 30), 16)
+puts("tiles:", t.cols, t.rows, len(t.dirty))
+let color = #ff0000
+let calls = []
+function paint(box, off) {
+  push(calls, box)
+  fb.fill(off, (40, 30), color)
+}
+tiles_render(t, paint)
+puts("first:", t.painted, t.area, len(t.dirty))
+color = #0000ff
+calls = []
+tiles_mark(t, [14.5, 10, 18.2, 12])
+tiles_mark(t, [38, 28, 50, 50])
+tiles_render(t, paint)
+puts("second:", t.painted, t.area, calls)
+tiles_render(t, paint)
+puts("nothing dirty:", t.painted)
+fb.fill((0, 0), (60, 40), #ffffff)
+tiles_blit(t, (10, 5))

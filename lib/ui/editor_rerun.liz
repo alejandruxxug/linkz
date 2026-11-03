@@ -1,0 +1,178 @@
+-~> editor_rerun: running only the row that changed. When an edit (a drag, a
+-~> property, typing) changes one row of a drawing made only of literal rows,
+-~> that row alone is run and its shape replaces the old one, instead of
+-~> running the whole drawing again. It is used only when that is provably the
+-~> same as a whole run:
+-~>   - the last run had no errors, and the text has the same lines but one
+-~>   - every statement of the drawing is a layer, a call whose arguments are
+-~>     all literals (numbers, colors, strings, points and lists of them, or a
+-~>     pen like pens.ink), or `canvas = ...` with no call in it; so no row
+-~>     reads another, and nothing reads or changes `drawing`
+-~>   - the changed row is a call of the same kind on one line, keeps its
+-~>     indentation (so its layer), made exactly one shape before and makes
+-~>     exactly one shape alone, without errors or output
+-~> Otherwise the whole drawing runs. The patch says which shape changed,
+-~> so the canvas repaints only around it (view_scene.liz).
+
+-~> Whether a parsed argument is a literal.
+function rerun_literal(a) {
+  if (a.kind == "number" || a.kind == "color" || a.kind == "string") {
+    return true
+  }
+  if (a.kind == "point" || a.kind == "array") {
+    for (let i = 0; i < len(a.items); i += 1) {
+      if (!rerun_literal(a.items[i])) {
+        return false
+      }
+    }
+    return true
+  }
+  a.kind == "expr" && rerun_pen_name(a.text)
+}
+
+-~> pens.NAME: a pen of the library (the drawing can't change pens, since an
+-~> assignment to it is not a literal row).
+function rerun_pen_name(s) {
+  if (!text.starts(s, "pens.")) {
+    return false
+  }
+  let name = text.slice(s, 5, len(s))
+  if (name == "") {
+    return false
+  }
+  for (let i = 0; i < len(name); i += 1) {
+    if (!ed_word_char(name[i])) {
+      return false
+    }
+  }
+  true
+}
+
+-~> Whether a text has no call in it: no "(" right after a name or a closing bracket.
+function rerun_no_call(s) {
+  let prev = ""
+  for (let i = 0; i < len(s); i += 1) {
+    let ch = s[i]
+    if (ch == "(" && (ed_word_char(prev) || prev == ")" || prev == "]")) {
+      return false
+    }
+    if (ch != " " && ch != "\t") {
+      prev = ch
+    }
+  }
+  true
+}
+
+-~> Whether a parsed call statement is a literal row on one line.
+function rerun_literal_call(st) {
+  if (st.kind != "call" || st.end_line != st.line) {
+    return false
+  }
+  for (let i = 0; i < len(st.args); i += 1) {
+    if (!rerun_literal(st.args[i])) {
+      return false
+    }
+  }
+  true
+}
+
+-~> Whether every statement is a layer, a literal call or a call-free canvas assignment.
+function rerun_literal_statements(stmts, lines) {
+  for (let i = 0; i < len(stmts); i += 1) {
+    let st = stmts[i]
+    if (st.kind == "layer") {
+      if (!rerun_literal_statements(st.children, lines)) {
+        return false
+      }
+    } elif (st.kind == "assign" && st.name == "canvas") {
+      for (let l = st.line; l <= st.end_line; l += 1) {
+        if (!rerun_no_call(comment_split(lines[l - 1])[0])) {
+          return false
+        }
+      }
+    } elif (!rerun_literal_call(st)) {
+      return false
+    }
+  }
+  true
+}
+
+-~> Whether a model is all literal rows (kept on the run record, worked out once).
+function rerun_all_literal(ran) {
+  if (ran.literal === null) {
+    let p = doc_parsed(ran.model)
+    ran.literal = len(p.errors) == 0 && rerun_literal_statements(p.statements, ran.model.lines)
+  }
+  ran.literal
+}
+
+-~> The one line where two line lists differ (counted from 1), 0 when they are
+-~> the same, or -1 when more than one line or the number of lines differs.
+function rerun_changed_line(a, b) {
+  if (len(a) != len(b)) {
+    return -1
+  }
+  let at = 0
+  for (let i = 0; i < len(a); i += 1) {
+    if (a[i] != b[i]) {
+      if (at > 0) {
+        return -1
+      }
+      at = i + 1
+    }
+  }
+  at
+}
+
+-~> The index in shapes of the only shape made by `line`, or -1.
+function rerun_only_shape(shapes, line) {
+  let at = -1
+  for (let i = 0; i < len(shapes); i += 1) {
+    if (shapes[i].line == line) {
+      if (at >= 0) {
+        return -1
+      }
+      at = i
+    }
+  }
+  at
+}
+
+-~> Runs only the changed row of m when that is safe (see the top). Returns the
+-~> patch {"index", "old", "new", "ms", "steps"} with the new shape tagged like
+-~> the old one, or null when the whole drawing must run.
+function rerun_row(ran, m) {
+  if (ran == null) {
+    return null
+  }
+  let line = rerun_changed_line(ran.model.lines, m.lines)
+  if (line <= 0) {
+    return null
+  }
+  let before = ran.model.lines[line - 1]
+  let after = m.lines[line - 1]
+  if (leading_ws(before) != leading_ws(after) || !rerun_all_literal(ran)) {
+    return null
+  }
+  let p = src.parse(text.trim(after))
+  if (len(p.errors) > 0 || len(p.statements) != 1 || !rerun_literal_call(p.statements[0])) {
+    return null
+  }
+  let index = rerun_only_shape(ed.shapes, line)
+  if (index < 0) {
+    return null
+  }
+  let old = ed.shapes[index]
+  if (p.statements[0].callee != old.kind) {
+    return null
+  }
+  let r = src.run(text.trim(after))
+  if (len(r.errors) > 0 || len(r.shapes) != 1 || r.printed != "") {
+    return null
+  }
+  let s = r.shapes[0]
+  s.line = old.line
+  s.layer = old.layer
+  s.styles = old.styles
+  {"index": index, "old": old, "new": s, "ms": r.ms, "steps": r.steps}
+}
