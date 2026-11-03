@@ -318,7 +318,7 @@ function view_tools_lite(s, off) {
       widest = widest + s.widths[i] / len(s.widths)
     }
   }
-  fb.spans(raster.stroke(tools_path(pts), math.max(1.0, widest)), off, s.fill)
+  raster.draw(raster.stroke(tools_path(pts), math.max(1.0, widest)), off, resolve_paint(s, "fill"))
   true
 }
 

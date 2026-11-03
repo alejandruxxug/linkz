@@ -323,10 +323,10 @@ function view_export() {
     for (let i = 0; i < len(shapes); i = i + 1) {
       let r = raster.shape(shapes[i])
       if (r.fill !== null) {
-        fb.spans(r.fill, (0, 0), shapes[i].fill)
+        raster.draw(r.fill, (0, 0), resolve_paint(shapes[i], "fill"))
       }
       if (r.stroke !== null) {
-        fb.spans(r.stroke, (0, 0), shapes[i].stroke)
+        raster.draw(r.stroke, (0, 0), resolve_paint(shapes[i], "stroke"))
       }
     }
     fb.save_png(path)

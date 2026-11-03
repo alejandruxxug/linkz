@@ -260,7 +260,7 @@ function pick_draw_strokes() {
     let s = pick_preview(pens.list[i], (r[0] + 9) * 2 - cr[0] * 2, (ry + 5) * 2 - cr[1] * 2, 88, 16)
     let sp = raster.shape(s)
     if (sp.fill !== null) {
-      fb.spans(sp.fill, (0, 0), s.fill)
+      raster.draw(sp.fill, (0, 0), resolve_paint(s, "fill"))
     }
   }
   g_ui()

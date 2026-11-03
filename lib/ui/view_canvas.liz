@@ -280,10 +280,10 @@ function view_paint_canvas() {
     if (!view_tools_lite(s, off)) {
       let r = raster.shape(s)
       if (r.fill !== null) {
-        fb.spans(r.fill, off, s.fill)
+        raster.draw(r.fill, off, resolve_paint(s, "fill"))
       }
       if (r.stroke !== null) {
-        fb.spans(r.stroke, off, s.stroke)
+        raster.draw(r.stroke, off, resolve_paint(s, "stroke"))
       }
     }
   }
