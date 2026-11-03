@@ -21,6 +21,14 @@
 | M8 | Tracing | `trace.image(...)` turns a PNG into editable shapes |
 | M9 | Release | GoReleaser binaries for macOS/Windows/Linux + install script; the reveal |
 
+## 🧱 v1.1 (after the v1 finish line)
+| # | Batch | Done when |
+|---|---|---|
+| B016 | Right-click menu + Fill editor + gradients (`linear`/`radial` values in lib/draw, gradient spans in the host) | Approved R002 frames; a gradient made in the editor renders on canvas, in SVG and in PNG |
+| B017 | Palette sidebar (HSV picker, recent, document palette as `let colors = {...}`) | Changing a named color updates every shape using it |
+| B018 | Artist mode (layers with thumbnails, code drawer) | Switching modes keeps the same file and selection |
+| B019 | First-run tutorial | Runs once, skippable, en + es, `tutorial_done` in settings |
+
 ## 🗃️ Later (parked ideas)
 | Idea | Why parked |
 |---|---|
