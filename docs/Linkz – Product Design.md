@@ -35,5 +35,14 @@ Write lizard-script → see the drawing update → tweak (code or, later, drag o
 | 2026-11-02 | 3D only as projection to 2D | Real 3D is a second project; projection fits vector art |
 | 2026-11-02 | Image tracing is a headline feature | Picture → editable vectors |
 | 2026-11-02 | The language grows beyond the course design, additively | "If I make it unique it isn't a bad thing"; "nothing diverts the go foundation so everything is purely additive" — every extension is logged in lizard-script's DESIGN.md |
+| 2026-11-02 | **Native app, no browser** ("no chrome, I want a native lizard app") | The editor is a native window |
+| 2026-11-02 | **Lizard draws every pixel**; Ebitengine only opens the window ("I would prefer lizard to draw, maybe keep the framerate not that high") | Go has no window API of its own; a hand-written Cocoa layer can replace Ebitengine later |
+| 2026-11-02 | The code is the layers panel and the properties panel; each line is a row, **top row = front** | The developer's editor idea: "code is a drawing" |
+| 2026-11-02 | **Layers are Python-style indentation** (`layer sun` + indented lines); code keeps braces | "for multiple objects in a same layer it would be messy… blocks would be indented" |
+| 2026-11-02 | Layer names and hidden/locked flags live in trailing comments | The file stays plain lizard-script |
+| 2026-11-02 | Shapes take points: `circle((380, 90), 40, #e0a526)` | Dragging rewrites one literal |
+| 2026-11-02 | Language gets color literals, points and units in v1 | The identity: geometry and color are part of the syntax |
+| 2026-11-02 | **v1 finish line: draw a line with the mouse and edit it like a vector line** | The developer's goal; two-way canvas editing is protected over panel polish |
+| 2026-11-02 | Pressure-sensitive `brush` (Force Touch trackpad + drawing tablets via an NSEvent monitor; speed-based with a mouse) | Trackpad pressure confirmed working by the developer |
 | 2026-11-02 | Named **Linkz** (lizard inkz); files stay `.lzdraw` | The developer's pick |
 | 2026-11-02 | lizard-script stays its own repo; Linkz imports it | Language work counts for the course; Linkz stays private until the reveal |

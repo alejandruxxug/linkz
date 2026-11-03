@@ -6,7 +6,8 @@
 |---|---|---|
 | Go | 1.27.0 | Host + lizard-script |
 | gh | 2.91.0 | Private repo, later releases |
-| Chrome + Claude in Chrome | | The tester drives the editor (from M3) |
+| Ebitengine | 2.10.5 | Opens the window only |
+| purego | 0.11.0 | Trackpad/tablet pressure (`go run ./tools/pressureprobe` to check) |
 
 ## 📁 Layout on disk
 

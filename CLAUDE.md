@@ -11,6 +11,7 @@ Vector art written in lizard-script. **Built on lizard-script itself: Go is only
 | What lizard-script is missing | `docs/Linkz – Language Needs.md` |
 | Milestones, ⏳ waiting on you, progress | `docs/Linkz – Build Plan.md` |
 | Commands, setup | `docs/Linkz – Tools & Setup.md` |
+| The editor (rows, layers, two-way canvas, host↔lizard contract, backdoor) | `docs/Linkz – Editor Design.md` |
 | The language itself | `../lizard-script/docs/GRAMMAR.md`, `SEMANTICS.md`, `DESIGN.md` |
 
 ## Rules
@@ -36,7 +37,7 @@ The main session orchestrates: it splits a milestone into small batches, writes 
 | Agent | Model | Does |
 |---|---|---|
 | `builder` | Sonnet | Implements one batch brief, runs the tests |
-| `tester` | Sonnet | Renders examples, writes edge-case programs, drives the editor in Chrome; reports BUG / WEIRD / VISUAL |
+| `tester` | Sonnet | Renders examples, writes edge-case programs, drives the native editor through `linkz debug`; reports BUG / WEIRD / VISUAL |
 | `lead` | Opus | WEIRD issues, BUGs whose first fix failed, and review of risky batches (language semantics, file formats, anything that writes the user's files) |
 | `design` | Opus | VISUAL issues, editor UI, default look of drawings, library API ergonomics |
 

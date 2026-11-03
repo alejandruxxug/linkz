@@ -9,6 +9,7 @@ Private until the reveal.
 | Note | What's in it |
 |---|---|
 | [[Linkz – Product Design]] | What Linkz is, the scope tiers, the design log |
+| [[Linkz – Editor Design]] | The native editor: code = layers + properties, the v1 goal, the backdoor |
 | [[Linkz – Architecture]] | The thin host, the lizard libraries, where new code goes |
 | [[Linkz – Language Needs]] | Every gap in lizard-script that Linkz hits, and the extensions they become |
 | [[Linkz – Build Plan]] | Milestones, ⏳ waiting on you, progress log |
