@@ -16,6 +16,9 @@ Draw a line with the mouse (or trackpad/tablet pen) and edit it afterwards like 
 - **Insert/delete anchors**: double-click on a selected stroke → insert a point at `nearest_on_path` between its neighbours; select an anchor (click) + Delete/Backspace → remove that item (min 1 point).
 - **Hover cursor feedback** isn't possible yet (no cursor API); highlight the anchor under the mouse instead (request hover moves from the host while a shape is selected).
 
+## Move samples (B005b)
+Ebitengine polls the mouse once per tick (30 TPS), so a fast stroke would lose points. The native event monitor sees every drag, so a `move` event also carries `samples`: a list of `{pos, canvas_pos, pressure, t}` (`pos` in UI px, `canvas_pos` full resolution or null outside the canvas, `pressure` 0..1, `t` seconds since the app started), one per native drag event since the previous tick, in order. The last sample equals the event's own `pos`. Pencil and brush must record every sample (not just `e.pos`) and take pressure from `sample.pressure`. Without native events (other OS, backdoor input) `samples` has the single point of the tick. When the host coalesces moves, their samples are concatenated, so nothing is lost. `down` and `up` carry their native pressure in `pen.pressure` (the `up` pressure is 0). The backdoor `Drag` injects one `move` per step, each with a one-item `samples` list, so agents exercise the same path.
+
 ## Test (tester, backdoor)
 `Call AddShape stroke`… no: draw it for real: `Drag` across the canvas with 20 steps → `Dump` shows a new stroke row with ≥2 points; `Screenshot`; `Drag` one anchor → `Dump` shows only that point's text changed; double-click the curve → one more point; Delete an anchor; `Drag … --pressure 0.2,1.0` with the brush → a brush row with rising widths; drag a circle → its center literal changes; drag a shape whose position is an expression → refused, text unchanged; Undo restores each step.
 

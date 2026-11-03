@@ -25,9 +25,19 @@ const (
 // nsPoint is an NSPoint (two CGFloats).
 type nsPoint struct{ X, Y float64 }
 
+// nsRect is an NSRect.
+type nsRect struct{ X, Y, W, H float64 }
+
+// epoch is the system uptime when the app clock started, so event
+// timestamps (seconds since boot) become seconds since the app started.
+var epoch float64
+
 // sawForce turns true once a pressure event arrives: only a Force Touch
 // trackpad sends them, so later plain mouse events are trackpad drags.
 var sawForce bool
+
+// buttonDown is true between a left mouse down and up.
+var buttonDown bool
 
 // monitor is the id returned by addLocalMonitor; kept so it is never freed.
 var (
@@ -57,7 +67,27 @@ func install() {
 		selRotation = objc.RegisterName("rotation")
 		selEntering = objc.RegisterName("isEnteringProximity")
 		selDevice   = objc.RegisterName("pointingDeviceType")
+		selTime     = objc.RegisterName("timestamp")
+		selLoc      = objc.RegisterName("locationInWindow")
+		selWindow   = objc.RegisterName("window")
+		selContent  = objc.RegisterName("contentView")
+		selFrame    = objc.RegisterName("frame")
 	)
+	epoch = systemUptime() - Now()
+	// sample logs the event as a native sample, if it has a window.
+	sample := func(ev objc.ID, phase string) {
+		win := objc.Send[objc.ID](ev, selWindow)
+		if win == 0 {
+			return
+		}
+		view := objc.Send[objc.ID](win, selContent)
+		if view == 0 {
+			return
+		}
+		loc := objc.Send[nsPoint](ev, selLoc)
+		frame := objc.Send[nsRect](view, selFrame)
+		record(snapshot(objc.Send[float64](ev, selTime)-epoch, loc.X, loc.Y, frame.H, phase))
+	}
 	// The block must hand the event back so Ebitengine still gets it.
 	handler = objc.NewBlock(func(_ objc.Block, ev objc.ID) objc.ID {
 		t := objc.Send[uint64](ev, selType)
@@ -70,9 +100,18 @@ func install() {
 			}
 		case typeTabletPoint:
 			readTablet(ev, selPressure, selTilt, selRotation)
+			// While a button is held the matching drag event is the sample.
+			if !buttonDown {
+				sample(ev, PhasePen)
+			}
 		case typeLeftMouseDown, typeLeftMouseDragged:
+			phase := PhaseDrag
+			if t == typeLeftMouseDown {
+				phase, buttonDown = PhaseDown, true
+			}
 			if objc.Send[int16](ev, selSubtype) == subtypeTabletPoint {
 				readTablet(ev, selPressure, selTilt, selRotation)
+				sample(ev, phase)
 				break
 			}
 			p := float64(objc.Send[float32](ev, selPressure))
@@ -86,6 +125,7 @@ func install() {
 					s.Stage = 1
 				}
 			})
+			sample(ev, phase)
 		case typePressure:
 			// -stage is only valid on pressure events.
 			sawForce = true
@@ -93,9 +133,11 @@ func install() {
 			st := int(objc.Send[int64](ev, selStage))
 			update(func(s *State) { s.Pressure, s.Stage, s.Source = p, st, "trackpad" })
 		case typeLeftMouseUp:
+			buttonDown = false
 			update(func(s *State) {
 				s.Pressure, s.Stage, s.Tilt, s.Rotation = 0, 0, [2]float64{}, 0
 			})
+			sample(ev, PhaseUp)
 		}
 		return ev
 	})
@@ -114,4 +156,10 @@ func readTablet(ev objc.ID, selPressure, selTilt, selRotation objc.SEL) {
 		s.Pressure, s.Tilt, s.Rotation, s.Source = p, [2]float64{tl.X, tl.Y}, rot, "tablet"
 		s.Stage = 0
 	})
+}
+
+// systemUptime is NSProcessInfo's systemUptime: the clock event timestamps use.
+func systemUptime() float64 {
+	info := objc.ID(objc.GetClass("NSProcessInfo")).Send(objc.RegisterName("processInfo"))
+	return objc.Send[float64](info, objc.RegisterName("systemUptime"))
 }

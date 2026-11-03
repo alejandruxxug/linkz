@@ -105,11 +105,12 @@ lizard (everything)     ui.liz       layout, rows, fields, text editing, tool st
 | Host calls (lizard entry points) | When |
 |---|---|
 | `app.start(path)` | Once |
-| `app.event(e)` | On input only (mouse down/up/move while pressed, key, text, wheel, resize). `e` is a hash with `type`, `pos`, `key`, `text`, `mods` |
+| `app.event(e)` | On input only (mouse down/up/move while pressed, key, text, wheel, resize). `e` is a hash with `type`, `pos`, `key`, `text`, `mods`; `move` also has `samples` (below) |
 | `app.paint()` | After events, only if lizard marked something dirty; lizard repaints only dirty regions |
 | `app.debug_state()` | For the backdoor's `Dump` |
 | `app.debug_commands` | A hash of named commands lizard exposes (e.g. `SelectRow`, `SetProp`, `AddShape`) |
 
+- **Move samples:** a `move` event carries `samples`, a list of `{pos, canvas_pos, pressure, t}` (`pos` UI px, `canvas_pos` full-res or null, `t` seconds since start): every native drag event since the previous tick, in order, the last equal to the event's `pos`. The macOS event monitor records them (bounded queue of 4096, y flipped to top-left origin); elsewhere, and for backdoor input, it is the one point of the tick. Coalesced moves concatenate their samples. `down`/`up` carry their native pressure in `pen.pressure`.
 - **No 60 fps:** nothing runs while idle. Dragging coalesces mouse moves (latest position only), so a slow frame drops moves instead of queuing them.
 - **Caching:** each layer's spans are cached; only layers whose lines changed are re-rasterized.
 

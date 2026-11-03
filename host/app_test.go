@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"linkz/host/window"
+	"lizardscript/object"
 )
 
 func TestWriteFileAtomic(t *testing.T) {
@@ -280,5 +281,77 @@ puts("done")
 	}
 	if err := Paint("nope", out, 8, 8, &printed); err == nil {
 		t.Error("a failing program should report an error")
+	}
+}
+
+func TestDragInjectsOneSamplePerMove(t *testing.T) {
+	a := NewApp(400, 300)
+	a.headless = true
+	if err := a.Load("test.lzdraw"); err != nil {
+		t.Fatal(err)
+	}
+	dbg := NewDebug(a)
+	go dbg.cmds["Drag"]([]string{"10", "20", "50", "60", "4", "--pressure", "0.2,1.0"})
+	// Run the job by hand so the injected events can be looked at.
+	j := <-a.jobs
+	thunk := j.run()
+	evs := append([]window.Event{}, a.injected...)
+	j.reply <- thunk()
+	if len(evs) != 6 || evs[0].Type != "down" || evs[5].Type != "up" {
+		t.Fatalf("events = %d, want down + 4 moves + up", len(evs))
+	}
+	for i, e := range evs[1:5] {
+		if e.Type != "move" || len(e.Samples) != 1 {
+			t.Fatalf("move %d: type %s, %d samples", i, e.Type, len(e.Samples))
+		}
+		s := e.Samples[0]
+		if s.X != e.X || s.Y != e.Y || s.Pressure != e.Pen.Pressure {
+			t.Errorf("move %d: sample %+v does not match the event %+v", i, s, e)
+		}
+	}
+	// The hash lizard sees: samples is a list whose last item is the event's pos.
+	h := a.eventHash(evs[4])
+	list := hashGet(h, "samples").(*object.Array)
+	last := list.Elements[len(list.Elements)-1].(*object.Hash)
+	if hashGet(last, "pos").Inspect() != hashGet(h, "pos").Inspect() {
+		t.Errorf("last sample pos %s != event pos %s", hashGet(last, "pos").Inspect(), hashGet(h, "pos").Inspect())
+	}
+}
+
+func TestCoalesceConcatenatesSamples(t *testing.T) {
+	a := NewApp(100, 100)
+	mv := func(x int, ss ...int) window.Event {
+		e := window.Event{Type: "move", X: x}
+		for _, s := range ss {
+			e.Samples = append(e.Samples, window.Sample{X: s})
+		}
+		return e
+	}
+	got := a.coalesce([]window.Event{mv(3, 1, 2, 3), mv(5, 4, 5), mv(9, 9)})
+	if len(got) != 1 || got[0].X != 9 {
+		t.Fatalf("got %+v", got)
+	}
+	var xs []int
+	for _, s := range got[0].Samples {
+		xs = append(xs, s.X)
+	}
+	if want := []int{1, 2, 3, 4, 5, 9}; len(xs) != len(want) || xs[0] != 1 || xs[5] != 9 || xs[3] != 4 {
+		t.Errorf("samples = %v, want %v", xs, want)
+	}
+}
+
+func TestSamplesFallbackIsOnePoint(t *testing.T) {
+	a := NewApp(100, 100)
+	h := a.eventHash(window.Event{Type: "move", X: 40, Y: 60})
+	list := hashGet(h, "samples").(*object.Array)
+	if len(list.Elements) != 1 {
+		t.Fatalf("samples = %d, want 1", len(list.Elements))
+	}
+	s := list.Elements[0].(*object.Hash)
+	if hashGet(s, "pos").Inspect() != "(20, 30)" {
+		t.Errorf("pos = %s", hashGet(s, "pos").Inspect())
+	}
+	if hashGet(s, "canvas_pos") != object.Object(null) && hashGet(s, "canvas_pos").Type() != "NULL" {
+		t.Errorf("canvas_pos = %s", hashGet(s, "canvas_pos").Inspect())
 	}
 }

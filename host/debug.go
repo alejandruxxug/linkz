@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"linkz/host/pressure"
 	"linkz/host/window"
 	"lizardscript/object"
 )
@@ -361,7 +362,8 @@ func (d *Debug) drag(args []string) (any, error) {
 		for i := 1; i <= steps; i++ {
 			t := float64(i) / float64(steps)
 			x, y := coords(f[0]+(f[2]-f[0])*t, f[1]+(f[3]-f[1])*t, flags)
-			d.App.Inject(window.Event{Type: "move", X: x, Y: y, Mods: mods, Pen: penAt(t)})
+			d.App.Inject(window.Event{Type: "move", X: x, Y: y, Mods: mods, Pen: penAt(t),
+				Samples: []window.Sample{{X: x, Y: y, Pressure: penAt(t).Pressure, T: pressure.Now()}}})
 		}
 		x1, y1 := coords(f[2], f[3], flags)
 		d.App.Inject(window.Event{Type: "up", X: x1, Y: y1, Mods: mods, Pen: penAt(1)})

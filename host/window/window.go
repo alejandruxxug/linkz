@@ -21,6 +21,14 @@ type Pen struct {
 	Eraser   bool
 }
 
+// Sample is one point of a drag: every native pointer event the system sent,
+// not just the one the tick polled. X and Y are window pixels, T is seconds.
+type Sample struct {
+	X, Y     int
+	Pressure float64
+	T        float64
+}
+
 // Event is one input event. X and Y are window pixels.
 type Event struct {
 	Type     string // down, up, move, key, text, wheel
@@ -31,7 +39,8 @@ type Event struct {
 	DY       float64
 	Mods     Mods
 	Pen      Pen
-	Injected bool // made by the backdoor: never coalesced
+	Samples  []Sample // move: every point since the last tick, last one at X, Y
+	Injected bool     // made by the backdoor: never coalesced
 }
 
 // Input is what happened since the last tick.

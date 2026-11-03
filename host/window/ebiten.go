@@ -128,15 +128,53 @@ func repeats(k ebiten.Key) bool {
 	return d == 1 || (d >= 15 && (d-15)%2 == 0)
 }
 
+// penOf turns a native sample into the pen state of an event.
+func penOf(s pressure.Sample, eraser bool) Pen {
+	return Pen{Pressure: s.Pressure, Tilt: s.Tilt, Rotation: s.Rotation, Source: s.Source, Eraser: eraser}
+}
+
+// lastPhase finds the newest native sample of a phase.
+func lastPhase(ss []pressure.Sample, phase string) (pressure.Sample, bool) {
+	for i := len(ss) - 1; i >= 0; i-- {
+		if ss[i].Phase == phase {
+			return ss[i], true
+		}
+	}
+	return pressure.Sample{}, false
+}
+
+// dragSamples are the native drag points of this tick as window samples.
+// The last one is moved onto (x, y), the position the event itself carries.
+func dragSamples(ss []pressure.Sample, x, y int) ([]Sample, pressure.Sample, bool) {
+	var out []Sample
+	var last pressure.Sample
+	for _, s := range ss {
+		if s.Phase != pressure.PhaseDrag {
+			continue
+		}
+		out = append(out, Sample{X: int(s.X), Y: int(s.Y), Pressure: s.Pressure, T: s.T})
+		last = s
+	}
+	if len(out) > 0 {
+		out[len(out)-1].X, out[len(out)-1].Y = x, y
+	}
+	return out, last, len(out) > 0
+}
+
 func (g *game) poll(hover bool) []Event {
 	var evs []Event
 	x, y := ebiten.CursorPosition()
 	mods := g.mods()
+	native := pressure.Drain()
 
 	for i, b := range mouseButtons {
 		if inpututil.IsMouseButtonJustPressed(b) {
 			g.held[i] = true
-			evs = append(evs, Event{Type: "down", X: x, Y: y, Button: i, Mods: mods, Pen: g.pen(true)})
+			pen := g.pen(true)
+			if s, ok := lastPhase(native, pressure.PhaseDown); ok {
+				pen = penOf(s, pressure.Latest().Eraser)
+			}
+			evs = append(evs, Event{Type: "down", X: x, Y: y, Button: i, Mods: mods, Pen: pen})
 		}
 	}
 	anyDown := false
@@ -145,14 +183,23 @@ func (g *game) poll(hover bool) []Event {
 			anyDown = true
 		}
 	}
-	if (x != g.lastX || y != g.lastY) && (anyDown || hover) {
-		evs = append(evs, Event{Type: "move", X: x, Y: y, Mods: mods, Pen: g.pen(anyDown)})
+	drags, lastDrag, haveDrags := dragSamples(native, x, y)
+	if (x != g.lastX || y != g.lastY || (anyDown && haveDrags)) && (anyDown || hover) {
+		pen := g.pen(anyDown)
+		if anyDown && haveDrags {
+			pen = penOf(lastDrag, pressure.Latest().Eraser)
+		}
+		evs = append(evs, Event{Type: "move", X: x, Y: y, Mods: mods, Pen: pen, Samples: drags})
 	}
 	g.lastX, g.lastY = x, y
 	for i, b := range mouseButtons {
 		if inpututil.IsMouseButtonJustReleased(b) {
 			delete(g.held, i)
-			evs = append(evs, Event{Type: "up", X: x, Y: y, Button: i, Mods: mods, Pen: g.pen(false)})
+			pen := g.pen(false)
+			if s, ok := lastPhase(native, pressure.PhaseUp); ok {
+				pen = penOf(s, pressure.Latest().Eraser)
+			}
+			evs = append(evs, Event{Type: "up", X: x, Y: y, Button: i, Mods: mods, Pen: pen})
 		}
 	}
 	if _, dy := ebiten.Wheel(); dy != 0 {

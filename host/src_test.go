@@ -326,3 +326,19 @@ func TestLibraryDocs(t *testing.T) {
 		t.Errorf("circle params = %v", c["params"])
 	}
 }
+
+func TestRunReportsAndRestoresSteps(t *testing.T) {
+	evaluator.MaxSteps = 1000
+	evaluator.SetSteps(7)
+	defer func() { evaluator.MaxSteps = 0; evaluator.SetSteps(0) }()
+	r := srcRun(t, "let i = 0\nwhile (i < 50) { i = i + 1 }\n")
+	if n, _ := r["steps"].(float64); n < 50 {
+		t.Errorf("steps = %v, want at least 50", r["steps"])
+	}
+	if got := evaluator.Steps(); got != 7 {
+		t.Errorf("caller steps = %d, want 7 restored", got)
+	}
+	if evaluator.MaxSteps != 1000 {
+		t.Errorf("MaxSteps = %d, want 1000 restored", evaluator.MaxSteps)
+	}
+}

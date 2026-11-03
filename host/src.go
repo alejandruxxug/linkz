@@ -264,10 +264,12 @@ func (s *Src) Run(code string) object.Object {
 	// Save what the caller had.
 	prevOut, prevMax := evaluator.Output, evaluator.MaxSteps
 	prevStmt, prevLayer := evaluator.OnStatement, evaluator.OnLayer
+	prevSteps := evaluator.Steps()
 	var printed bytes.Buffer
 	defer func() {
 		evaluator.Output, evaluator.MaxSteps = prevOut, prevMax
 		evaluator.OnStatement, evaluator.OnLayer = prevStmt, prevLayer
+		evaluator.SetSteps(prevSteps)
 	}()
 	evaluator.Output = &printed
 	evaluator.MaxSteps = RunSteps
@@ -340,6 +342,7 @@ func (s *Src) Run(code string) object.Object {
 		errList = append(errList, errorMap(e))
 	}
 	result["errors"], result["printed"], result["ms"] = errList, printed.String(), ms
+	result["steps"] = evaluator.Steps()
 	out := fromGo(result).(*object.Hash)
 	hashSet(out, "shapes", shapes)
 	hashSet(out, "canvas", canvas)

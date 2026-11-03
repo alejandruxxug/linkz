@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"linkz/host/pressure"
 	"linkz/host/window"
 	"linkz/lib"
 	"lizardscript/ast"
@@ -180,6 +181,8 @@ func (a *App) coalesce(evs []window.Event) []window.Event {
 	var out []window.Event
 	for _, e := range evs {
 		if n := len(out); n > 0 && e.Type == "move" && !e.Injected && out[n-1].Type == "move" && !out[n-1].Injected {
+			// Nothing is lost: the earlier points stay in the sample list.
+			e.Samples = append(append([]window.Sample{}, out[n-1].Samples...), e.Samples...)
 			out[n-1] = e
 			a.Stats.Coalesced++
 			continue
@@ -311,6 +314,9 @@ func (a *App) eventHash(e window.Event) *object.Hash {
 			}
 		}
 		hashSet(h, "button", newInt(e.Button))
+		if e.Type == "move" {
+			hashSet(h, "samples", a.samplesList(e))
+		}
 		if e.Type == "wheel" {
 			hashSet(h, "dy", newFloat(e.DY))
 		}
@@ -340,6 +346,38 @@ func (a *App) eventHash(e window.Event) *object.Hash {
 	hashSet(ph, "eraser", newBool(pen.Eraser))
 	hashSet(h, "pen", ph)
 	return h
+}
+
+// samplesList is the "samples" array of a move event: every point since the
+// last tick. An event with no native samples (other OS, backdoor input) gets
+// one sample, its own point.
+func (a *App) samplesList(e window.Event) object.Object {
+	ss := e.Samples
+	if len(ss) == 0 {
+		ss = []window.Sample{{X: e.X, Y: e.Y, Pressure: e.Pen.Pressure, T: pressure.Now()}}
+	}
+	list := &object.Array{}
+	for _, s := range ss {
+		sh := object.NewHash()
+		hashSet(sh, "pos", newPoint(s.X/2, s.Y/2))
+		hashSet(sh, "canvas_pos", a.canvasPos(s.X, s.Y))
+		hashSet(sh, "pressure", newFloat(s.Pressure))
+		hashSet(sh, "t", newFloat(s.T))
+		list.Elements = append(list.Elements, sh)
+	}
+	return list
+}
+
+// canvasPos is the full-resolution canvas point for window pixels, or null
+// when the point is outside the canvas.
+func (a *App) canvasPos(x, y int) object.Object {
+	if r, ok := a.FB.CanvasRect(); ok {
+		cx, cy := x-r.Min.X*2, y-r.Min.Y*2
+		if cx >= 0 && cy >= 0 && cx < r.Dx()*2 && cy < r.Dy()*2 {
+			return newPoint(cx, cy)
+		}
+	}
+	return null
 }
 
 // Screenshot is the window as shown.
