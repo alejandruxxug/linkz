@@ -21,8 +21,7 @@ there is no property called nope
 let language = "es"
 
 > Open ["/d.lzdraw"] true
-> SetCode ["let nino = 1 -~> niño
-circle((5, 5), 2, #000)"] true
+> SetCode ["let nino = 1 -~> niño\ncircle((5, 5), 2, #000)"] true
 > Save [] true
 > Save ["/e.lzdraw"] true
 let nino = 1 -~> niño
