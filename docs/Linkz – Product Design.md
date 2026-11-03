@@ -60,5 +60,6 @@ Write lizard-script → see the drawing update → tweak (code or, later, drag o
 | 2026-11-03 | **Pressure is tunable per brush**: curve, min/max width and opacity, smoothing, speed influence, per-input settings (trackpad / tablet / mouse); strokes store raw pressure so retuning restyles them | "changeable and tuneable how we want them (brush sided)" |
 | 2026-11-03 | **Autocomplete is mandatory for v1**: names, members after `.`, the user's own functions/layers, snippets from doc examples, signature hints | "also mandatory autocomplete" |
 | 2026-11-03 | **Undo/redo everywhere (IMPORTANT)**: every document change is one step (typing coalesced by word), caret/selection restored, Cmd+Z / Shift+Cmd+Z / Cmd+Y, toolbar ↶ ↷ with action names, ≥ 200 steps, kept across saves; canvas gestures are one step each | The developer flagged it as important |
+| 2026-11-03 | **Color popover** next to any color you click: color variables first (picking writes `colors.sky`, a live reference), recent colors, compact HSV + hex, save as variable | "open the color picker next to it with the last used colors or color variables" |
 | 2026-11-02 | Named **Linkz** (lizard inkz); files stay `.lzdraw` | The developer's pick |
 | 2026-11-02 | lizard-script stays its own repo; Linkz imports it | Language work counts for the course; Linkz stays private until the reveal |
