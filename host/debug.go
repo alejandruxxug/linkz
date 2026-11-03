@@ -49,6 +49,7 @@ func NewDebug(app *App) *Debug {
 		"List": d.list, "Dump": d.dump, "Screenshot": d.screenshot,
 		"Click": d.click, "DoubleClick": d.doubleClick, "Drag": d.drag, "Scroll": d.scroll,
 		"Key": d.key, "Type": d.typeText,
+		"Focus": d.focus, "Leave": d.presence("leave"), "Enter": d.presence("enter"),
 		"Resize": d.resize, "Stats": d.stats, "Wait": d.wait, "Quit": d.quit,
 		"Call": d.callCmd,
 		// The file-state commands are the editor's to define in lizard.
@@ -409,16 +410,42 @@ func (d *Debug) typeText(args []string) (any, error) {
 	}, d.state)
 }
 
+// focus injects a focus event: Focus true|false.
+func (d *Debug) focus(args []string) (any, error) {
+	pos, _ := split(args)
+	if len(pos) != 1 {
+		return nil, fmt.Errorf("usage: Focus true|false")
+	}
+	on, err := strconv.ParseBool(pos[0])
+	if err != nil {
+		return nil, fmt.Errorf("usage: Focus true|false")
+	}
+	return d.afterPaint(func() {
+		d.App.Inject(window.Event{Type: "focus", Focused: on})
+	}, d.state)
+}
+
+// presence injects a "leave" or "enter" event: the cursor left or entered the window.
+func (d *Debug) presence(kind string) func([]string) (any, error) {
+	return func(args []string) (any, error) {
+		return d.afterPaint(func() {
+			d.App.Inject(window.Event{Type: kind})
+		}, d.state)
+	}
+}
+
 func (d *Debug) resize(args []string) (any, error) {
 	pos, _ := split(args)
-	f, err := floats(pos, 2, "Resize w h")
+	f, err := floats(pos, 2, "Resize w h (at least 640 x 420)")
 	if err != nil {
 		return nil, err
 	}
 	w, h := int(f[0]), int(f[1])
-	if w < 100 || h < 100 || w > 8000 || h > 8000 {
-		return nil, fmt.Errorf("size must be between 100 and 8000")
+	if w < 1 || h < 1 || w > 8000 || h > 8000 {
+		return nil, fmt.Errorf("size must be at most 8000")
 	}
+	// Like the window system: never below the smallest window.
+	w, h = max(w, window.MinW), max(h, window.MinH)
 	d.App.Do(func() func() any {
 		d.App.resizeTo = [2]int{w, h}
 		return func() any { return nil }

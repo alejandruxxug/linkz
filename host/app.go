@@ -374,6 +374,8 @@ func (a *App) eventHash(e window.Event) *object.Hash {
 		hashSet(h, "text", newStr(e.Text))
 	case "resize":
 		hashSet(h, "size", newPoint(e.X, e.Y))
+	case "focus":
+		hashSet(h, "focused", newBool(e.Focused))
 	}
 	mods := object.NewHash()
 	hashSet(mods, "shift", newBool(e.Mods.Shift))

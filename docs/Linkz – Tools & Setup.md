@@ -67,3 +67,7 @@ Nothing is published until a person pushes a tag and publishes the draft. The pi
 ## ⚠️ Things only the developer can do
 
 - Approve commits in lizard-script (the team sees them).
+
+## 🔧 Backdoor quick reference
+
+`linkz debug [--pid N] <Command>` drives the newest running window. Commands: `List`, `Dump`, `Screenshot [path]`, `Click x y`, `DoubleClick x y`, `Drag x1 y1 x2 y2 [steps] [--pressure a,b] [--full]`, `Scroll dy`, `Key name [mods]`, `Type text`, `Resize w h` (clamped to at least 640×420), `Focus true|false`, `Leave`, `Enter`, `Stats`, `Wait`, `Quit`, `Call Name args…` (editor/home commands such as `Open`, `Save`, `SetCode`, `SelectRow`, `SetProp`, `Tool`, `PencilStroke`, `Undo`, `Redo`, `Language`, `Home`, `OpenCard`, `NewDrawing`, `Complete`). Testers run with `HOME=$(mktemp -d)` and `--no-splash`.

@@ -31,17 +31,25 @@ type Sample struct {
 
 // Event is one input event. X and Y are window pixels.
 type Event struct {
-	Type     string // down, up, move, key, text, wheel
+	Type     string // down, up, move, key, text, wheel, focus, leave, enter
 	X, Y     int
 	Button   int
 	Key      string
 	Text     string
+	Focused  bool // focus: the window gained (true) or lost (false) focus
 	DY       float64
 	Mods     Mods
 	Pen      Pen
 	Samples  []Sample // move: every point since the last tick, last one at X, Y
 	Injected bool     // made by the backdoor: never coalesced
 }
+
+// Smallest window, in logical pixels: below it the toolbar and the panels
+// no longer fit. The window system enforces it; the backdoor clamps to it.
+const (
+	MinW = 640
+	MinH = 420
+)
 
 // Input is what happened since the last tick.
 type Input struct {

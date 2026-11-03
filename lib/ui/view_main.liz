@@ -190,6 +190,17 @@ function view_event(e) {
     view_key(e)
   } elif (ty == "text") {
     view_text(e)
+  } elif (ty == "leave" || (ty == "focus" && !e.focused)) {
+    view_cursor_gone()
+  }
+}
+
+-~> The pointer left the window (or the window lost focus): the mouse readout
+-~> in the status bar goes away until the next move.
+function view_cursor_gone() {
+  if (V.mouse_draw != null) {
+    V.mouse_draw = null
+    app.needs_paint = true
   }
 }
 

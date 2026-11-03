@@ -1,0 +1,66 @@
+-~> Focus, leave and unknown events: the status bar's mouse readout goes away
+-~> when the pointer leaves, the home screen looks at its folder again when the
+-~> window gains focus, and both screens ignore event types they don't know.
+let app = {"needs_paint": false}
+let dir = "/home/u/Documents/Linkz"
+let times = {}
+os.home = function() { "/home/u" }
+fs.list = function(d, ext) {
+  let out = []
+  let ks = keys(times)
+  for (let i = 0; i < len(ks); i = i + 1) {
+    let k = ks[i]
+    if (text.starts(k, d + "/") && text.ends(k, ext)) {
+      push(out, {"name": text.slice(k, len(d) + 1, len(k)), "path": k, "mtime": times[k], "size": 10})
+    }
+  }
+  out
+}
+fs.mkdir = function(p) { null }
+function add(name, mtime) {
+  times[dir + "/" + name] = mtime
+}
+
+-~> == The editor ==
+V.mouse_draw = (12.0, 34.0)
+app.needs_paint = false
+view_event({"type": "enter"})
+view_event({"type": "mystery"})
+puts(V.mouse_draw, app.needs_paint)
+view_event({"type": "focus", "focused": true})
+puts(V.mouse_draw, app.needs_paint)
+view_event({"type": "leave"})
+puts(V.mouse_draw, app.needs_paint)
+V.mouse_draw = (5.0, 6.0)
+app.needs_paint = false
+view_event({"type": "focus", "focused": false})
+puts(V.mouse_draw, app.needs_paint)
+app.needs_paint = false
+view_event({"type": "leave"})
+puts(app.needs_paint)
+
+-~> == Home ==
+add("one.lzdraw", 100)
+home_scan()
+home.size = (512, 360)
+puts(len(home.files))
+add("two.lzdraw", 200)
+-~> Moving, wheel and keys no longer look at the folder.
+home_event({"type": "wheel", "dy": 0.0, "pos": (10, 10), "mods": {}})
+home_event({"type": "mystery"})
+puts(len(home.files))
+-~> Losing focus does not either; gaining it does.
+home_event({"type": "focus", "focused": false})
+puts(len(home.files))
+home.needs_paint = false
+home_event({"type": "focus", "focused": true})
+puts(len(home.files), home.needs_paint)
+-~> Nothing changed: no repaint.
+home.needs_paint = false
+home_event({"type": "focus", "focused": true})
+puts(home.needs_paint)
+-~> Leave clears the hover.
+home.hover = {"kind": "card", "index": 0}
+home.needs_paint = false
+home_event({"type": "leave"})
+puts(home.hover, home.needs_paint)

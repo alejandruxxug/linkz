@@ -168,12 +168,46 @@ func TestAppPlaceholderEvents(t *testing.T) {
 
 	// Resize reallocates the buffers, and lizard repaints.
 	frames := app.Stats.Frames
-	mustCall("Resize", "600", "400")
-	if w, h := app.FB.WindowSize(); w != 600 || h != 400 {
+	mustCall("Resize", "700", "450")
+	if w, h := app.FB.WindowSize(); w != 700 || h != 450 {
 		t.Errorf("window size %dx%d after Resize", w, h)
+	}
+	// Below the minimum it clamps, as the window system does.
+	mustCall("Resize", "100", "100")
+	if w, h := app.FB.WindowSize(); w != window.MinW || h != window.MinH {
+		t.Errorf("window size %dx%d after a tiny Resize, want the minimum", w, h)
 	}
 	if app.Stats.Frames == frames {
 		t.Error("no repaint after the resize")
+	}
+}
+
+// Injected Focus, Leave and Enter reach app.event with their fields.
+func TestInjectedPresenceEvents(t *testing.T) {
+	app, stop := newTestApp(t)
+	defer stop()
+	dbg := NewDebug(app)
+	if _, err := dbg.cmds["Wait"](nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := app.eval(`app["seen"] = []; let old = app.event; app["event"] = function(e) { push(app.seen, e.type + ":" + str(e.focused)); old(e) }`, nil); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range [][]string{{"Focus", "false"}, {"Leave"}, {"Focus", "true"}, {"Enter"}} {
+		if _, err := dbg.cmds[c[0]](c[1:]); err != nil {
+			t.Fatalf("%v: %v", c, err)
+		}
+	}
+	got, err := app.eval("str(app.seen)", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `["focus:false", "leave:null", "focus:true", "enter:null"]`
+	if got.Inspect() != want {
+		t.Errorf("events = %s, want %s", got.Inspect(), want)
+	}
+	if _, err := dbg.cmds["Focus"]([]string{"maybe"}); err == nil {
+		t.Error("Focus maybe should fail")
 	}
 }
 

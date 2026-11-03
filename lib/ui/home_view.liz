@@ -51,13 +51,9 @@ function home_scan() {
   home.scanned_at = time.ms()
 }
 
--~> Files may be added or removed outside the app. There is no focus event, so
--~> the first input after a couple of seconds looks at the folder again (coming
--~> back to the window always moves the pointer). True when something changed.
-function home_rescan_if_old() {
-  if (time.ms() - home.scanned_at < 2000) {
-    return false
-  }
+-~> Files may be added or removed outside the app. The folder is looked at again
+-~> when the window gains focus (and on Cmd+R). True when something changed.
+function home_rescan() {
   let before = str(home.files) + str(home.recent)
   home_scan()
   if (str(home.files) + str(home.recent) != before) {
@@ -963,6 +959,14 @@ function home_click(hit, e) {
   home_dirty()
 }
 
+-~> The pointer left the window: nothing is hovered any more.
+function home_cursor_gone() {
+  if (home.hover != null) {
+    home.hover = null
+    home_dirty()
+  }
+}
+
 function home_event(e) {
   if (e.type == "resize") {
     home.size = e.size
@@ -973,8 +977,17 @@ function home_event(e) {
   if (home.dialog != null) {
     return home_dialog_event(e)
   }
-  if (e.type == "move" || e.type == "wheel" || e.type == "key") {
-    home_rescan_if_old()
+  if (e.type == "focus") {
+    if (e.focused) {
+      home_rescan()
+    } else {
+      home_cursor_gone()
+    }
+    return null
+  }
+  if (e.type == "leave") {
+    home_cursor_gone()
+    return null
   }
   if (e.type == "move") {
     let hit = home_hit(e.pos.x, e.pos.y)

@@ -34,6 +34,9 @@ func (e Ebiten) Run(title string, w, h int, handler Handler) error {
 		ebiten.SetWindowResizingMode(ebiten.WindowResizingModeDisabled)
 		center(w, h)
 	}
+	if !e.Frameless {
+		ebiten.SetWindowSizeLimits(MinW, MinH, -1, -1)
+	}
 	ebiten.SetScreenClearedEveryFrame(false)
 	ebiten.SetRunnableOnUnfocused(true)
 	ebiten.SetTPS(30)
@@ -56,6 +59,7 @@ type game struct {
 
 	lastX, lastY int
 	held         map[int]bool
+	presence     Presence
 }
 
 // Layout makes the buffer the size of the window: logical pixels equal
@@ -268,6 +272,8 @@ func (g *game) poll(hover bool) []Event {
 			evs = append(evs, Event{Type: "text", Text: string(r), Mods: mods})
 		}
 	}
+	// Focus and cursor-in-window changes: events only when something changed.
+	evs = append(evs, g.presence.Update(ebiten.IsFocused(), x, y, g.w, g.h)...)
 	return evs
 }
 
