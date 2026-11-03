@@ -1,0 +1,8 @@
+-~> Relative gradients: one value on a small and a large shape, each fitted to its own box.
+fb.fill((0, 0), (220, 140), #ffffff)
+let dusk = gradient([#ff0000, #0000ff])
+let glow = radial_gradient([#000000, #ffffff])
+-~> A small rect (x 0 to 19, y 0 to 19) and a large one (x 30 to 129, y 0 to 99), both top to bottom.
+raster.paint([rect((0, 0), (20, 20), dusk), rect((30, 0), (100, 100), dusk)], (0, 0))
+-~> A left to right one, and a radial one (box 140 to 199, 0 to 59, center (170, 30)).
+raster.paint([rect((0, 110), (100, 20), gradient([#ff0000, #0000ff], 0deg)), rect((140, 0), (60, 60), glow)], (0, 0))

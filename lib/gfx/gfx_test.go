@@ -272,6 +272,25 @@ func TestGradient(t *testing.T) {
 	})
 }
 
+func TestRelativeGradient(t *testing.T) {
+	img, _ := scene(t, "relgradient", 220, 140)
+	check(t, img, []px{
+		// 90deg: the top row is the first stop and the bottom row the last, on both sizes.
+		{10, 0, [3]uint8{249, 0, 6}, 2, "small shape: top row is the first stop"},
+		{10, 19, [3]uint8{6, 0, 249}, 2, "small shape: bottom row is the last stop"},
+		{80, 0, [3]uint8{253, 0, 2}, 3, "large shape: top row is the first stop"},
+		{80, 99, [3]uint8{2, 0, 253}, 3, "large shape: bottom row is the last stop"},
+		{80, 50, [3]uint8{128, 0, 127}, 3, "large shape: halfway"},
+		{10, 10, [3]uint8{121, 0, 134}, 2, "small shape: halfway (row 10 is 52.5%)"},
+		// 0deg: left to right.
+		{0, 120, red, 3, "left edge"},
+		{99, 120, blue, 3, "right edge"},
+		// Radial: the first stop at the center, the last on the edge.
+		{170, 30, [3]uint8{0, 0, 0}, 8, "center is the first stop"},
+		{199, 30, [3]uint8{250, 250, 250}, 12, "edge of the larger side"},
+	})
+}
+
 func TestBlend(t *testing.T) {
 	img, _ := scene(t, "blend", 200, 40)
 	g := func(v uint8) [3]uint8 { return [3]uint8{v, v, v} }

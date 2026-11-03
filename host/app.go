@@ -35,6 +35,10 @@ type App struct {
 	// UI as the "settings" hash. Nil means no settings.
 	Settings *object.Hash
 
+	// Machine is the kept measurement of this computer (see LoadMachine),
+	// given to the UI as the "machine" hash. Nil means none.
+	Machine *object.Hash
+
 	FB    *FB
 	Src   *Src
 	Stats Stats
@@ -98,6 +102,11 @@ func (a *App) LoadWith(path string, progress func(float64)) error {
 		settings = object.NewHash()
 	}
 	a.env.Define("settings", settings)
+	machine := a.Machine
+	if machine == nil {
+		machine = object.NewHash()
+	}
+	a.env.Define("machine", machine)
 
 	names := lib.UIFiles()
 	codes := make([][]byte, len(names))

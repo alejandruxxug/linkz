@@ -1,0 +1,1 @@
+[line 33, column 8] runtime error: radial_gradient: center must be a point like (10, 20), not INTEGER

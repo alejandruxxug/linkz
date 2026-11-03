@@ -1,0 +1,182 @@
+-~> calibrate: how many objects this machine can handle. It paints a standard
+-~> mix of shapes into an offscreen buffer, times it, and turns the timing and
+-~> the free memory into a recommended limit for one drawing.
+-~>   calibrate()            runs the benchmark (about 200 ms), returns the machine
+-~>   recommend(m)           the limit from {"free", "ms_per_object", "bytes_per_object"}
+-~>   machine_source(m)      the text of ~/.linkz/machine.liz
+-~>   machine_json(m)        the same as JSON (linkz calibrate prints it)
+-~> Needs raster.liz and the drawing libraries; it only calls them when run.
+
+-~> The share of free memory the span caches may take.
+let calib_memory_share = 0.10
+-~> The time one full repaint may take, in milliseconds.
+let calib_repaint_ms = 100.0
+-~> Stay under the caps by this much, since a real drawing is not the mix.
+let calib_headroom = 0.8
+-~> The benchmark stops starting new rounds after this many milliseconds.
+let calib_budget_ms = 180.0
+let calib_min_rounds = 3
+let calib_max_rounds = 9
+let calib_canvas = (512, 512)
+
+-~> Estimated bytes of memory for one span [y, x0, x1]: a list of three numbers
+-~> is about 24 bytes for the list, 3 x 16 for its slots, 3 x ~16 for the boxed
+-~> numbers, and 16 for its place in the outer list. A guess, not a measurement.
+let calib_bytes_per_span = 136
+-~> Estimated bytes for the rest of one object: the shape record (a hash of
+-~> about ten entries), its path and anchors.
+let calib_bytes_per_shape = 2000
+
+-~> The standard mix, 20 shapes: 7 circles, 4 rects, 4 strokes of 20 points,
+-~> 4 brushes of 20 points and 1 gradient fill. round is only there to move
+-~> things around a little, so no two shapes are the same.
+function calib_shapes(round) {
+  let shapes = []
+  let wobble = round * 0.7
+  for (let i = 0; i < 7; i = i + 1) {
+    push(shapes, circle((70 + i * 60, 90 + (i % 3) * 140 + wobble), 24 + i * 7, #3fa34d))
+  }
+  for (let i = 0; i < 4; i = i + 1) {
+    push(shapes, rect((20 + i * 110, 40 + i * 90 + wobble), (130, 90), #2d6a8f))
+  }
+  for (let k = 0; k < 4; k = k + 1) {
+    let pts = []
+    let pressures = []
+    for (let i = 0; i < 20; i = i + 1) {
+      push(pts, (30 + i * 23.0, 80 + k * 100 + math.sin(i / 3.0 + k + wobble) * 40))
+      push(pressures, 0.3 + (i % 5) * 0.15)
+    }
+    push(shapes, stroke(pts, #1d1d1f, 6))
+    push(shapes, brush(pts, pressures, #c0392b, pens.ink))
+  }
+  push(shapes, circle((256, 256), 120, radial((256, 256), 120, [#fff3c4, #e0607a])))
+  shapes
+}
+
+-~> Paints the mix once, empty cache, and returns [milliseconds, spans].
+function calib_round(round) {
+  let shapes = calib_shapes(round)
+  raster_cache = {}
+  raster_cache_size = 0
+  let t0 = time.ms()
+  raster.paint(shapes, (0, 0))
+  let ms = time.ms() - t0
+  let spans = 0
+  for (let i = 0; i < len(shapes); i = i + 1) {
+    let r = raster.shape(shapes[i])
+    if (r.fill !== null) {
+      spans = spans + len(r.fill)
+    }
+    if (r.stroke !== null) {
+      spans = spans + len(r.stroke)
+    }
+  }
+  [ms, spans, len(shapes)]
+}
+
+-~> The middle value of a list of numbers.
+function calib_median(values) {
+  let sorted = list.sort(values)
+  sorted[len(sorted) // 2]
+}
+
+-~> Rounds down to 2 significant digits: 1234 -> 1200, 87 -> 87.
+function friendly_number(n) {
+  let step = 1
+  while (n >= step * 100) {
+    step = step * 10
+  }
+  (n // step) * step
+}
+
+-~> The recommended limit. m has the free memory in bytes ("free"), and the
+-~> measured "ms_per_object" and "bytes_per_object". Gives the limit
+-~> ("max_objects") with the two caps that made it and which one was lower.
+function recommend(m) {
+  let ms = math.max(m.ms_per_object, 0.001)
+  let bytes = math.max(m.bytes_per_object, 1)
+  let memory_cap = int(m.free * calib_memory_share / bytes)
+  let speed_cap = int(calib_repaint_ms / ms)
+  let limited_by = "speed"
+  let cap = speed_cap
+  if (memory_cap < speed_cap) {
+    limited_by = "memory"
+    cap = memory_cap
+  }
+  let max = friendly_number(int(cap * calib_headroom))
+  if (max < 10) {
+    max = 10
+  }
+  {"max_objects": max, "ms_per_object": ms, "bytes_per_object": bytes,
+   "memory_cap": memory_cap, "speed_cap": speed_cap, "limited_by": limited_by}
+}
+
+-~> Runs the benchmark and returns the machine: recommend()'s result plus
+-~> "measured_at" (seconds since 1970) and "app_version". The first round is
+-~> thrown away (it warms things up); the rest give the median.
+function calibrate() {
+  fb.offscreen(calib_canvas)
+  let start = time.ms()
+  let times = []
+  let spans = 0
+  let count = 1
+  calib_round(0)
+  let round = 1
+  while (round <= calib_max_rounds && (round <= calib_min_rounds || time.ms() - start < calib_budget_ms)) {
+    let r = calib_round(round)
+    push(times, r[0])
+    spans = r[1]
+    count = r[2]
+    round = round + 1
+  }
+  fb.screen()
+  raster_cache = {}
+  raster_cache_size = 0
+
+  let free = os.memory().free
+  let m = recommend({
+    "free": free,
+    "ms_per_object": calib_median(times) / count,
+    "bytes_per_object": calib_bytes_per_shape + calib_bytes_per_span * spans / count
+  })
+  m.measured_at = time.now()
+  m.app_version = os.app_version()
+  m
+}
+
+let calib_keys = ["max_objects", "ms_per_object", "bytes_per_object", "memory_cap", "speed_cap", "limited_by", "measured_at", "app_version"]
+
+-~> Three decimals, so the file stays short.
+function calib_value(v) {
+  if (type(v) == "STRING") {
+    return "\"" + v + "\""
+  }
+  if (type(v) == "FLOAT") {
+    return str(math.round(v * 1000) / 1000.0)
+  }
+  str(v)
+}
+
+-~> The machine as "key": value pairs, in a fixed order, for the two writers.
+function calib_body(m) {
+  let out = ""
+  for (let i = 0; i < len(calib_keys); i = i + 1) {
+    let k = calib_keys[i]
+    if (m[k] === null) {
+      continue
+    }
+    if (out != "") {
+      out = out + ", "
+    }
+    out = out + "\"" + k + "\": " + calib_value(m[k])
+  }
+  out
+}
+
+function machine_source(m) {
+  "let machine = {" + calib_body(m) + "}\n"
+}
+
+function machine_json(m) {
+  "{" + calib_body(m) + "}"
+}

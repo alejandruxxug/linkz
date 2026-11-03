@@ -24,3 +24,41 @@ puts(gradient_color_at(h, 0.32), gradient_color_at(h, 0.34), gradient_color_at(h
 let shape = circle((10, 10), 5, g)
 puts(shape.fill === g, rect((0, 0), (5, 5), r).fill.kind, line((0, 0), (9, 9), g, 2).stroke.kind)
 puts(stroke([(0, 0), (9, 9)], r, 2).stroke.kind, polygon([(0, 0), (9, 0), (9, 9)], g).fill.kind, ellipse((9, 9), (3, 4), g).fill.kind)
+
+-~> Relative gradients: values that fit each shape's bounds.
+let rg = gradient([#ff0000, #0000ff])
+puts(rg.kind, rg.relative, rg.angle == 90deg, rg.steps, is_gradient(rg), is_relative_gradient(rg), is_relative_gradient(g))
+let rr = radial_gradient([#ffffff, #000000], (0.25, 0.75), 0.4, 4)
+puts(rr.kind, rr.relative, rr.center, rr.r, rr.steps)
+puts(paint_kind(#fff), paint_kind(rg), paint_kind(g), paint_kind(null), is_paint(#fff), is_paint(rr), is_paint(5))
+
+-~> Stored in a hash like a color, and used by shapes of any size.
+let colors = {"dusk": gradient([#3d1c4f, #f4d35e]), "leaf": #3fa34d}
+let small = circle((50, 50), 10, colors["dusk"])
+let big = rect((0, 100), (200, 400), colors["dusk"])
+let flat = rect((0, 0), (5, 5), colors["leaf"])
+puts(small.fill === big.fill, paint_kind(colors["leaf"]), paint_kind(colors["dusk"]))
+
+-~> The same variable resolves to different pinned parameters on each shape.
+let a = resolve_paint(small, "fill")
+let b = resolve_paint(big, "fill")
+puts(a.kind, a.relative, a.from, a.to, a.axis)
+puts(b.from, b.to)
+puts(resolve_paint(flat, "fill"))
+puts(resolve_paint(small, "fill") === a)
+
+-~> Angles: 0 is left to right, 90 top to bottom, 45 covers the box corner to corner.
+let box = {"min": (0, 0), "max": (100, 50)}
+let ang = gradient([#000, #fff], 0deg)
+puts(resolve_gradient(ang, box).from, resolve_gradient(ang, box).to)
+let diag = resolve_gradient(gradient([#000, #fff], 45deg), box)
+puts(diag.from, diag.to)
+
+-~> Radial: center and radius from the box; the radius follows the larger side.
+let rad = resolve_gradient(radial_gradient([#fff, #000]), box)
+puts(rad.kind, rad.center, rad.r)
+puts(resolve_gradient(radial_gradient([#fff, #000], (0, 0), 1), box).center)
+
+-~> A line has no height: the gradient still resolves.
+puts(resolve_paint(line((0, 10), (40, 10), gradient([#000, #fff], 0deg), 2), "fill"))
+puts(resolve_paint(line((0, 10), (40, 10), gradient([#000, #fff], 0deg), 2), "stroke").to)

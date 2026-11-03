@@ -1,0 +1,36 @@
+-~> object_count and object_budget with fixed inputs.
+function range_of(n) {
+  let out = []
+  for (let i = 0; i < n; i = i + 1) {
+    push(out, i)
+  }
+  out
+}
+
+let few = [1, 2, 3]
+puts(object_count([]), object_count(few))
+
+let machine = {"max_objects": 100}
+let c = {"size": (512, 512), "background": #ffffff}
+
+-~> no limit in the file: the machine's counts
+puts(object_budget(c, machine, few))
+puts(object_budget(c, machine, range_of(79)).state, object_budget(c, machine, range_of(80)).state)
+puts(object_budget(c, machine, range_of(100)).state, object_budget(c, machine, range_of(101)).state)
+
+-~> a limit in the file wins; above the machine's means a slower machine
+c.max_objects = 200
+puts(object_budget(c, machine, few))
+puts(object_budget(c, machine, range_of(160)).state)
+c.max_objects = 50
+puts(object_budget(c, machine, few))
+c.max_objects = 100
+puts(object_budget(c, machine, few).slower_machine)
+
+-~> nothing known: always ok
+puts(object_budget({}, {}, range_of(5000)))
+
+-~> the live drawing is the default
+circle((10, 10), 5, #3fa34d)
+rect((0, 0), (5, 5), #000000)
+puts(object_budget(c, machine).count)

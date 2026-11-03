@@ -4,6 +4,7 @@
 //	linkz render drawing.lzdraw [out.svg]  writes the SVG
 //	linkz paint prog.liz out.png [WxH]     runs a program headless on a buffer
 //	linkz debug [--pid N] Command [args]   drives a running editor
+//	linkz calibrate                        measures this machine, prints JSON
 package main
 
 import (
@@ -23,7 +24,8 @@ const usage = `usage:
   linkz edit [--no-splash] [file.lzdraw]
   linkz render file.lzdraw [out.svg]
   linkz paint prog.liz out.png [WxH]
-  linkz debug [--pid N] Command [args...]`
+  linkz debug [--pid N] Command [args...]
+  linkz calibrate`
 
 func main() {
 	if len(os.Args) < 2 {
@@ -40,6 +42,8 @@ func main() {
 		err = paint(os.Args[2:])
 	case "debug":
 		err = debug(os.Args[2:])
+	case "calibrate":
+		err = calibrate()
 	default:
 		fmt.Fprintln(os.Stderr, usage)
 		os.Exit(2)
@@ -48,6 +52,21 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+}
+
+// version is the app's version. A new one measures the machine again.
+const version = "0.1.0-dev"
+
+// calibrate measures this machine, keeps the result in ~/.linkz/machine.liz
+// and prints it as JSON.
+func calibrate() error {
+	host.AppVersion = version
+	text, err := host.Recalibrate(os.Stderr)
+	if err != nil {
+		return err
+	}
+	fmt.Println(text)
+	return nil
 }
 
 func render(args []string) error {
@@ -113,6 +132,12 @@ func edit(args []string) error {
 		fmt.Fprintln(os.Stderr, "linkz: settings ignored, using defaults:", err)
 	}
 	app.Settings = settings
+	host.AppVersion = version
+	if machine, err := host.Machine(false, os.Stderr); err != nil {
+		fmt.Fprintln(os.Stderr, "linkz: machine not measured:", err)
+	} else {
+		app.Machine = machine
+	}
 	if host.SkipLoadingAnim(settings) {
 		splash = false
 	}

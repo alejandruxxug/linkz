@@ -346,10 +346,10 @@ function raster_draw(spans, offset, paint) {
 function raster_paint_shape(s, offset) {
   let r = raster_shape(s)
   if (r.fill !== null) {
-    raster_draw(r.fill, offset, s.fill)
+    raster_draw(r.fill, offset, resolve_paint(s, "fill"))
   }
   if (r.stroke !== null) {
-    raster_draw(r.stroke, offset, s.stroke)
+    raster_draw(r.stroke, offset, resolve_paint(s, "stroke"))
   }
 }
 

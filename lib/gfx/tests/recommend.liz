@@ -1,0 +1,23 @@
+-~> recommend() and friendly_number() with fixed inputs.
+-~> Run by TestRecommend; the output is compared with recommend.expected.
+
+for (let i = 0; i < 1; i = i + 1) {
+  puts(friendly_number(7), friendly_number(87), friendly_number(100), friendly_number(1234), friendly_number(99999), friendly_number(123456))
+}
+
+-~> speed is the lower cap: 100 / 0.5 = 200 objects, x 0.8 = 160
+puts(recommend({"free": 8000000000, "ms_per_object": 0.5, "bytes_per_object": 20000}))
+-~> memory is the lower cap: 10% of 1 GB / 50000 = 2000, x 0.8 = 1600
+puts(recommend({"free": 1000000000, "ms_per_object": 0.01, "bytes_per_object": 50000}))
+-~> 100 / 0.37 = 270, x 0.8 = 216, friendly 210
+puts(recommend({"free": 8000000000, "ms_per_object": 0.37, "bytes_per_object": 20000}).max_objects)
+-~> a very slow machine never goes under 10
+puts(recommend({"free": 8000000000, "ms_per_object": 50.0, "bytes_per_object": 20000}).max_objects)
+-~> a faster machine gets a higher number
+puts(recommend({"free": 8000000000, "ms_per_object": 0.25, "bytes_per_object": 20000}).max_objects > recommend({"free": 8000000000, "ms_per_object": 0.5, "bytes_per_object": 20000}).max_objects)
+-~> the writers
+let m = recommend({"free": 8000000000, "ms_per_object": 0.5, "bytes_per_object": 20000})
+m.measured_at = 5
+m.app_version = "1.0"
+puts(machine_source(m))
+puts(machine_json(m))

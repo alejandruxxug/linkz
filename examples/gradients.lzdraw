@@ -1,9 +1,12 @@
 -~> lzdraw 1
 -~> Gradients are values: give one wherever a fill or stroke color goes.
--~> linear(from, to, stops) runs along a line, radial(center, r, stops) outwards.
+-~> linear(from, to, stops) runs along a line, radial(center, r, stops) outwards,
+-~> both pinned to canvas coordinates. gradient(stops, angle) and
+-~> radial_gradient(stops) fit each shape's own box, so one variable can hold a
+-~> color or a gradient and be used on any shape.
 -~> steps = n makes n flat bands, and hard(color) is a sharp edge.
 
-canvas = {"size": (480, 320), "background": #f4f1e8}
+canvas = {"size": (480, 480), "background": #f4f1e8}
 
 layer sun
   circle((380, 70), 44, radial((380, 70), 44, [#fff3c4, #f2a65a, #e0607a]))
@@ -15,3 +18,21 @@ layer bands
 layer sky
   line((40, 160), (300, 40), linear((40, 0), (300, 0), [#ffffff, #3d1c4f]), 8)
   rect((20, 20), (300, 150), linear((20, 20), (20, 170), [[0, #3d1c4f], [0.6, #e0607a], [1, #f4d35e]]))
+
+-~> Color variables: some colors, some gradients, all interchangeable.
+let colors = {
+  "dusk": gradient([#3d1c4f, #e0607a, #f4d35e]),
+  "glow": radial_gradient([#fff3c4, #e0607a]),
+  "diag": gradient([#2d6a8f, #a9d3e4], 45deg, 5),
+  "leaf": #3fa34d
+}
+
+layer swatches
+  circle((60, 350), 30, colors["dusk"])
+  rect((110, 310), (160, 80), colors["dusk"])
+  circle((330, 350), 40, colors["glow"])
+  rect((390, 310), (70, 80), colors["diag"])
+  rect((20, 410), (140, 50), colors["leaf"])
+  rect((180, 410), (140, 50), colors["glow"])
+  stroke([(350, 440), (380, 415), (410, 455), (450, 420)], colors["dusk"], 6)
+  rect((340, 410), (120, 50), colors["diag"])

@@ -1,0 +1,9 @@
+7 87 100 1200 99000 120000
+{"max_objects": 160, "ms_per_object": 0.5, "bytes_per_object": 20000, "memory_cap": 40000, "speed_cap": 200, "limited_by": "speed"}
+{"max_objects": 1600, "ms_per_object": 0.01, "bytes_per_object": 50000, "memory_cap": 2000, "speed_cap": 10000, "limited_by": "memory"}
+210
+10
+true
+let machine = {"max_objects": 160, "ms_per_object": 0.5, "bytes_per_object": 20000, "memory_cap": 40000, "speed_cap": 200, "limited_by": "speed", "measured_at": 5, "app_version": "1.0"}
+
+{"max_objects": 160, "ms_per_object": 0.5, "bytes_per_object": 20000, "memory_cap": 40000, "speed_cap": 200, "limited_by": "speed", "measured_at": 5, "app_version": "1.0"}

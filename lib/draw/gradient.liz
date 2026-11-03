@@ -7,6 +7,13 @@
 -~>   steps    0 for smooth, or the number of flat bands (2 to 64)
 -~>   from, to (linear) or center, r (radial): where it sits, in the drawing's space
 -~>   origin, axis, scale   the same, worked out for the rasterizer (fb.span_gradient)
+-~>
+-~> linear and radial are pinned: their numbers are canvas coordinates. For one
+-~> value that fits every shape (a color variable that holds a color or a
+-~> gradient), use gradient and radial_gradient: they work in fractions of each
+-~> shape's bounding box and are resolved against the shape when it is drawn.
+-~> A relative gradient has "relative": true, with angle (linear), center and r
+-~> (radial) instead of from/to or center/r in pixels.
 -~> Stops are colors (spread evenly), [t, color] pairs, or hard(color) for an
 -~> edge. A hard stop starts a new flat color where it is, with no blending
 -~> from the stop before: [#fff, #333, hard(#c00), #000] is a smooth white to
@@ -161,5 +168,111 @@ function gradient_svg_stops(g) {
     push(out, [i / float(g.steps), c])
     push(out, [(i + 1) / float(g.steps), c])
   }
+  out
+}
+
+-~> A gradient that fits each shape it is given to, across the shape's bounding
+-~> box. The angle is the direction the colors travel, in screen space, turning
+-~> clockwise from "to the right": 0deg is left to right, 90deg is top to bottom
+-~> (the default), 180deg right to left, 270deg bottom to top. This is not CSS:
+-~> CSS counts from "up", so CSS 180deg is this 90deg. The first stop is at the
+-~> box's start corner and the last at the opposite corner, so the box is fully
+-~> covered. Resolved against the path's bounds when the shape is drawn.
+-~> stops: colors, [t, color] pairs or hard(color), at least two
+-~> angle: the direction, like 90deg, 45deg or 0.25turn
+-~> steps: 0 for smooth, or 2 to 64 for that many flat bands
+-~> example: let dusk = gradient([#3d1c4f, #e0607a, #f4d35e])
+function gradient(stops, angle = 90deg, steps = 0) {
+  need_number("gradient", "angle", angle)
+  need_steps("gradient", steps)
+  let list_of_stops = gradient_stops("gradient", stops)
+  {"kind": "linear", "relative": true, "angle": angle, "stops": list_of_stops, "steps": steps}
+}
+
+-~> A gradient that runs outwards from a point of each shape, as circles. The
+-~> center is a point in fractions of the box ((0, 0) top left, (1, 1) bottom
+-~> right), and r is a fraction of the box's larger side, so the default
+-~> r = 0.5 reaches the edge on the longer side. The rings are circles, not an
+-~> ellipse, because the host evaluates circles only; on a wide box the short
+-~> sides are not reached. Resolved against the path's bounds when drawn.
+-~> stops: colors, [t, color] pairs or hard(color), at least two
+-~> center: where the first stop is, as fractions of the box
+-~> r: where the last stop is, as a fraction of the larger side
+-~> steps: 0 for smooth, or 2 to 64 for that many flat rings
+-~> example: let glow = radial_gradient([#fff3c4, #e0607a])
+function radial_gradient(stops, center = (0.5, 0.5), r = 0.5, steps = 0) {
+  need_point("radial_gradient", "center", center)
+  need_number("radial_gradient", "r", r)
+  if (r <= 0) {
+    reject("radial_gradient", "r must be more than 0, not " + str(r))
+  }
+  need_steps("radial_gradient", steps)
+  let list_of_stops = gradient_stops("radial_gradient", stops)
+  {"kind": "radial", "relative": true, "center": center, "r": r, "stops": list_of_stops, "steps": steps}
+}
+
+-~> True when v is a gradient that fits each shape (gradient, radial_gradient).
+function is_relative_gradient(v) {
+  is_gradient(v) && v["relative"] === true
+}
+
+-~> True when v can be a fill or stroke: a color or any gradient.
+function is_paint(v) {
+  type(v) == "COLOR" || is_gradient(v)
+}
+
+-~> "color" or "gradient" for a paint, "none" for anything else.
+function paint_kind(v) {
+  if (type(v) == "COLOR") {
+    return "color"
+  }
+  if (is_gradient(v)) {
+    return "gradient"
+  }
+  "none"
+}
+
+-~> A relative gradient worked out for a box ({"min": (x, y), "max": (x, y)}):
+-~> a pinned linear() or radial() with the numbers in pixels.
+function resolve_gradient(g, box) {
+  let w = float(box.max.x - box.min.x)
+  let h = float(box.max.y - box.min.y)
+  if (g.kind == "linear") {
+    let dx = math.round(math.cos(g.angle) * 1000000000) / 1000000000.0
+    let dy = math.round(math.sin(g.angle) * 1000000000) / 1000000000.0
+    let span = math.max(1.0, math.abs(w * dx) + math.abs(h * dy))
+    let cx = box.min.x + w / 2
+    let cy = box.min.y + h / 2
+    let half = span / 2
+    return linear((cx - dx * half, cy - dy * half), (cx + dx * half, cy + dy * half), g.stops, g.steps)
+  }
+  let r = math.max(0.01, g.r * math.max(w, h))
+  radial((box.min.x + g.center.x * w, box.min.y + g.center.y * h), r, g.stops, g.steps)
+}
+
+-~> The paint of a shape's "fill" or "stroke" ready to draw: a color or a
+-~> pinned gradient is returned as it is; a relative one is resolved against
+-~> the shape's path bounds. The result is kept on the shape, and used again
+-~> while the paint and the path are the very same values.
+function resolve_paint(shape, which) {
+  let paint = shape[which]
+  if (!is_relative_gradient(paint)) {
+    return paint
+  }
+  let cache = shape["paint_cache"]
+  if (cache === null) {
+    cache = {}
+    shape["paint_cache"] = cache
+  }
+  let hit = cache[which]
+  if (hit !== null && hit[0] === paint && hit[1] === shape.path) {
+    return hit[2]
+  }
+  let box = path_bounds(shape.path)
+  if (box === null) {
+    box = {"min": (0, 0), "max": (0, 0)}
+  }
+  let out = resolve_gradient(paint, box)
+  cache[which] = [paint, shape.path, out]
   out
 }

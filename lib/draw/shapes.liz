@@ -431,9 +431,48 @@ function layer_events(ordered) {
   events
 }
 
--~> A fill or stroke: a color, or a gradient value from linear() or radial().
+-~> A fill or stroke: a color, or a gradient value (linear, radial, gradient, radial_gradient).
 function need_paint(call, name, v) {
   if (!is_gradient(v)) {
     need_color(call, name, v)
   }
+}
+
+-~> The object limit. A canvas may carry "max_objects" (a whole number): the
+-~> limit its file was made with, written when the drawing was created.
+
+-~> How many shapes a drawing has.
+function object_count(shapes) {
+  len(shapes)
+}
+
+-~> Where a drawing stands against the object limit.
+-~>   count           shapes now
+-~>   max             the limit that counts here: the file's own, else this
+-~>                   machine's recommended one (0 when neither is known)
+-~>   file_max        canvas["max_objects"], or null
+-~>   state           "ok", "near" (80% or more of max) or "over" (more than max)
+-~>   slower_machine  true when the file's limit is above this machine's, so
+-~>                   the file may run slowly here (the file is not changed)
+-~> machine is the hash with "max_objects" (see calibrate.liz); {} when unknown.
+function object_budget(cnv, machine, shapes = drawing) {
+  let count = object_count(shapes)
+  let file_max = cnv["max_objects"]
+  let here_max = machine["max_objects"]
+  let max = 0
+  if (file_max !== null) {
+    max = file_max
+  } elif (here_max !== null) {
+    max = here_max
+  }
+  let state = "ok"
+  if (max > 0) {
+    if (count > max) {
+      state = "over"
+    } elif (count * 5 >= max * 4) {
+      state = "near"
+    }
+  }
+  let slower = file_max !== null && here_max !== null && file_max > here_max
+  {"count": count, "max": max, "file_max": file_max, "state": state, "slower_machine": slower}
 }

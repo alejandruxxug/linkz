@@ -13,3 +13,12 @@ rect((0, 0), (50, 50), #ff0000)
 circle((50, 30), 10, #0000ff)
 line((0, 0), (100, 60), #000000aa, 2.5)
 puts(svg_document(canvas, drawing))
+
+-~> One relative gradient on two shapes of different sizes: two pinned
+-~> gradients in <defs>; the same size shares one.
+let dusk = gradient([#3d1c4f, #f4d35e])
+canvas = {"size": (100, 100), "background": gradient([#fff, #ccc])}
+circle((20, 20), 10, dusk)
+rect((0, 40), (100, 50), dusk)
+rect((0, 40), (100, 50), dusk)
+puts(svg_document(canvas, drawing))

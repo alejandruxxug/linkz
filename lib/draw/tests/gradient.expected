@@ -8,3 +8,17 @@ radial (50, 50) 40 4 (50, 50) 0.025
 #0a0a0a #000000 #ff0000
 true radial linear
 radial linear linear
+linear true true 0 true true false
+radial true (0.25, 0.75) 0.4 4
+color gradient gradient none true true false
+true color gradient
+linear null (50.0, 40.0) (50.0, 60.0) (0.0, 0.05)
+(100.0, 100.0) (100.0, 500.0)
+#3fa34d
+true
+(0.0, 25.0) (100.0, 25.0)
+(12.500000019786356, -12.499999980213644) (87.49999998021364, 62.499999980213644)
+radial (50.0, 25.0) 50.0
+(0.0, 0.0)
+null
+(40.0, 10.0)

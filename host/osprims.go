@@ -200,5 +200,6 @@ func osHash() *object.Hash {
 		},
 	})
 	addOSPrims(h)
+	addMemPrims(h)
 	return h
 }

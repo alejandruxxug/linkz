@@ -1,0 +1,10 @@
+0 3
+{"count": 3, "max": 100, "file_max": null, "state": "ok", "slower_machine": false}
+ok near
+near over
+{"count": 3, "max": 200, "file_max": 200, "state": "ok", "slower_machine": true}
+near
+{"count": 3, "max": 50, "file_max": 50, "state": "ok", "slower_machine": false}
+false
+{"count": 5000, "max": 0, "file_max": null, "state": "ok", "slower_machine": false}
+2
