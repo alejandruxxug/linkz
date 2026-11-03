@@ -305,3 +305,77 @@ function simplify(points, tolerance) {
   }
   out
 }
+
+-~> How far the direction changes at p when walking from a through p to b,
+-~> in radians: 0 for a straight line, pi for turning right back.
+function turn_angle(a, p, b) {
+  let u = p - a
+  let v = b - p
+  math.abs(math.atan2(u.x * v.y - u.y * v.x, u.x * v.x + u.y * v.y))
+}
+
+-~> Twice the signed area of a polygon (the shoelace sum), as a float.
+-~> It is positive when the points go clockwise on the screen (y points down).
+function polygon_area2(points) {
+  let n = len(points)
+  let sum = 0.0
+  for (let i = 0; i < n; i = i + 1) {
+    let a = points[i]
+    let b = points[(i + 1) % n]
+    sum = sum + a.x * b.y - b.x * a.y
+  }
+  sum
+}
+
+-~> Path commands for a smooth outline through the points, with sharp corners.
+-~> It is Catmull-Rom like smooth_path, except that a point where the line
+-~> turns by more than `corner` degrees stays a sharp corner (the curve
+-~> arrives and leaves it without bending), and the pieces between two sharp
+-~> corners are straight. A closed outline wraps round and ends with ["Z"];
+-~> an open one has sharp ends. With fewer than 3 points it is straight lines.
+function smooth_outline(points, closed, corner) {
+  let n = len(points)
+  let path = [["M", points[0]]]
+  if (n < 3) {
+    for (let i = 1; i < n; i = i + 1) {
+      push(path, ["L", points[i]])
+    }
+    if (closed) {
+      push(path, ["Z"])
+    }
+    return path
+  }
+  let limit = corner * math.pi / 180.0
+  let sharp = []
+  for (let i = 0; i < n; i = i + 1) {
+    if (!closed && (i == 0 || i == n - 1)) {
+      push(sharp, true)
+    } else {
+      push(sharp, turn_angle(points[(i + n - 1) % n], points[i], points[(i + 1) % n]) > limit)
+    }
+  }
+  let pieces = n - 1
+  if (closed) {
+    pieces = n
+  }
+  for (let i = 0; i < pieces; i = i + 1) {
+    let j = (i + 1) % n
+    if (sharp[i] && sharp[j]) {
+      push(path, ["L", points[j]])
+    } else {
+      let before = points[i]
+      if (!sharp[i]) {
+        before = points[(i + n - 1) % n]
+      }
+      let after = points[j]
+      if (!sharp[j]) {
+        after = points[(j + 1) % n]
+      }
+      push(path, ["C", points[i] + (points[j] - before) / 6.0, points[j] - (after - points[i]) / 6.0, points[j]])
+    }
+  }
+  if (closed) {
+    push(path, ["Z"])
+  }
+  path
+}

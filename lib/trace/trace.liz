@@ -1,0 +1,614 @@
+-~> trace: turns a picture into lizard-script drawing code you can edit.
+-~> The steps, each one a function below:
+-~>   1. trace_quantize   reduce the picture to a few colors (median cut, then
+-~>                       a few k-means rounds), each pixel gets a palette number
+-~>   2. trace_clean      merge specks smaller than min_area into their neighbour
+-~>   3. trace_rings      follow the edge of every region on the pixel grid,
+-~>                       outer outlines and holes, in one direction
+-~>   4. trace_ring_simplify  Ramer-Douglas-Peucker, so a staircase becomes few points
+-~>   5. trace_code       write a .lzdraw: one layer per color, one path() per
+-~>                       region; path() does the smoothing (Bezier curves,
+-~>                       sharp corners kept)
+-~> Needs the drawing libraries (simplify, polygon_area2, color_hex, svg_num)
+-~> and, for trace(), the host's img.load and time.ms.
+
+-~> The options of trace(path, options). Anything left out takes the value shown.
+-~>   colors      how many colors the picture is reduced to (2 and up). More colors,
+-~>               more detail and more shapes.
+-~>   detail      how far, in pixels, an outline may drift from the pixel edge when
+-~>               it is simplified. Small keeps wiggles, large gives smooth, simple shapes.
+-~>   min_area    regions smaller than this many pixels are merged into the neighbour
+-~>               they touch most (0 keeps every speck).
+-~>   corner      the turn in degrees from which an outline point stays a sharp corner.
+-~>   smooth      false to write straight-sided polygons instead of curves.
+-~>   background  true to write the biggest color as one rectangle behind everything
+-~>               (no seams, far fewer points); false to trace it like the others.
+-~>   refine      how many k-means rounds polish the palette after the median cut.
+-~>   scale       multiplies every coordinate, to make a bigger drawing.
+-~>   max_side    the picture is shrunk until its longer side is at most this many pixels.
+let trace_options = {
+  "colors": 8,
+  "detail": 1.5,
+  "min_area": 8,
+  "corner": 55,
+  "smooth": true,
+  "background": true,
+  "refine": 2,
+  "scale": 1,
+  "max_side": 256
+}
+
+-~> The options with the defaults filled in. An unknown name is an error, so a
+-~> typo doesn't pass silently.
+function trace_settings(options) {
+  if (type(options) != "HASH") {
+    error("trace: options must be a hash like {\"colors\": 6}, not " + type(options))
+  }
+  let names = keys(options)
+  for (let i = 0; i < len(names); i = i + 1) {
+    if (trace_options[names[i]] === null) {
+      error("trace: unknown option \"" + names[i] + "\" (known: " + text.join(keys(trace_options), ", ") + ")")
+    }
+  }
+  let out = {}
+  let all = keys(trace_options)
+  for (let i = 0; i < len(all); i = i + 1) {
+    out[all[i]] = trace_options[all[i]]
+    if (options[all[i]] !== null) {
+      out[all[i]] = options[all[i]]
+    }
+  }
+  if (out.colors < 2 || out.colors > 64) {
+    error("trace: colors must be from 2 to 64")
+  }
+  out
+}
+
+-~> A group of colors for the median cut: the cells (distinct colors with a
+-~> count) it holds, how many pixels they cover, and its widest channel.
+function trace_box(cells, members) {
+  let lo = [255.0, 255.0, 255.0]
+  let hi = [0.0, 0.0, 0.0]
+  let count = 0
+  for (let i = 0; i < len(members); i = i + 1) {
+    let cell = cells[members[i]]
+    count = count + cell[0]
+    for (let c = 0; c < 3; c = c + 1) {
+      if (cell[c + 1] < lo[c]) {
+        lo[c] = cell[c + 1]
+      }
+      if (cell[c + 1] > hi[c]) {
+        hi[c] = cell[c + 1]
+      }
+    }
+  }
+  let chan = 0
+  let range = hi[0] - lo[0]
+  for (let c = 1; c < 3; c = c + 1) {
+    if (hi[c] - lo[c] > range) {
+      range = hi[c] - lo[c]
+      chan = c
+    }
+  }
+  {"members": members, "count": count, "chan": chan + 1, "range": range}
+}
+
+-~> Palette numbers for the cells: the colors are cut into `n` boxes (median
+-~> cut), then every cell goes to its nearest center for `rounds` rounds
+-~> (k-means). Nothing is random, so the same picture gives the same palette.
+-~> Returns {"palette": [[r, g, b], ...], "of_cell": [number for each cell]}.
+function trace_palette(cells, n, rounds) {
+  let all = []
+  for (let i = 0; i < len(cells); i = i + 1) {
+    push(all, i)
+  }
+  let boxes = [trace_box(cells, all)]
+  while (len(boxes) < n) {
+    let best = -1
+    let top = 0.0
+    for (let b = 0; b < len(boxes); b = b + 1) {
+      if (len(boxes[b].members) >= 2 && boxes[b].range > 0) {
+        let score = boxes[b].range * math.sqrt(float(boxes[b].count))
+        if (score > top) {
+          top = score
+          best = b
+        }
+      }
+    }
+    if (best < 0) {
+      break
+    }
+    let chan = boxes[best].chan
+    let sorted = list.sort(boxes[best].members, function(a, b) { cells[a][chan] < cells[b][chan] })
+    let half = boxes[best].count / 2.0
+    let seen = 0
+    let cut = 1
+    for (let i = 0; i < len(sorted) - 1; i = i + 1) {
+      seen = seen + cells[sorted[i]][0]
+      cut = i + 1
+      if (seen >= half) {
+        break
+      }
+    }
+    boxes[best] = trace_box(cells, list.slice(sorted, 0, cut))
+    push(boxes, trace_box(cells, list.slice(sorted, cut, len(sorted))))
+  }
+
+  let palette = []
+  for (let b = 0; b < len(boxes); b = b + 1) {
+    push(palette, trace_mean(cells, boxes[b].members))
+  }
+  let of_cell = []
+  for (let r = 0; r <= rounds; r = r + 1) {
+    of_cell = trace_assign(cells, palette)
+    if (r == rounds) {
+      break
+    }
+    let groups = []
+    for (let p = 0; p < len(palette); p = p + 1) {
+      push(groups, [])
+    }
+    for (let i = 0; i < len(cells); i = i + 1) {
+      push(groups[of_cell[i]], i)
+    }
+    for (let p = 0; p < len(palette); p = p + 1) {
+      if (len(groups[p]) > 0) {
+        palette[p] = trace_mean(cells, groups[p])
+      }
+    }
+  }
+  {"palette": palette, "of_cell": of_cell}
+}
+
+-~> The average color [r, g, b] of some cells, weighted by their pixel counts.
+function trace_mean(cells, members) {
+  let sum = [0.0, 0.0, 0.0]
+  let count = 0
+  for (let i = 0; i < len(members); i = i + 1) {
+    let cell = cells[members[i]]
+    count = count + cell[0]
+    for (let c = 0; c < 3; c = c + 1) {
+      sum[c] = sum[c] + cell[c + 1] * cell[0]
+    }
+  }
+  [sum[0] / count, sum[1] / count, sum[2] / count]
+}
+
+-~> For each cell, the number of the nearest palette color.
+function trace_assign(cells, palette) {
+  let out = []
+  for (let i = 0; i < len(cells); i = i + 1) {
+    let cell = cells[i]
+    let best = 0
+    let near = 1000000000.0
+    for (let p = 0; p < len(palette); p = p + 1) {
+      let dr = cell[1] - palette[p][0]
+      let dg = cell[2] - palette[p][1]
+      let db = cell[3] - palette[p][2]
+      let d = dr * dr + dg * dg + db * db
+      if (d < near) {
+        near = d
+        best = p
+      }
+    }
+    push(out, best)
+  }
+  out
+}
+
+-~> Reduces the pixels to `n` colors. Returns {"palette": [[r, g, b], ...],
+-~> "index": [palette number for each pixel]}. The pixels are first grouped
+-~> by their top 5 bits per channel (at most 32768 distinct colors), so the
+-~> palette work is done on those groups, not on every pixel.
+function trace_quantize(pixels, n, rounds) {
+  let cells = []
+  let slot = {}
+  let cell_of = []
+  for (let i = 0; i < len(pixels); i = i + 1) {
+    let c = pixels[i]
+    let key = (c.r // 8) * 1024 + (c.g // 8) * 32 + c.b // 8
+    let s = slot[key]
+    if (s === null) {
+      s = len(cells)
+      slot[key] = s
+      push(cells, [0, 0, 0, 0])
+    }
+    let cell = cells[s]
+    cell[0] = cell[0] + 1
+    cell[1] = cell[1] + c.r
+    cell[2] = cell[2] + c.g
+    cell[3] = cell[3] + c.b
+    push(cell_of, s)
+  }
+  for (let s = 0; s < len(cells); s = s + 1) {
+    for (let c = 1; c < 4; c = c + 1) {
+      cells[s][c] = cells[s][c] / float(cells[s][0])
+    }
+  }
+  let made = trace_palette(cells, n, rounds)
+  let index = []
+  for (let i = 0; i < len(pixels); i = i + 1) {
+    push(index, made.of_cell[cell_of[i]])
+  }
+  {"palette": made.palette, "index": index}
+}
+
+-~> The picture as a grid with a border: (w + 2) by (h + 2) palette numbers,
+-~> -1 all round, so no neighbour check needs a bounds test.
+function trace_pad(index, w, h) {
+  let w2 = w + 2
+  let pad = []
+  for (let i = 0; i < w2 * (h + 2); i = i + 1) {
+    push(pad, -1)
+  }
+  for (let y = 0; y < h; y = y + 1) {
+    for (let x = 0; x < w; x = x + 1) {
+      pad[(y + 1) * w2 + x + 1] = index[y * w + x]
+    }
+  }
+  pad
+}
+
+-~> Connected pieces of one color (sides touching, not corners).
+-~> Returns {"label": a grid like pad with each piece's number (-1 outside),
+-~> "members": [[grid positions] for each piece]}.
+function trace_label(pad, w, h) {
+  let w2 = w + 2
+  let label = []
+  for (let i = 0; i < len(pad); i = i + 1) {
+    push(label, -1)
+  }
+  let members = []
+  let steps = [-1, 1, -w2, w2]
+  for (let y = 1; y <= h; y = y + 1) {
+    for (let x = 1; x <= w; x = x + 1) {
+      let p = y * w2 + x
+      if (label[p] != -1) {
+        continue
+      }
+      let id = len(members)
+      let color = pad[p]
+      let found = [p]
+      label[p] = id
+      let todo = [p]
+      while (len(todo) > 0) {
+        let q = pop(todo)
+        for (let s = 0; s < 4; s = s + 1) {
+          let r = q + steps[s]
+          if (label[r] == -1 && pad[r] == color) {
+            label[r] = id
+            push(found, r)
+            push(todo, r)
+          }
+        }
+      }
+      push(members, found)
+    }
+  }
+  {"label": label, "members": members}
+}
+
+-~> Merges every piece smaller than min_area pixels into the color it touches
+-~> most (the lower palette number wins a tie). Changes pad. Returns how many
+-~> pieces it merged.
+function trace_clean(pad, w, h, pieces, colors, min_area) {
+  let w2 = w + 2
+  let steps = [-1, 1, -w2, w2]
+  let merged = 0
+  for (let id = 0; id < len(pieces.members); id = id + 1) {
+    let found = pieces.members[id]
+    if (len(found) >= min_area) {
+      continue
+    }
+    let votes = []
+    for (let c = 0; c < colors; c = c + 1) {
+      push(votes, 0)
+    }
+    for (let i = 0; i < len(found); i = i + 1) {
+      for (let s = 0; s < 4; s = s + 1) {
+        let r = found[i] + steps[s]
+        if (pad[r] >= 0 && pieces.label[r] != id) {
+          votes[pad[r]] = votes[pad[r]] + 1
+        }
+      }
+    }
+    let best = -1
+    let most = 0
+    for (let c = 0; c < colors; c = c + 1) {
+      if (votes[c] > most) {
+        most = votes[c]
+        best = c
+      }
+    }
+    if (best >= 0) {
+      for (let i = 0; i < len(found); i = i + 1) {
+        pad[found[i]] = best
+      }
+      merged = merged + 1
+    }
+  }
+  merged
+}
+
+-~> Adds a directed edge to the list of edges that leave its start corner (kept
+-~> by color and corner, so each color is followed on its own).
+function trace_add_edge(outs, all, key, edge) {
+  if (outs[key] === null) {
+    outs[key] = [edge]
+  } else {
+    push(outs[key], edge)
+  }
+  push(all, edge)
+}
+
+-~> Follows the edge of every region on the grid of pixel corners. Each side of
+-~> a pixel that faces another color (or the outside) is an edge, directed so
+-~> the pixel is on its right: outer outlines run clockwise on the screen
+-~> (positive polygon_area2) and holes counter-clockwise. At a corner where
+-~> two same-color pixels only touch diagonally the line turns right, so
+-~> they stay two regions, like the pieces of trace_label.
+-~> Returns a list of {"label", "color", "points", "outer"}; points are corners
+-~> (x, y), with the points in the middle of a straight run left out.
+function trace_rings(pad, w, h, label) {
+  let w2 = w + 2
+  let vw = w + 1
+  let vn = vw * (h + 1)
+  let outs = {}
+  let all = []
+  for (let y = 0; y < h; y = y + 1) {
+    for (let x = 0; x < w; x = x + 1) {
+      let p = (y + 1) * w2 + x + 1
+      let c = pad[p]
+      let lb = label[p]
+      let tl = y * vw + x
+      if (pad[p - w2] != c) {
+        trace_add_edge(outs, all, c * vn + tl, [tl, tl + 1, 1, 0, lb, false, c])
+      }
+      if (pad[p + 1] != c) {
+        trace_add_edge(outs, all, c * vn + tl + 1, [tl + 1, tl + 1 + vw, 0, 1, lb, false, c])
+      }
+      if (pad[p + w2] != c) {
+        trace_add_edge(outs, all, c * vn + tl + 1 + vw, [tl + 1 + vw, tl + vw, -1, 0, lb, false, c])
+      }
+      if (pad[p - 1] != c) {
+        trace_add_edge(outs, all, c * vn + tl + vw, [tl + vw, tl, 0, -1, lb, false, c])
+      }
+    }
+  }
+
+  let rings = []
+  for (let ei = 0; ei < len(all); ei = ei + 1) {
+    let e0 = all[ei]
+    if (e0[5]) {
+      continue
+    }
+    let corners = []
+    let e = e0
+    let dx = 0
+    let dy = 0
+    while (true) {
+      e[5] = true
+      if (e[2] != dx || e[3] != dy) {
+        push(corners, e[0])
+      }
+      dx = e[2]
+      dy = e[3]
+      let next = outs[e0[6] * vn + e[1]]
+      let pick = next[0]
+      if (len(next) == 2 && next[1][2] == -dy && next[1][3] == dx) {
+        pick = next[1]
+      }
+      if (pick[5]) {
+        break
+      }
+      e = pick
+    }
+    if (dx == e0[2] && dy == e0[3] && len(corners) > 1) {
+      list.remove(corners, 0)
+    }
+    let points = []
+    for (let i = 0; i < len(corners); i = i + 1) {
+      push(points, (corners[i] % vw, corners[i] // vw))
+    }
+    push(rings, {"label": e0[4], "color": e0[6], "points": points, "outer": polygon_area2(points) > 0})
+  }
+  rings
+}
+
+-~> Ramer-Douglas-Peucker for a closed outline: cut at the point farthest
+-~> from the first one, simplify both halves. Tiny outlines stay as they are.
+function trace_ring_simplify(ring, tolerance) {
+  let n = len(ring)
+  if (n <= 4 || tolerance <= 0) {
+    return ring
+  }
+  let far = 0.0
+  let f = 1
+  for (let i = 1; i < n; i = i + 1) {
+    let d = math.dist(ring[0], ring[i])
+    if (d > far) {
+      far = d
+      f = i
+    }
+  }
+  let a = simplify(list.slice(ring, 0, f + 1), tolerance)
+  let tail = list.slice(ring, f, n)
+  push(tail, ring[0])
+  let b = simplify(tail, tolerance)
+  for (let i = 1; i < len(b) - 1; i = i + 1) {
+    push(a, b[i])
+  }
+  if (len(a) < 3) {
+    return ring
+  }
+  a
+}
+
+-~> A list of points as source text: [(1, 2), (3, 4)].
+function trace_points_text(points, scale) {
+  let parts = []
+  for (let i = 0; i < len(points); i = i + 1) {
+    push(parts, "(" + svg_num(points[i].x * scale) + ", " + svg_num(points[i].y * scale) + ")")
+  }
+  "[" + text.join(parts, ", ") + "]"
+}
+
+-~> The .lzdraw source of a traced picture. `regions` is a list of
+-~> {"color", "outer", "holes"} (outlines already simplified), `order` the
+-~> palette numbers from the biggest area to the smallest.
+function trace_code(source_name, w, h, palette, order, regions, opt) {
+  let scale = opt.scale
+  let lines = ["-~> lzdraw 1", "-~> Traced from " + source_name + ": " + str(len(order)) + " colors, " + str(len(regions)) + " regions."]
+  lines = trace_palette_lines(lines, palette, order)
+  push(lines, "canvas = {\"size\": (" + svg_num(w * scale) + ", " + svg_num(h * scale) + "), \"background\": colors.c1}")
+  push(lines, "")
+  push(lines, "layer traced")
+  let by_color = {}
+  for (let i = 0; i < len(regions); i = i + 1) {
+    let key = str(regions[i].color)
+    if (by_color[key] === null) {
+      by_color[key] = []
+    }
+    push(by_color[key], regions[i])
+  }
+  for (let k = len(order) - 1; k >= 0; k = k - 1) {
+    let name = "c" + str(k + 1)
+    push(lines, "  layer color_" + str(k + 1))
+    if (k == 0 && opt.background) {
+      push(lines, "    rect((0, 0), (" + svg_num(w * scale) + ", " + svg_num(h * scale) + "), colors." + name + ")")
+      continue
+    }
+    let mine = by_color[str(order[k])]
+    if (mine === null) {
+      continue
+    }
+    for (let i = 0; i < len(mine); i = i + 1) {
+      push(lines, "    " + trace_path_line(mine[i], "colors." + name, scale, opt))
+    }
+  }
+  text.join(lines, "\n") + "\n"
+}
+
+-~> The `let colors = {...}` lines: c1 is the biggest color, c2 the next, ...
+function trace_palette_lines(lines, palette, order) {
+  push(lines, "let colors = {")
+  for (let k = 0; k < len(order); k = k + 1) {
+    let c = palette[order[k]]
+    let sep = ","
+    if (k == len(order) - 1) {
+      sep = ""
+    }
+    push(lines, "  \"c" + str(k + 1) + "\": " + color_hex(rgba(c[0], c[1], c[2], 255)) + sep)
+  }
+  push(lines, "}")
+  lines
+}
+
+-~> One path(...) call for a region.
+function trace_path_line(region, fill, scale, opt) {
+  let call = "path(" + trace_points_text(region.outer, scale) + ", " + fill
+  if (len(region.holes) > 0 || opt.corner != 55 || !opt.smooth) {
+    let holes = []
+    for (let i = 0; i < len(region.holes); i = i + 1) {
+      push(holes, trace_points_text(region.holes[i], scale))
+    }
+    call = call + ", true, " + str(opt.smooth) + ", [" + text.join(holes, ", ") + "]"
+    if (opt.corner != 55) {
+      call = call + ", " + str(opt.corner)
+    }
+  }
+  call + ")"
+}
+
+-~> Traces pixels: `size` is (w, h) and `pixels` a flat list of colors, row by
+-~> row (what img.load gives). Returns {"code": the .lzdraw source, "stats":
+-~> {colors, regions, holes, points, ms, size, stages}}. `stages` has the
+-~> milliseconds of each step. `name` says where the picture came from.
+function trace_pixels(size, pixels, options = {}, name = "a picture") {
+  let opt = trace_settings(options)
+  let w = size.x
+  let h = size.y
+  let t0 = time.ms()
+
+  let q = trace_quantize(pixels, opt.colors, opt.refine)
+  let t1 = time.ms()
+
+  let pad = trace_pad(q.index, w, h)
+  let pieces = trace_label(pad, w, h)
+  let merged = 0
+  if (opt.min_area > 1) {
+    merged = trace_clean(pad, w, h, pieces, len(q.palette), opt.min_area)
+    if (merged > 0) {
+      pieces = trace_label(pad, w, h)
+    }
+  }
+  let t2 = time.ms()
+
+  let rings = trace_rings(pad, w, h, pieces.label)
+  let t3 = time.ms()
+
+  let area = []
+  for (let c = 0; c < len(q.palette); c = c + 1) {
+    push(area, 0)
+  }
+  for (let i = 0; i < len(pieces.members); i = i + 1) {
+    let c = pad[pieces.members[i][0]]
+    area[c] = area[c] + len(pieces.members[i])
+  }
+  let ids = []
+  for (let c = 0; c < len(q.palette); c = c + 1) {
+    if (area[c] > 0) {
+      push(ids, c)
+    }
+  }
+  let order = list.sort(ids, function(a, b) { area[a] > area[b] })
+
+  let regions = []
+  let region_of = {}
+  let points = 0
+  let holes = 0
+  for (let i = 0; i < len(rings); i = i + 1) {
+    let ring = trace_ring_simplify(rings[i].points, opt.detail)
+    points = points + len(ring)
+    let key = str(rings[i].label)
+    if (rings[i].outer) {
+      let region = {"color": rings[i].color, "outer": ring, "holes": []}
+      region_of[key] = region
+      push(regions, region)
+    }
+  }
+  for (let i = 0; i < len(rings); i = i + 1) {
+    if (!rings[i].outer) {
+      holes = holes + 1
+      push(region_of[str(rings[i].label)].holes, trace_ring_simplify(rings[i].points, opt.detail))
+    }
+  }
+  let t4 = time.ms()
+
+  let code = trace_code(name, w, h, q.palette, order, regions, opt)
+  let t5 = time.ms()
+
+  {"code": code,
+   "stats": {"colors": len(order), "regions": len(regions), "holes": holes, "points": points, "merged": merged,
+             "ms": t5 - t0, "size": size,
+             "stages": {"quantize": t1 - t0, "clean": t2 - t1, "rings": t3 - t2, "simplify": t4 - t3, "code": t5 - t4}}}
+}
+
+-~> Traces a picture file (PNG or JPEG) into drawing code. Returns
+-~> {"code": the .lzdraw source, "stats": {colors, regions, holes, points,
+-~> ms, ...}}. Save the code as a .lzdraw and it is a drawing like any other.
+-~> options: see trace_options, for example {"colors": 6, "detail": 2}
+-~> example: trace("photo.png", {"colors": 6})
+function trace(path, options = {}) {
+  let t0 = time.ms()
+  let max_side = trace_options.max_side
+  if (type(options) == "HASH" && options.max_side !== null) {
+    max_side = options.max_side
+  }
+  let loaded = img.load(path, max_side)
+  let load_ms = time.ms() - t0
+  let result = trace_pixels(loaded.size, loaded.pixels, options, path)
+  result.stats.stages.load = load_ms
+  result.stats.ms = result.stats.ms + load_ms
+  result
+}

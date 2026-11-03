@@ -1,0 +1,28 @@
+-~> path(): a smooth outline with sharp corners and holes.
+
+-~> A square keeps its four corners (a 90 degree turn is above the default 55).
+let sq = path([(0, 0), (10, 0), (10, 10), (0, 10)], #3fa34d)
+puts(sq.kind, len(sq.path), sq.path[1][0], sq.path[4][0])
+
+-~> A turn below the limit bends: the same square with corner = 100 is curved.
+let soft = path([(0, 0), (10, 0), (10, 10), (0, 10)], #3fa34d, true, true, [], 100)
+puts(soft.path[1][0], soft.path[2][0])
+
+-~> smooth = false is plain straight sides.
+let flat = path([(0, 0), (10, 0), (5, 8)], #c0392b, true, false)
+puts(flat.path[1][0], flat.path[2][0], flat.path[3][0])
+
+-~> A hole is turned to run the other way, whichever way it was given.
+let ring = path([(0, 0), (20, 0), (20, 20), (0, 20)], #2d6a8f, true, true, [[(5, 5), (15, 5), (15, 15), (5, 15)]])
+let subs = flatten_path(ring.path, 0.1)
+puts(len(subs), polygon_area2(subs[0].points) > 0, polygon_area2(subs[1].points) > 0)
+let ring2 = path([(0, 0), (20, 0), (20, 20), (0, 20)], #2d6a8f, true, true, [[(5, 5), (5, 15), (15, 15), (15, 5)]])
+let subs2 = flatten_path(ring2.path, 0.1)
+puts(polygon_area2(subs2[0].points) > 0, polygon_area2(subs2[1].points) > 0)
+
+-~> Open: sharp ends, no Z. Two points are a line.
+let open = path([(0, 0), (10, 5), (20, 0), (30, 5)], #1d1d1f, false)
+puts(open.path[0][0], open.path[len(open.path) - 1][0])
+puts(len(path([(0, 0), (9, 9)], #1d1d1f).path))
+
+puts(len(sq.anchors))

@@ -1,0 +1,13 @@
+-~> lzdraw 1
+-~> Traced from ring: 2 colors, 3 regions.
+let colors = {
+  "c1": #f0f0e6,
+  "c2": #c82828
+}
+canvas = {"size": (14, 14), "background": colors.c1}
+
+layer traced
+  layer color_2
+    path([(2, 2), (12, 2), (12, 12), (2, 12)], colors.c2, true, true, [[(5, 5), (5, 9), (9, 9), (9, 5)]])
+  layer color_1
+    rect((0, 0), (14, 14), colors.c1)

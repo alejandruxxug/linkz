@@ -81,7 +81,7 @@ let docs_es = {
   "simplify": {"summary": "Ramer-Douglas-Peucker: una lista nueva sin los puntos que doblan la línea menos de `tolerance` píxeles. Los extremos siempre se quedan.", "params": {}},
   "turn_angle": {"summary": "Cuánto cambia la dirección en p al ir de a a b pasando por p, en radianes: 0 en línea recta, pi si se devuelve.", "params": {}},
   "polygon_area2": {"summary": "El doble del área con signo de un polígono (suma del cordón de zapato), como decimal. Es positiva si los puntos van en sentido horario en pantalla (y apunta hacia abajo).", "params": {}},
-  "corner_path": {"summary": "Comandos de trazado para un contorno suave por los puntos, con esquinas vivas. Como smooth_path, pero un punto donde la línea gira más de `corner` grados queda como esquina y los tramos entre esquinas son rectos. Un contorno cerrado termina con [\"Z\"]; uno abierto tiene extremos vivos. Con menos de 3 puntos son líneas rectas.", "params": {}},
+  "smooth_outline": {"summary": "Comandos de trazado para un contorno suave por los puntos, con esquinas vivas. Como smooth_path, pero un punto donde la línea gira más de `corner` grados queda como esquina y los tramos entre esquinas son rectos. Un contorno cerrado termina con [\"Z\"]; uno abierto tiene extremos vivos. Con menos de 3 puntos son líneas rectas.", "params": {}},
 
   "pen_block": {"summary": "Los ajustes de presión de un lápiz para un dispositivo: los valores por defecto, luego el bloque del lápiz y luego lo propio del dispositivo. Con `source` null usa pen_input.", "params": {}},
   "pen_curve": {"summary": "La presión efectiva (0 a 1) con la presión cruda p: el piso la reescala y luego se lee la curva (lineal por tramos).", "params": {}},

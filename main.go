@@ -2,6 +2,7 @@
 //
 //	linkz edit [--no-splash] [drawing.lzdraw]  opens the native editor
 //	linkz render drawing.lzdraw [out.svg]  writes the SVG
+//	linkz trace in.png out.lzdraw [--colors N] [--detail D]  traces a picture into code
 //	linkz paint prog.liz out.png [WxH]     runs a program headless on a buffer
 //	linkz debug [--pid N] Command [args]   drives a running editor
 //	linkz calibrate                        measures this machine, prints JSON
@@ -24,6 +25,7 @@ import (
 const usage = `usage:
   linkz edit [--no-splash] [file.lzdraw]
   linkz render file.lzdraw [out.svg]
+  linkz trace in.png out.lzdraw [--colors 8] [--detail 1.5]
   linkz paint prog.liz out.png [WxH]
   linkz debug [--pid N] Command [args...]
   linkz calibrate
@@ -40,6 +42,8 @@ func main() {
 		err = edit(os.Args[2:])
 	case "render":
 		err = render(os.Args[2:])
+	case "trace":
+		err = traceCmd(os.Args[2:])
 	case "paint":
 		err = paint(os.Args[2:])
 	case "debug":
@@ -198,4 +202,46 @@ func edit(args []string) error {
 		err = launcher.Err
 	}
 	return err
+}
+
+// traceCmd turns a picture into drawing code: linkz trace in.png out.lzdraw
+// [--colors N] [--detail D] [--min-area N] [--max-side N].
+func traceCmd(args []string) error {
+	const use = "usage: linkz trace in.png out.lzdraw [--colors 8] [--detail 1.5] [--min-area 8] [--max-side 256] [--scale 1] [--corner 55]"
+	var files []string
+	options := map[string]any{}
+	for i := 0; i < len(args); i++ {
+		name, ok := strings.CutPrefix(args[i], "--")
+		if !ok {
+			files = append(files, args[i])
+			continue
+		}
+		key := map[string]string{"colors": "colors", "detail": "detail", "min-area": "min_area", "max-side": "max_side", "scale": "scale", "corner": "corner"}[name]
+		if key == "" || i+1 >= len(args) {
+			return fmt.Errorf("%s\n%s", "bad option "+args[i], use)
+		}
+		i++
+		n, err := strconv.ParseFloat(args[i], 64)
+		if err != nil {
+			return fmt.Errorf("--%s needs a number, got %q", name, args[i])
+		}
+		options[key] = n // whole numbers become INTEGERs in lizard
+	}
+	if len(files) != 2 {
+		return fmt.Errorf("%s", use)
+	}
+	code, stats, err := host.Trace(files[0], options, os.Stdout)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(files[1], []byte(code), 0o644); err != nil {
+		return err
+	}
+	fmt.Printf("wrote %s: %v colors, %v regions (%v holes), %v points, %.0f ms\n",
+		files[1], stats["colors"], stats["regions"], stats["holes"], stats["points"], stats["ms"])
+	if st, ok := stats["stages"].(map[string]any); ok {
+		fmt.Printf("  load %.0f, quantize %.0f, clean %.0f, rings %.0f, simplify %.0f, code %.0f ms\n",
+			st["load"], st["quantize"], st["clean"], st["rings"], st["simplify"], st["code"])
+	}
+	return nil
 }

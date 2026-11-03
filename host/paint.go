@@ -23,6 +23,7 @@ func Paint(source, out string, w, h int, stdout io.Writer) error {
 	evaluator.Output = stdout
 	env.Define("fb", fb.Builtins())
 	env.Define("fs", fsHash())
+	env.Define("img", imgHash())
 	env.Define("time", timeHash())
 	env.Define("clip", clipHash())
 	env.Define("os", osHash())
