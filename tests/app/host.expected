@@ -2,12 +2,11 @@
 a.lzdraw $DIR/a.lzdraw 1 INTEGER
 b.lzdraw $DIR/b.lzdraw 23 INTEGER
 3 []
-true 16 true
+2d711642b726b044 true true
 a/b/c a/b /
 ~/.linkz true 0.1.0-dev
 -- clock
-0 11017 20760
-true true
+INTEGER true true
 -- events
 {"type": "down", "pos": (10, 20), "canvas_pos": (4, 6), "button": 1, "mods": {"shift": false, "alt": false, "cmd": true, "ctrl": false}, "pen": {"pressure": 0.5, "tilt": (0.0, 0.0), "rotation": 0.0, "source": "trackpad", "eraser": false}}
 {"type": "move", "pos": (3, 4), "button": 0, "samples": [{"pos": (3, 4), "canvas_pos": null, "pressure": 0.5, "t": 1.5}], "mods": {"shift": false, "alt": false, "cmd": true, "ctrl": false}, "pen": {"pressure": 0.5, "tilt": (0.0, 0.0), "rotation": 0.0, "source": "trackpad", "eraser": false}}

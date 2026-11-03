@@ -43,9 +43,10 @@ function rig_frame(rig, events = []) {
   rig.ed.error
 }
 
--~> The window as it shows, as PNG text (rect: the part to keep).
+-~> The window as it shows, every pixel of the screen (the interface at its
+-~> scale, the canvas at its own), as PNG text (rect: the part to keep).
 function rig_shot(rig, rect = null) {
-  let shot = window.screenshot(rig.win)
+  let shot = window.screenshot(rig.win, {"full": true})
   if (rect == null) {
     return img.png_base64(shot)
   }

@@ -9,11 +9,24 @@ use "../gfx/font"
 use "icons"
 
 let P = {
-  "void": #0b0c0b, "coal": #131512, "panel": #1a1d19, "row": #232721,
-  "raised": #2e332c, "bevel": #434a40, "dim": #5f685b, "mute": #a0ab9b,
-  "text": #d4dacd, "bright": #f2f5ec, "moss": #163a20, "lizard": #4fc46a,
-  "amber": #f2b33d, "ember": #f36c5b, "ember_dim": #96534a, "sky": #72b8e6, "peach": #eb9a6f,
-  "checker": #161815, "veil": #13151273
+  "void": #0b0c0b,
+  "coal": #131512,
+  "panel": #1a1d19,
+  "row": #232721,
+  "raised": #2e332c,
+  "bevel": #434a40,
+  "dim": #5f685b,
+  "mute": #a0ab9b,
+  "text": #d4dacd,
+  "bright": #f2f5ec,
+  "moss": #163a20,
+  "lizard": #4fc46a,
+  "amber": #f2b33d,
+  "ember": #f36c5b,
+  "sky": #72b8e6,
+  "peach": #eb9a6f,
+  "checker": #161815,
+  "veil": #13151273
 }
 
 let g = {"s": 1, "ox": 0, "oy": 0}

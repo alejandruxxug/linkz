@@ -90,11 +90,11 @@ function calib_round(round) {
 -~> A drawing program of n simple shapes (circles, rects, strokes).
 function calib_program(n) {
   "for (let i = 0; i < " + str(n) + "; i = i + 1) {\n" +
-  "  let k = i % 3\n" +
-  "  if (k == 0) { circle((40 + i % 10 * 40, 60), 15, #3fa34d) }\n" +
-  "  elif (k == 1) { rect((40 + i % 10 * 40, 200), (30, 30), #2d6a8f) }\n" +
-  "  else { stroke([(20, 300 + i % 7), (80, 330), (140, 300), (200, 330)], #1d1d1f, 4) }\n" +
-  "}\n"
+    "  let k = i % 3\n" +
+    "  if (k == 0) { circle((40 + i % 10 * 40, 60), 15, #3fa34d) }\n" +
+    "  elif (k == 1) { rect((40 + i % 10 * 40, 200), (30, 30), #2d6a8f) }\n" +
+    "  else { stroke([(20, 300 + i % 7), (80, 330), (140, 300), (200, 330)], #1d1d1f, 4) }\n" +
+    "}\n"
 }
 
 -~> Milliseconds src.run takes for n shapes (median of 3).
@@ -162,9 +162,17 @@ function recommend(m) {
   if (max < 10) {
     max = 10
   }
-  {"max_objects": max, "ms_per_object": each, "warm_ms_per_object": warm, "cold_ms_per_object": cold,
-   "run_ms_per_object": run, "bytes_per_object": bytes,
-   "memory_cap": memory_cap, "speed_cap": speed_cap, "limited_by": limited_by}
+  {
+    "max_objects": max,
+    "ms_per_object": each,
+    "warm_ms_per_object": warm,
+    "cold_ms_per_object": cold,
+    "run_ms_per_object": run,
+    "bytes_per_object": bytes,
+    "memory_cap": memory_cap,
+    "speed_cap": speed_cap,
+    "limited_by": limited_by
+  }
 }
 
 -~> Runs the benchmark and returns the machine: recommend()'s result plus

@@ -7,7 +7,7 @@ use "../view_layout"
 use "../view_main"
 use "../lang_en"
 use "../lang_es"
-let app = {"needs_paint": false}
+app.needs_paint = false
 let dir = "/home/u/Documents/Linkz"
 let times = {}
 os.home = function() { "/home/u" }
@@ -22,7 +22,7 @@ fs.list = function(d, ext) {
   }
   out
 }
-fs.mkdir = function(p) { null }
+fs.mkdir = function(_p) { null }
 function add(name, mtime) {
   times[dir + "/" + name] = mtime
 }

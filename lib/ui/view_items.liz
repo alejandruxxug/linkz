@@ -287,8 +287,15 @@ function view_items_fill(rows, m, adds, i0, i1, items, at, base, last, off) {
         if (i + 1 < len(rows) && rows[i + 1].kind == "empty" && rows[i + 1].line == m.line) {
           continue
         }
-        push(items, {"t": "add", "line": ends[k].line, "row": ends[k], "h": 10, "gap": 0, "depth": ends[k].depth + 1,
-                     "y": off})
+        push(items, {
+          "t": "add",
+          "line": ends[k].line,
+          "row": ends[k],
+          "h": 10,
+          "gap": 0,
+          "depth": ends[k].depth + 1,
+          "y": off
+        })
         off = off + 10
         last = "add"
       }

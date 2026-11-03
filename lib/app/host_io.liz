@@ -8,9 +8,12 @@
 use "engine"
 
 function host_io() {
-  {"read_line": io.read_line, "write": io.write,
-   "log": function(line) { io.error(line + "\n") },
-   "with_steps": host_with_steps}
+  {
+    "read_line": io.read_line,
+    "write": io.write,
+    "log": function(line) { io.error(line + "\n") },
+    "with_steps": host_with_steps
+  }
 }
 
 -~> What f() prints goes to the error output, never into the protocol.

@@ -6,10 +6,22 @@
 use "../gfx/font"
 
 let home_c = {
-  "void": #0b0c0b, "coal": #131512, "panel": #1a1d19, "row": #232721,
-  "raised": #2e332c, "bevel": #434a40, "dim": #5f685b, "mute": #a0ab9b,
-  "text": #d4dacd, "bright": #f2f5ec, "moss": #163a20, "lizard": #4fc46a,
-  "amber": #f2b33d, "ember": #f36c5b, "sky": #72b8e6, "peach": #eb9a6f
+  "void": #0b0c0b,
+  "coal": #131512,
+  "panel": #1a1d19,
+  "row": #232721,
+  "raised": #2e332c,
+  "bevel": #434a40,
+  "dim": #5f685b,
+  "mute": #a0ab9b,
+  "text": #d4dacd,
+  "bright": #f2f5ec,
+  "moss": #163a20,
+  "lizard": #4fc46a,
+  "amber": #f2b33d,
+  "ember": #f36c5b,
+  "sky": #72b8e6,
+  "peach": #eb9a6f
 }
 
 -~> The 8x8 icons, a row per "|", a "#" for a set pixel.

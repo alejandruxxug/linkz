@@ -278,11 +278,25 @@ function rows_build(p, i0, i1, from, to) {
       }
     }
     let flags = li.flags
-    push(rows, {"line": n, "text": li.text, "depth": depth, "kind": row_kind(s, li), "callee": callee,
-                "name": row_name(s, li), "comment": li.comment, "hidden": list.index(flags, "hidden") >= 0,
-                "locked": list.index(flags, "locked") >= 0, "error": null, "follow": false, "layer": layer,
-                "parent": parent, "end_line": end_line, "foldable": foldable, "collapsed": false, "visible": true,
-                "stmt": s})
+    push(rows, {
+      "line": n,
+      "text": li.text,
+      "depth": depth,
+      "kind": row_kind(s, li),
+      "callee": callee,
+      "name": row_name(s, li),
+      "comment": li.comment,
+      "hidden": list.index(flags, "hidden") >= 0,
+      "locked": list.index(flags, "locked") >= 0,
+      "error": null,
+      "layer": layer,
+      "parent": parent,
+      "end_line": end_line,
+      "foldable": foldable,
+      "collapsed": false,
+      "visible": true,
+      "stmt": s
+    })
   }
   rows
 }
@@ -310,7 +324,7 @@ function rows_errors_key(errors) {
   let parts = []
   for (let i = 0; i < len(errors); i = i + 1) {
     let e = errors[i]
-    push(parts, str(e.line) + ":" + str(e.follow == true) + ":" + str(e.message))
+    push(parts, str(e.line) + ":" + str(e.message))
   }
   text.join(parts, "\n")
 }
@@ -362,10 +376,6 @@ function rows_decorate(m, base, errors, folded) {
         seen[k] = true
         let r = hash_copy(rows[k - 1])
         r.error = errors[i].message
-        if (errors[i].follow == true) {
-          r.error = t("err.follow") + ": " + errors[i].message
-          r.follow = true
-        }
         rows[k - 1] = r
       }
     }

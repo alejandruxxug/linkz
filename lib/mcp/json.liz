@@ -389,7 +389,7 @@ function json_write(v, depth) {
     try {
       out = out + "," + str(v.z)
     } catch {
-      out = out
+      -~> a point of two numbers has no z
     }
     return out + "]"
   }

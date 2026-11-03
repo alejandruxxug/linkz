@@ -1,9 +1,0 @@
-10 false
-20 true
-10 false lexical error: bad color #zzz
-20 true may be caused by the error above: syntax error: expected end of statement, got ")"
-1 error · line 10 · 1 more may follow from it
-1 error · línea 10 · 1 más podrían venir de él
-false
-false
-1 false

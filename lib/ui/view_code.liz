@@ -8,7 +8,7 @@
 use "view_gfx"
 
 let code_keywords = ["let", "layer", "for", "while", "function", "if", "elif", "else", "return", "break",
-                     "continue", "try", "catch", "true", "false", "null"]
+  "continue", "try", "catch", "true", "false", "null"]
 
 function code_is_digit(ch) {
   ch != null && text.find("0123456789", ch) >= 0

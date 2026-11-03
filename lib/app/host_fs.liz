@@ -6,16 +6,24 @@
 -~>                      folder that isn't there has none
 -~>   rename(from, to), copy(from, to)   refuse to replace a file
 -~>   trash(path)        moves it to the Trash
--~>   hash(path)         the fingerprint of the file's text
+-~>   hash(path)         16 hex digits of the SHA-256 of the file, the same for the same text
 -~>   join(dir, name), slash(path), sep()
 
-use "fingerprint"
-
 function host_fs() {
-  {"read": fs.read, "write": fs.write, "exists": fs.exists, "mkdir": fs.mkdir,
-   "rename": fs.rename, "copy": fs.copy, "trash": fs.trash,
-   "list": host_fs_list, "hash": host_fs_hash, "join": fs.join, "sep": function() { "/" },
-   "slash": function(path) { text.replace(path, "\\", "/") }}
+  {
+    "read": fs.read,
+    "write": fs.write,
+    "exists": fs.exists,
+    "mkdir": fs.mkdir,
+    "rename": fs.rename,
+    "copy": fs.copy,
+    "trash": fs.trash,
+    "list": host_fs_list,
+    "hash": host_fs_hash,
+    "join": fs.join,
+    "sep": function() { "/" },
+    "slash": function(path) { text.replace(path, "\\", "/") }
+  }
 }
 
 function host_fs_list(dir, ext) {
@@ -34,5 +42,5 @@ function host_fs_list(dir, ext) {
 }
 
 function host_fs_hash(path) {
-  fingerprint(fs.read(path))
+  text.slice(fs.digest(path), 0, 16)
 }

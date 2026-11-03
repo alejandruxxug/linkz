@@ -45,10 +45,12 @@ function mcp_initialize(params) {
   if (params.protocolVersion !== null && list.index(mcp_versions, params.protocolVersion) >= 0) {
     version = params.protocolVersion
   }
-  {"protocolVersion": version,
-   "capabilities": {"tools": {"listChanged": false}},
-   "serverInfo": {"name": "linkz", "version": mcp_server_version},
-   "instructions": mcp_instructions}
+  {
+    "protocolVersion": version,
+    "capabilities": {"tools": {"listChanged": false}},
+    "serverInfo": {"name": "linkz", "version": mcp_server_version},
+    "instructions": mcp_instructions
+  }
 }
 
 function mcp_tools_call(params) {

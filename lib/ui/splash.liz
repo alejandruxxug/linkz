@@ -16,8 +16,8 @@ use "splash_art"
 -~> (logo-local x 24 to 80, centered on them), feet on a ground line just
 -~> below the letters. The tagline sits lower to leave room for it.
 let splash_ink = [24, 80]
-let splash_lizard_dy = 33   -~> lizard top, from the logo's top
-let splash_tagline_dy = 10  -~> how far the tagline moves down from the art's tagline_y
+let splash_lizard_dy = 33  -~> lizard top, from the logo's top
+let splash_tagline_dy = 10 -~> how far the tagline moves down from the art's tagline_y
 
 -~> Draws a sprite's runs [y, x0, x1, color] at a point.
 function splash_sprite(sprite, at) {

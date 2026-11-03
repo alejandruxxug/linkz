@@ -24,7 +24,7 @@ fs.list = function(d, ext) {
   }
   out
 }
-fs.mkdir = function(p) { null }
+fs.mkdir = function(_p) { null }
 fs.write = function(p, body) {
   fake_files[p] = body
   if (times[p] == null) { times[p] = 500 }
@@ -47,7 +47,7 @@ fs.copy = function(a, b) {
 let trashed = []
 fs.trash = function(p) { push(trashed, p); delete(fake_files, p); delete(times, p); null }
 let shown = []
-show_screen = function(name, args) { push(shown, name) }
+show_screen = function(name, _args) { push(shown, name) }
 function add(name, mtime) {
   let p = dir + "/" + name
   fake_files[p] = "canvas = {\"size\": (100, 50), \"background\": #ffffff}\nrect((0, 0), (50, 50), #ff0000)\n"

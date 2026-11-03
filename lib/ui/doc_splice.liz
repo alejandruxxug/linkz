@@ -275,10 +275,25 @@ function splice_parse(before, lines, ht) {
   let parse = {
     "lines": list.slice(old.lines, 0, from - 1) + scan.lines + list.slice(old.lines, old_to, len(old.lines)),
     "statements": list.slice(st, 0, i0) + fresh + list.slice(st, stop.i + 1, n),
-    "shift": shift, "errors": errors, "local": true, "approx": approx
+    "shift": shift,
+    "errors": errors,
+    "local": true,
+    "approx": approx
   }
-  {"parse": parse, "from": from, "old_to": old_to, "new_to": new_to, "delta": delta, "i0": i0,
-   "count": len(fresh), "old": list.slice(st, i0, stop.i + 1), "rows": doc_cache_rows(before.cache),
-   "names": before.cache.names, "name_parts": before.cache.name_parts, "n_old": n, "base": before.cache.id,
-   "hidden": before.cache.hidden}
+  {
+    "parse": parse,
+    "from": from,
+    "old_to": old_to,
+    "new_to": new_to,
+    "delta": delta,
+    "i0": i0,
+    "count": len(fresh),
+    "old": list.slice(st, i0, stop.i + 1),
+    "rows": doc_cache_rows(before.cache),
+    "names": before.cache.names,
+    "name_parts": before.cache.name_parts,
+    "n_old": n,
+    "base": before.cache.id,
+    "hidden": before.cache.hidden
+  }
 }

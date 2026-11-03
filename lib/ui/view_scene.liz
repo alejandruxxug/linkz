@@ -77,8 +77,17 @@ function scene_box(s) {
 -~> A new entry for a shape of the run, with an id of its own in the index.
 function scene_entry(sc, src, j) {
   let s = view_scale_shape(src, sc.zoom)
-  let e = {"id": sc.next_id, "j": j, "shape": s, "src": src, "box": scene_box(s), "ops": null,
-           "chain": null, "layer": s.layer, "styles": s.styles}
+  let e = {
+    "id": sc.next_id,
+    "j": j,
+    "shape": s,
+    "src": src,
+    "box": scene_box(s),
+    "ops": null,
+    "chain": null,
+    "layer": s.layer,
+    "styles": s.styles
+  }
   sc.next_id += 1
   sc.byid[e.id] = e
   spatial_insert(sc.index, e.id, e.box)
@@ -145,7 +154,7 @@ function scene_order(shapes, rows, hidden) {
 
 -~> The hidden rows, as a text: when it changes the painted shapes change.
 -~> The model's cache keeps it (doc_hidden_key).
-function scene_hidden_key(rows) {
+function scene_hidden_key(_rows) {
   doc_hidden_key(ed_model())
 }
 
@@ -181,9 +190,20 @@ function scene_entries_in(sc, box) {
 -~> == Keeping up with the editor ==
 
 function scene_new(cl, rows) {
-  let sc = {"zoom": cl.zoom, "size": (cl.sw, cl.sh), "bg": ed.canvas.background, "ver": ed.shapes_ver,
-            "hidden": scene_hidden_key(rows), "list": [], "pos": [], "lite": null, "next_id": 0, "byid": {},
-            "index": spatial_new(scene_cell), "tiles": tiles_new("canvas", (cl.sw, cl.sh), scene_tile)}
+  let sc = {
+    "zoom": cl.zoom,
+    "size": (cl.sw, cl.sh),
+    "bg": ed.canvas.background,
+    "ver": ed.shapes_ver,
+    "hidden": scene_hidden_key(rows),
+    "list": [],
+    "pos": [],
+    "lite": null,
+    "next_id": 0,
+    "byid": {},
+    "index": spatial_new(scene_cell),
+    "tiles": tiles_new("canvas", (cl.sw, cl.sh), scene_tile)
+  }
   scene_rebuild(sc, rows)
   sc
 }
@@ -201,16 +221,16 @@ function scene_sync(cl) {
   if (sc.ver != ed.shapes_ver || sc.hidden != hidden) {
     let p = ed.patch
     if (p != null && p.ver == ed.shapes_ver && sc.ver == p.ver - 1 && sc.hidden == hidden &&
-        (p.kind != "range" || sc.pos === null)) {
-      if (p.kind == "range") {
-        scene_patch_range(sc, p)
+      (p.kind != "range" || sc.pos === null)) {
+        if (p.kind == "range") {
+          scene_patch_range(sc, p)
+        } else {
+          scene_patch(sc, p)
+        }
       } else {
-        scene_patch(sc, p)
+        sc.hidden = hidden
+        scene_rebuild(sc, rows)
       }
-    } else {
-      sc.hidden = hidden
-      scene_rebuild(sc, rows)
-    }
     sc.ver = ed.shapes_ver
   }
   scene_sync_lite(sc)
@@ -303,9 +323,9 @@ function scene_line_up(sc, old, srcs, j0) {
   }
   let tail = 0
   while (tail < n - head && tail < len(old) - head &&
-         raster_same_look(old[len(old) - 1 - tail].src, srcs[n - 1 - tail])) {
-    tail += 1
-  }
+    raster_same_look(old[len(old) - 1 - tail].src, srcs[n - 1 - tail])) {
+      tail += 1
+    }
   let list = []
   for (let b = 0; b < head; b += 1) {
     push(list, scene_carry(sc, old[b], srcs[b], j0 + b))

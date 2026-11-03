@@ -93,8 +93,16 @@ function tools_canvas_down(e) {
   }
   view_select_line(s.line)
   V.drag = {"kind": "canvas"}
-  V.gest = {"mode": "shape", "shape": s, "line": s.line, "m0": ed_model(), "start": tools_pointer(cl, e),
-            "ui0": e.pos, "moved": false, "lite": s.kind == "brush"}
+  V.gest = {
+    "mode": "shape",
+    "shape": s,
+    "line": s.line,
+    "m0": ed_model(),
+    "start": tools_pointer(cl, e),
+    "ui0": e.pos,
+    "moved": false,
+    "lite": s.kind == "brush"
+  }
 }
 
 function tools_is_selected(line) {
@@ -118,8 +126,17 @@ function tools_anchor_begin(e, cl, hit) {
   V.sel_anchor = {"line": hit.line, "i": hit.i, "anchor": hit.anchor, "at_line": m.line, "at_col": m.col}
   V.drag = {"kind": "canvas"}
   let a = shape.anchors[hit.anchor]
-  V.gest = {"mode": "anchor", "shape": shape, "line": hit.line, "idx": hit.anchor, "anchor": a,
-            "grab": a.pos - tools_pointer(cl, e), "ui0": e.pos, "moved": false, "lite": shape.kind == "brush"}
+  V.gest = {
+    "mode": "anchor",
+    "shape": shape,
+    "line": hit.line,
+    "idx": hit.anchor,
+    "anchor": a,
+    "grab": a.pos - tools_pointer(cl, e),
+    "ui0": e.pos,
+    "moved": false,
+    "lite": shape.kind == "brush"
+  }
   view_touch()
 }
 
@@ -164,7 +181,7 @@ function tools_canvas_move(e) {
 
 -~> == Release ==
 
-function tools_canvas_up(e) {
+function tools_canvas_up(_e) {
   let g = V.gest
   V.gest = null
   V.live = null
@@ -192,8 +209,16 @@ function tools_stroke_begin(e, cl) {
   if (e.canvas_pos != null) {
     cp = tools_draw_pt(cl, e.canvas_pos)
   }
-  V.gest = {"mode": "stroke", "tool": V.tool, "source": source, "samples": [], "frozen": [], "tail": [], "tail_p": [],
-            "first": {"pos": e.pos, "canvas_pos": cp, "pressure": null, "t": null}}
+  V.gest = {
+    "mode": "stroke",
+    "tool": V.tool,
+    "source": source,
+    "samples": [],
+    "frozen": [],
+    "tail": [],
+    "tail_p": [],
+    "first": {"pos": e.pos, "canvas_pos": cp, "pressure": null, "t": null}
+  }
   V.live = V.gest
   V.live_n = 0
   view_touch()

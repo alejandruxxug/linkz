@@ -294,7 +294,7 @@ function trace_label(pad, w, h) {
 -~> Merges every piece smaller than min_area pixels into the color it touches
 -~> most (the lower palette number wins a tie). Changes pad. Returns how many
 -~> pieces it merged.
-function trace_clean(pad, w, h, pieces, colors, min_area) {
+function trace_clean(pad, w, _h, pieces, colors, min_area) {
   let w2 = w + 2
   let steps = [-1, 1, -w2, w2]
   let merged = 0
@@ -591,10 +591,19 @@ function trace_pixels(size, pixels, options = {}, name = "a picture") {
   let code = trace_code(name, w, h, q.palette, order, regions, opt)
   let t5 = time.ms()
 
-  {"code": code,
-   "stats": {"colors": len(order), "regions": len(regions), "holes": holes, "points": points, "merged": merged,
-             "ms": t5 - t0, "size": size,
-             "stages": {"quantize": t1 - t0, "clean": t2 - t1, "rings": t3 - t2, "simplify": t4 - t3, "code": t5 - t4}}}
+  {
+    "code": code,
+    "stats": {
+      "colors": len(order),
+      "regions": len(regions),
+      "holes": holes,
+      "points": points,
+      "merged": merged,
+      "ms": t5 - t0,
+      "size": size,
+      "stages": {"quantize": t1 - t0, "clean": t2 - t1, "rings": t3 - t2, "simplify": t4 - t3, "code": t5 - t4}
+    }
+  }
 }
 
 -~> Traces a picture file (PNG or JPEG) into drawing code. Returns

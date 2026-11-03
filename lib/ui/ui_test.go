@@ -125,7 +125,9 @@ func TestPrograms(t *testing.T) {
 		t.Fatalf("no programs: %v", err)
 	}
 	for _, file := range files {
-		if filepath.Base(file) == "prelude.liz" {
+		// presence.liz uses the real app (app.liz), which this runner
+		// doesn't load; tests/ui/programs.liz runs it with modules.
+		if filepath.Base(file) == "prelude.liz" || filepath.Base(file) == "presence.liz" {
 			continue
 		}
 		t.Run(strings.TrimSuffix(filepath.Base(file), ".liz"), func(t *testing.T) {

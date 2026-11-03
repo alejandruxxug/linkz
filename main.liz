@@ -27,7 +27,7 @@ let usage = text.join(["usage:",
   "  linkz mcp"], "\n")
 
 -~> The agent backdoor moved into the language: lizardscript drive.
-function debug_command(args) {
+function debug_command(_args) {
   error("linkz debug is now `lizardscript drive Command [args...]` (with LIZARD_AUTOMATION=1 or a running editor)")
 }
 

@@ -136,7 +136,7 @@ function view_paint_row(r, y, pinned) {
   let sel = view_selected(m, r.line)
   let hover = V.hover == "row:" + str(r.line) && !sel
   let err = r.error != null
-  let ec_err = row_error_color(r)
+  let ec_err = P.ember
   let pw = V.pw
   if (sel) {
     g_rect(0, y, pw, 18, P.moss)
@@ -240,14 +240,6 @@ function view_paint_row(r, y, pinned) {
   }
 }
 
--~> Errors that may only be follow-ons of an earlier parse error are dimmer.
-function row_error_color(r) {
-  if (r.follow == true) {
-    return P.ember_dim
-  }
-  P.ember
-}
-
 function view_error_at(line) {
   for (let i = 0; i < len(ed.errors); i = i + 1) {
     if (ed.errors[i].line == line) {
@@ -282,7 +274,7 @@ function view_paint_strip(it, y) {
 
 function view_paint_err(it, y) {
   let cx = view_code_x(it.row)
-  let c = row_error_color(it.row)
+  let c = P.ember
   g_rect(0, y, 2, 16, c)
   g_rect(cx - 9, y + 2, 1, 12, c)
   let room = (V.pw - 8 - cx) // 7
@@ -301,7 +293,6 @@ function view_paint_add(it, y) {
 
 function view_paint_rows() {
   let gm = view_geom()
-  let m = ed_model()
   g_rect(0, 30, V.pw, gm.props_y - 30, P.panel)
   g_rect(0, 30, V.pw, 13, P.raised)
   g_rect(0, 43, V.pw, 1, P.void)
@@ -443,22 +434,10 @@ function view_status_parts() {
   if (len(errs) > 0) {
     let line = errs[0].line
     let key = "state.error"
-    let real = len(errs)
-    let more = 0
-    for (let i = 0; i < len(errs); i = i + 1) {
-      if (errs[i].follow == true) {
-        real = real - 1
-        more = more + 1
-      }
-    }
-    if (real > 1) {
+    if (len(errs) > 1) {
       key = "state.errors"
     }
-    let msg = t(key, {"n": real, "line": line})
-    if (more > 0) {
-      msg = msg + " · " + t("state.follow", {"n": more})
-    }
-    push(left, ["error", msg, "ember"])
+    push(left, ["error", t(key, {"n": len(errs), "line": line}), "ember"])
   } elif (ed_dirty()) {
     push(left, ["dot", t("state.unsaved"), "amber"])
   } else {

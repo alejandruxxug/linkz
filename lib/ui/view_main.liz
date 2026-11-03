@@ -285,8 +285,17 @@ function view_debug_state() {
   let lay = view_props_cached()
   for (let i = 0; i < len(lay.boxes); i = i + 1) {
     let b = lay.boxes[i]
-    push(fields, {"name": b.field, "sub": b.sub, "kind": b.kind, "text": b.text, "focus": b.focus,
-                  "x": b.x, "y": b.y, "w": b.w, "h": b.h})
+    push(fields, {
+      "name": b.field,
+      "sub": b.sub,
+      "kind": b.kind,
+      "text": b.text,
+      "focus": b.focus,
+      "x": b.x,
+      "y": b.y,
+      "w": b.w,
+      "h": b.h
+    })
   }
   let tools = []
   let bs = view_toolbar()
@@ -310,12 +319,31 @@ function view_debug_state() {
   if (V.focus != null) {
     focus = {"field": V.focus.field, "sub": V.focus.sub, "text": V.focus.text, "caret": V.focus.caret}
   }
-  st.view = {"size": (V.w, V.h), "split": V.pw, "top": V.top, "rows": rows, "fields": fields, "tools": tools,
-             "props_title": lay.title, "props_msg": lay.msg,
-             "canvas": {"area": view_rect_hash([gm.cx, gm.cy, gm.cw, gm.ch]), "drawing": view_rect_hash(cl.frame),
-                        "zoom": cl.zoom, "buffer": view_rect_hash(cl.crect)},
-             "tool": V.tool, "picker": V.picker, "hover": V.hover, "tip": tip, "focus": focus,
-             "dialog": V.dialog != null, "pen": ed.pen, "paint_ms": V.painted_ms, "paints": V.paints}
+  st.view = {
+    "size": (V.w, V.h),
+    "split": V.pw,
+    "top": V.top,
+    "rows": rows,
+    "fields": fields,
+    "tools": tools,
+    "props_title": lay.title,
+    "props_msg": lay.msg,
+    "canvas": {
+      "area": view_rect_hash([gm.cx, gm.cy, gm.cw, gm.ch]),
+      "drawing": view_rect_hash(cl.frame),
+      "zoom": cl.zoom,
+      "buffer": view_rect_hash(cl.crect)
+    },
+    "tool": V.tool,
+    "picker": V.picker,
+    "hover": V.hover,
+    "tip": tip,
+    "focus": focus,
+    "dialog": V.dialog != null,
+    "pen": ed.pen,
+    "paint_ms": V.painted_ms,
+    "paints": V.paints
+  }
   st
 }
 
@@ -363,10 +391,10 @@ function view_commands() {
       r
     }
   }
-  cmds["Undo"] = function(args) {
+  cmds["Undo"] = function(_args) {
     {"ok": view_undo(), "text": ed_undo_text(), "status": ed.note}
   }
-  cmds["Redo"] = function(args) {
+  cmds["Redo"] = function(_args) {
     {"ok": view_redo(), "text": ed_redo_text(), "status": ed.note}
   }
   cmds["Tool"] = function(args) {
@@ -387,7 +415,7 @@ function view_commands() {
   cmds["ClickRow"] = function(args) {
     {"ok": view_click_row_cmd(args[0])}
   }
-  cmds["Export"] = function(args) {
+  cmds["Export"] = function(_args) {
     {"ok": view_export(), "status": ed.status, "path": view_png_path()}
   }
   cmds["Hover"] = function(args) {
@@ -406,7 +434,7 @@ function view_commands() {
     }
     {"hover": V.hover, "tip_lines": lines}
   }
-  cmds["Home"] = function(args) {
+  cmds["Home"] = function(_args) {
     view_go_home()
     {"ok": view_has_home()}
   }
@@ -418,7 +446,7 @@ function view_commands() {
     view_choose_pen(str(args[0]))
     {"ok": true, "pen": ed.pen}
   }
-  cmds["Picker"] = function(args) {
+  cmds["Picker"] = function(_args) {
     V.picker = !V.picker
     view_touch()
     {"ok": true, "picker": V.picker}
@@ -439,6 +467,8 @@ function view_commands() {
 
 let editor_screen = {
   "wants_hover": true,
-  "enter": view_enter, "event": view_event, "paint": view_paint,
+  "enter": view_enter,
+  "event": view_event,
+  "paint": view_paint,
   "debug_state": view_debug_state
 }

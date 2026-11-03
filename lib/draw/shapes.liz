@@ -35,8 +35,19 @@ function draw(shape) {
 }
 
 function make_shape(kind, args, path, fill, stroke_color, width, anchors) {
-  draw({"kind": kind, "args": args, "path": path, "fill": fill, "stroke": stroke_color, "width": width,
-        "widths": null, "opacities": null, "anchors": anchors, "line": null, "layer": null})
+  draw({
+    "kind": kind,
+    "args": args,
+    "path": path,
+    "fill": fill,
+    "stroke": stroke_color,
+    "width": width,
+    "widths": null,
+    "opacities": null,
+    "anchors": anchors,
+    "line": null,
+    "layer": null
+  })
 }
 
 function make_anchor(pos, arg, item, role) {
@@ -60,11 +71,11 @@ function ellipse_path(center, radii) {
   let rx = radii.x
   let ry = radii.y
   return [["M", (cx + rx, cy)],
-   ["C", (cx + rx, cy + ry * k), (cx + rx * k, cy + ry), (cx, cy + ry)],
-   ["C", (cx - rx * k, cy + ry), (cx - rx, cy + ry * k), (cx - rx, cy)],
-   ["C", (cx - rx, cy - ry * k), (cx - rx * k, cy - ry), (cx, cy - ry)],
-   ["C", (cx + rx * k, cy - ry), (cx + rx, cy - ry * k), (cx + rx, cy)],
-   ["Z"]]
+    ["C", (cx + rx, cy + ry * k), (cx + rx * k, cy + ry), (cx, cy + ry)],
+    ["C", (cx - rx * k, cy + ry), (cx - rx, cy + ry * k), (cx - rx, cy)],
+    ["C", (cx - rx, cy - ry * k), (cx - rx * k, cy - ry), (cx, cy - ry)],
+    ["C", (cx + rx * k, cy - ry), (cx + rx, cy - ry * k), (cx + rx, cy)],
+    ["Z"]]
 }
 
 -~> The shapes in the order they are painted, back to front. Rows lower in the
@@ -90,7 +101,7 @@ function circle(center, r, fill) {
   need_number("circle", "r", r)
   need_paint("circle", "fill", fill)
   make_shape("circle", [center, r, fill], ellipse_path(center, (r, r)), fill, null, 0,
-             [make_anchor(center, 0, null, "move"), make_anchor(center + (r, 0), 1, null, "radius")])
+    [make_anchor(center, 0, null, "move"), make_anchor(center + (r, 0), 1, null, "radius")])
 }
 
 -~> Draws a filled ellipse.
@@ -103,7 +114,7 @@ function ellipse(center, radii, fill) {
   need_point("ellipse", "radii", radii)
   need_paint("ellipse", "fill", fill)
   make_shape("ellipse", [center, radii, fill], ellipse_path(center, radii), fill, null, 0,
-             [make_anchor(center, 0, null, "move"), make_anchor(center + radii, 1, null, "corner")])
+    [make_anchor(center, 0, null, "move"), make_anchor(center + radii, 1, null, "corner")])
 }
 
 -~> Draws a filled rectangle.
@@ -115,9 +126,9 @@ function rect(pos, size, fill) {
   need_point("rect", "pos", pos)
   need_point("rect", "size", size)
   need_paint("rect", "fill", fill)
-  let path = [["M", pos], ["L", (pos.x + size.x, pos.y)], ["L", pos + size], ["L", (pos.x, pos.y + size.y)], ["Z"]]
-  make_shape("rect", [pos, size, fill], path, fill, null, 0,
-             [make_anchor(pos, 0, null, "move"), make_anchor(pos + size, 1, null, "corner")])
+  let outline = [["M", pos], ["L", (pos.x + size.x, pos.y)], ["L", pos + size], ["L", (pos.x, pos.y + size.y)], ["Z"]]
+  make_shape("rect", [pos, size, fill], outline, fill, null, 0,
+    [make_anchor(pos, 0, null, "move"), make_anchor(pos + size, 1, null, "corner")])
 }
 
 -~> Draws a straight line with round ends.
@@ -132,7 +143,7 @@ function line(a, b, color, width) {
   need_paint("line", "color", color)
   need_number("line", "width", width)
   make_shape("line", [a, b, color, width], [["M", a], ["L", b]], null, color, width,
-             [make_anchor(a, 0, null, "point"), make_anchor(b, 1, null, "point")])
+    [make_anchor(a, 0, null, "point"), make_anchor(b, 1, null, "point")])
 }
 
 -~> Draws a filled shape with straight sides.
@@ -142,12 +153,12 @@ function line(a, b, color, width) {
 function polygon(points, fill) {
   need_points("polygon", "points", points)
   need_paint("polygon", "fill", fill)
-  let path = [["M", points[0]]]
+  let outline = [["M", points[0]]]
   for (let i = 1; i < len(points); i = i + 1) {
-    push(path, ["L", points[i]])
+    push(outline, ["L", points[i]])
   }
-  push(path, ["Z"])
-  make_shape("polygon", [points, fill], path, fill, null, 0, anchors_of(points))
+  push(outline, ["Z"])
+  make_shape("polygon", [points, fill], outline, fill, null, 0, anchors_of(points))
 }
 
 -~> Draws a filled shape with a smooth outline, and holes if you give them.
@@ -224,8 +235,11 @@ function brush_samples(points, widths, opacities) {
     let piece = pieces[i]
     for (let s = 0; s < steps; s = s + 1) {
       let t = s / float(steps)
-      push(samples, {"pos": bezier_point(points[i], piece[0], piece[1], piece[2], t),
-                     "w": lerp(widths[i], widths[i + 1], t), "op": lerp(opacities[i], opacities[i + 1], t)})
+      push(samples, {
+        "pos": bezier_point(points[i], piece[0], piece[1], piece[2], t),
+        "w": lerp(widths[i], widths[i + 1], t),
+        "op": lerp(opacities[i], opacities[i + 1], t)
+      })
     }
   }
   push(samples, {"pos": points[n - 1], "w": widths[n - 1], "op": opacities[n - 1]})
@@ -274,27 +288,27 @@ function brush_outline(samples, pen) {
     push(right, samples[i].pos - normal * half)
   }
 
-  let path = [["M", left[0]]]
+  let outline = [["M", left[0]]]
   for (let i = 1; i < n; i = i + 1) {
-    push(path, ["L", left[i]])
+    push(outline, ["L", left[i]])
   }
   let end = samples[n - 1].pos
   let endn = (-tangents[n - 1].y, tangents[n - 1].x)
   for (let j = 1; j < 6; j = j + 1) {
     let a = j / 6.0 * math.pi
-    push(path, ["L", end + (endn * math.cos(a) + tangents[n - 1] * math.sin(a)) * halves[n - 1]])
+    push(outline, ["L", end + (endn * math.cos(a) + tangents[n - 1] * math.sin(a)) * halves[n - 1]])
   }
   for (let i = n - 1; i >= 0; i = i - 1) {
-    push(path, ["L", right[i]])
+    push(outline, ["L", right[i]])
   }
   let begin = samples[0].pos
   let beginn = (-tangents[0].y, tangents[0].x)
   for (let j = 1; j < 6; j = j + 1) {
     let a = j / 6.0 * math.pi
-    push(path, ["L", begin - (beginn * math.cos(a) + tangents[0] * math.sin(a)) * halves[0]])
+    push(outline, ["L", begin - (beginn * math.cos(a) + tangents[0] * math.sin(a)) * halves[0]])
   }
-  push(path, ["Z"])
-  path
+  push(outline, ["Z"])
+  outline
 }
 
 -~> The color with its opacity multiplied by `op` (0 to 1).
@@ -345,13 +359,13 @@ function brush(points, pressures, color, pen) {
     widest = math.max(widest, widths[i])
   }
 
-  let path = null
+  let outline = null
   if (n == 1) {
-    path = ellipse_path(points[0], (math.max(0.1, widths[0] / 2.0), math.max(0.1, widths[0] / 2.0)))
+    outline = ellipse_path(points[0], (math.max(0.1, widths[0] / 2.0), math.max(0.1, widths[0] / 2.0)))
   } else {
-    path = brush_outline(brush_samples(points, widths, opacities), pen)
+    outline = brush_outline(brush_samples(points, widths, opacities), pen)
   }
-  let shape = make_shape("brush", [points, pressures, color, pen], path, fade_color(color, mean), null, widest, anchors_of(points))
+  let shape = make_shape("brush", [points, pressures, color, pen], outline, fade_color(color, mean), null, widest, anchors_of(points))
   shape.widths = widths
   shape.opacities = opacities
   shape

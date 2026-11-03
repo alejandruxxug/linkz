@@ -492,8 +492,16 @@ function view_dialog_choose(what) {
 -~> Starts editing a box of the properties panel: its text, with the caret at the end.
 -~> The first typed character replaces everything (`fresh`).
 function view_focus_box(b) {
-  V.focus = {"field": b.field, "sub": b.sub, "text": b.text, "caret": len(b.text), "fresh": true, "orig": b.text,
-             "line": ed_model().line, "kind": b.kind}
+  V.focus = {
+    "field": b.field,
+    "sub": b.sub,
+    "text": b.text,
+    "caret": len(b.text),
+    "fresh": true,
+    "orig": b.text,
+    "line": ed_model().line,
+    "kind": b.kind
+  }
   V.ver = V.ver + 1
   app.needs_paint = true
 }

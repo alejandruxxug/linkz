@@ -1,0 +1,18 @@
+# B042 – Finish the move to lizard: catch up, match the Go host's speed, delete the Go (M11)
+
+Repo: `linkz` · Pin: `../.lizard-stable` is now lizard-script **f34d1ac** (VM overhaul, use cycles, module cache, `lizard.run` `use`/`hook_source`, `time.now` epoch/utc_offset, `text.digest`/`fs.digest`, scaled `blit`, `screenshot {"full": true}`, `error(msg, {"at": "caller"})`, parser recovery + teaching messages, fmt/check/lsp) · Plan: [[Linkz – All Lizard Plan]] · Previous: B041's report (in `docs/Linkz – Language Needs.md` and the B041 brief)
+
+## Part A – catch up with the new language
+On the new pin, `go test ./...` fails `TestPrograms/follow` and `scripts/test.sh` fails 5 suites (tests/app/drawing, tests/app/host, tests/editor/editor, tests/mcp/programs, tests/ui/programs incl. `mcp/tests/server_files.liz` and `ui/tests/follow.liz`). Expected causes: the parser now recovers, so follow-on errors are mostly gone (Linkz's "may be caused by the error above" dimming may now be rare or unneeded — keep the feature if any case still produces them, simplify if not, and update the tests to the new messages); teaching messages; module semantics (cycles now allowed — remove any workaround); anything else, find it. Fix in Linkz (or report a real lizard-script bug with a minimal program — don't work around it).
+
+Then use the new features where B041 needed them: `hook_source` (only the drawing's statements fire the hook), the module cache (drawing libraries compiled once), `lizard.run` `use` (live libraries for paint programs), `time.now().epoch`/`utc_offset` (drop the probe-file clock), `fs.digest`/`text.digest` (drop the polynomial fingerprints), scaled `blit` (drop the nearest-pixel scale in host_fb), `screenshot {"full": true}`, `lizard.check` diagnostics in the editor if cheap. Inline or remove shims that are no longer worth it, keeping the code clean.
+
+## Part B – speed: the port within 10% of the Go host
+Profile (`vm.StartProfile`/`lizardscript --profile`, and Go pprof on `lizardscript` itself) the M10 benchmarks (`tests/editor/editor_bench.liz` vs `go test ./host -bench Editor`) and fix what dominates: run fixed costs, the parse phase through modules, the scanner on big files, opening a 10k drawing (6 s today). If the bottleneck is the language/VM, write it up with numbers as a lizard-script need (the orchestrator decides) rather than a Linkz hack. Report the before/after table against the Go host.
+
+## Part C – delete the Go host (only when A and B are green, or B's remaining gaps are accepted by the orchestrator)
+Remove `main.go`, `debugcli.go`, `host/**`, `lib/lib.go`, `lib/*/*.go` and the Go tests, `go.mod`/`go.sum`/`go.work`; the repo becomes `.liz` + data + docs + scripts. Keep every behaviour: `scripts/test.sh` (both engines), the lizard smoke and parity scripts (parity becomes "against the last Go release's outputs", stored as goldens), release scripts with `lizardscript build --vm . -o linkz` for macOS/Windows/Linux (note B039's signing/linking caveats), CI workflow updated (still manual-only), docs (Architecture, Tools & Setup, README, CONTRIBUTING, CLAUDE.md, the All Lizard Plan marked done).
+Do Part C in a way the orchestrator can review as one diff; stop and report if Part B isn't within 10%.
+
+## Rules
+Clean code (one concept per file, documented, no hacks); LEP 0001 style; `lizardscript fmt` and `lizardscript check` clean on Linkz's code (fix real findings); strings unchanged (en + es). Testers: isolated HOME and config dir, `LIZARD_AUTOMATION=1`; never touch the user's ~/Documents/Linkz, ~/.linkz or real config. Don't edit ../lizard-script or ../.lizard-stable. Don't commit.

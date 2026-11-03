@@ -16,21 +16,6 @@ use "perf"
 
 -~> == Running the drawing ==
 
-
--~> A run that stopped at parse time lists every error the parser found, but the
--~> parser's recovery makes the later ones unreliable: a bad row can leave a
--~> valid one after it looking broken. The first error is real; each later one
--~> gets follow = true. A runtime error is always alone, so it is never marked.
-function errors_mark_follow(errors) {
-  let out = []
-  for (let i = 0; i < len(errors); i = i + 1) {
-    let e = errors[i]
-    let later = i > 0 && text.find(e.message, "runtime error") != 0
-    push(out, {"line": e.line, "column": e.column, "message": e.message, "follow": later})
-  }
-  out
-}
-
 -~> Runs the drawing. A run with errors keeps the last good shapes (ed.stale
 -~> says they are old) and the errors go to their rows. When only one literal
 -~> row changed, only that row runs (editor_rerun.liz) and ed.patch says which
@@ -61,7 +46,7 @@ function ed_run_now() {
     doc_cache_rescan(m)
   }
   ed.runs = ed.runs + 1
-  ed.errors = errors_mark_follow(r.errors)
+  ed.errors = r.errors
   ed.printed = r.printed
   ed.stats = {"ms": r.ms, "steps": r.steps}
   ed.patch = null
@@ -110,15 +95,23 @@ function ed_run_patch(m, patch) {
   }
   patch.ver = ed.shapes_ver
   ed.patch = patch
-  ed.ran = {"model": m, "literal": true}
+  -~> the same kind of shape call on the same row: the drawing stays as plain as it was
+  ed.ran = {"model": m, "literal": true, "plain": ed.ran.plain}
   ed.errors = []
   ed.printed = ""
   ed.stale = false
   ed.runs = ed.runs + 1
   ed.stats = {"ms": patch.ms, "steps": patch.steps}
   ed.pending = false
-  {"shapes": ed.shapes, "canvas": ed.canvas, "errors": [], "printed": ed.printed, "ms": patch.ms,
-   "steps": patch.steps, "rerun": true}
+  {
+    "shapes": ed.shapes,
+    "canvas": ed.canvas,
+    "errors": [],
+    "printed": ed.printed,
+    "ms": patch.ms,
+    "steps": patch.steps,
+    "rerun": true
+  }
 }
 
 -~> Puts the shapes of a region run (rerun_region) in place of the old ones of
@@ -142,8 +135,15 @@ function ed_run_range(m, patch) {
   ed.runs = ed.runs + 1
   ed.stats = {"ms": patch.ms, "steps": patch.steps}
   ed.pending = false
-  {"shapes": ed.shapes, "canvas": ed.canvas, "errors": [], "printed": ed.printed, "ms": patch.ms,
-   "steps": patch.steps, "rerun": true}
+  {
+    "shapes": ed.shapes,
+    "canvas": ed.canvas,
+    "errors": [],
+    "printed": ed.printed,
+    "ms": patch.ms,
+    "steps": patch.steps,
+    "rerun": true
+  }
 }
 
 -~> Whether every shape has a line and the lines never go down (one shape per
@@ -257,7 +257,6 @@ function ed_props() {
 
 -~> == Files ==
 
-
 function ed_new() {
   ed_reset("", "")
 }
@@ -304,7 +303,6 @@ function ed_set_code(code) {
 
 -~> == Editing ==
 
-
 function ed_word_char(ch) {
   text.find("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_", ch) >= 0 || text.code(ch, 0) > 127
 }
@@ -350,7 +348,6 @@ function ed_toggle_fold(line) {
 
 -~> == Creating and properties ==
 
-
 function ed_add_shape(kind) {
   ed_try_as("add_shape", {"kind": kind}, add_shape(ed_model(), kind, ed_canvas_size()))
 }
@@ -384,7 +381,6 @@ function ed_set_locked(line, on) {
 }
 
 -~> == The canvas editing the code ==
-
 
 -~> Drag helpers: call ed_begin_gesture on mouse down and ed_end_gesture on
 -~> mouse up; in between, each move calls one of these with absolute positions.
@@ -421,7 +417,6 @@ function brush_commit(samples, pen, source, layer) {
 }
 
 -~> == Keyboard ==
-
 
 -~> Handles a key event's name ("Backspace", "ArrowUp", "Z", ...) and mods
 -~> ({"shift", "alt", "cmd", "ctrl"}). True when the editor used the key.

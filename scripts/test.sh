@@ -7,7 +7,9 @@
 set -eu
 cd "$(dirname "$0")/.."
 LZ="${LIZARDSCRIPT:-lizardscript}"
-TMP="$(mktemp -d "${TMPDIR:-/tmp}/linkz-test.XXXXXX")"
+# Without the slash $TMPDIR ends with, so HOME is the path fs.home() gives.
+BASE="${TMPDIR:-/tmp}"
+TMP="$(mktemp -d "${BASE%/}/linkz-test.XXXXXX")"
 mkdir -p "$TMP/tree" "$TMP/vm"
 echo "== evaluator"
 HOME="$TMP/tree" LINKZ_ENGINE=tree "$LZ" test "$@" tests

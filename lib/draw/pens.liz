@@ -50,34 +50,95 @@ function pen_set_input(source) {
 
 -~> ink: crisp line, pressure changes the width a lot, both ends taper to a
 -~> point. Steady (a little smoothing) and thins when fast.
-pens.ink = {"name": "ink", "min": 1, "max": 10, "taper": 0.3, "opacity": [1, 1], "nib": null, "grain": 0,
-  "pressure": {"curve": [[0, 0], [1, 1]], "smoothing": 0.2, "speed": 0.4,
-    "inputs": {"trackpad": {"floor": 0.08}, "tablet": {}, "mouse": {"speed": 1.0}}}}
+pens.ink = {
+  "name": "ink",
+  "min": 1,
+  "max": 10,
+  "taper": 0.3,
+  "opacity": [1, 1],
+  "nib": null,
+  "grain": 0,
+  "pressure": {
+    "curve": [[0, 0], [1, 1]],
+    "smoothing": 0.2,
+    "speed": 0.4,
+    "inputs": {"trackpad": {"floor": 0.08}, "tablet": {}, "mouse": {"speed": 1.0}}
+  }
+}
 
 -~> pencil: thin and light, pressure changes the opacity more than the width,
 -~> and the edge is slightly grainy. Barely smoothed: it follows the hand.
-pens.pencil = {"name": "pencil", "min": 1, "max": 2.5, "taper": 0.1, "opacity": [0.3, 0.95], "nib": null, "grain": 0.4,
-  "pressure": {"curve": [[0, 0], [1, 1]], "smoothing": 0.05, "speed": 0,
-    "inputs": {"trackpad": {"floor": 0.12, "curve": [[0, 0], [0.5, 0.6], [1, 1]]}, "tablet": {}, "mouse": {"speed": 0.6}}}}
+pens.pencil = {
+  "name": "pencil",
+  "min": 1,
+  "max": 2.5,
+  "taper": 0.1,
+  "opacity": [0.3, 0.95],
+  "nib": null,
+  "grain": 0.4,
+  "pressure": {
+    "curve": [[0, 0], [1, 1]],
+    "smoothing": 0.05,
+    "speed": 0,
+    "inputs": {"trackpad": {"floor": 0.12, "curve": [[0, 0], [0.5, 0.6], [1, 1]]}, "tablet": {}, "mouse": {"speed": 0.6}}
+  }
+}
 
 -~> marker: constant width, see-through, flat ends. Pressure hardly matters, so
 -~> it is very smooth and a mouse gets a constant pressure.
-pens.marker = {"name": "marker", "min": 10, "max": 10, "taper": 0, "opacity": [0.55, 0.55], "nib": null, "grain": 0,
-  "pressure": {"curve": [[0, 0], [1, 1]], "smoothing": 0.6, "speed": 0,
-    "inputs": {"trackpad": {}, "tablet": {}, "mouse": {"speed": 0}}}}
+pens.marker = {
+  "name": "marker",
+  "min": 10,
+  "max": 10,
+  "taper": 0,
+  "opacity": [0.55, 0.55],
+  "nib": null,
+  "grain": 0,
+  "pressure": {
+    "curve": [[0, 0], [1, 1]],
+    "smoothing": 0.6,
+    "speed": 0,
+    "inputs": {"trackpad": {}, "tablet": {}, "mouse": {"speed": 0}}
+  }
+}
 
 -~> brush: wide width range, soft taper, fades out at low pressure. Needs a
 -~> firm press to get wide (the curve starts slowly), smooth, thins when fast.
-pens.brush = {"name": "brush", "min": 2, "max": 28, "taper": 0.4, "opacity": [0.35, 1], "nib": null, "grain": 0,
-  "pressure": {"curve": [[0, 0], [0.4, 0.2], [1, 1]], "smoothing": 0.3, "speed": 0.5,
-    "inputs": {"trackpad": {"floor": 0.15}, "tablet": {"curve": [[0, 0], [0.2, 0.1], [1, 1]]}, "mouse": {"speed": 1.0}}}}
+pens.brush = {
+  "name": "brush",
+  "min": 2,
+  "max": 28,
+  "taper": 0.4,
+  "opacity": [0.35, 1],
+  "nib": null,
+  "grain": 0,
+  "pressure": {
+    "curve": [[0, 0], [0.4, 0.2], [1, 1]],
+    "smoothing": 0.3,
+    "speed": 0.5,
+    "inputs": {"trackpad": {"floor": 0.15}, "tablet": {"curve": [[0, 0], [0.2, 0.1], [1, 1]]}, "mouse": {"speed": 1.0}}
+  }
+}
 
 -~> calligraphy: a flat nib held at 45 degrees; strokes along the nib are thin
 -~> and across it are thick; pressure only adds a little (nib_weight).
-pens.calligraphy = {"name": "calligraphy", "min": 1.5, "max": 14, "taper": 0, "opacity": [1, 1], "nib": 45deg, "grain": 0,
-  "pressure": {"curve": [[0, 0], [0.5, 0.7], [1, 1]], "smoothing": 0.4, "speed": 0.2, "nib_weight": 0.3,
-    "inputs": {"trackpad": {"floor": 0.1}, "tablet": {}, "mouse": {"speed": 0.5}}},
-  "tilt": {"nib": 0.6}}
+pens.calligraphy = {
+  "name": "calligraphy",
+  "min": 1.5,
+  "max": 14,
+  "taper": 0,
+  "opacity": [1, 1],
+  "nib": 45deg,
+  "grain": 0,
+  "pressure": {
+    "curve": [[0, 0], [0.5, 0.7], [1, 1]],
+    "smoothing": 0.4,
+    "speed": 0.2,
+    "nib_weight": 0.3,
+    "inputs": {"trackpad": {"floor": 0.1}, "tablet": {}, "mouse": {"speed": 0.5}}
+  },
+  "tilt": {"nib": 0.6}
+}
 
 -~> The pens for the editor's picker, in order.
 pens.list = [pens.ink, pens.pencil, pens.marker, pens.brush, pens.calligraphy]
@@ -85,8 +146,15 @@ pens.list = [pens.ink, pens.pencil, pens.marker, pens.brush, pens.calligraphy]
 -~> The pressure settings of a pen for a device: the defaults, then the pen's
 -~> own block, then the device's overrides. `source` null uses pen_input.
 function pen_block(pen, source = null) {
-  let b = {"curve": [[0, 0], [1, 1]], "width": [0, 1], "opacity": [0, 1], "smoothing": 0, "speed": 0,
-           "floor": 0, "nib_weight": 0}
+  let b = {
+    "curve": [[0, 0], [1, 1]],
+    "width": [0, 1],
+    "opacity": [0, 1],
+    "smoothing": 0,
+    "speed": 0,
+    "floor": 0,
+    "nib_weight": 0
+  }
   let own = pen.pressure
   if (type(own) != "HASH") {
     return b

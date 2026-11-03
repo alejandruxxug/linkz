@@ -13,6 +13,14 @@ use "host_src"
 -~> The primitives, with fb drawing on target (an image, or a window when
 -~> on_window is true).
 function host_globals(target, on_window = false) {
-  {"fb": host_fb(target, on_window), "fs": host_fs(), "os": host_os(), "time": host_time(),
-   "clip": clip, "img": host_img(), "io": host_io(), "src": host_src()}
+  {
+    "fb": host_fb(target, on_window),
+    "fs": host_fs(),
+    "os": host_os(),
+    "time": host_time(),
+    "clip": clip,
+    "img": host_img(),
+    "io": host_io(),
+    "src": host_src()
+  }
 }

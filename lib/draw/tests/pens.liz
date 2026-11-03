@@ -23,8 +23,16 @@ pen_set_input(null)
 puts(r2(pen_response(pens.brush, 0.5, 0)[0]))
 
 -~> Retuning a pen restyles a stroke: the raw pressures stay.
-let soft = {"name": "soft", "min": 2, "max": 12, "taper": 0, "opacity": [1, 1], "nib": null, "grain": 0,
-  "pressure": {"curve": [[0, 0], [1, 0.5]], "width": [0.2, 1]}}
+let soft = {
+  "name": "soft",
+  "min": 2,
+  "max": 12,
+  "taper": 0,
+  "opacity": [1, 1],
+  "nib": null,
+  "grain": 0,
+  "pressure": {"curve": [[0, 0], [1, 0.5]], "width": [0.2, 1]}
+}
 let pts = [(0, 0), (50, 0), (100, 0)]
 let s1 = brush(pts, [0.2, 0.6, 1.0], #000, soft)
 soft.pressure.curve = [[0, 0], [1, 1]]

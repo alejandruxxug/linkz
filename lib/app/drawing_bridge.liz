@@ -1,0 +1,13 @@
+-~> drawing_bridge: the last module of every drawing run (drawing_exec in
+-~> drawing.liz). The run sees the drawing libraries alive, so this file is
+-~> how the host reaches into them: it gives the libraries the run's here()
+-~> (the shape tags) and hands the drawing and the canvas back, through
+-~> drawing_run_hooks, a hash the host puts around the run:
+-~>   {"here": f}   in;  "results" is set to a function that gives
+-~>                 {"drawing", "canvas"} once the run is over
+
+use "../draw/here"
+use "../draw/shapes"
+
+here = drawing_run_hooks.here
+drawing_run_hooks.results = function() { {"drawing": drawing, "canvas": canvas} }

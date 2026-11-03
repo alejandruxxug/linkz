@@ -75,8 +75,6 @@ lang_register("es", {
 
   "state.saved": "guardado",
   "state.unsaved": "sin guardar",
-  "err.follow": "puede venir del error anterior",
-  "state.follow": "{n} más podrían venir de él",
   "state.error": "{n} error · línea {line}",
   "state.errors": "{n} errores · línea {line}",
   "stat.steps": "{n} pasos · {ms} ms",

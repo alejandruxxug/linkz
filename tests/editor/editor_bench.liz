@@ -64,7 +64,7 @@ for (let s = 0; s < len(sizes); s += 1) {
   let n = rig.names
   puts(k + "open", str(math.round(time.ms() - t0)) + " ms")
 
-  bench(rig, k + "full_repaint", function(i) {
+  bench(rig, k + "full_repaint", function(_i) {
     if (n.V.scene != null) {
       n.tiles_mark_all(n.V.scene.tiles)
     }
@@ -114,19 +114,19 @@ for (let s = 0; s < len(sizes); s += 1) {
     n.view_after()
     rig_frame(rig)
   }
-  bench(rig, k + "enter", function(i) {
+  bench(rig, k + "enter", function(_i) {
     n.ed_set_caret(mid, 1000)
     n.view_after()
     rig_frame(rig)
     [{"type": "key", "key": "Enter"}]
   }, undo)
-  bench(rig, k + "delete_line", function(i) {
+  bench(rig, k + "delete_line", function(_i) {
     n.ed_select_range(mid, mid)
     n.view_after()
     rig_frame(rig)
     [{"type": "key", "key": "Backspace"}]
   }, undo)
-  bench(rig, k + "paste_20", function(i) {
+  bench(rig, k + "paste_20", function(_i) {
     rig_clip.set(n.edit_rows_text(n.ed_model(), mid + 3, mid + 22))
     n.ed_set_caret(mid, 0)
     n.view_after()

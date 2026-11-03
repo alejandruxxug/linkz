@@ -17,8 +17,14 @@
 -~> "canvas" surface and fb.dirty tells the window what changed; with an
 -~> image the canvas is an image of its own and fb.dirty does nothing.
 function host_fb(ui, on_window = false) {
-  let st = {"ui": ui, "window": on_window, "canvas": null,
-    "named": "ui", "off": null, "kept": {}, "scaled": {}}
+  let st = {
+    "ui": ui,
+    "window": on_window,
+    "canvas": null,
+    "named": "ui",
+    "off": null,
+    "kept": {}
+  }
   let fb = {}
 
   -~> Where drawing goes now.
@@ -147,42 +153,18 @@ function host_fb(ui, on_window = false) {
   -~> Keeps a PNG file under a name, like fb.keep, and gives its size.
   fb.load_png = function(path, name) {
     st.kept[name] = img.load(path)
-    st.scaled[name] = {}
     img.size(st.kept[name])
   }
-  -~> Draws a kept image at pos, scaled to size with the nearest pixel when
-  -~> one is given.
+  -~> Draws a kept image at pos, scaled to the width of size with the
+  -~> nearest pixel when one is given.
   fb.blit = function(name, pos, size = null) {
     let b = kept(name)
-    if (size != null && size != img.size(b)) {
-      b = host_fb_scaled(st, name, b, size)
+    let from = img.size(b)
+    if (size == null || size == from) {
+      img.blit(cur(), b, pos)
+    } else {
+      img.blit(cur(), b, pos, {"scale": size.x / float(from.x)})
     }
-    img.blit(cur(), b, pos)
   }
   fb
-}
-
--~> The kept image `name` scaled to size, made once and kept until the name
--~> is loaded again: each pixel takes the source pixel nearest to it.
-function host_fb_scaled(st, name, b, size) {
-  if (st.scaled[name] == null) {
-    st.scaled[name] = {}
-  }
-  let key = str(size)
-  if (st.scaled[name][key] != null) {
-    return st.scaled[name][key]
-  }
-  let w = int(size.x)
-  let h = int(size.y)
-  let from = img.size(b)
-  let src = img.pixels(b)
-  let out = []
-  for (let y = 0; y < h; y += 1) {
-    let row = (y * from.y // h) * from.x
-    for (let x = 0; x < w; x += 1) {
-      push(out, src[row + x * from.x // w])
-    }
-  }
-  st.scaled[name][key] = img.from_pixels((w, h), out)
-  st.scaled[name][key]
 }

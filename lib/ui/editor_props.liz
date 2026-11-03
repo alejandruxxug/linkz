@@ -34,8 +34,19 @@ function props_field(info, args, index) {
       note = info.param_docs[name]
     }
   }
-  let f = {"name": name, "index": index, "doc": note, "text": "", "kind": "missing", "missing": true, "items": [],
-           "line": 0, "end_line": 0, "start": 0, "end": 0}
+  let f = {
+    "name": name,
+    "index": index,
+    "doc": note,
+    "text": "",
+    "kind": "missing",
+    "missing": true,
+    "items": [],
+    "line": 0,
+    "end_line": 0,
+    "start": 0,
+    "end": 0
+  }
   if (index < len(args)) {
     let a = args[index]
     f.text = a.text
@@ -66,8 +77,14 @@ function props_of(m, line, docs) {
 function props_build(m, line, docs) {
   let row = doc_row(m, line, null, null)
   if (row.kind == "layer") {
-    return {"kind": "layer", "line": line, "name": row.name, "ident": row.stmt.name, "hidden": row.hidden,
-            "locked": row.locked}
+    return {
+      "kind": "layer",
+      "line": line,
+      "name": row.name,
+      "ident": row.stmt.name,
+      "hidden": row.hidden,
+      "locked": row.locked
+    }
   }
   if (row.stmt == null || row.stmt.kind != "call") {
     return null

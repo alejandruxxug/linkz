@@ -13,16 +13,45 @@ use "view_gfx"
 use "view_items"
 
 let V = {
-  "w": 512, "h": 360, "pw": 320,
-  "top": 0, "pw_user": false, "ver": 0, "run_id": 0,
-  "mouse": (0, 0), "mouse_in": false, "overflow": false,
-  "tool": "", "picker": false, "picker_hover": -1,
-  "hover": "", "tip": null, "tip_key": "", "tip_since": 0, "tip_due": 0,
-  "dialog": null, "focus": null, "drag": null, "flash": 0,
-  "keys": {}, "force": {}, "popup_rect": null,
-  "items": null, "items_key": "", "items_at": null, "pinned": null, "items_caret": "", 
-  "paints": 0, "painted_ms": 0, "pen_note": "", "hover_anchor": null,
-  "zoom": 1.0, "host_origin": null, "crect": null, "drawing_rect": null, "hits": {}
+  "w": 512,
+  "h": 360,
+  "pw": 320,
+  "top": 0,
+  "pw_user": false,
+  "ver": 0,
+  "run_id": 0,
+  "mouse": (0, 0),
+  "mouse_in": false,
+  "overflow": false,
+  "tool": "",
+  "picker": false,
+  "picker_hover": -1,
+  "hover": "",
+  "tip": null,
+  "tip_key": "",
+  "tip_since": 0,
+  "tip_due": 0,
+  "dialog": null,
+  "focus": null,
+  "drag": null,
+  "flash": 0,
+  "keys": {},
+  "force": {},
+  "popup_rect": null,
+  "items": null,
+  "items_key": "",
+  "items_at": null,
+  "pinned": null,
+  "items_caret": "",
+  "paints": 0,
+  "painted_ms": 0,
+  "pen_note": "",
+  "hover_anchor": null,
+  "zoom": 1.0,
+  "host_origin": null,
+  "crect": null,
+  "drawing_rect": null,
+  "hits": {}
 }
 
 -~> Something the editor's state or the layers changed: everything that reads it repaints.
@@ -34,9 +63,21 @@ function view_touch() {
 function view_geom() {
   let h = V.h
   let props_y = h - 78
-  {"w": V.w, "h": h, "pw": V.pw, "props_y": props_y, "status_y": h - 16, "lim": props_y - 20,
-   "pin_y": props_y - 19, "main_y": 30, "rows_y": 45,
-   "cx": V.pw + 2, "cy": 30, "cw": V.w - V.pw - 2, "ch": h - 46}
+  {
+    "w": V.w,
+    "h": h,
+    "pw": V.pw,
+    "props_y": props_y,
+    "status_y": h - 16,
+    "lim": props_y - 20,
+    "pin_y": props_y - 19,
+    "main_y": 30,
+    "rows_y": 45,
+    "cx": V.pw + 2,
+    "cy": 30,
+    "cw": V.w - V.pw - 2,
+    "ch": h - 46
+  }
 }
 
 function view_in(x, y, rx, ry, rw, rh) {
@@ -46,9 +87,14 @@ function view_in(x, y, rx, ry, rw, rh) {
 -~> The panels as [x, y, w, h], to know which ones a popup covers.
 function view_panel_rects() {
   let gm = view_geom()
-  {"toolbar": [0, 0, gm.w, 16], "tabs": [0, 16, gm.w, 14],
-   "rows": [0, 30, gm.pw, gm.props_y - 30], "props": [0, gm.props_y, gm.pw, gm.status_y - gm.props_y],
-   "status": [0, gm.status_y, gm.w, 16], "canvas": [gm.pw, 30, gm.w - gm.pw, gm.h - 46]}
+  {
+    "toolbar": [0, 0, gm.w, 16],
+    "tabs": [0, 16, gm.w, 14],
+    "rows": [0, 30, gm.pw, gm.props_y - 30],
+    "props": [0, gm.props_y, gm.pw, gm.status_y - gm.props_y],
+    "status": [0, gm.status_y, gm.w, 16],
+    "canvas": [gm.pw, 30, gm.w - gm.pw, gm.h - 46]
+  }
 }
 
 -~> Marks every panel a rectangle touches to be painted again.
@@ -332,8 +378,13 @@ function view_toolbar_seps() {
 function view_tabs() {
   let name = view_file_name()
   let w = g_text_w(name) + 26
-  {"name": name, "w": w, "close": [7 + g_text_w(name) + 4, 20, 8, 8], "plus": [2 + w + 6, 17, 7, 13],
-   "tab": [2, 17, w, 13]}
+  {
+    "name": name,
+    "w": w,
+    "close": [7 + g_text_w(name) + 4, 20, 8, 8],
+    "plus": [2 + w + 6, 17, 7, 13],
+    "tab": [2, 17, w, 13]
+  }
 }
 
 -~> The eight tools of the inline strip on an empty row at y: [{"id", "x", "y", "w", "h"}].
@@ -376,9 +427,16 @@ function view_canvas_layout() {
   if (V.picker) {
     crect = [0, 0, gm.w, gm.h]
   }
-  {"zoom": zoom, "sw": sw, "sh": sh, "wx": wx, "wy": wy, "crect": crect,
-   "frame": [wx // 2 - 1, wy // 2 - 1, (sw + 1) // 2 + 2, (sh + 1) // 2 + 2],
-   "offset": (wx - crect[0] * 2, wy - crect[1] * 2)}
+  {
+    "zoom": zoom,
+    "sw": sw,
+    "sh": sh,
+    "wx": wx,
+    "wy": wy,
+    "crect": crect,
+    "frame": [wx // 2 - 1, wy // 2 - 1, (sw + 1) // 2 + 2, (sh + 1) // 2 + 2],
+    "offset": (wx - crect[0] * 2, wy - crect[1] * 2)
+  }
 }
 
 -~> A point of the drawing as window pixels (two per UI pixel).
@@ -474,15 +532,33 @@ function view_props_layout_build() {
       txt = V.focus.text
     }
     let bw = math.max(g_text_w(txt) + 8, 60)
-    push(out.boxes, {"field": "name", "sub": 0, "kind": "text", "x": bx, "y": y, "w": bw, "h": 18, "text": txt,
-                     "focus": V.focus != null && V.focus.field == "name"})
+    push(out.boxes, {
+      "field": "name",
+      "sub": 0,
+      "kind": "text",
+      "x": bx,
+      "y": y,
+      "w": bw,
+      "h": 18,
+      "text": txt,
+      "focus": V.focus != null && V.focus.field == "name"
+    })
     x = bx + bw + 12
     let flags = [["hidden", props.hidden], ["locked", props.locked]]
     for (let i = 0; i < 2; i = i + 1) {
       let lab = text.lower(t(prefixed("props.", flags[i][0])))
       push(out.labels, {"x": x, "y": y + 2, "s": lab})
-      push(out.boxes, {"field": flags[i][0], "sub": 0, "kind": "bool", "x": x + g_text_w(lab) + 4, "y": y + 3, "w": 12, "h": 12,
-                       "text": str(flags[i][1]), "focus": false})
+      push(out.boxes, {
+        "field": flags[i][0],
+        "sub": 0,
+        "kind": "bool",
+        "x": x + g_text_w(lab) + 4,
+        "y": y + 3,
+        "w": 12,
+        "h": 12,
+        "text": str(flags[i][1]),
+        "focus": false
+      })
       x = x + g_text_w(lab) + 4 + 12 + 10
     }
     out.hint = t("hint.layer")
@@ -505,14 +581,32 @@ function view_props_layout_build() {
       push(out.labels, {"x": fx, "y": y + 2, "s": "("})
       fx = fx + 8
       let aw = g_text_w(parts[0]) + 8
-      push(out.boxes, {"field": f.name, "sub": 0, "kind": "point", "x": fx, "y": y, "w": aw, "h": 18, "text": parts[0],
-                       "focus": focused && V.focus.sub == 0})
+      push(out.boxes, {
+        "field": f.name,
+        "sub": 0,
+        "kind": "point",
+        "x": fx,
+        "y": y,
+        "w": aw,
+        "h": 18,
+        "text": parts[0],
+        "focus": focused && V.focus.sub == 0
+      })
       fx = fx + g_text_w(parts[0]) + 10
       push(out.labels, {"x": fx - 2, "y": y + 2, "s": ","})
       fx = fx + 6
       let bw = g_text_w(parts[1]) + 8
-      push(out.boxes, {"field": f.name, "sub": 1, "kind": "point", "x": fx, "y": y, "w": bw, "h": 18, "text": parts[1],
-                       "focus": focused && V.focus.sub == 1})
+      push(out.boxes, {
+        "field": f.name,
+        "sub": 1,
+        "kind": "point",
+        "x": fx,
+        "y": y,
+        "w": bw,
+        "h": 18,
+        "text": parts[1],
+        "focus": focused && V.focus.sub == 1
+      })
       fx = fx + g_text_w(parts[1]) + 9
       push(out.labels, {"x": fx, "y": y + 2, "s": ")"})
       x = fx + 12
@@ -543,8 +637,17 @@ function view_props_layout_build() {
         kind = "missing"
       }
       w = math.max(w, 20)
-      push(out.boxes, {"field": f.name, "sub": 0, "kind": kind, "x": fx, "y": y, "w": w, "h": 18, "text": shown,
-                       "focus": focused || (kind == "pen" && V.picker)})
+      push(out.boxes, {
+        "field": f.name,
+        "sub": 0,
+        "kind": kind,
+        "x": fx,
+        "y": y,
+        "w": w,
+        "h": 18,
+        "text": shown,
+        "focus": focused || (kind == "pen" && V.picker)
+      })
       x = fx + w + 8
     }
   }

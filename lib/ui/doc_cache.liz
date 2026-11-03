@@ -41,9 +41,23 @@ let doc_cache_hops = 16
 -~> An empty cache for a text edited from `before` (a model, or null).
 function doc_cache_new(before) {
   doc_caches.made += 1
-  {"id": doc_caches.made, "text": null, "parse": null, "rows": null, "rows_epoch": -1, "shown": null,
-   "folds": null, "hidden": null, "hidden_key": null, "names": null, "name_parts": null, "before": doc_cache_base(before),
-   "diff": null, "splice": null, "rows_from": null}
+  {
+    "id": doc_caches.made,
+    "text": null,
+    "parse": null,
+    "rows": null,
+    "rows_epoch": -1,
+    "shown": null,
+    "folds": null,
+    "hidden": null,
+    "hidden_key": null,
+    "names": null,
+    "name_parts": null,
+    "before": doc_cache_base(before),
+    "diff": null,
+    "splice": null,
+    "rows_from": null
+  }
 }
 
 -~> The nearest model, from m back through the ones it was edited from, that

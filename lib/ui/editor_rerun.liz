@@ -252,8 +252,16 @@ function rerun_region(ran, m) {
   }
   let start = rerun_first_at(ed.shapes, sp.from)
   let after = rerun_first_at(ed.shapes, sp.old_to + 1)
-  {"kind": "range", "start": start, "removed": after - start, "added": added, "delta": sp.delta, "after": after,
-   "ms": r.ms, "steps": r.steps}
+  {
+    "kind": "range",
+    "start": start,
+    "removed": after - start,
+    "added": added,
+    "delta": sp.delta,
+    "after": after,
+    "ms": r.ms,
+    "steps": r.steps
+  }
 }
 
 -~> The index of the first shape on line `line` or after it (shapes in rising

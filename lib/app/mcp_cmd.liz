@@ -6,7 +6,7 @@ use "host"
 use "libs"
 use "settings"
 
-function mcp_command(args) {
+function mcp_command(_args) {
   let around = hash.merge(host_globals(img.new(1, 1)), {"settings": settings_load()})
   let names = libs_load(libs_draw + libs_gfx + libs_trace + libs_mcp, around)
   names.mcp_serve()

@@ -21,10 +21,14 @@ function machine_path() {
 -~> output.
 function machine_run(expr) {
   let around = host_globals(img.new(512, 512))
-  let tr = drawing_tracker(lizard.parse(expr).program, false)
+  let tr = drawing_tracker(expr, false)
   let names = libs_load(libs_draw + libs_gfx, around, tr.here)
-  let r = lizard.run(expr, {"globals": hash.merge(around, names), "engine": engine_name(), "name": "calibrate",
-    "on_layer": tr.on_layer})
+  let r = lizard.run(expr, {
+    "globals": hash.merge(around, names),
+    "engine": engine_name(),
+    "name": "calibrate",
+    "on_layer": tr.on_layer
+  })
   io.write(r.output)
   if (r.error != null) {
     error("calibrate: " + drawing_message(r.error))

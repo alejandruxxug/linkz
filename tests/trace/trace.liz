@@ -44,7 +44,7 @@ let ring = function(x, y) {
 let cases = [
   ["two colors, a square", grid(12, 12, square), {"colors": 2, "min_area": 0}, 16],
   ["a square with a hole", grid(14, 14, ring), {"colors": 2, "min_area": 0}, 84],
-  ["three colors in bands", grid(12, 6, function(x, y) { if (x < 4) { red } elif (x < 8) { green } else { blue } }),
+  ["three colors in bands", grid(12, 6, function(x, _y) { if (x < 4) { red } elif (x < 8) { green } else { blue } }),
     {"colors": 3, "min_area": 0}, 0],
   ["three colors, nested", grid(15, 15, function(x, y) {
     if (x >= 5 && x < 10 && y >= 5 && y < 10) { blue } elif (x >= 2 && x < 13 && y >= 2 && y < 13) { green } else { white }
@@ -81,7 +81,7 @@ let pic = grid(14, 14, ring)
 puts("ring golden:", trace_pixels(pic.size, pic.pixels, {"colors": 2, "min_area": 0}, "ring").code == golden)
 
 let bad = [{"colours": 4}, {"colors": 1}, 5]
-let tiny = grid(2, 2, function(x, y) { red })
+let tiny = grid(2, 2, function(_x, _y) { red })
 for (let i = 0; i < len(bad); i += 1) {
   try {
     trace_pixels(tiny.size, tiny.pixels, bad[i])

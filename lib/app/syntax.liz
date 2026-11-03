@@ -1,0 +1,19 @@
+-~> syntax: every syntax and lexical error of a program that lizard.run found
+-~> broken, as lizard.parse lists them ({"kind", "message", "line",
+-~> "column"}) but in the order of the code. They come from lizard.check,
+-~> which on broken code runs only the checks that need no names: on the
+-~> 10k-shape drawing ~24 ms, where lizard.parse builds the whole tree in
+-~> ~90 ms. (On code that parses, check looks up every name and is no
+-~> faster than parse: the scanner keeps lizard.parse.)
+
+function syntax_errors(code) {
+  let found = lizard.check(code)
+  let out = []
+  for (let i = 0; i < len(found); i += 1) {
+    let f = found[i]
+    if (f.rule == "syntax" || f.rule == "lexical") {
+      push(out, {"kind": f.rule, "message": f.message, "line": f.line, "column": f.column})
+    }
+  }
+  out
+}

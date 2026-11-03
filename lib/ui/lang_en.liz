@@ -75,8 +75,6 @@ lang_register("en", {
 
   "state.saved": "saved",
   "state.unsaved": "unsaved",
-  "err.follow": "may be caused by the error above",
-  "state.follow": "{n} more may follow from it",
   "state.error": "{n} error · line {line}",
   "state.errors": "{n} errors · line {line}",
   "stat.steps": "{n} steps · {ms} ms",

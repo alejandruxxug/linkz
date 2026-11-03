@@ -39,7 +39,8 @@ let home = {
   "status": "",
   "cards": [],
   "lay": null,
-  "warm": false, "scanned_at": 0,
+  "warm": false,
+  "scanned_at": 0,
   "needs_paint": true,
   "wants_hover": true
 }
@@ -81,7 +82,7 @@ function home_refresh() {
   home_say(t("home.refreshed", {"n": len(home.files)}))
 }
 
-function home_enter(args) {
+function home_enter(_args) {
   fb.canvas((0, 0), (0, 0))
   fb.target("ui")
   home_scan()
@@ -136,9 +137,16 @@ function home_card(section, f, x, y, w, th, big) {
 -~> order (working on, then all); y values already include the scroll.
 function home_layout() {
   let w = home.size.x
-  let h = home.size.y
-  let lay = {"empty": false, "cards": [], "titles": [], "new": null, "sort": null,
-             "height": 0, "grid_y": 0, "none": false}
+  let lay = {
+    "empty": false,
+    "cards": [],
+    "titles": [],
+    "new": null,
+    "sort": null,
+    "height": 0,
+    "grid_y": 0,
+    "none": false
+  }
   let shown = home_search(home_sort(home.files, home.sort), home.query)
   if (len(home.files) == 0 && text.trim(home.query) == "") {
     lay.empty = true
@@ -201,10 +209,15 @@ function home_empty_layout() {
   let by = ty + 40
   let ex = t("home.example")
   let ew = len(ex) * 7 + 18
-  {"lx": lx, "ly": ly, "k": k, "ty": ty,
-   "new": {"x": (w - bw) // 2, "y": by, "w": bw, "h": 26},
-   "example": {"x": (w - ew) // 2, "y": by + 34, "w": ew, "h": 16},
-   "hint_y": by + 58}
+  {
+    "lx": lx,
+    "ly": ly,
+    "k": k,
+    "ty": ty,
+    "new": {"x": (w - bw) // 2, "y": by, "w": bw, "h": 26},
+    "example": {"x": (w - ew) // 2, "y": by + 34, "w": ew, "h": 16},
+    "hint_y": by + 58
+  }
 }
 
 function home_in(r, x, y) {
@@ -215,9 +228,11 @@ function home_top_layout() {
   let w = home.size.x
   let lang = text.upper(lang_get())
   let lw = len(lang) * 7 + 18
-  {"search": {"x": 150, "y": 3, "w": 212, "h": 16},
-   "lang": {"x": w - 8 - 16 - 4 - lw, "y": 4, "w": lw, "h": 14},
-   "settings": {"x": w - 8 - 16, "y": 4, "w": 16, "h": 14}}
+  {
+    "search": {"x": 150, "y": 3, "w": 212, "h": 16},
+    "lang": {"x": w - 8 - 16 - 4 - lw, "y": 4, "w": lw, "h": 14},
+    "settings": {"x": w - 8 - 16, "y": 4, "w": 16, "h": 14}
+  }
 }
 
 function home_card_visible(c) {
@@ -415,7 +430,7 @@ function home_checker(x, y, w, h) {
   }
 }
 
-function home_paint_thumb(c, hover) {
+function home_paint_thumb(c, _hover) {
   let box = (c.w - 2, c.th)
   let x = c.x + 1
   let y = c.y + 1
@@ -668,10 +683,18 @@ function home_dialog_layout() {
   let cw = len(cancel) * 7 + 18
   let ow = len(ok) * 7 + 18 + 10
   let by = y + h - 8 - 16
-  {"x": x, "y": y, "w": w, "h": h, "lines": lines, "ok_label": ok, "cancel_label": cancel,
-   "cancel": {"x": x + w - 8 - cw, "y": by, "w": cw, "h": 16},
-   "ok": {"x": x + w - 8 - cw - 6 - ow, "y": by, "w": ow, "h": 16},
-   "field": {"x": x + 8, "y": y + 24, "w": w - 16, "h": 18}}
+  {
+    "x": x,
+    "y": y,
+    "w": w,
+    "h": h,
+    "lines": lines,
+    "ok_label": ok,
+    "cancel_label": cancel,
+    "cancel": {"x": x + w - 8 - cw, "y": by, "w": cw, "h": 16},
+    "ok": {"x": x + w - 8 - cw - 6 - ow, "y": by, "w": ow, "h": 16},
+    "field": {"x": x + 8, "y": y + 24, "w": w - 16, "h": 18}
+  }
 }
 
 function home_paint_dialog() {
@@ -799,7 +822,6 @@ function home_tz() {
 
 -~> What is under the pointer: {"kind": ...} or null.
 function home_hit(x, y) {
-  let w = home.size.x
   let h = home.size.y
   if (home.dialog != null) {
     let g = home_dialog_layout()
@@ -1104,9 +1126,13 @@ function home_key(e) {
 -~> == Hooking into the app ==
 
 function home_screen() {
-  {"event": home_event, "paint": home_paint, "enter": home_enter,
-   "needs_paint": function() { home.needs_paint },
-   "wants_hover": function() { home.wants_hover }}
+  {
+    "event": home_event,
+    "paint": home_paint,
+    "enter": home_enter,
+    "needs_paint": function() { home.needs_paint },
+    "wants_hover": function() { home.wants_hover }
+  }
 }
 
 -~> Puts the home screen in the router: screens["home"].
@@ -1117,7 +1143,7 @@ function home_register() {
 -~> The backdoor: add these to the app's debug_commands (Call Home, Call
 -~> OpenCard n, Call NewDrawing) and put home_debug_state() in its Dump.
 
-function home_cmd_home(args) {
+function home_cmd_home(_args) {
   show_screen("home", null)
   home_debug_state()
 }
@@ -1134,7 +1160,7 @@ function home_cmd_open_card(args) {
   {"opened": home_open(path), "path": path}
 }
 
-function home_cmd_new_drawing(args) {
+function home_cmd_new_drawing(_args) {
   let ok = home_new_drawing()
   {"created": ok, "files": len(home.files)}
 }
@@ -1156,17 +1182,35 @@ function home_debug_state() {
   let cards = []
   for (let i = 0; i < len(home.cards); i = i + 1) {
     let c = home.cards[i]
-    push(cards, {"index": i, "name": c.file.name, "path": c.file.path, "section": c.section,
-                 "thumb": home_thumb_state(c), "rect": [c.x, c.y, c.w, c.h]})
+    push(cards, {
+      "index": i,
+      "name": c.file.name,
+      "path": c.file.path,
+      "section": c.section,
+      "thumb": home_thumb_state(c),
+      "rect": [c.x, c.y, c.w, c.h]
+    })
   }
   let nr = null
   if (lay.new != null) {
     nr = [lay.new.x, lay.new.y, lay.new.w, lay.new.h]
   }
-  {"screen": "home", "dir": home_dir(), "files": len(home.files), "query": home.query,
-   "sort": home.sort, "scroll": home.scroll, "empty": lay.empty, "menu": home.menu != null,
-   "dialog": home.dialog != null, "status": home.status, "recent": home.recent,
-   "renders": home_thumbs.renders, "new_card": nr, "cards": cards}
+  {
+    "screen": "home",
+    "dir": home_dir(),
+    "files": len(home.files),
+    "query": home.query,
+    "sort": home.sort,
+    "scroll": home.scroll,
+    "empty": lay.empty,
+    "menu": home.menu != null,
+    "dialog": home.dialog != null,
+    "status": home.status,
+    "recent": home.recent,
+    "renders": home_thumbs.renders,
+    "new_card": nr,
+    "cards": cards
+  }
 }
 
 -~> A router that already exists gets the screen now; one that is made later

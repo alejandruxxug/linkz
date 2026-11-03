@@ -3,6 +3,6 @@
 
 use "machine"
 
-function calibrate_command(args) {
+function calibrate_command(_args) {
   puts(machine_recalibrate())
 }

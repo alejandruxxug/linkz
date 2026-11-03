@@ -225,7 +225,7 @@ function home_working(files, paths, count) {
 
 -~> The language keys of the weekdays, from Sunday.
 let home_weekday_keys = ["time.weekday.0", "time.weekday.1", "time.weekday.2", "time.weekday.3",
-                         "time.weekday.4", "time.weekday.5", "time.weekday.6"]
+  "time.weekday.4", "time.weekday.5", "time.weekday.6"]
 
 -~> The language keys of the sort modes.
 let home_sort_keys = {"edited": "home.sort.edited", "name": "home.sort.name"}

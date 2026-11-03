@@ -9,8 +9,14 @@ use "libs"
 let trace_usage = "usage: linkz trace in.png out.lzdraw [--colors 8] [--detail 1.5] [--min-area 8] [--max-side 256] [--scale 1] [--corner 55]"
 
 -~> The options the command takes, by flag, and the key of trace's options.
-let trace_flags = {"colors": "colors", "detail": "detail", "min-area": "min_area", "max-side": "max_side",
-  "scale": "scale", "corner": "corner"}
+let trace_flags = {
+  "colors": "colors",
+  "detail": "detail",
+  "min-area": "min_area",
+  "max-side": "max_side",
+  "scale": "scale",
+  "corner": "corner"
+}
 
 -~> A number as trace takes it: a whole number is an INTEGER.
 function trace_number(v) {

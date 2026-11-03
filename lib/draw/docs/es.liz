@@ -3,67 +3,127 @@
 -~> entry, summary or parameter falls back to the English doc comment.
 -~> Code names, parameters and examples stay as they are in the library.
 let docs_es = {
-  "circle": {"summary": "Dibuja un círculo relleno.", "params": {
-    "center": "el centro del círculo, un punto",
-    "r": "el radio en píxeles",
-    "fill": "el color del relleno"}},
-  "ellipse": {"summary": "Dibuja una elipse rellena.", "params": {
-    "center": "el centro de la elipse, un punto",
-    "radii": "la mitad del ancho y la mitad del alto, un punto como (60, 30)",
-    "fill": "el color del relleno"}},
-  "rect": {"summary": "Dibuja un rectángulo relleno.", "params": {
-    "pos": "la esquina superior izquierda, un punto",
-    "size": "ancho y alto, un punto como (120, 60)",
-    "fill": "el color del relleno"}},
-  "line": {"summary": "Dibuja una línea recta con extremos redondeados.", "params": {
-    "a": "dónde empieza la línea, un punto",
-    "b": "dónde termina la línea, un punto",
-    "color": "el color de la línea",
-    "width": "el grosor en píxeles"}},
-  "polygon": {"summary": "Dibuja una figura rellena de lados rectos.", "params": {
-    "points": "las esquinas en orden, una lista de puntos",
-    "fill": "el color del relleno"}},
-  "path": {"summary": "Dibuja una figura rellena de contorno suave, con huecos si los das. El contorno es una curva por los puntos; donde la línea gira más de `corner` grados queda una esquina, y entre dos esquinas los tramos son rectos. Es de lo que se hace una imagen vectorizada.", "params": {
-    "points": "el contorno, una lista de puntos",
-    "fill": "el color del relleno",
-    "closed": "true para unir el último punto con el primero (necesario para huecos)",
-    "smooth": "false para lados rectos, como polygon",
-    "holes": "una lista de listas de puntos, cada una recortada de la figura",
-    "corner": "el giro en grados desde el que un punto queda como esquina"}},
-  "stroke": {"summary": "Dibuja una curva suave que pasa por todos los puntos. Un punto es un círculo y dos son una línea recta. Los extremos son redondos.", "params": {
-    "points": "los sitios por donde pasa la curva, una lista de puntos",
-    "color": "el color de la línea",
-    "width": "el grosor en píxeles"}},
-  "brush": {"summary": "Dibuja una curva suave cuyo grosor y opacidad siguen la presión del lápiz que la trazó. Se guardan las presiones originales, así que otro lápiz puede cambiar el estilo del mismo trazo.", "params": {
-    "points": "los sitios por donde pasa la curva, una lista de puntos",
-    "pressures": "un número de 0 a 1 por cada punto",
-    "color": "el color de la tinta",
-    "pen": "un estilo de lápiz como pens.ink, pens.pencil o pens.calligraphy"}},
-  "hard": {"summary": "Marca una parada como borde: su color empieza justo ahí en lugar de mezclarse con la parada anterior.", "params": {
-    "color": "el color después del borde"}},
-  "linear": {"summary": "Un degradado que corre a lo largo de una línea, de un punto a otro.", "params": {
-    "from": "dónde está la primera parada, un punto",
-    "to": "dónde está la última parada, un punto",
-    "stops": "colores, pares [t, color] o hard(color), al menos dos",
-    "steps": "0 para suave, o de 2 a 64 para ese número de bandas planas"}},
-  "radial": {"summary": "Un degradado que se expande desde un punto, en círculos.", "params": {
-    "center": "dónde está la primera parada, un punto",
-    "r": "la distancia donde está la última parada, en píxeles",
-    "stops": "colores, pares [t, color] o hard(color), al menos dos",
-    "steps": "0 para suave, o de 2 a 64 para ese número de anillos planos"}},
-  "gradient": {"summary": "Un degradado que se ajusta a cada figura, a lo largo de su caja. El ángulo es la dirección en que viajan los colores, en pantalla y girando a la derecha desde la derecha: 0deg va de izquierda a derecha, 90deg de arriba abajo (el valor por defecto), 180deg de derecha a izquierda y 270deg de abajo arriba. No es como CSS, que cuenta desde arriba. La primera parada está en la esquina inicial de la caja y la última en la opuesta.", "params": {
-    "stops": "colores, pares [t, color] o hard(color), al menos dos",
-    "angle": "la dirección, como 90deg, 45deg o 0.25turn",
-    "steps": "0 para suave, o de 2 a 64 para ese número de bandas planas"}},
-  "radial_gradient": {"summary": "Un degradado que sale desde un punto de cada figura, en círculos. El centro es un punto en fracciones de la caja ((0, 0) arriba a la izquierda, (1, 1) abajo a la derecha) y r es una fracción del lado mayor, así que r = 0.5 llega al borde del lado más largo. Los anillos son círculos, no una elipse: en una caja ancha no se llegan a los lados cortos.", "params": {
-    "stops": "colores, pares [t, color] o hard(color), al menos dos",
-    "center": "dónde está la primera parada, en fracciones de la caja",
-    "r": "dónde está la última parada, como fracción del lado mayor",
-    "steps": "0 para suave, o de 2 a 64 para ese número de anillos planos"}},
-  "blend": {"summary": "Define cómo se mezcla la capa en la que está con lo que tiene detrás.", "params": {
-    "mode": "\"normal\", \"multiply\", \"screen\", \"overlay\", \"darken\", \"lighten\" o \"add\""}},
-  "opacity": {"summary": "Define qué tan transparente es la capa en la que está: 1 es sólida, 0 es invisible.", "params": {
-    "x": "un número de 0 a 1"}},
+  "circle": {
+    "summary": "Dibuja un círculo relleno.",
+    "params": {
+      "center": "el centro del círculo, un punto",
+      "r": "el radio en píxeles",
+      "fill": "el color del relleno"
+    }
+  },
+  "ellipse": {
+    "summary": "Dibuja una elipse rellena.",
+    "params": {
+      "center": "el centro de la elipse, un punto",
+      "radii": "la mitad del ancho y la mitad del alto, un punto como (60, 30)",
+      "fill": "el color del relleno"
+    }
+  },
+  "rect": {
+    "summary": "Dibuja un rectángulo relleno.",
+    "params": {
+      "pos": "la esquina superior izquierda, un punto",
+      "size": "ancho y alto, un punto como (120, 60)",
+      "fill": "el color del relleno"
+    }
+  },
+  "line": {
+    "summary": "Dibuja una línea recta con extremos redondeados.",
+    "params": {
+      "a": "dónde empieza la línea, un punto",
+      "b": "dónde termina la línea, un punto",
+      "color": "el color de la línea",
+      "width": "el grosor en píxeles"
+    }
+  },
+  "polygon": {
+    "summary": "Dibuja una figura rellena de lados rectos.",
+    "params": {
+      "points": "las esquinas en orden, una lista de puntos",
+      "fill": "el color del relleno"
+    }
+  },
+  "path": {
+    "summary": "Dibuja una figura rellena de contorno suave, con huecos si los das. El contorno es una curva por los puntos; donde la línea gira más de `corner` grados queda una esquina, y entre dos esquinas los tramos son rectos. Es de lo que se hace una imagen vectorizada.",
+    "params": {
+      "points": "el contorno, una lista de puntos",
+      "fill": "el color del relleno",
+      "closed": "true para unir el último punto con el primero (necesario para huecos)",
+      "smooth": "false para lados rectos, como polygon",
+      "holes": "una lista de listas de puntos, cada una recortada de la figura",
+      "corner": "el giro en grados desde el que un punto queda como esquina"
+    }
+  },
+  "stroke": {
+    "summary": "Dibuja una curva suave que pasa por todos los puntos. Un punto es un círculo y dos son una línea recta. Los extremos son redondos.",
+    "params": {
+      "points": "los sitios por donde pasa la curva, una lista de puntos",
+      "color": "el color de la línea",
+      "width": "el grosor en píxeles"
+    }
+  },
+  "brush": {
+    "summary": "Dibuja una curva suave cuyo grosor y opacidad siguen la presión del lápiz que la trazó. Se guardan las presiones originales, así que otro lápiz puede cambiar el estilo del mismo trazo.",
+    "params": {
+      "points": "los sitios por donde pasa la curva, una lista de puntos",
+      "pressures": "un número de 0 a 1 por cada punto",
+      "color": "el color de la tinta",
+      "pen": "un estilo de lápiz como pens.ink, pens.pencil o pens.calligraphy"
+    }
+  },
+  "hard": {
+    "summary": "Marca una parada como borde: su color empieza justo ahí en lugar de mezclarse con la parada anterior.",
+    "params": {
+      "color": "el color después del borde"
+    }
+  },
+  "linear": {
+    "summary": "Un degradado que corre a lo largo de una línea, de un punto a otro.",
+    "params": {
+      "from": "dónde está la primera parada, un punto",
+      "to": "dónde está la última parada, un punto",
+      "stops": "colores, pares [t, color] o hard(color), al menos dos",
+      "steps": "0 para suave, o de 2 a 64 para ese número de bandas planas"
+    }
+  },
+  "radial": {
+    "summary": "Un degradado que se expande desde un punto, en círculos.",
+    "params": {
+      "center": "dónde está la primera parada, un punto",
+      "r": "la distancia donde está la última parada, en píxeles",
+      "stops": "colores, pares [t, color] o hard(color), al menos dos",
+      "steps": "0 para suave, o de 2 a 64 para ese número de anillos planos"
+    }
+  },
+  "gradient": {
+    "summary": "Un degradado que se ajusta a cada figura, a lo largo de su caja. El ángulo es la dirección en que viajan los colores, en pantalla y girando a la derecha desde la derecha: 0deg va de izquierda a derecha, 90deg de arriba abajo (el valor por defecto), 180deg de derecha a izquierda y 270deg de abajo arriba. No es como CSS, que cuenta desde arriba. La primera parada está en la esquina inicial de la caja y la última en la opuesta.",
+    "params": {
+      "stops": "colores, pares [t, color] o hard(color), al menos dos",
+      "angle": "la dirección, como 90deg, 45deg o 0.25turn",
+      "steps": "0 para suave, o de 2 a 64 para ese número de bandas planas"
+    }
+  },
+  "radial_gradient": {
+    "summary": "Un degradado que sale desde un punto de cada figura, en círculos. El centro es un punto en fracciones de la caja ((0, 0) arriba a la izquierda, (1, 1) abajo a la derecha) y r es una fracción del lado mayor, así que r = 0.5 llega al borde del lado más largo. Los anillos son círculos, no una elipse: en una caja ancha no se llegan a los lados cortos.",
+    "params": {
+      "stops": "colores, pares [t, color] o hard(color), al menos dos",
+      "center": "dónde está la primera parada, en fracciones de la caja",
+      "r": "dónde está la última parada, como fracción del lado mayor",
+      "steps": "0 para suave, o de 2 a 64 para ese número de anillos planos"
+    }
+  },
+  "blend": {
+    "summary": "Define cómo se mezcla la capa en la que está con lo que tiene detrás.",
+    "params": {
+      "mode": "\"normal\", \"multiply\", \"screen\", \"overlay\", \"darken\", \"lighten\" o \"add\""
+    }
+  },
+  "opacity": {
+    "summary": "Define qué tan transparente es la capa en la que está: 1 es sólida, 0 es invisible.",
+    "params": {
+      "x": "un número de 0 a 1"
+    }
+  },
 
   "lerp": {"summary": "Mezcla dos números o dos puntos: a cuando t = 0, b cuando t = 1.", "params": {}},
   "bezier_point": {"summary": "El punto en t (de 0 a 1) sobre la Bezier cúbica p0, c1, c2, p3.", "params": {}},

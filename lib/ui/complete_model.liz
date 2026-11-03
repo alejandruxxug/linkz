@@ -18,7 +18,7 @@ use "view_code"
 use "view_gfx"
 
 let cmp_keywords = ["let", "function", "layer", "if", "elif", "else", "for", "while", "return", "break",
-                    "continue", "try", "catch", "true", "false", "null"]
+  "continue", "try", "catch", "true", "false", "null"]
 
 -~> The words before a "(" that open no call: `if (`, `function foo(`, ...
 let cmp_not_calls = ["if", "elif", "while", "for", "catch", "function", "try", "else", "return", "let", "layer"]
@@ -188,8 +188,15 @@ function cmp_rank(items, prefix, recent) {
 -~> == Where the names come from ==
 
 function cmp_item(name, kind, sig, summary, example, params) {
-  {"name": name, "kind": kind, "sig": sig, "summary": summary, "example": example, "params": params,
-   "lower": text.lower(name)}
+  {
+    "name": name,
+    "kind": kind,
+    "sig": sig,
+    "summary": summary,
+    "example": example,
+    "params": params,
+    "lower": text.lower(name)
+  }
 }
 
 function cmp_sig(name, params) {
@@ -318,7 +325,6 @@ function cmp_scan_keys(lines, from) {
 -~> The items after `owner.`: the builtin hashes, the pens, or a hash literal of the document.
 function cmp_member_items(m, owner) {
   let names = null
-  let note = ""
   if (owner == "math") {
     names = keys(math)
   } elif (owner == "text") {
@@ -337,8 +343,16 @@ function cmp_member_items(m, owner) {
     if (owner == "pens" && sorted[i] != "list") {
       summary = t(prefixed("pen.", sorted[i]))
     }
-    push(out, {"name": sorted[i], "kind": "member", "sig": owner + "." + sorted[i], "summary": summary,
-               "example": null, "params": null, "lower": text.lower(sorted[i]), "owner": owner})
+    push(out, {
+      "name": sorted[i],
+      "kind": "member",
+      "sig": owner + "." + sorted[i],
+      "summary": summary,
+      "example": null,
+      "params": null,
+      "lower": text.lower(sorted[i]),
+      "owner": owner
+    })
   }
   out
 }
@@ -510,8 +524,10 @@ function cmp_ph_replace(m, ph, s) {
     }
   }
   let lines = list.slice(m.lines, 0, m.line - 1) + [line] + list.slice(m.lines, m.line, len(m.lines))
-  {"model": doc_with(m, lines, m.line, sp[0] + len(s)),
-   "ph": {"line": ph.line, "spans": spans, "cur": ph.cur, "fresh": false, "expect": line}}
+  {
+    "model": doc_with(m, lines, m.line, sp[0] + len(s)),
+    "ph": {"line": ph.line, "spans": spans, "cur": ph.cur, "fresh": false, "expect": line}
+  }
 }
 
 -~> Tab (dir 1) or Shift+Tab (dir -1): the caret goes to the next (previous) argument and
@@ -533,8 +549,10 @@ function cmp_ph_step(m, ph, dir) {
     next = 0
   }
   let spans = ph.spans
-  {"model": doc_at(m, m.line, spans[next][0]),
-   "ph": {"line": ph.line, "spans": spans, "cur": next, "fresh": true, "expect": ph.expect}}
+  {
+    "model": doc_at(m, m.line, spans[next][0]),
+    "ph": {"line": ph.line, "spans": spans, "cur": next, "fresh": true, "expect": ph.expect}
+  }
 }
 
 -~> The placeholders after an edit that moved the line from `old_len` characters to

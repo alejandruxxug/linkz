@@ -112,8 +112,16 @@ function linear(from, to, stops, steps = 0) {
   if (len2 == 0) {
     reject("linear", "from and to must be different points")
   }
-  {"kind": "linear", "from": from, "to": to, "stops": list_of_stops, "steps": steps,
-   "origin": from, "axis": (dx / len2, dy / len2), "scale": 0.0}
+  {
+    "kind": "linear",
+    "from": from,
+    "to": to,
+    "stops": list_of_stops,
+    "steps": steps,
+    "origin": from,
+    "axis": (dx / len2, dy / len2),
+    "scale": 0.0
+  }
 }
 
 -~> A gradient that runs outwards from a point, as circles.
@@ -130,8 +138,16 @@ function radial(center, r, stops, steps = 0) {
   }
   need_steps("radial", steps)
   let list_of_stops = gradient_stops("radial", stops)
-  {"kind": "radial", "center": center, "r": r, "stops": list_of_stops, "steps": steps,
-   "origin": center, "axis": (0.0, 0.0), "scale": 1.0 / r}
+  {
+    "kind": "radial",
+    "center": center,
+    "r": r,
+    "stops": list_of_stops,
+    "steps": steps,
+    "origin": center,
+    "axis": (0.0, 0.0),
+    "scale": 1.0 / r
+  }
 }
 
 -~> The color of a gradient at t (0 to 1), steps included. The rasterizer does
@@ -156,7 +172,7 @@ function gradient_color_at(g, t) {
   let b = st[j]
   let f = (t - a[0]) / (b[0] - a[0])
   rgba(math.round(lerp(a[1].r, b[1].r, f)), math.round(lerp(a[1].g, b[1].g, f)),
-       math.round(lerp(a[1].b, b[1].b, f)), math.round(lerp(a[1].a, b[1].a, f)))
+    math.round(lerp(a[1].b, b[1].b, f)), math.round(lerp(a[1].a, b[1].a, f)))
 }
 
 -~> The stops an SVG needs: the stops themselves, or for a stepped gradient

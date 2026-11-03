@@ -52,8 +52,11 @@ function libs_load(specs, around = {}, here_fn = null) {
   if (here_fn != null) {
     code += "use \"draw/here\"\nhere = _here\n"
   }
-  let r = lizard.run(code, {"name": fs.join(libs_dir(), "libraries"), "engine": engine_name(),
-    "globals": hash.merge(around, {"_here": here_fn})})
+  let r = lizard.run(code, {
+    "name": fs.join(libs_dir(), "libraries"),
+    "engine": engine_name(),
+    "globals": hash.merge(around, {"_here": here_fn})
+  })
   if (r.error != null) {
     error("library " + libs_error_source(r.error) + ": " + libs_error_text(r.error))
   }

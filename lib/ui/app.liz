@@ -87,7 +87,7 @@ function app_commands() {
     }
   }
   cmds["Ping"] = app_ping
-  cmds["Screen"] = function(args) {
+  cmds["Screen"] = function(_args) {
     {"screen": screen_state.current, "screens": keys(screens)}
   }
   cmds["Show"] = function(args) {

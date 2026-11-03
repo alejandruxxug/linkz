@@ -46,9 +46,9 @@ function rand(k) {
 
 -~> Lines that an edit can put in: shapes, layers, broken code, blanks, comments.
 let pieces = ["  circle((10, 10), 5, #000)", "circle((1, 2), 3, #fff)", "layer extra", "  layer inner",
-              "", "-~> a note", "    rect((0, 0), (5, 5), #abc)", "  .x", "let k = 1", "  let k = 2",
-              "function f(a) {", "}", "circle((1, 2),", "  3, #000)", "for (let j = 0; j < 2; j = j + 1) {",
-              "x = 1; y = 2", "circle((1, 2), 3, #fff) -~> named [locked]", "canvas = {\"size\": (10, 10)}"]
+  "", "-~> a note", "    rect((0, 0), (5, 5), #abc)", "  .x", "let k = 1", "  let k = 2",
+  "function f(a) {", "}", "circle((1, 2),", "  3, #000)", "for (let j = 0; j < 2; j = j + 1) {",
+  "x = 1; y = 2", "circle((1, 2), 3, #fff) -~> named [locked]", "canvas = {\"size\": (10, 10)}"]
 
 -~> One random edit of the lines: change a line, put one in, take one out,
 -~> indent one, or put a character in the middle of one.
@@ -161,7 +161,7 @@ let u0_rows = rows_plain(doc_rows(u0, null, null))
 let u1 = doc_with(u0, list.slice(u0.lines, 0, 10) + ["  circle((1, 1), 1, #000)"] + list.slice(u0.lines, 10, len(u0.lines)), 11, 0)
 let u1_rows = rows_plain(doc_rows(u1, null, null))
 puts(u1.cache.rows_from.delta, rows_plain(doc_rows(u0, null, null)) === u0_rows,
-     rows_plain(doc_rows(u1, null, null)) === u1_rows, doc_rows(u1, null, null)[11].line)
+  rows_plain(doc_rows(u1, null, null)) === u1_rows, doc_rows(u1, null, null)[11].line)
 
 -~> An edit inside a layer, keeping the line count, splices the rows and keeps the rest.
 let a = doc_new(code)

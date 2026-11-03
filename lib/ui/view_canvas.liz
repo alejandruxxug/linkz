@@ -385,7 +385,7 @@ function view_paint_canvas_part(cl, was, now) {
   if (d !== null) {
     -~> whole UI pixels (2 x 2 blocks), inside the canvas buffer
     d = [math.max(0, math.floor(d[0] / 2) * 2), math.max(0, math.floor(d[1] / 2) * 2),
-         math.min(cr[2] * 2, math.ceil(d[2] / 2) * 2), math.min(cr[3] * 2, math.ceil(d[3] / 2) * 2)]
+      math.min(cr[2] * 2, math.ceil(d[2] / 2) * 2), math.min(cr[3] * 2, math.ceil(d[3] / 2) * 2)]
   }
   if (d === null || d[2] <= d[0] || d[3] <= d[1]) {
     g_ui()

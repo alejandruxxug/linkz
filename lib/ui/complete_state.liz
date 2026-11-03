@@ -14,8 +14,19 @@ use "editor_undo"
 use "i18n"
 use "perf"
 
-let cmp = {"open": false, "items": [], "sel": 0, "top": 0, "recent": [], "dismissed": null,
-           "ph": null, "word": null, "hint": null, "layout": null, "synced": ""}
+let cmp = {
+  "open": false,
+  "items": [],
+  "sel": 0,
+  "top": 0,
+  "recent": [],
+  "dismissed": null,
+  "ph": null,
+  "word": null,
+  "hint": null,
+  "layout": null,
+  "synced": ""
+}
 
 let cmp_max_visible = 8
 let cmp_max_items = 40
@@ -126,9 +137,9 @@ function cmp_sync_now() {
   if (cmp.open) {
     let w = cmp_word_at(doc_cur(m), m.col, true)
     if (w == null || cmp.word == null || m.line != cmp.word.line || w.start != cmp.word.start ||
-        w.prefix != cmp.word.prefix) {
-      cmp_close()
-    }
+      w.prefix != cmp.word.prefix) {
+        cmp_close()
+      }
   }
   if (cmp.ph != null && (m.line != cmp.ph.line || doc_cur(m) != cmp.ph.expect)) {
     cmp.ph = null
@@ -272,12 +283,12 @@ function cmp_ed_key(name, mods) {
   let old_len = len(doc_cur(m))
   let old_rows = len(m.lines)
   if (ph != null && ph.fresh && (k == "backspace" || k == "delete") && cmp_plain(mods) && m.line == ph.line &&
-      doc_cur(m) == ph.expect) {
-    let r = cmp_ph_replace(m, ph, "")
-    ed_apply(r.model, "delete")
-    cmp.ph = r.ph
-    return true
-  }
+    doc_cur(m) == ph.expect) {
+      let r = cmp_ph_replace(m, ph, "")
+      ed_apply(r.model, "delete")
+      cmp.ph = r.ph
+      return true
+    }
   let ok = ed_key(name, mods)
   cmp.ph = cmp_ph_track(cmp.ph, ed_model(), old_len, old_rows)
   if (was_open && (k == "backspace" || k == "delete")) {

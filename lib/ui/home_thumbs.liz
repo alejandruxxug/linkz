@@ -76,9 +76,17 @@ function home_scale_shape(s, k) {
   if (type(width) == "INTEGER" || type(width) == "FLOAT") {
     width = width * k
   }
-  {"path": home_scale_path(s.path, k), "fill": scale_paint(s.fill, k), "stroke": scale_paint(s.stroke, k),
-   "width": width, "rule": s.rule, "line": s.line, "widths": null,
-   "styles": s.styles, "layer": s.layer}
+  {
+    "path": home_scale_path(s.path, k),
+    "fill": scale_paint(s.fill, k),
+    "stroke": scale_paint(s.stroke, k),
+    "width": width,
+    "rule": s.rule,
+    "line": s.line,
+    "widths": null,
+    "styles": s.styles,
+    "layer": s.layer
+  }
 }
 
 -~> The size the canvas gets inside a box: as big as fits, never more than

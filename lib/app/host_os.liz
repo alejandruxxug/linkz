@@ -5,9 +5,8 @@
 -~>   os.home(), os.locale(), os.reveal(path), os.memory()   as in the Terrarium
 -~>   os.app_version()  the version of Linkz
 -~>   time.ms()         milliseconds since the program started
--~>   time.now()        seconds since 1970 (UTC), time.tz() the local offset in seconds
+-~>   time.now()        whole seconds since 1970 (UTC), time.tz() the local offset in seconds
 
-use "clock"
 use "version"
 
 -~> ~/.linkz, made when missing.
@@ -18,12 +17,20 @@ function host_config_dir() {
 }
 
 function host_os() {
-  {"config_dir": host_config_dir, "home": fs.home, "locale": os.locale, "reveal": os.reveal,
-   "memory": os.memory, "app_version": function() { linkz_version }}
+  {
+    "config_dir": host_config_dir,
+    "home": fs.home,
+    "locale": os.locale,
+    "reveal": os.reveal,
+    "memory": os.memory,
+    "app_version": function() { linkz_version }
+  }
 }
 
 function host_time() {
-  {"ms": time.ms,
-   "now": function() { clock_unix(host_config_dir()) },
-   "tz": function() { clock_offset(host_config_dir()) }}
+  {
+    "ms": time.ms,
+    "now": function() { int(time.now().epoch) },
+    "tz": function() { time.now().utc_offset }
+  }
 }

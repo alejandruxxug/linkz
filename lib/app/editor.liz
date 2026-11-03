@@ -32,8 +32,15 @@ function editor_options() {
 -~> (the last paint's or event's), "stats"}. stand_ins replace some of the
 -~> host's primitives (a test's own clipboard).
 function editor_load(win, path, settings, machine, modules = editor_modules, stand_ins = {}) {
-  let stats = {"paint_ms": 0, "event_ms": 0, "run_ms": 0, "run_errors": 0, "frames_painted": 0,
-    "events": 0, "events_coalesced": 0}
+  let stats = {
+    "paint_ms": 0,
+    "event_ms": 0,
+    "run_ms": 0,
+    "run_errors": 0,
+    "frames_painted": 0,
+    "events": 0,
+    "events_coalesced": 0
+  }
   let around = hash.merge(hash.merge(host_globals(win, true), {"settings": settings, "machine": machine}), stand_ins)
   around.src.run = function(code) {
     let r = drawing_run(code)
@@ -47,8 +54,16 @@ function editor_load(win, path, settings, machine, modules = editor_modules, sta
   }
   names.lang_init()
   names.app.start(path)
-  {"win": win, "names": names, "app": names.app, "path": path, "error": "", "stats": stats, "force": true,
-   "hover": null}
+  {
+    "win": win,
+    "names": names,
+    "app": names.app,
+    "path": path,
+    "error": "",
+    "stats": stats,
+    "force": true,
+    "hover": null
+  }
 }
 
 -~> Remembers an error of the editor's code and prints it; the last good
@@ -135,9 +150,11 @@ function editor_stats(ed) {
 -~> and Call runs the commands the editor exposes (app.debug_commands:
 -~> SetCode, Open, Save, SelectRow, SetProp, Tool, ...).
 function editor_hooks(ed) {
-  {"dump": function() { editor_dump(ed) },
-   "stats": function() { editor_stats(ed) },
-   "commands": ed.app.debug_commands}
+  {
+    "dump": function() { editor_dump(ed) },
+    "stats": function() { editor_stats(ed) },
+    "commands": ed.app.debug_commands
+  }
 }
 
 -~> The window, its surfaces and the window's own stats are in Dump already.

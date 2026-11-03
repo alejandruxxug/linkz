@@ -4,8 +4,13 @@
 puts(friendly_number(7), friendly_number(87), friendly_number(100), friendly_number(1234), friendly_number(99999), friendly_number(123456))
 
 function mach(free, warm, cold, run, bytes) {
-  recommend({"free": free, "warm_ms_per_object": warm, "cold_ms_per_object": cold,
-             "run_ms_per_object": run, "bytes_per_object": bytes})
+  recommend({
+    "free": free,
+    "warm_ms_per_object": warm,
+    "cold_ms_per_object": cold,
+    "run_ms_per_object": run,
+    "bytes_per_object": bytes
+  })
 }
 
 -~> speed: (100 - 2 x 1.0) / (0.25 + 0.05) = 326, x 0.8 = 261, friendly 260

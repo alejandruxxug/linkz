@@ -3,7 +3,7 @@
 -- printed and errors
 hi 3
  [{"column": 1, "line": 3, "message": "runtime error: identifier not found: nope"}] 1
-[{"column": 5, "line": 1, "message": "syntax error: expected identifier, got \"=\""}]
+[{"column": 5, "line": 1, "message": "syntax error: let needs a name before the \"=\", like let x = 1"}]
 -- library errors at the drawing's line
 [{"column": 0, "line": 4, "message": "circle: center must be a point like (10, 20), not INTEGER"}]
 [{"column": 0, "line": 3, "message": "circle: center must be a point like (10, 20), not INTEGER"}]
@@ -19,7 +19,7 @@ true
 [line 1, column 1] runtime error: circle: center must be a point like (10, 20), not INTEGER
 [line 2, column 13] runtime error: identifier not found: nope
 canvas: must be a hash like {"size": (400, 200), "background": #ffffff}, got INTEGER
-[line 2, column 1] syntax error: expected ")", got end of input
+[line 1, column 14] syntax error: the "(" at line 1, column 7 is never closed
 canvas: size must be between (1, 1) and (16384, 16384), got (400, 20000)
 -- paint
 (4, 4) #ff0000

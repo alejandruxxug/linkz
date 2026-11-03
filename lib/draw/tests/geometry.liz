@@ -44,7 +44,7 @@ puts(point_in_path(sq.path, (15, 15)), point_in_path(sq.path, (35, 15)), point_i
 
 -~> Two squares drawn the same way: the overlap still counts as inside (nonzero).
 let both = [["M", (0, 0)], ["L", (20, 0)], ["L", (20, 20)], ["L", (0, 20)], ["Z"],
-            ["M", (10, 10)], ["L", (30, 10)], ["L", (30, 30)], ["L", (10, 30)], ["Z"]]
+  ["M", (10, 10)], ["L", (30, 10)], ["L", (30, 30)], ["L", (10, 30)], ["Z"]]
 puts(point_in_path(both, (15, 15)), point_in_path(both, (5, 5)), point_in_path(both, (25, 5)))
 
 puts(distance_to_polyline([(0, 0), (10, 0), (10, 10)], (5, 4), false))

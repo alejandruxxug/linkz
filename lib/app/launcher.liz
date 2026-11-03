@@ -53,8 +53,19 @@ function splash_frame(sp, win, n, vine, bloom, with_error) {
 -~> The launch's state: the animation frame, the vine stage and bloom frame
 -~> shown, when the finished picture first showed, and how loading went.
 function launch_new(sp, slow) {
-  {"sp": sp, "slow": slow, "start": time.ms(), "n": -1, "stage": 0, "bloom": -1, "final_at": null,
-   "loaded": false, "ed": null, "error": null, "ticks": 0}
+  {
+    "sp": sp,
+    "slow": slow,
+    "start": time.ms(),
+    "n": -1,
+    "stage": 0,
+    "bloom": -1,
+    "final_at": null,
+    "loaded": false,
+    "ed": null,
+    "error": null,
+    "ticks": 0
+  }
 }
 
 -~> Milliseconds since the splash showed, on the splash's own clock (a
@@ -104,8 +115,16 @@ function launch_ready(l, now) {
 
 -~> Turns the splash window into the editor's window.
 function launch_become_editor(l, win, title) {
-  window.set(win, {"frameless": false, "floating": false, "scale": 2, "size": editor_size,
-    "min_size": editor_min_size, "resizable": true, "center": true, "title": title})
+  window.set(win, {
+    "frameless": false,
+    "floating": false,
+    "scale": 2,
+    "size": editor_size,
+    "min_size": editor_min_size,
+    "resizable": true,
+    "center": true,
+    "title": title
+  })
   window.automation(win, editor_hooks(l.ed))
   l.ed.force = true
 }
@@ -148,8 +167,12 @@ function launch_tick(l, win, events, load) {
 -~> message of a load that went wrong, after the splash showed it.
 function launch_run(sp, title, slow, load) {
   let info = sp.info
-  let win = window.open(info.size.x, info.size.y, title, {"scale": splash_scale, "frameless": true,
-    "transparent": true, "on_demand": true})
+  let win = window.open(info.size.x, info.size.y, title, {
+    "scale": splash_scale,
+    "frameless": true,
+    "transparent": true,
+    "on_demand": true
+  })
   let l = launch_new(sp, slow)
   splash_frame(sp, win, 0, 0, -1, false)
   let editing = false

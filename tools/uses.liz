@@ -15,8 +15,18 @@
 -~> The Terrarium's modules: a file that says json means the Terrarium's
 -~> unless it uses a module of its own that defines one (lib/mcp/json.liz),
 -~> so these names never ask for a use.
-let uses_terrarium = {"fs": true, "os": true, "time": true, "json": true, "img": true, "clip": true,
-  "io": true, "lizard": true, "window": true, "pen": true}
+let uses_terrarium = {
+  "fs": true,
+  "os": true,
+  "time": true,
+  "json": true,
+  "img": true,
+  "clip": true,
+  "io": true,
+  "lizard": true,
+  "window": true,
+  "pen": true
+}
 
 -~> The .liz files under dir, without tests and translations.
 function uses_files(dir) {

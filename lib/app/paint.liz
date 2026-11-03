@@ -1,7 +1,8 @@
 -~> paint: linkz paint prog.liz out.png [WxH] runs a lizard program with the
 -~> drawing and graphics libraries and fb on a transparent buffer of w by h
 -~> pixels (512 by 512 by default), then saves the buffer. It is how the
--~> graphics libraries are tried without a window.
+-~> graphics libraries are tried without a window. The libraries are alive
+-~> around the program: `raster_cache_limit = 4` changes the library's own.
 
 use "drawing"
 use "host"
@@ -32,14 +33,11 @@ function paint_run(code, size) {
       "), got " + str(size))
   }
   let target = img.new(size.x, size.y)
-  let tree = lizard.parse(code)
-  if (len(tree.errors) > 0) {
-    error("program: " + drawing_syntax_text(tree.errors))
+  let tr = drawing_tracker(code, false)
+  let r = drawing_exec(code, host_globals(target), tr, libs_draw + libs_gfx)
+  if (drawing_is_syntax(r.error)) {
+    error("program: " + drawing_syntax_text(code))
   }
-  let around = host_globals(target)
-  let tr = drawing_tracker(tree.program, false)
-  let names = libs_load(libs_draw + libs_gfx, around, tr.here)
-  let r = drawing_exec(code, hash.merge(around, names), tr)
   io.write(r.output)
   if (r.error != null) {
     error("program: " + drawing_attributed(r.error, tr))

@@ -98,7 +98,7 @@ function tip_tool_lines(id) {
 -~> The tooltip lines of a pen in the picker.
 function tip_pen_lines(name) {
   return [[tip_piece(name, 0, "bright"), tip_piece(" · pens." + name, g_text_w(name), "mute")],
-   [tip_piece(t(prefixed("pen.", name)), 0, "text")]]
+    [tip_piece(t(prefixed("pen.", name)), 0, "text")]]
 }
 
 -~> Where a tooltip of size [w, h] goes for a thing at rect [x, y, w, h]: just below it,
@@ -185,8 +185,14 @@ function tip_anchor(cl) {
   let s = "(" + str(math.round(p.x)) + ", " + str(math.round(p.y)) + ")"
   let u = view_anchor_ui(cl, p)
   let w = g_text_w(s) + 14
-  {"lines": [[tip_piece(s, 0, "amber")]], "x": math.max(2, u[0] - w - 8), "y": math.max(2, u[1] - 22), "w": w, "h": 21,
-   "key": "anchor"}
+  {
+    "lines": [[tip_piece(s, 0, "amber")]],
+    "x": math.max(2, u[0] - w - 8),
+    "y": math.max(2, u[1] - 22),
+    "w": w,
+    "h": 21,
+    "key": "anchor"
+  }
 }
 
 -~> == The pen picker ==

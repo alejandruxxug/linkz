@@ -56,28 +56,49 @@ function scan_is_word(s) {
 }
 
 -~> One line: its indent, and its -~> comment outside strings.
-function scan_line(n, line, chars) {
+function scan_line(n, line) {
+  let size = len(line)
   let indent = 0
-  while (indent < len(chars) && (chars[indent] == " " || chars[indent] == "\t")) {
+  while (indent < size && (line[indent] == " " || line[indent] == "\t")) {
     indent += 1
   }
   let comment = ""
+  let at = text.find(line, "-~>")
+  if (at >= 0) {
+    at = scan_comment_at(line, at)
+  }
+  if (at >= 0) {
+    comment = text.trim(text.slice(line, at + 3, size))
+  }
+  if (comment == "") {
+    return {"comment": "", "flags": [], "indent": indent, "line": n, "name": "", "text": line}
+  }
+  let name = text.trim(text.replace(text.replace(comment, "[hidden]", ""), "[locked]", ""))
+  {"comment": comment, "flags": scan_flags(comment), "indent": indent, "line": n, "name": name, "text": line}
+}
+
+-~> Where the first -~> of a line outside strings starts, given the first
+-~> one anywhere (at), or -1. Most lines have no quote before it.
+function scan_comment_at(line, at) {
+  let quote = text.find(line, "\"")
+  if (quote < 0 || quote > at) {
+    return at
+  }
+  let size = len(line)
   let in_string = false
-  for (let i = 0; i < len(chars); i += 1) {
-    let c = chars[i]
+  for (let i = 0; i < size; i += 1) {
+    let c = line[i]
     if (in_string && c == "\\") {
       i += 1
     } elif (c == "\"") {
       in_string = !in_string
-    } elif (!in_string && c == "-" && i + 2 < len(chars) && chars[i + 1] == "~" && chars[i + 2] == ">") {
-      comment = text.trim(text.join(list.slice(chars, i + 3, len(chars)), ""))
-    }
-    if (comment != "") {
-      break
+    } elif (!in_string && c == "-" && i + 2 < size && line[i + 1] == "~" && line[i + 2] == ">") {
+      if (text.trim(text.slice(line, i + 3, size)) != "") {
+        return i
+      }
     }
   }
-  let name = text.trim(text.replace(text.replace(comment, "[hidden]", ""), "[locked]", ""))
-  {"comment": comment, "flags": scan_flags(comment), "indent": indent, "line": n, "name": name, "text": line}
+  -1
 }
 
 -~> ---- tokens ----
@@ -87,9 +108,30 @@ let scan_closes = {")": true, "]": true, "}": true}
 
 -~> The tokens an operator line ends with, or the next line starts with, that
 -~> carry a statement on to the next line.
-let scan_carry_after = {"+": true, "-": true, "*": true, "/": true, "//": true, "**": true, "%": true,
-  "=": true, "==": true, "!=": true, "===": true, "!==": true, "<": true, ">": true, "<=": true,
-  ">=": true, "&&": true, "||": true, ",": true, ".": true, ":": true, "!": true}
+let scan_carry_after = {
+  "+": true,
+  "-": true,
+  "*": true,
+  "/": true,
+  "//": true,
+  "**": true,
+  "%": true,
+  "=": true,
+  "==": true,
+  "!=": true,
+  "===": true,
+  "!==": true,
+  "<": true,
+  ">": true,
+  "<=": true,
+  ">=": true,
+  "&&": true,
+  "||": true,
+  ",": true,
+  ".": true,
+  ":": true,
+  "!": true
+}
 let scan_carry_before = {"ELSE": true, "ELIF": true, ".": true, "&&": true, "||": true}
 
 -~> The text a token stands for: a string's value, else what is written.
@@ -100,26 +142,31 @@ function scan_lit(t) {
   t.text
 }
 
--~> The scanner of one source: its lines (as characters) and its tokens,
--~> without comments and without what the lexer rejected.
+-~> The scanner of one source: its lines, and its tokens without comments
+-~> and without what the lexer rejected. The type, line and column of token
+-~> k are also ty[k], ln[k] and col[k]: the loops over tokens read those.
 function scan_new(code) {
   let lines = text.lines(code)
-  let chars = []
   let infos = []
   for (let i = 0; i < len(lines); i += 1) {
-    let cs = text.split(lines[i], "")
-    push(chars, cs)
-    push(infos, scan_line(i + 1, lines[i], cs))
+    push(infos, scan_line(i + 1, lines[i]))
   }
   let all = lizard.tokens(code)
   let toks = []
+  let ty = []
+  let ln = []
+  let col = []
   for (let i = 0; i < len(all); i += 1) {
-    let k = all[i].type
+    let t = all[i]
+    let k = t.type
     if (k != "COMMENT" && k != "ILLEGAL" && k != "EOF") {
-      push(toks, all[i])
+      push(toks, t)
+      push(ty, k)
+      push(ln, t.line)
+      push(col, t.column)
     }
   }
-  {"lines": infos, "chars": chars, "toks": toks, "n": len(toks), "pos": 0}
+  {"lines": infos, "src": lines, "toks": toks, "ty": ty, "ln": ln, "col": col, "n": len(toks), "pos": 0}
 }
 
 -~> Whether the statement goes on after token i, which ends a line at
@@ -128,38 +175,41 @@ function scan_continues(p, i) {
   if (i + 1 >= p.n) {
     return false
   }
-  scan_carry_after[p.toks[i].type] == true || scan_carry_before[p.toks[i + 1].type] == true
+  scan_carry_after[p.ty[i]] == true || scan_carry_before[p.ty[i + 1]] == true
 }
 
 -~> The index after the last token of the statement that starts at i.
 function scan_extent(p, i) {
-  let toks = p.toks
+  let ty = p.ty
+  let ln = p.ln
+  let n = p.n
   let depth = 0
-  for (let j = i; j < p.n; j += 1) {
-    let t = toks[j]
-    if (scan_opens[t.type] == true) {
+  for (let j = i; j < n; j += 1) {
+    let k = ty[j]
+    if (scan_opens[k] == true) {
       depth += 1
-    } elif (scan_closes[t.type] == true) {
+    } elif (scan_closes[k] == true) {
       if (depth == 0) {
         return j
       }
       depth -= 1
-    } elif (t.type == ";" && depth == 0) {
+    } elif (k == ";" && depth == 0) {
       return j + 1
     }
-    if (depth == 0 && j + 1 < p.n && toks[j + 1].line > t.line && !scan_continues(p, j)) {
+    if (depth == 0 && j + 1 < n && ln[j + 1] > ln[j] && !scan_continues(p, j)) {
       return j + 1
     }
   }
-  p.n
+  n
 }
 
 -~> The index of the bracket that closes the one at open, looking before
 -~> `to`, or -1.
 function scan_matching(p, open, to) {
+  let types = p.ty
   let depth = 0
   for (let k = open; k < to; k += 1) {
-    let ty = p.toks[k].type
+    let ty = types[k]
     if (scan_opens[ty] == true) {
       depth += 1
     } elif (scan_closes[ty] == true) {
@@ -175,30 +225,44 @@ function scan_matching(p, open, to) {
 -~> The source between two positions without the blanks at its end, and the
 -~> column where that text really ends: [text, end].
 function scan_trimmed(p, l1, c1, l2, c2) {
-  let parts = []
-  for (let l = l1; l <= l2 && l <= len(p.chars); l += 1) {
-    let rs = p.chars[l - 1]
-    let from = 0
-    let to = len(rs)
-    if (l == l1) {
-      from = c1 - 1
+  let src = p.src
+  let whole = ""
+  if (l1 == l2 && l1 <= len(src)) {
+    let line = src[l1 - 1]
+    let to = math.min(c2 - 1, len(line))
+    whole = text.slice(line, math.min(c1 - 1, to), to)
+  } else {
+    let parts = []
+    for (let l = l1; l <= l2 && l <= len(src); l += 1) {
+      let line = src[l - 1]
+      let from = 0
+      let to = len(line)
+      if (l == l1) {
+        from = c1 - 1
+      }
+      if (l == l2) {
+        to = math.min(c2 - 1, len(line))
+      }
+      if (from > to) {
+        from = to
+      }
+      push(parts, text.slice(line, from, to))
     }
-    if (l == l2) {
-      to = math.min(c2 - 1, len(rs))
-    }
-    if (from > to) {
-      from = to
-    }
-    push(parts, text.join(list.slice(rs, from, to), ""))
+    whole = text.join(parts, "\n")
   }
-  let whole = text.join(parts, "\n")
-  let cs = text.split(whole, "")
-  let cut = len(cs)
-  while (cut > 0 && (cs[cut - 1] == " " || cs[cut - 1] == "\t" || cs[cut - 1] == "\r" || cs[cut - 1] == "\n")) {
+  let size = len(whole)
+  let cut = size
+  while (cut > 0 && scan_blanks[whole[cut - 1]] == true) {
     cut -= 1
   }
-  [text.join(list.slice(cs, 0, cut), ""), c2 - (len(cs) - cut)]
+  if (cut == size) {
+    return [whole, c2]
+  }
+  [text.slice(whole, 0, cut), c2 - (size - cut)]
 }
+
+-~> The characters trimmed from the end of a span.
+let scan_blanks = {" ": true, "\t": true, "\r": true, "\n": true}
 
 -~> ---- statements ----
 
@@ -226,8 +290,19 @@ function scan_block(p, layer_col, depth) {
 
 -~> A new statement with the keys every one has.
 function scan_stmt(line, end_line, column, depth, kind) {
-  {"args": [], "callee": "", "children": [], "column": column, "depth": depth, "end_line": end_line,
-   "flags": [], "kind": kind, "label": "", "line": line, "name": ""}
+  {
+    "args": [],
+    "callee": "",
+    "children": [],
+    "column": column,
+    "depth": depth,
+    "end_line": end_line,
+    "flags": [],
+    "kind": kind,
+    "label": "",
+    "line": line,
+    "name": ""
+  }
 }
 
 -~> The statement that starts at p.pos; p.pos moves past it.
@@ -284,7 +359,7 @@ function scan_statement(p, depth) {
 -~> the commas of depth 0, so (0.5, 0.5), [1, 2] or "a,b" stay one default.
 function scan_params(p, from, to) {
   let out = []
-  if (from >= to || p.toks[from].type != "(") {
+  if (from >= to || p.ty[from] != "(") {
     return out
   }
   let close = scan_matching(p, from, to)
@@ -295,7 +370,7 @@ function scan_params(p, from, to) {
   let depth = 0
   for (let k = from + 1; k <= close && k <= to; k += 1) {
     if (k < close) {
-      let ty = p.toks[k].type
+      let ty = p.ty[k]
       if (scan_opens[ty] == true) {
         depth += 1
         continue
@@ -325,13 +400,13 @@ function scan_param(p, start, end, to) {
     return d
   }
   d.name = scan_lit(first)
-  if (end - start > 2 && p.toks[start + 1].type == "=") {
+  if (end - start > 2 && p.ty[start + 1] == "=") {
     let value = p.toks[start + 2]
-    let line = len(p.chars)
-    let col = len(p.chars[line - 1]) + 1
+    let line = len(p.src)
+    let col = len(p.src[line - 1]) + 1
     if (end < to) {
-      line = p.toks[end].line
-      col = p.toks[end].column
+      line = p.ln[end]
+      col = p.col[end]
     }
     d.default = scan_trimmed(p, value.line, value.column, line, col)[0]
   }
@@ -380,7 +455,7 @@ function scan_bodies(p, from, to, depth) {
   let out = []
   let paren = 0
   for (let k = from; k < to; k += 1) {
-    let ty = p.toks[k].type
+    let ty = p.ty[k]
     if (ty == "(" || ty == "[") {
       paren += 1
     } elif (ty == ")" || ty == "]") {
@@ -397,65 +472,65 @@ function scan_bodies(p, from, to, depth) {
 -~> The arguments between the brackets at open and close, split at the
 -~> commas of depth 0.
 function scan_args(p, open, close) {
+  let types = p.ty
   let out = []
   let start = open + 1
   let depth = 0
   for (let k = open + 1; k <= close; k += 1) {
-    let t = p.toks[k]
-    if (k < close && scan_opens[t.type] == true) {
+    let ty = types[k]
+    if (k < close && scan_opens[ty] == true) {
       depth += 1
-      continue
-    }
-    if (k < close && scan_closes[t.type] == true) {
+    } elif (k < close && scan_closes[ty] == true) {
       depth -= 1
-      continue
-    }
-    if ((k == close || (t.type == "," && depth == 0)) && k > start) {
-      push(out, scan_arg(p, start, k, t))
+    } elif ((k == close || (ty == "," && depth == 0)) && k > start) {
+      push(out, scan_arg(p, start, k, k))
       start = k + 1
-    } elif (t.type == "," && depth == 0) {
+    } elif (ty == "," && depth == 0) {
       start = k + 1
     }
   }
   out
 }
 
--~> One argument: the tokens from up to to, ended by the token `term`. Its
+-~> One argument: the tokens from up to to, ended by the token at term. Its
 -~> kind is number, color, string, array, point (whose items are scanned
 -~> too) or expr.
 function scan_arg(p, from, to, term) {
-  let first = p.toks[from]
-  let cut = scan_trimmed(p, first.line, first.column, term.line, term.column)
-  let a = {"end": cut[1], "end_line": term.line, "items": [], "kind": "expr", "line": first.line,
-    "start": first.column, "text": cut[0]}
-  if (a.end <= a.start && a.end_line == a.line) {
-    a.end = a.start
+  let line = p.ln[from]
+  let start = p.col[from]
+  let end_line = p.ln[term]
+  let cut = scan_trimmed(p, line, start, end_line, p.col[term])
+  let end = cut[1]
+  if (end <= start && end_line == line) {
+    end = start
   }
   let count = to - from
-  let ty = first.type
+  let ty = p.ty[from]
+  let kind = "expr"
+  let items = []
   if (count == 1 && (ty == "INT" || ty == "FLOAT")) {
-    a.kind = "number"
-  } elif (count == 2 && ty == "-" && (p.toks[from + 1].type == "INT" || p.toks[from + 1].type == "FLOAT")) {
-    a.kind = "number"
+    kind = "number"
+  } elif (count == 2 && ty == "-" && (p.ty[from + 1] == "INT" || p.ty[from + 1] == "FLOAT")) {
+    kind = "number"
   } elif (count == 1 && ty == "COLOR") {
-    a.kind = "color"
+    kind = "color"
   } elif (count == 1 && ty == "STRING") {
-    a.kind = "string"
+    kind = "string"
   } elif (ty == "[" && scan_matching(p, from, to) == to - 1) {
-    a.kind = "array"
-    a.items = scan_args(p, from, to - 1)
+    kind = "array"
+    items = scan_args(p, from, to - 1)
   } elif (ty == "(" && scan_matching(p, from, to) == to - 1 && scan_has_comma(p, from, to)) {
-    a.kind = "point"
-    a.items = scan_args(p, from, to - 1)
+    kind = "point"
+    items = scan_args(p, from, to - 1)
   }
-  a
+  {"end": end, "end_line": end_line, "items": items, "kind": kind, "line": line, "start": start, "text": cut[0]}
 }
 
 -~> Whether the brackets from up to to hold a comma of their own.
 function scan_has_comma(p, from, to) {
   let depth = 0
   for (let k = from + 1; k < to - 1; k += 1) {
-    let ty = p.toks[k].type
+    let ty = p.ty[k]
     if (scan_opens[ty] == true) {
       depth += 1
     } elif (scan_closes[ty] == true) {
@@ -490,9 +565,22 @@ function scan_decorate(p, s, defs) {
   for (let i = 0; i < len(defs); i += 1) {
     push(names, defs[i].name)
   }
-  {"args": s.args, "callee": s.callee, "children": s.children, "column": s.column, "depth": s.depth,
-   "doc": scan_doc(p, s.line, names), "end_line": s.end_line, "flags": s.flags, "kind": s.kind,
-   "label": s.label, "line": s.line, "name": s.name, "param_defaults": defs, "params": names}
+  {
+    "args": s.args,
+    "callee": s.callee,
+    "children": s.children,
+    "column": s.column,
+    "depth": s.depth,
+    "doc": scan_doc(p, s.line, names),
+    "end_line": s.end_line,
+    "flags": s.flags,
+    "kind": s.kind,
+    "label": s.label,
+    "line": s.line,
+    "name": s.name,
+    "param_defaults": defs,
+    "params": names
+  }
 }
 
 -~> ---- doc comments ----

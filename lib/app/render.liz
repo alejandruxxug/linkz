@@ -10,19 +10,17 @@ use "libs"
 -~> any line of the drawing: an error in it (a bad canvas) is its message
 -~> alone.
 function render_svg(code) {
-  let tree = lizard.parse(code)
-  if (len(tree.errors) > 0) {
-    error(drawing_syntax_text(tree.errors))
+  let tr = drawing_tracker(code, false)
+  let r = drawing_exec(code, {}, tr)
+  if (drawing_is_syntax(r.error)) {
+    error(drawing_syntax_text(code))
   }
-  let tr = drawing_tracker(tree.program, false)
-  let names = libs_load(libs_draw, {}, tr.here)
-  let r = drawing_exec(code, names, tr)
   io.write(r.output)
   if (r.error != null) {
     error(drawing_attributed(r.error, tr))
   }
   try {
-    return names.svg_document(r.globals.canvas, r.globals.drawing)
+    return libs_load(["draw/svg"]).svg_document(r.canvas, r.drawing)
   } catch (e) {
     error(e.message)
   }
