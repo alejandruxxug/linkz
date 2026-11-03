@@ -51,5 +51,7 @@ Write lizard-script → see the drawing update → tweak (code or, later, drag o
 | 2026-11-02 | **Multi-language UI from the start**: `t("key")`, one lizard file per language (en, es first), Latin-1 pixel font | "from the start could we maybe add multi lang support or for it to slot in easily" |
 | 2026-11-02 | **Splash banner**: frameless, transparent window with the pixel Linkz logo, a lizard crawling behind it, "powered by lizard-script" | The developer's request; lizard pre-draws the frames, Go only flips them while the editor loads |
 | 2026-11-02 | **UI like Aseprite, but black and dark** ("Linkz Dark" palette replaces Lizard 16); views designed in Figma via Figwright and approved there before B007 builds them | The developer's direction; UI is approved as Figma frames first |
+| 2026-11-02 | **Home screen** gallery: working + past drawings with small previews rendered by lizard, cached by file hash | The developer's request |
+| 2026-11-02 | Splash: lizard walks in place under "ink", bloom held 1 s, setting `skip_loading_anim` in `~/.linkz/settings.liz` (lizard code) | The developer's request |
 | 2026-11-02 | Named **Linkz** (lizard inkz); files stay `.lzdraw` | The developer's pick |
 | 2026-11-02 | lizard-script stays its own repo; Linkz imports it | Language work counts for the course; Linkz stays private until the reveal |
