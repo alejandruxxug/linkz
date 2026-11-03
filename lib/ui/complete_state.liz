@@ -1,0 +1,272 @@
+-~> complete_state: the open suggestion list, the placeholders of an inserted
+-~> call and the keys that drive them. It uses the editor's `ed` (model and undo)
+-~> and the pure functions of complete_model; the view only calls these.
+-~>   cmp_ed_type(s)        typing (replaces a selected argument first)
+-~>   cmp_intercept(k, mods) the keys the open list or the arguments take
+-~>   cmp_ed_key(name, mods) any other key, then the list follows the caret
+-~>   cmp_sync()            after anything changed: close a stale list, redo the hint
+
+let cmp = {"open": false, "items": [], "sel": 0, "top": 0, "recent": [], "dismissed": null,
+           "ph": null, "word": null, "hint": null, "layout": null}
+
+let cmp_max_visible = 8
+let cmp_max_items = 40
+
+function cmp_close() {
+  cmp.open = false
+  cmp.items = []
+  cmp.sel = 0
+  cmp.top = 0
+  cmp.word = null
+}
+
+-~> Clears everything (a new document starts without suggestions).
+function cmp_reset() {
+  cmp_close()
+  cmp.ph = null
+  cmp.hint = null
+  cmp.dismissed = null
+  cmp.layout = null
+}
+
+-~> == Opening ==
+
+-~> Works out the list for the word at the caret. force opens it even with no letters
+-~> typed. The list opens only for a word being typed (or after a dot), and stays
+-~> closed for a word the user dismissed with Esc.
+function cmp_refresh(force) {
+  let m = ed_model()
+  if (m.sel != null) {
+    cmp_close()
+    return null
+  }
+  let w = cmp_word_at(doc_cur(m), m.col, force)
+  if (w == null) {
+    cmp_close()
+    return null
+  }
+  let d = cmp.dismissed
+  if (d != null && !force) {
+    if (d.line == m.line && d.start == w.start) {
+      cmp_close()
+      return null
+    }
+  }
+  cmp.dismissed = null
+  let ranked = cmp_rank(cmp_candidates(m, w.owner, ed_docs()), w.prefix, cmp.recent)
+  if (len(ranked) > cmp_max_items) {
+    ranked = list.slice(ranked, 0, cmp_max_items)
+  }
+  if (len(ranked) == 0) {
+    cmp_close()
+    return null
+  }
+  let key = str(m.line) + ":" + str(w.start) + ":" + w.prefix
+  if (!cmp.open || cmp.word == null || cmp.word.key != key) {
+    cmp.sel = 0
+    cmp.top = 0
+  }
+  w.key = key
+  w.line = m.line
+  cmp.word = w
+  cmp.items = ranked
+  cmp.open = true
+  cmp.sel = math.min(cmp.sel, len(ranked) - 1)
+  null
+}
+
+-~> The Complete command: opens the list at the caret even with nothing typed.
+function cmp_force() {
+  cmp.dismissed = null
+  cmp_refresh(true)
+  cmp.open
+}
+
+-~> == Following the editor ==
+
+-~> After anything changed: the list closes when the caret left its word, the
+-~> arguments end when the line changed under them, the hint follows the caret.
+function cmp_sync() {
+  let m = ed_model()
+  if (cmp.open) {
+    let w = cmp_word_at(doc_cur(m), m.col, true)
+    if (w == null || cmp.word == null || m.line != cmp.word.line || w.start != cmp.word.start ||
+        w.prefix != cmp.word.prefix) {
+      cmp_close()
+    }
+  }
+  if (cmp.ph != null && (m.line != cmp.ph.line || doc_cur(m) != cmp.ph.expect)) {
+    cmp.ph = null
+  }
+  cmp.hint = cmp_hint_at(m, ed_docs())
+}
+
+-~> == Accepting ==
+
+function cmp_remember(name) {
+  let at = list.index(cmp.recent, name)
+  if (at >= 0) {
+    list.remove(cmp.recent, at)
+  }
+  cmp.recent = [name] + cmp.recent
+  if (len(cmp.recent) > 24) {
+    list.remove(cmp.recent, 24)
+  }
+}
+
+-~> Puts the selected item into the text: one undo step, "insert <name>". A function
+-~> becomes its call with the first argument selected.
+function cmp_accept_selected() {
+  if (!cmp.open || cmp.sel >= len(cmp.items)) {
+    return false
+  }
+  let item = cmp.items[cmp.sel].item
+  let m = ed_model()
+  let w = cmp_word_at(doc_cur(m), m.col, true)
+  if (w == null) {
+    cmp_close()
+    return false
+  }
+  let r = cmp_accept(m, w, item)
+  ed_label("complete", {"name": item.name})
+  ed_apply(r.model, null)
+  cmp.ph = r.ph
+  cmp_remember(item.name)
+  cmp_close()
+  true
+}
+
+function cmp_move(dir) {
+  let n = len(cmp.items)
+  if (n == 0) {
+    return null
+  }
+  cmp.sel = (cmp.sel + dir + n) % n
+  if (cmp.sel < cmp.top) {
+    cmp.top = cmp.sel
+  }
+  if (cmp.sel >= cmp.top + cmp_max_visible) {
+    cmp.top = cmp.sel - cmp_max_visible + 1
+  }
+  if (dir > 0 && cmp.sel == 0) {
+    cmp.top = 0
+  }
+}
+
+-~> == Keys ==
+
+function cmp_plain(mods) {
+  mods == null || (mods.cmd != true && mods.ctrl != true && mods.alt != true)
+}
+
+-~> A key while the list is open or arguments are selected. True when it was used
+-~> (then nothing else should handle it).
+-~>   list open: Up, Down move; Tab, Enter accept; Esc closes
+-~>   arguments: Tab selects the next, Shift+Tab the previous; Esc forgets them
+-~> Enter does nothing here with the list closed: it is the normal new row.
+function cmp_intercept(k, mods) {
+  if (!cmp_plain(mods)) {
+    return false
+  }
+  let shift = mods != null && mods.shift == true
+  if (cmp.open) {
+    if (k == "escape") {
+      let w = cmp.word
+      cmp.dismissed = {"line": w.line, "start": w.start}
+      cmp_close()
+      return true
+    }
+    if (k == "arrowdown" && !shift) {
+      cmp_move(1)
+      return true
+    }
+    if (k == "arrowup" && !shift) {
+      cmp_move(-1)
+      return true
+    }
+    if ((k == "tab" || k == "enter" || k == "return") && !shift) {
+      return cmp_accept_selected()
+    }
+    return false
+  }
+  if (cmp.ph != null) {
+    let m = ed_model()
+    if (k == "escape") {
+      cmp.ph = null
+      return true
+    }
+    if (k == "tab" && m.line == cmp.ph.line && doc_cur(m) == cmp.ph.expect) {
+      let dir = 1
+      if (shift) {
+        dir = -1
+      }
+      let r = cmp_ph_step(m, cmp.ph, dir)
+      ed_apply(r.model, null)
+      cmp.ph = r.ph
+      return true
+    }
+  }
+  false
+}
+
+-~> Typing. A selected argument is replaced by what is typed; otherwise the text goes in
+-~> at the caret. Then the list follows (it opens for a word being typed).
+function cmp_ed_type(s) {
+  let m = ed_model()
+  let ph = cmp.ph
+  if (ph != null && ph.fresh && m.line == ph.line && doc_cur(m) == ph.expect) {
+    let r = cmp_ph_replace(m, ph, s)
+    ed_apply(r.model, "type")
+    cmp.ph = r.ph
+  } else {
+    let old_len = len(doc_cur(m))
+    let old_rows = len(m.lines)
+    ed_type(s)
+    cmp.ph = cmp_ph_track(cmp.ph, ed_model(), old_len, old_rows)
+  }
+  cmp_refresh(false)
+}
+
+-~> A key the editor handles (Backspace, arrows, ...): the arguments are kept in step
+-~> and an open list follows the word.
+function cmp_ed_key(name, mods) {
+  let k = text.lower(name)
+  let m = ed_model()
+  let ph = cmp.ph
+  let was_open = cmp.open
+  let old_len = len(doc_cur(m))
+  let old_rows = len(m.lines)
+  if (ph != null && ph.fresh && (k == "backspace" || k == "delete") && cmp_plain(mods) && m.line == ph.line &&
+      doc_cur(m) == ph.expect) {
+    let r = cmp_ph_replace(m, ph, "")
+    ed_apply(r.model, "delete")
+    cmp.ph = r.ph
+    return true
+  }
+  let ok = ed_key(name, mods)
+  cmp.ph = cmp_ph_track(cmp.ph, ed_model(), old_len, old_rows)
+  if (was_open && (k == "backspace" || k == "delete")) {
+    cmp_refresh(false)
+  }
+  ok
+}
+
+-~> What the backdoor's Dump shows: the list ({"open", "items", "selected"}), the signature
+-~> hint (callee and the current parameter) and the argument that is selected.
+function cmp_debug_state() {
+  cmp_sync()
+  let names = []
+  for (let i = 0; i < len(cmp.items); i = i + 1) {
+    push(names, cmp.items[i].item.name)
+  }
+  let hint = null
+  if (cmp.hint != null) {
+    hint = {"callee": cmp.hint.callee, "param": cmp.hint.param, "index": cmp.hint.index}
+  }
+  let arg = null
+  if (cmp.ph != null && cmp.ph.fresh) {
+    let sp = cmp.ph.spans[cmp.ph.cur]
+    arg = text.slice(cmp.ph.expect, sp[0], sp[1])
+  }
+  {"open": cmp.open, "items": names, "selected": cmp.sel, "hint": hint, "arg": arg}
+}

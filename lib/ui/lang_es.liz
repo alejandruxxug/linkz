@@ -178,5 +178,13 @@ lang_register("es", {
   "undo.nothing": "nada que deshacer",
   "undo.nothing_redo": "nada que rehacer",
   "undo.move_kind": "mover {kind}",
-  "status.anchor_selected": "ancla {n} seleccionada · Supr la quita"
+  "status.anchor_selected": "ancla {n} seleccionada · Supr la quita",
+  "undo.complete": "insertar {name}",
+  "complete.header": "sugerencias",
+  "complete.fn": "función de dibujo",
+  "complete.user": "tu función",
+  "complete.let": "tu valor",
+  "complete.layer": "tu capa",
+  "complete.kw": "palabra clave",
+  "complete.member": "parte de {owner}"
 })

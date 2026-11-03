@@ -36,7 +36,7 @@ function editor_debug_state() {
    "selection": {"row": m.line, "rows": sel}, "caret": {"line": m.line, "col": m.col},
    "properties": shown, "errors": ed.errors, "stale": ed.stale, "status": ed.status,
    "refusal": ed.refusal, "shapes": len(ed.shapes), "run": ed.stats, "can_undo": len(ed.undo) > 0,
-   "can_redo": len(ed.redo) > 0, "code": doc_text(m)}
+   "can_redo": len(ed.redo) > 0, "code": doc_text(m), "complete": cmp_debug_state()}
 }
 
 -~> All the arguments from index `from` joined with spaces (so a value with
@@ -79,6 +79,7 @@ function editor_debug_commands() {
     "Caret": function(args) { ed_set_caret(args[0], args[1]); cmd_result(true) },
     "Undo": function(args) { cmd_result(ed_undo()) },
     "Redo": function(args) { cmd_result(ed_redo()) },
+    "Complete": function(args) { cmp_force(); cmd_result(cmp.open) },
     "Language": function(args) { cmd_result(set_language(str(args[0]))) },
     "PencilStroke": function(args) { cmd_result(pencil_commit(cmd_samples(args), doc_current_layer(ed_model()))) }
   }

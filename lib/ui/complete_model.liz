@@ -1,0 +1,635 @@
+-~> complete_model: autocomplete as plain functions on a line of text, a caret
+-~> and the editor's docs. Nothing here draws or touches the editor's state:
+-~> the word at the caret, what can complete it, how the matches rank, the
+-~> call that is inserted for a function (with the spans of its arguments) and
+-~> the call the caret is inside (for the signature hint).
+-~> complete_state.liz keeps the open list and the keys; complete_view.liz draws.
+-~>
+-~> An item is {"name", "kind", "sig", "summary", "example", "params", "lower"};
+-~> kind is fn (a drawing function), user (the document's own function), let,
+-~> layer, kw (keyword) or member (after a dot).
+
+let cmp_keywords = ["let", "function", "layer", "if", "elif", "else", "for", "while", "return", "break",
+                    "continue", "try", "catch", "true", "false", "null"]
+
+-~> The words before a "(" that open no call: `if (`, `function foo(`, ...
+let cmp_not_calls = ["if", "elif", "while", "for", "catch", "function", "try", "else", "return", "let", "layer"]
+
+-~> The names that are not completed where a new name is being made.
+let cmp_declares = ["let", "function", "layer"]
+
+-~> == The word at the caret ==
+
+-~> The last word of a text before its end: "" when it ends in a space or punctuation.
+function cmp_word_before(s, end) {
+  let b = end
+  while (b > 0 && code_is_word(s[b - 1])) {
+    b = b - 1
+  }
+  text.slice(s, b, end)
+}
+
+-~> Whether the character at index i of a line is inside a comment, string, color or number.
+function cmp_in_literal(s, i) {
+  let toks = code_tokens(s)
+  for (let k = 0; k < len(toks); k = k + 1) {
+    let tk = toks[k]
+    if (i >= tk[1] && i < tk[2]) {
+      return tk[0] == "comment" || tk[0] == "string" || tk[0] == "color" || tk[0] == "number"
+    }
+  }
+  false
+}
+
+-~> The word a completion works on at (line text s, column col), or null when there
+-~> is none to complete: {"start", "end", "prefix", "owner"}. start..end is the whole
+-~> word (what an accept replaces), prefix is the part before the caret, owner is the
+-~> name before a dot ("math" in `math.s`) or null. With force, no word is fine.
+function cmp_word_at(s, col, force) {
+  let a = col
+  while (a > 0 && code_is_word(s[a - 1])) {
+    a = a - 1
+  }
+  let b = col
+  while (b < len(s) && code_is_word(s[b])) {
+    b = b + 1
+  }
+  let prefix = text.slice(s, a, col)
+  let owner = null
+  if (a > 0 && s[a - 1] == ".") {
+    owner = cmp_word_before(s, a - 1)
+    if (owner == "") {
+      return null
+    }
+  }
+  if (prefix == "" && owner == null && !force) {
+    return null
+  }
+  if (prefix != "" && code_is_digit(prefix[0])) {
+    return null
+  }
+  if (col > 0 && prefix != "" && cmp_in_literal(s, col - 1)) {
+    return null
+  }
+  if (owner == null) {
+    let before = text.trim(text.slice(s, 0, a))
+    let prev = cmp_word_before(before, len(before))
+    if (list.index(cmp_declares, prev) >= 0) {
+      return null
+    }
+  }
+  {"start": a, "end": b, "prefix": prefix, "owner": owner}
+}
+
+-~> == Matching and ranking ==
+
+-~> Whether every letter of the prefix can be found in order in the name; with
+-~> starts_only the letters after the first must begin a part of the name (after "_").
+-~> Returns the matched indexes in the name, or null. Both lower case.
+function cmp_subsequence(p, n, starts_only) {
+  if (len(p) == 0 || len(n) == 0 || p[0] != n[0]) {
+    return null
+  }
+  let hits = [0]
+  let at = 1
+  for (let j = 1; j < len(p); j = j + 1) {
+    let found = -1
+    for (let i = at; i < len(n) && found < 0; i = i + 1) {
+      if (n[i] == p[j] && (!starts_only || n[i - 1] == "_")) {
+        found = i
+      }
+    }
+    if (found < 0) {
+      return null
+    }
+    push(hits, found)
+    at = found + 1
+  }
+  hits
+}
+
+-~> How a prefix matches a name: {"tier", "hits"} or null.
+-~>   tier 0: the name starts with the prefix      (ci -> circle)
+-~>   tier 1: letters start the parts of the name  (sw -> stroke_width)
+-~>   tier 2: the letters appear in order          (crc -> circle)
+function cmp_match(prefix, lower_name) {
+  let p = text.lower(prefix)
+  if (p == "") {
+    return {"tier": 0, "hits": []}
+  }
+  if (text.starts(lower_name, p)) {
+    let hits = []
+    for (let i = 0; i < len(p); i = i + 1) {
+      push(hits, i)
+    }
+    return {"tier": 0, "hits": hits}
+  }
+  let hits = cmp_subsequence(p, lower_name, true)
+  if (hits != null) {
+    return {"tier": 1, "hits": hits}
+  }
+  hits = cmp_subsequence(p, lower_name, false)
+  if (hits != null) {
+    return {"tier": 2, "hits": hits}
+  }
+  null
+}
+
+-~> Where a name is in the recently accepted list (0 = latest), or a big number.
+function cmp_recent_rank(recent, name) {
+  let at = list.index(recent, name)
+  if (at < 0) {
+    return 1000
+  }
+  at
+}
+
+-~> The items that match the prefix, best first: {"item", "tier", "hits"}.
+-~> Order: prefix before word starts before fuzzy, then recently accepted, then
+-~> shorter names, then alphabetical. A word that is already a whole name (a keyword, a
+-~> value, a member) gives no list at all: it is done. A function typed in full is still
+-~> suggested, since accepting it inserts its call.
+function cmp_rank(items, prefix, recent) {
+  let found = []
+  for (let i = 0; i < len(items); i = i + 1) {
+    if (prefix != "" && items[i].name == prefix && cmp_snippet(items[i]) == null) {
+      return found
+    }
+  }
+  for (let i = 0; i < len(items); i = i + 1) {
+    let it = items[i]
+    let mt = cmp_match(prefix, it.lower)
+    if (mt != null) {
+      push(found, {"item": it, "tier": mt.tier, "hits": mt.hits, "recent": cmp_recent_rank(recent, it.name)})
+    }
+  }
+  list.sort(found, function(a, b) {
+    if (a.tier != b.tier) {
+      return a.tier < b.tier
+    }
+    if (a.recent != b.recent) {
+      return a.recent < b.recent
+    }
+    if (prefix != "" && len(a.item.name) != len(b.item.name)) {
+      return len(a.item.name) < len(b.item.name)
+    }
+    a.item.name < b.item.name
+  })
+}
+
+-~> == Where the names come from ==
+
+function cmp_item(name, kind, sig, summary, example, params) {
+  {"name": name, "kind": kind, "sig": sig, "summary": summary, "example": example, "params": params,
+   "lower": text.lower(name)}
+}
+
+function cmp_sig(name, params) {
+  name + "(" + text.join(params, ", ") + ")"
+}
+
+-~> The library's documented functions (computed once: the docs do not change in a session).
+let cmp_lib_cache = {"items": []}
+
+function cmp_library_items(docs) {
+  if (docs == null) {
+    return []
+  }
+  if (len(cmp_lib_cache.items) > 0) {
+    return cmp_lib_cache.items
+  }
+  let out = []
+  let names = list.sort(keys(docs))
+  for (let i = 0; i < len(names); i = i + 1) {
+    let d = docs[names[i]]
+    if (d.doc.summary != "") {
+      push(out, cmp_item(names[i], "fn", cmp_sig(names[i], d.params), d.doc.summary, d.doc.example, d.params))
+    }
+  }
+  cmp_lib_cache.items = out
+  out
+}
+
+-~> The functions, values and layers a parsed document defines, as items (first
+-~> definition of a name wins, the document's own functions hide library ones).
+function cmp_user_items(statements, out, seen) {
+  for (let i = 0; i < len(statements); i = i + 1) {
+    let st = statements[i]
+    if (st.name != "" && seen[st.name] == null) {
+      if (st.kind == "function") {
+        seen[st.name] = true
+        push(out, cmp_item(st.name, "user", cmp_sig(st.name, st.params), st.doc.summary, st.doc.example, st.params))
+      } elif (st.kind == "let") {
+        seen[st.name] = true
+        push(out, cmp_item(st.name, "let", st.name, "", null, null))
+      } elif (st.kind == "layer") {
+        seen[st.name] = true
+        push(out, cmp_item(st.name, "layer", "layer " + st.name, "", null, null))
+      }
+    }
+    if (len(st.children) > 0 && st.kind != "function") {
+      cmp_user_items(st.children, out, seen)
+    }
+  }
+  out
+}
+
+-~> The names without a call to insert: the keywords.
+function cmp_keyword_items() {
+  let out = []
+  for (let i = 0; i < len(cmp_keywords); i = i + 1) {
+    push(out, cmp_item(cmp_keywords[i], "kw", cmp_keywords[i], "", null, null))
+  }
+  out
+}
+
+-~> The keys of the hash literal a `let name = {` (or `name = {`) in the text starts,
+-~> read straight from the lines: the keys written as strings at its top level.
+function cmp_hash_keys(lines, name) {
+  let out = []
+  for (let i = 0; i < len(lines); i = i + 1) {
+    let s = text.trim(lines[i])
+    if (text.starts(s, "let ")) {
+      s = text.trim(text.slice(s, 4, len(s)))
+    }
+    if (text.starts(s, name) && !code_is_word(s[len(name)])) {
+      let rest = text.trim(text.slice(s, len(name), len(s)))
+      if (text.starts(rest, "=") && !text.starts(rest, "==") && text.starts(text.trim(text.slice(rest, 1, len(rest))), "{")) {
+        return cmp_scan_keys(lines, i)
+      }
+    }
+  }
+  out
+}
+
+-~> The top-level string keys of the hash literal that opens on line index `from`.
+function cmp_scan_keys(lines, from) {
+  let out = []
+  let depth = 0
+  let started = false
+  for (let i = from; i < len(lines) && i < from + 60; i = i + 1) {
+    let s = lines[i]
+    let k = 0
+    while (k < len(s)) {
+      let ch = s[k]
+      if (ch == "-" && s[k + 1] == "~" && s[k + 2] == ">") {
+        break
+      }
+      if (ch == "\"") {
+        let e = k + 1
+        while (e < len(s) && s[e] != "\"") {
+          if (s[e] == "\\") {
+            e = e + 1
+          }
+          e = e + 1
+        }
+        let after = text.trim(text.slice(s, e + 1, len(s)))
+        if (started && depth == 1 && text.starts(after, ":")) {
+          push(out, text.slice(s, k + 1, e))
+        }
+        k = e + 1
+        continue
+      }
+      if (ch == "{" || ch == "(" || ch == "[") {
+        if (ch == "{" && !started) {
+          started = true
+        }
+        depth = depth + 1
+      } elif (ch == "}" || ch == ")" || ch == "]") {
+        depth = depth - 1
+        if (started && depth == 0) {
+          return out
+        }
+      }
+      k = k + 1
+    }
+  }
+  out
+}
+
+-~> The items after `owner.`: the builtin hashes, the pens, or a hash literal of the document.
+function cmp_member_items(m, owner) {
+  let names = null
+  let note = ""
+  if (owner == "math") {
+    names = keys(math)
+  } elif (owner == "text") {
+    names = keys(text)
+  } elif (owner == "list") {
+    names = keys(list)
+  } elif (owner == "pens") {
+    names = keys(pens)
+  } else {
+    names = cmp_hash_keys(m.lines, owner)
+  }
+  let out = []
+  let sorted = list.sort(names)
+  for (let i = 0; i < len(sorted); i = i + 1) {
+    let summary = ""
+    if (owner == "pens" && sorted[i] != "list") {
+      summary = t(prefixed("pen.", sorted[i]))
+    }
+    push(out, {"name": sorted[i], "kind": "member", "sig": owner + "." + sorted[i], "summary": summary,
+               "example": null, "params": null, "lower": text.lower(sorted[i]), "owner": owner})
+  }
+  out
+}
+
+-~> Everything that can complete a word at the caret (before matching).
+function cmp_candidates(m, owner, docs) {
+  if (owner != null) {
+    return cmp_member_items(m, owner)
+  }
+  let seen = {}
+  let user = cmp_user_items(doc_parsed(m).statements, [], seen)
+  let out = user
+  let lib = cmp_library_items(docs)
+  for (let i = 0; i < len(lib); i = i + 1) {
+    if (seen[lib[i].name] == null) {
+      push(out, lib[i])
+    }
+  }
+  out + cmp_keyword_items()
+}
+
+-~> == The call an accept inserts ==
+
+-~> The index of the ")" that closes the "(" at index open, or -1.
+function cmp_close_paren(s, open) {
+  let depth = 0
+  let i = open
+  while (i < len(s)) {
+    let ch = s[i]
+    if (ch == "\"") {
+      i = i + 1
+      while (i < len(s) && s[i] != "\"") {
+        if (s[i] == "\\") {
+          i = i + 1
+        }
+        i = i + 1
+      }
+    } elif (ch == "(" || ch == "[" || ch == "{") {
+      depth = depth + 1
+    } elif (ch == ")" || ch == "]" || ch == "}") {
+      depth = depth - 1
+      if (depth == 0) {
+        return i
+      }
+    }
+    i = i + 1
+  }
+  -1
+}
+
+-~> The argument spans [start, end] (exclusive end, trimmed) of the call whose "(" is
+-~> at index open of s.
+function cmp_arg_spans(s, open) {
+  let close = cmp_close_paren(s, open)
+  let out = []
+  if (close < 0) {
+    return out
+  }
+  let depth = 0
+  let from = open + 1
+  let i = open + 1
+  while (i <= close) {
+    let ch = s[i]
+    if (i == close || (ch == "," && depth == 0)) {
+      let a = from
+      let b = i
+      while (a < b && s[a] == " ") {
+        a = a + 1
+      }
+      while (b > a && s[b - 1] == " ") {
+        b = b - 1
+      }
+      if (b > a) {
+        push(out, [a, b])
+      }
+      from = i + 1
+    } elif (ch == "\"") {
+      i = i + 1
+      while (i < close && s[i] != "\"") {
+        if (s[i] == "\\") {
+          i = i + 1
+        }
+        i = i + 1
+      }
+    } elif (ch == "(" || ch == "[" || ch == "{") {
+      depth = depth + 1
+    } elif (ch == ")" || ch == "]" || ch == "}") {
+      depth = depth - 1
+    }
+    i = i + 1
+  }
+  out
+}
+
+-~> The call to insert for a function item: {"text", "args"} with the argument spans
+-~> inside the text. It is the call of the doc's example (a library function), or the
+-~> name with its parameters as placeholders. Null for items that insert only their name.
+function cmp_snippet(item) {
+  if (item.kind != "fn" && item.kind != "user") {
+    return null
+  }
+  let name = item.name
+  let ex = item.example
+  if (ex != null && ex != "") {
+    let at = text.find(ex, name + "(")
+    if (at >= 0) {
+      let open = at + len(name)
+      let close = cmp_close_paren(ex, open)
+      if (close >= 0) {
+        let call = text.slice(ex, at, close + 1)
+        return {"text": call, "args": cmp_arg_spans(call, len(name))}
+      }
+    }
+  }
+  let call = cmp_sig(name, item.params)
+  {"text": call, "args": cmp_arg_spans(call, len(name))}
+}
+
+-~> Accepting an item at the word w of the caret's row: the new model and the
+-~> placeholders left ({"line", "spans", "cur", "fresh", "expect"} or null).
+-~> A function that is already followed by "(" gets only its name.
+function cmp_accept(m, w, item) {
+  let s = doc_cur(m)
+  let head = text.slice(s, 0, w.start)
+  let tail = text.slice(s, w.end, len(s))
+  let ins = item.name
+  let spans = []
+  let inside = -1
+  let sn = null
+  if (!text.starts(tail, "(")) {
+    sn = cmp_snippet(item)
+  }
+  if (sn != null) {
+    ins = sn.text
+    for (let i = 0; i < len(sn.args); i = i + 1) {
+      push(spans, [w.start + sn.args[i][0], w.start + sn.args[i][1]])
+    }
+    inside = w.start + len(item.name) + 1
+  }
+  let line = head + ins + tail
+  let col = w.start + len(ins)
+  let ph = null
+  if (len(spans) > 0) {
+    col = spans[0][0]
+    ph = {"line": m.line, "spans": spans, "cur": 0, "fresh": true, "expect": line}
+  } elif (inside >= 0) {
+    col = inside
+  }
+  let lines = list.slice(m.lines, 0, m.line - 1) + [line] + list.slice(m.lines, m.line, len(m.lines))
+  {"model": doc_with(m, lines, m.line, col), "ph": ph}
+}
+
+-~> == Placeholders (the argument that is selected, Tab to the next) ==
+
+-~> Replaces the current placeholder's text with s: {"model", "ph"}.
+function cmp_ph_replace(m, ph, s) {
+  let sp = ph.spans[ph.cur]
+  let cur = doc_cur(m)
+  let line = text.slice(cur, 0, sp[0]) + s + text.slice(cur, sp[1], len(cur))
+  let delta = len(s) - (sp[1] - sp[0])
+  let spans = []
+  for (let i = 0; i < len(ph.spans); i = i + 1) {
+    if (i < ph.cur) {
+      push(spans, ph.spans[i])
+    } elif (i == ph.cur) {
+      push(spans, [sp[0], sp[0] + len(s)])
+    } else {
+      push(spans, [ph.spans[i][0] + delta, ph.spans[i][1] + delta])
+    }
+  }
+  let lines = list.slice(m.lines, 0, m.line - 1) + [line] + list.slice(m.lines, m.line, len(m.lines))
+  {"model": doc_with(m, lines, m.line, sp[0] + len(s)),
+   "ph": {"line": ph.line, "spans": spans, "cur": ph.cur, "fresh": false, "expect": line}}
+}
+
+-~> Tab (dir 1) or Shift+Tab (dir -1): the caret goes to the next (previous) argument and
+-~> selects it. After the last one the caret leaves the call and the placeholders end.
+-~> Returns {"model", "ph"}.
+function cmp_ph_step(m, ph, dir) {
+  let n = len(ph.spans)
+  let next = ph.cur + dir
+  if (next >= n) {
+    let last = ph.spans[n - 1]
+    let cur = doc_cur(m)
+    let col = last[1]
+    if (cur[col] == ")") {
+      col = col + 1
+    }
+    return {"model": doc_at(m, m.line, col), "ph": null}
+  }
+  if (next < 0) {
+    next = 0
+  }
+  let spans = ph.spans
+  {"model": doc_at(m, m.line, spans[next][0]),
+   "ph": {"line": ph.line, "spans": spans, "cur": next, "fresh": true, "expect": ph.expect}}
+}
+
+-~> The placeholders after an edit that moved the line from `old_len` characters to
+-~> what it is now (or a caret move): still alive when the caret is inside the current
+-~> argument, else null.
+function cmp_ph_track(ph, m, old_len, old_rows) {
+  if (ph == null || m.line != ph.line || len(m.lines) != old_rows) {
+    return null
+  }
+  let cur = doc_cur(m)
+  let delta = len(cur) - old_len
+  let sp = ph.spans[ph.cur]
+  if (m.col < sp[0] || m.col > sp[1] + delta) {
+    return null
+  }
+  let spans = []
+  for (let i = 0; i < len(ph.spans); i = i + 1) {
+    if (i < ph.cur) {
+      push(spans, ph.spans[i])
+    } elif (i == ph.cur) {
+      push(spans, [sp[0], sp[1] + delta])
+    } else {
+      push(spans, [ph.spans[i][0] + delta, ph.spans[i][1] + delta])
+    }
+  }
+  {"line": ph.line, "spans": spans, "cur": ph.cur, "fresh": delta == 0 && ph.fresh && m.col == sp[0], "expect": cur}
+}
+
+-~> == Signature help: the call the caret is in ==
+
+-~> The call whose parentheses hold the caret on this line: {"callee", "index"} where
+-~> index counts the commas before the caret at the call's own level (a point or a list
+-~> written inside an argument does not count). Null when the caret is in no call.
+function cmp_call_at(s, col) {
+  let stack = []
+  let i = 0
+  let n = math.min(col, len(s))
+  while (i < n) {
+    let ch = s[i]
+    if (ch == "-" && s[i + 1] == "~" && s[i + 2] == ">") {
+      break
+    }
+    if (ch == "\"") {
+      i = i + 1
+      while (i < n && s[i] != "\"") {
+        if (s[i] == "\\") {
+          i = i + 1
+        }
+        i = i + 1
+      }
+    } elif (ch == "(") {
+      let b = i
+      while (b > 0 && (code_is_word(s[b - 1]) || s[b - 1] == ".")) {
+        b = b - 1
+      }
+      let callee = text.slice(s, b, i)
+      let before = text.trim(text.slice(s, 0, b))
+      let call = callee != "" && !code_is_digit(callee[0]) && list.index(cmp_not_calls, callee) < 0 &&
+        cmp_word_before(before, len(before)) != "function"
+      if (call) {
+        push(stack, {"callee": callee, "index": 0})
+      } else {
+        push(stack, {"callee": null, "index": 0})
+      }
+    } elif (ch == "[" || ch == "{") {
+      push(stack, {"callee": null, "index": 0})
+    } elif (ch == ")" || ch == "]" || ch == "}") {
+      if (len(stack) > 0) {
+        pop(stack)
+      }
+    } elif (ch == ",") {
+      if (len(stack) > 0) {
+        stack[len(stack) - 1].index = stack[len(stack) - 1].index + 1
+      }
+    }
+    i = i + 1
+  }
+  for (let k = len(stack) - 1; k >= 0; k = k - 1) {
+    if (stack[k].callee != null) {
+      return stack[k]
+    }
+  }
+  null
+}
+
+-~> The signature hint for the caret: {"callee", "params", "index", "param", "doc", "summary"}
+-~> or null when the caret is not in a call of a function the editor knows.
+function cmp_hint_at(m, docs) {
+  let c = cmp_call_at(doc_cur(m), m.col)
+  if (c == null) {
+    return null
+  }
+  let info = props_function_info(m, c.callee, docs)
+  if (info == null) {
+    return null
+  }
+  let param = ""
+  let doc = ""
+  if (c.index < len(info.params)) {
+    param = info.params[c.index]
+    if (info.param_docs[param] != null) {
+      doc = info.param_docs[param]
+    }
+  }
+  {"callee": c.callee, "params": info.params, "index": c.index, "param": param, "doc": doc, "summary": info.summary}
+}

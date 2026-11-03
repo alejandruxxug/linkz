@@ -192,6 +192,7 @@ function view_after() {
     V.flash = 1
   }
   view_reveal(ed_model().line)
+  cmp_sync()
   app.needs_paint = true
 }
 
@@ -979,6 +980,11 @@ function view_key(e) {
     view_export()
     return null
   }
+  if (cmp_intercept(k, mods)) {
+    view_prepare()
+    view_after()
+    return null
+  }
   if (k == "escape") {
     V.tool = ""
     V.pen_note = ""
@@ -989,7 +995,7 @@ function view_key(e) {
   if (view_tools_key(e)) {
     return null
   }
-  ed_key(name, mods)
+  cmp_ed_key(name, mods)
   view_prepare()
   view_after()
 }
@@ -1007,7 +1013,7 @@ function view_text(e) {
     view_field_text_in(e.text)
     return null
   }
-  ed_type(e.text)
+  cmp_ed_type(e.text)
   view_prepare()
   view_after()
 }

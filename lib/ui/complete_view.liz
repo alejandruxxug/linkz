@@ -1,0 +1,324 @@
+-~> complete_view: where the suggestion list, the signature hint and the selected
+-~> argument go on screen, and drawing them. The look is the pen picker's: a `row`
+-~> box with a `void` outline, a `bevel` top line and a 2 px shadow, a `raised`
+-~> header, 18 px rows with a `moss` selected row and a `lizard` bar.
+-~> cmp_popup_rects() works the layout out once per paint (view_popups calls it
+-~> and then cmp_draw()).
+
+let cmp_row_h = 18
+let cmp_list_max_w = 330
+
+-~> The icon of a kind of item and its color.
+function cmp_icon(kind) {
+  if (kind == "fn" || kind == "user") {
+    return "function"
+  }
+  if (kind == "layer") {
+    return "layer"
+  }
+  if (kind == "kw") {
+    return "chevron-right"
+  }
+  "dot"
+}
+
+function cmp_icon_color(kind) {
+  if (kind == "fn") {
+    return P.lizard
+  }
+  if (kind == "kw") {
+    return P.sky
+  }
+  if (kind == "let") {
+    return P.amber
+  }
+  P.text
+}
+
+-~> A text cut to fit w pixels, with a » when it was cut.
+function cmp_fit(s, w) {
+  let room = w // 7
+  if (len(s) <= room) {
+    return s
+  }
+  text.slice(s, 0, math.max(0, room - 1)) + "»"
+}
+
+-~> The part of an item shown after its name: "(center, r, fill)" for a function.
+function cmp_tail(item) {
+  if ((item.kind == "fn" || item.kind == "user") && item.params != null) {
+    return "(" + text.join(item.params, ", ") + ")"
+  }
+  ""
+}
+
+-~> The line under the list about the selected item.
+function cmp_footer_text(item) {
+  if (item.summary != null && item.summary != "") {
+    return item.summary
+  }
+  if (item.kind == "member") {
+    return t("complete.member", {"owner": item.owner})
+  }
+  t(prefixed("complete.", item.kind))
+}
+
+-~> Where the caret is on screen: {"x", "y", "cx", "row", "start_x"} or null when its row is
+-~> not visible. y is the top of the row, cx the x of its code, start_x the x of the word.
+function cmp_caret_pos() {
+  let m = ed_model()
+  let vis = view_visible()
+  for (let i = 0; i < len(vis); i = i + 1) {
+    let it = vis[i].item
+    if (it.t == "row" && it.line == m.line) {
+      let rr = view_row_render(it.row)
+      let lead = view_row_code(it.row)[1]
+      let xs = rr[0].xs
+      let idx = math.max(0, math.min(m.col - lead, len(xs) - 1))
+      let sx = rr[1] + xs[idx]
+      if (cmp.word != null) {
+        let wi = math.max(0, math.min(cmp.word.start - lead, len(xs) - 1))
+        sx = rr[1] + xs[wi]
+      }
+      return {"x": rr[1] + xs[idx], "y": vis[i].y, "cx": rr[1], "row": it.row, "start_x": sx, "xs": xs, "lead": lead}
+    }
+  }
+  null
+}
+
+-~> == The list ==
+
+function cmp_list_layout(pos) {
+  let n = len(cmp.items)
+  let shown = math.min(n, cmp_max_visible)
+  let w = 150
+  for (let i = 0; i < n; i = i + 1) {
+    let it = cmp.items[i].item
+    w = math.max(w, 16 + g_text_w(it.name + cmp_tail(it)) + 12)
+  }
+  w = math.min(w, cmp_list_max_w)
+  let h = 16 + shown * cmp_row_h + 18
+  let x = math.max(2, math.min(pos.start_x - 4, V.w - w - 4))
+  let y = pos.y + cmp_row_h
+  let above = false
+  if (y + h + 2 > V.h - 16) {
+    y = pos.y - h
+    above = true
+  }
+  {"x": x, "y": math.max(0, y), "w": w, "h": h, "shown": shown, "above": above}
+}
+
+-~> Draws a name with the letters the prefix matched in amber.
+function cmp_draw_name(name, hits, x, y, color) {
+  let marks = {}
+  for (let i = 0; i < len(hits); i = i + 1) {
+    marks[str(hits[i])] = true
+  }
+  let k = 0
+  while (k < len(name)) {
+    let hot = marks[str(k)] == true
+    let e = k + 1
+    while (e < len(name) && (marks[str(e)] == true) == hot) {
+      e = e + 1
+    }
+    let c = color
+    if (hot) {
+      c = P.amber
+    }
+    g_text(text.slice(name, k, e), x + k * 7, y, c)
+    k = e
+  }
+}
+
+function cmp_draw_list(l) {
+  g_box(l.x, l.y, l.w, l.h)
+  g_rect(l.x + 1, l.y + 1, l.w - 2, 13, P.raised)
+  g_text(text.upper(t("complete.header")) + " · " + str(len(cmp.items)), l.x + 5, l.y, P.mute)
+  for (let r = 0; r < l.shown; r = r + 1) {
+    let i = cmp.top + r
+    let e = cmp.items[i]
+    let it = e.item
+    let ry = l.y + 16 + r * cmp_row_h
+    let tc = P.text
+    if (i == cmp.sel) {
+      g_rect(l.x + 1, ry, l.w - 2, cmp_row_h, P.moss)
+      g_rect(l.x + 1, ry, 2, cmp_row_h, P.lizard)
+      tc = P.bright
+    }
+    g_icon(cmp_icon(it.kind), l.x + 5, ry + 5, cmp_icon_color(it.kind))
+    cmp_draw_name(it.name, e.hits, l.x + 16, ry + 3, tc)
+    let tail = cmp_fit(cmp_tail(it), l.w - 16 - 7 * len(it.name) - 8)
+    g_text(tail, l.x + 16 + 7 * len(it.name), ry + 3, P.mute)
+  }
+  if (len(cmp.items) > l.shown) {
+    let ty = l.y + 16
+    let th = l.shown * cmp_row_h
+    g_rect(l.x + l.w - 5, ty, 4, th, P.coal)
+    let bh = math.max(6, th * l.shown // len(cmp.items))
+    let by = ty + (th - bh) * cmp.top // math.max(1, len(cmp.items) - l.shown)
+    g_rect(l.x + l.w - 5, by, 4, bh, P.bevel)
+  }
+  let fy = l.y + 16 + l.shown * cmp_row_h
+  g_rect(l.x + 1, fy, l.w - 2, 1, P.void)
+  g_text(cmp_fit(cmp_footer_text(cmp.items[cmp.sel].item), l.w - 12), l.x + 6, fy + 2, P.mute)
+}
+
+-~> == The signature hint ==
+
+-~> The hint's box and the x of each parameter in its first line.
+function cmp_hint_layout(pos, list_l) {
+  let h = cmp.hint
+  let sig = h.callee + "(" + text.join(h.params, ", ") + ")"
+  let doc = h.doc
+  if (doc == "") {
+    doc = h.summary
+  }
+  let w = math.min(math.max(g_text_w(sig), g_text_w(doc)) + 12, 420)
+  let lines = 1
+  if (doc != "") {
+    lines = 2
+  }
+  let bh = lines * 15 + 6
+  let x = math.max(2, math.min(pos.cx - 4, V.w - w - 4))
+  let y = pos.y - bh - 1
+  if (list_l != null && list_l.above) {
+    y = pos.y + cmp_row_h + 1
+    if (y + bh + 2 > V.h - 16) {
+      y = list_l.y - bh - 1
+    }
+  } elif (y < 30) {
+    y = pos.y + cmp_row_h + 1
+    if (list_l != null) {
+      y = list_l.y + list_l.h + 3
+    }
+  }
+  let xs = []
+  let dx = g_text_w(h.callee + "(")
+  for (let i = 0; i < len(h.params); i = i + 1) {
+    push(xs, dx)
+    dx = dx + g_text_w(h.params[i]) + 14
+  }
+  {"x": x, "y": math.max(0, y), "w": w, "h": bh, "doc": doc, "sig": sig, "xs": xs}
+}
+
+function cmp_draw_hint(l) {
+  let h = cmp.hint
+  g_box(l.x, l.y, l.w, l.h)
+  let y = l.y + 4
+  g_text(h.callee, l.x + 6, y, P.bright)
+  g_text("(", l.x + 6 + g_text_w(h.callee), y, P.mute)
+  let dx = g_text_w(h.callee + "(")
+  for (let i = 0; i < len(h.params); i = i + 1) {
+    let p = h.params[i]
+    let px = l.x + 6 + dx
+    if (i == h.index) {
+      g_rect(px - 2, y + 1, g_text_w(p) + 4, 13, P.moss)
+      g_text(p, px, y, P.lizard)
+    } else {
+      g_text(p, px, y, P.mute)
+    }
+    if (i < len(h.params) - 1) {
+      g_text(", ", px + g_text_w(p), y, P.mute)
+    }
+    dx = dx + g_text_w(p) + 14
+  }
+  g_text(")", l.x + 6 + g_text_w(h.callee + "(" + text.join(h.params, ", ")), y, P.mute)
+  if (l.doc != "") {
+    g_text(cmp_fit(l.doc, l.w - 12), l.x + 6, y + 15, P.text)
+  }
+}
+
+-~> == The selected argument ==
+
+-~> The box over the argument the next typing replaces, or null.
+function cmp_ph_layout(pos) {
+  let ph = cmp.ph
+  if (ph == null || !ph.fresh) {
+    return null
+  }
+  let sp = ph.spans[ph.cur]
+  let xs = pos.xs
+  let a = sp[0] - pos.lead
+  let b = sp[1] - pos.lead
+  if (a < 0 || b >= len(xs)) {
+    return null
+  }
+  let s = text.slice(doc_cur(ed_model()), sp[0], sp[1])
+  {"x": pos.cx + xs[a], "y": pos.y, "w": xs[b] - xs[a], "text": s}
+}
+
+function cmp_draw_ph(l) {
+  g_rect(l.x - 1, l.y + 2, l.w + 2, 14, P.raised)
+  g_frame(l.x - 1, l.y + 2, l.w + 2, 14, P.amber)
+  code_draw(code_render(l.text, 0, true), l.x, l.y + 3)
+}
+
+-~> == For view_popups ==
+
+-~> The popups the completion has now as [kind, rect] (rects with their shadow); keeps
+-~> the layout for cmp_draw.
+function cmp_popup_rects() {
+  cmp.layout = null
+  if (!cmp.open && cmp.hint == null && cmp.ph == null) {
+    return []
+  }
+  let pos = cmp_caret_pos()
+  if (pos == null) {
+    return []
+  }
+  let out = []
+  let lay = {"list": null, "hint": null, "ph": null}
+  if (cmp.open) {
+    lay.list = cmp_list_layout(pos)
+    let l = lay.list
+    push(out, ["cmp_list", [l.x, l.y, l.w + 2, l.h + 2]])
+  }
+  if (cmp.hint != null) {
+    lay.hint = cmp_hint_layout(pos, lay.list)
+    let l = lay.hint
+    push(out, ["cmp_hint", [l.x, l.y, l.w + 2, l.h + 2]])
+  }
+  lay.ph = cmp_ph_layout(pos)
+  if (lay.ph != null) {
+    let l = lay.ph
+    push(out, ["cmp_ph", [l.x - 1, l.y + 2, l.w + 2, 14]])
+  }
+  if (len(out) > 0) {
+    cmp.layout = lay
+  }
+  out
+}
+
+-~> A text that changes when what the completion draws changes.
+function cmp_content_key() {
+  if (cmp.layout == null) {
+    return ""
+  }
+  let k = "c" + str(cmp.sel) + "," + str(cmp.top) + "," + str(len(cmp.items))
+  if (cmp.open && len(cmp.items) > 0) {
+    k = k + cmp.items[0].item.name
+  }
+  if (cmp.hint != null) {
+    k = k + "h" + str(cmp.hint.index) + cmp.hint.callee
+  }
+  if (cmp.ph != null) {
+    k = k + "p" + str(cmp.ph.cur) + str(cmp.ph.fresh) + str(cmp.ph.spans)
+  }
+  k
+}
+
+function cmp_draw() {
+  let lay = cmp.layout
+  if (lay == null) {
+    return null
+  }
+  if (lay.ph != null) {
+    cmp_draw_ph(lay.ph)
+  }
+  if (lay.hint != null) {
+    cmp_draw_hint(lay.hint)
+  }
+  if (lay.list != null) {
+    cmp_draw_list(lay.list)
+  }
+}

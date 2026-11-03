@@ -1,0 +1,91 @@
+ci: true circle continue
+sw: stroke_width 1 [0, 7]
+crc: circle 2 [0, 2, 3]
+c (by length): catch circle continue color_hex
+cxq closes: false
+nothing matches: false
+let typed: false
+circle typed: circle
+co before: continue color_hex closest_on_segment
+continue
+c after recent catch: catch circle
+number: false
+comment: false
+let name: false
+string: false
+color: false
+math.s: sin seed sqrt
+math.: 19 abs acos angle asin
+text.sp: split
+list.: copy index insert remove reverse slice sort
+pens.: brush calligraphy ink list marker pencil soft, wide
+colors.: nested red sea
+colors.s: sea
+pal. multi-line: a bb
+unknown owner: false
+wa: wave user wave(a, b)
+ho: horizon let
+su: sun svg_num layer
+own function hides the library's: 1 user circle(q)
+true false
+1: circle(|(256, 256), 40, #3fa34d)
+selected: 0 true (256, 256)
+undo text: insert circle 2
+circle((10, 20), 40, #3fa34d) false
+tab -> 1 40 17
+tab -> 2 #3fa34d
+shift+tab -> 1 9
+past the last: null circle((10, 20), 9, #3fa34d) true
+typing steps: typing
+one step: insert circle 2
+undo accept: ci
+redo accept: circle((256, 256), 40, #3fa34d) 7
+backspace: rect(, (120, 60), #2d6a8f) false
+circle
+circle(1) null
+wave(a, b) 0 2
+function null
+math.sqrt null
+  ellipse((256, 256), (60, 30), #e0a526)
+list open, Enter accepts: true 1 circle((256, 256), 40, #3fa34d)
+list closed, Enter is a new row: true 2 2
+undo text: new row
+no word, Enter: false
+2 2
+esc: false
+same word stays closed: false
+next word opens: true
+  let a = 1
+down: 1
+up wraps: 6 0
+scroll: 9 2
+math.max
+caret moved off: false
+forced: true true true
+circle#0
+circle#1
+circle#0
+circle#2
+polygon#0
+polygon#1
+polygon#1
+line#1
+line#1
+circle#1
+none
+none
+none
+none
+none
+circle#1
+circle 1 r | the radius in pixels
+in a point: 0 center
+too many: 4 []
+not a library function: null
+user function: wave b
+sync: wave b
+true 0 ["circle", "continue"] null
+false circle center (256, 256)
+insertar circle
+sugerencias parte de math
+insert circle

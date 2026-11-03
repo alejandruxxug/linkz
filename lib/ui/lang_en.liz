@@ -178,5 +178,13 @@ lang_register("en", {
   "undo.nothing": "nothing to undo",
   "undo.nothing_redo": "nothing to redo",
   "undo.move_kind": "move {kind}",
-  "status.anchor_selected": "anchor {n} selected · Delete removes it"
+  "status.anchor_selected": "anchor {n} selected · Delete removes it",
+  "undo.complete": "insert {name}",
+  "complete.header": "suggestions",
+  "complete.fn": "drawing function",
+  "complete.user": "your function",
+  "complete.let": "your value",
+  "complete.layer": "your layer",
+  "complete.kw": "keyword",
+  "complete.member": "part of {owner}"
 })

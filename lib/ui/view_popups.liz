@@ -325,6 +325,9 @@ function popup_list() {
   if (V.dialog != null) {
     push(out, ["dialog", [V.dialog.x, V.dialog.y, V.dialog.w + 2, V.dialog.h + 2]])
   }
+  if (V.dialog == null) {
+    out = out + cmp_popup_rects()
+  }
   out
 }
 
@@ -341,7 +344,7 @@ function popup_content_key() {
   if (V.dialog != null) {
     k = k + V.hover
   }
-  k + ed.pen
+  k + ed.pen + cmp_content_key()
 }
 
 -~> Draws every open popup over the panels, into both buffers.
@@ -358,6 +361,8 @@ function popup_paint() {
   }
   if (V.dialog != null) {
     push(both, "dialog")
+  } elif (cmp.layout != null) {
+    push(both, "cmp")
   }
   for (let pass = 0; pass < 2; pass = pass + 1) {
     if (pass == 0) {
@@ -378,6 +383,8 @@ function popup_paint() {
         tip_draw(V.tip)
       } elif (k == "anchor") {
         tip_draw(V.anchor_tip)
+      } elif (k == "cmp") {
+        cmp_draw()
       } else {
         dialog_draw(V.dialog)
       }
