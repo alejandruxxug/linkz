@@ -57,7 +57,7 @@ same word stays closed: false
 next word opens: true
   let a = 1
 down: 1
-up wraps: 6 0
+up wraps: 7 0
 scroll: 9 2
 math.max
 caret moved off: false
