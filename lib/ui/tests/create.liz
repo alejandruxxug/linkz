@@ -1,4 +1,9 @@
 -~> Creating objects: shapes centered on the canvas, layers with an empty row.
+use "../editor_create"
+use "../editor_doc"
+use "../editor_rows"
+use "../lang_en"
+use "../lang_es"
 let m = doc_new("")
 show(add_shape(m, "circle", (400, 200)))
 show(add_shape(m, "ellipse", null))

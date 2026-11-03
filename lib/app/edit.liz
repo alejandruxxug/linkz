@@ -1,0 +1,72 @@
+-~> edit: linkz edit [--no-splash] [--slow-splash] [drawing.lzdraw] opens the
+-~> native editor: the splash screen while it loads (unless --no-splash or
+-~> the skip_loading_anim setting), then the editor on the drawing, or the
+-~> home screen without one. The window can be driven by agents with
+-~> `lizardscript drive` (see editor.liz for its commands).
+
+use "editor"
+use "launcher"
+use "machine"
+use "settings"
+
+let edit_usage = "usage: linkz edit [--no-splash] [--slow-splash] [file.lzdraw]"
+
+-~> {"path", "splash", "slow"} from the arguments.
+function edit_args(args) {
+  let out = {"path": "", "splash": true, "slow": false}
+  for (let i = 0; i < len(args); i += 1) {
+    let a = args[i]
+    if (a == "--no-splash") {
+      out.splash = false
+    } elif (a == "--slow-splash") {
+      out.slow = true
+    } elif (text.starts(a, "--")) {
+      error("unknown flag " + a + " (" + edit_usage + ")")
+    } else {
+      out.path = a
+    }
+  }
+  out
+}
+
+-~> The machine's measurement, or {} with a warning when it can't be made.
+function edit_machine() {
+  try {
+    return machine_load()
+  } catch (e) {
+    io.error("linkz: machine not measured: " + e.message + "\n")
+    return {}
+  }
+}
+
+function edit_command(args) {
+  let a = edit_args(args)
+  let settings = settings_load()
+  try {
+    settings_apply_curves(settings)
+  } catch (e) {
+    io.error("linkz: pressure curves ignored, using defaults: " + e.message + "\n")
+  }
+  let machine = edit_machine()
+  if (settings_skip_splash(settings) && !a.slow) {
+    a.splash = false
+  }
+  let title = "Linkz"
+  if (a.path != "") {
+    title += " - " + a.path
+  }
+  let sp = null
+  if (a.splash) {
+    try {
+      sp = splash_load()
+    } catch (e) {
+      io.error("linkz: no splash: " + e.message + "\n")
+    }
+  }
+  if (sp != null) {
+    launch_run(sp, title, a.slow, function(win) { editor_load(win, a.path, settings, machine) })
+    return
+  }
+  let win = window.open(editor_size.x, editor_size.y, title, editor_options())
+  editor_run(editor_load(win, a.path, settings, machine))
+}

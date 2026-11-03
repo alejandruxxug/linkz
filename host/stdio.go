@@ -17,6 +17,7 @@ import (
 	"lizardscript/lexer"
 	"lizardscript/object"
 	"lizardscript/parser"
+	"lizardscript/token"
 )
 
 // The stdio primitives of `linkz mcp`: reading lines from stdin, writing to
@@ -81,6 +82,25 @@ func (s *Stdio) Builtins() *object.Hash {
 			}
 			fmt.Fprintln(s.err, t)
 			return null
+		},
+		// with_steps(n, f) calls f() with a step limit of its own: its steps
+		// are counted from zero, at most n, and the caller's count and limit
+		// come back after. The server runs each request this way.
+		"with_steps": func(args ...object.Object) object.Object {
+			if len(args) != 2 {
+				return errorf("wrong number of arguments: want 2 (steps, function), got %d", len(args))
+			}
+			n, ok := args[0].(*object.Integer)
+			if !ok || n.Value < 0 {
+				return errorf("steps must be a whole number, 0 or more")
+			}
+			prevMax, prevSteps := evaluator.MaxSteps, evaluator.Steps()
+			evaluator.MaxSteps = int(n.Value)
+			evaluator.ResetSteps()
+			result := evaluator.ApplyFunction(token.Token{}, args[1], nil)
+			evaluator.MaxSteps = prevMax
+			evaluator.SetSteps(prevSteps)
+			return result
 		},
 		// step_limit(n) starts counting steps from zero, with n as the most
 		// the program may take before it is stopped. The server calls it at

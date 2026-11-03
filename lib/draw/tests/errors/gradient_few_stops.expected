@@ -1,1 +1,1 @@
-[line 33, column 8] runtime error: linear: stops must be a list of at least two colors, like [#f4d35e, #3d1c4f]
+[line 6, column 8] runtime error: linear: stops must be a list of at least two colors, like [#f4d35e, #3d1c4f]

@@ -1,4 +1,6 @@
 -~> gradient: linear and radial values, stops, hard stops, steps, and use as a fill.
+use "../gradient"
+use "../shapes"
 
 let g = linear((0, 0), (100, 0), [#ff0000, #0000ff])
 puts(g.kind, g.stops, g.steps, g.origin, g.axis, is_gradient(g), is_gradient(#fff), is_gradient({}))

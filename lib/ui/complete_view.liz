@@ -5,6 +5,15 @@
 -~> cmp_popup_rects() works the layout out once per paint (view_popups calls it
 -~> and then cmp_draw()).
 
+use "complete_state"
+use "editor_doc"
+use "editor_undo"
+use "i18n"
+use "view_code"
+use "view_gfx"
+use "view_layout"
+use "view_panels"
+
 let cmp_row_h = 18
 let cmp_list_max_w = 330
 

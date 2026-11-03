@@ -1,4 +1,8 @@
 -~> The canvas edits the code: rewrite_arg, move_anchor, move_shape, insert_point, remove_point.
+use "../editor_doc"
+use "../editor_twoway"
+use "../lang_en"
+use "../lang_es"
 let code = "let horizon = 300
 circle((380, 90), 40, #e0a526)
 rect((10, 20), (120, 60), #2d6a8f)

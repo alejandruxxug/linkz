@@ -21,6 +21,13 @@
 -~> Otherwise the whole drawing runs. The patch says which shapes changed,
 -~> so the canvas repaints only around them (view_scene.liz).
 
+use "doc_cache"
+use "doc_splice"
+use "editor_doc"
+use "editor_rows"
+use "editor_state"
+use "editor_undo"
+
 -~> Whether a parsed argument is a literal.
 function rerun_literal(a) {
   if (a.kind == "number" || a.kind == "color" || a.kind == "string") {

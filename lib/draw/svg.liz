@@ -2,6 +2,9 @@
 -~> The shapes are painted in paint_order(): bottom row first, so a shape that
 -~> is higher in the file ends up in front of the ones below it.
 
+use "gradient"
+use "shapes"
+
 let hex_digits = "0123456789abcdef"
 
 function svg_hex2(n) {

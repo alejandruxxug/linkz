@@ -1,0 +1,108 @@
+-~> settings: ~/.linkz/settings.liz, lizard code with one `let` per setting:
+-~>   let language = "es"
+-~>   let skip_loading_anim = true
+-~>   let trackpad_pressure = {"low": 0.8, "high": 1.0, "gamma": 1.5}
+-~> It is run once, at startup, in a sandbox of its own with a small step
+-~> limit, and its top-level names become the `settings` hash the editor
+-~> sees. A missing file is no settings; a file with an error is ignored
+-~> with a warning, so the editor starts with the defaults.
+
+use "drawing"
+use "engine"
+use "host_os"
+
+-~> The step limit of a settings (or machine) file.
+let settings_steps = 100000
+
+function settings_file() {
+  fs.join(host_config_dir(), "settings.liz")
+}
+
+-~> The top-level names of settings code, as a hash, or an error with the
+-~> language's message. What the code prints goes to the error output.
+function settings_eval(code) {
+  let r = lizard.run(code, {"steps": settings_steps, "engine": engine_name()})
+  if (r.output != "") {
+    io.error(r.output)
+  }
+  if (r.error != null) {
+    error(drawing_message(r.error))
+  }
+  r.globals
+}
+
+-~> The settings of a file: {} when it isn't there; an error names the file.
+function settings_load_file(path) {
+  if (!fs.exists(path)) {
+    return {}
+  }
+  let code = fs.read(path)
+  try {
+    return settings_eval(code)
+  } catch (e) {
+    error(path + ": " + e.message)
+  }
+}
+
+-~> The user's settings, or {} with a warning when the file has an error.
+function settings_load() {
+  try {
+    return settings_load_file(settings_file())
+  } catch (e) {
+    io.error("linkz: settings ignored, using defaults: " + e.message + "\n")
+    return {}
+  }
+}
+
+-~> skip_loading_anim: `linkz edit` then starts as if it had --no-splash.
+function settings_skip_splash(settings) {
+  settings.skip_loading_anim == true
+}
+
+-~> The settings that hold a pressure curve, by the source they shape.
+let settings_curves = {"trackpad": "trackpad_pressure", "tablet": "tablet_pressure"}
+
+-~> Sets the pressure curves the settings give (pen.curve). Keys left out
+-~> keep their default. If one curve is wrong none is set, and the error
+-~> says which setting.
+function settings_apply_curves(settings) {
+  let sources = keys(settings_curves)
+  let before = {}
+  for (let i = 0; i < len(sources); i += 1) {
+    before[sources[i]] = pen.curve(sources[i])
+  }
+  try {
+    for (let i = 0; i < len(sources); i += 1) {
+      let name = settings_curves[sources[i]]
+      if (settings[name] != null) {
+        settings_set_curve(sources[i], name, settings[name])
+      }
+    }
+  } catch (e) {
+    for (let i = 0; i < len(sources); i += 1) {
+      pen.curve(sources[i], before[sources[i]])
+    }
+    error(e.message)
+  }
+}
+
+function settings_set_curve(source, name, v) {
+  if (type(v) != "HASH") {
+    error(name + ": want a hash like {\"low\": 0.8}, got " + type(v))
+  }
+  let ks = keys(v)
+  for (let i = 0; i < len(ks); i += 1) {
+    let k = ks[i]
+    if (k != "low" && k != "high" && k != "gamma") {
+      error(name + ": unknown key \"" + str(k) + "\": a curve has low, high and gamma")
+    }
+    if (type(v[k]) != "INTEGER" && type(v[k]) != "FLOAT") {
+      error(name + ": " + k + " must be a number, got " + type(v[k]))
+    }
+  }
+  try {
+    pen.curve(source, v)
+  } catch (e) {
+    error(name + ": " + e.message)
+  }
+}

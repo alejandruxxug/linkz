@@ -1,0 +1,27 @@
+-- fs
+a.lzdraw $DIR/a.lzdraw 1 INTEGER
+b.lzdraw $DIR/b.lzdraw 23 INTEGER
+3 []
+true 16 true
+a/b/c a/b /
+~/.linkz true 0.1.0-dev
+-- clock
+0 11017 20760
+true true
+-- events
+{"type": "down", "pos": (10, 20), "canvas_pos": (4, 6), "button": 1, "mods": {"shift": false, "alt": false, "cmd": true, "ctrl": false}, "pen": {"pressure": 0.5, "tilt": (0.0, 0.0), "rotation": 0.0, "source": "trackpad", "eraser": false}}
+{"type": "move", "pos": (3, 4), "button": 0, "samples": [{"pos": (3, 4), "canvas_pos": null, "pressure": 0.5, "t": 1.5}], "mods": {"shift": false, "alt": false, "cmd": true, "ctrl": false}, "pen": {"pressure": 0.5, "tilt": (0.0, 0.0), "rotation": 0.0, "source": "trackpad", "eraser": false}}
+{"type": "wheel", "pos": (3, 4), "button": 0, "dy": 2.0, "mods": {"shift": false, "alt": false, "cmd": true, "ctrl": false}, "pen": {"pressure": 1.0, "tilt": (0.0, 0.0), "rotation": 0.0, "source": "mouse", "eraser": false}}
+é {"type": "resize", "size": (400, 300), "mods": {"shift": false, "alt": false, "cmd": false, "ctrl": false}, "pen": {"pressure": 1.0, "tilt": (0.0, 0.0), "rotation": 0.0, "source": "mouse", "eraser": false}}
+null
+-- docs
+["center", "r", "fill"] [{"default": "", "name": "center"}, {"default": "", "name": "r"}, {"default": "", "name": "fill"}] true
+true true true
+-- command lines
+{"path": "a.lzdraw", "splash": false, "slow": false} {"path": "", "splash": true, "slow": false}
+unknown flag --fast (usage: linkz edit [--no-splash] [--slow-splash] [file.lzdraw])
+{"files": ["in.png", "out.lzdraw"], "options": {"colors": 4, "detail": 1.5, "max_side": 64}}
+usage: linkz trace in.png out.lzdraw [--colors 8] [--detail 1.5] [--min-area 8] [--max-side 256] [--scale 1] [--corner 55]
+bad option --colours
+--colors needs a number, got "x"
+bad option --colors

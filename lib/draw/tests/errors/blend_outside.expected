@@ -1,1 +1,1 @@
-[line 33, column 8] runtime error: blend: blend() goes inside a layer
+[line 6, column 8] runtime error: blend: blend() goes inside a layer

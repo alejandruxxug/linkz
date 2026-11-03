@@ -1,5 +1,11 @@
 -~> Running only the row that changed: used when every row is a literal row,
 -~> and the result is always what a whole run gives.
+use "../editor_doc"
+use "../editor_rerun"
+use "../editor_state"
+use "../editor_undo"
+use "../lang_en"
+use "../lang_es"
 let code = "-~> lzdraw 1
 layer sun
   opacity(0.5)

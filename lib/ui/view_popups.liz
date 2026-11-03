@@ -3,6 +3,23 @@
 -~> the confirm dialog. A popup is drawn last, into the UI buffer and into the
 -~> canvas buffer too, so it also sits over the drawing.
 
+use "../draw/gradient"
+use "../draw/pens"
+use "../draw/shapes"
+use "../gfx/raster"
+use "complete_state"
+use "complete_view"
+use "editor_doc"
+use "editor_props"
+use "editor_state"
+use "editor_undo"
+use "i18n"
+use "view_canvas"
+use "view_code"
+use "view_gfx"
+use "view_input"
+use "view_layout"
+
 let tip_delay = 400
 
 -~> == Tooltips ==

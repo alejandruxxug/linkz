@@ -8,6 +8,11 @@
 -~>   machine_json(m)        the same as JSON (linkz calibrate prints it)
 -~> Needs raster.liz and the drawing libraries; it only calls them when run.
 
+use "../draw/gradient"
+use "../draw/pens"
+use "../draw/shapes"
+use "raster"
+
 -~> The share of free memory the span caches may take.
 let calib_memory_share = 0.10
 -~> The time one repaint plus a typical edit may take, in milliseconds.

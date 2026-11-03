@@ -15,6 +15,22 @@ let fs = {
 let clip = {"get": function() { fake_clip.text }, "set": function(s) { fake_clip.text = s; null }}
 let os = {"locale": function() { fake_os.locale }, "config_dir": function() { "/cfg" }}
 
+-~> Empty the in-memory files and the settings, in place: the editor keeps
+-~> the same hashes.
+function reset_files() {
+  let ks = keys(fake_files)
+  for (let i = 0; i < len(ks); i += 1) {
+    delete(fake_files, ks[i])
+  }
+}
+
+function reset_settings() {
+  let ks = keys(settings)
+  for (let i = 0; i < len(ks); i += 1) {
+    delete(settings, ks[i])
+  }
+}
+
 -~> Prints a model compactly: its text with the caret as ‸ and the row selection.
 function show(m) {
   let out = []

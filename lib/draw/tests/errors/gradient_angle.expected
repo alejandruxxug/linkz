@@ -1,1 +1,1 @@
-[line 33, column 8] runtime error: gradient: angle must be a number, not STRING
+[line 6, column 8] runtime error: gradient: angle must be a number, not STRING

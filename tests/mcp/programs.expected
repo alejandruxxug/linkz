@@ -1,0 +1,7 @@
+ok mcp/tests/json_errors.liz
+ok mcp/tests/json_parse.liz
+ok mcp/tests/json_strings.liz
+ok mcp/tests/json_write.liz
+ok mcp/tests/server_files.liz
+ok mcp/tests/server_requests.liz
+ok mcp/tests/server_tools.liz

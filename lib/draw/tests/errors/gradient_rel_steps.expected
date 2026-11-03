@@ -1,1 +1,1 @@
-[line 33, column 8] runtime error: gradient: steps must be 0 (smooth) or a whole number from 2 to 64, not 1
+[line 6, column 8] runtime error: gradient: steps must be 0 (smooth) or a whole number from 2 to 64, not 1

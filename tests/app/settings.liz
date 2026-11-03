@@ -1,0 +1,54 @@
+-~> Settings and the machine's measurement: settings.liz is lizard code run
+-~> in a sandbox (its lets become the settings), a missing file is no
+-~> settings, a broken one is an error that names the file, a loop is
+-~> stopped; pressure curves are set from the settings or none is; the
+-~> machine file is reused for the same version and measured again for
+-~> another. Run with HOME in a folder of its own (scripts/test.sh).
+
+use "../../lib/app/machine"
+use "../../lib/app/settings"
+use "../../lib/app/version"
+
+let dir = fs.join(fs.home(), "settings-test")
+fs.mkdir(dir)
+let path = fs.join(dir, "settings.liz")
+
+puts("-- settings")
+puts(settings_load_file(fs.join(dir, "missing.liz")))
+fs.write(path, "-~> Linkz settings\nlet language = \"es\"\nlet skip_loading_anim = true\nlet n = 1 + 2\n")
+let s = settings_load_file(path)
+puts(s, settings_skip_splash(s), settings_skip_splash({}))
+let broken = ["let language = ", "let x = nope", "while (true) {}"]
+for (let i = 0; i < len(broken); i += 1) {
+  fs.write(path, broken[i])
+  try {
+    settings_load_file(path)
+  } catch (e) {
+    puts(text.replace(e.message, dir, "$DIR"))
+  }
+}
+
+puts("-- pressure curves")
+let before = pen.curve("trackpad")
+settings_apply_curves({"trackpad_pressure": {"low": 0.85}, "tablet_pressure": {"gamma": 2}})
+puts(pen.curve("trackpad"), pen.curve("tablet"))
+let wrong = [{"trackpad_pressure": 5}, {"trackpad_pressure": {"low": 0.1, "bend": 1}},
+  {"tablet_pressure": {"gamma": "x"}}, {"tablet_pressure": {"gamma": 99}}]
+for (let i = 0; i < len(wrong); i += 1) {
+  try {
+    settings_apply_curves(wrong[i])
+  } catch (e) {
+    puts(e.message)
+  }
+}
+puts(pen.curve("trackpad"), pen.curve("tablet"))
+
+puts("-- machine")
+let m = machine_load()
+puts(type(m.max_objects), m.app_version == linkz_version, fs.exists(machine_path()))
+fs.write(machine_path(), "let machine = {\"max_objects\": 7, \"app_version\": \"" + linkz_version + "\"}\n")
+puts(machine_load().max_objects)
+fs.write(machine_path(), "let machine = {\"max_objects\": 7, \"app_version\": \"old\"}\n")
+puts(machine_load().max_objects != 7)
+let json_text = machine_recalibrate()
+puts(text.starts(json_text, "{\"max_objects\": "), text.ends(json_text, "}"))

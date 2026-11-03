@@ -1,5 +1,8 @@
 -~> save and open: where files may go, and that nothing is replaced by accident.
 -~> The test runs with HOME in a temporary folder, shown here as $HOME.
+use "../json"
+use "../server"
+use "../tools"
 
 let next_id = 0
 function call(name, args) {

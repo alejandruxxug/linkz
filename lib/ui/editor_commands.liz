@@ -4,6 +4,13 @@
 -~> Command arguments arrive as a list; numbers are already numbers.
 -~> Lines are counted from 1 and columns from 0, like the rows in the dump.
 
+use "complete_state"
+use "editor_doc"
+use "editor_rows"
+use "editor_state"
+use "editor_undo"
+use "i18n"
+
 -~> The state an agent can read: rows, selection, caret, properties, errors, ...
 function editor_debug_state() {
   ed_settle()

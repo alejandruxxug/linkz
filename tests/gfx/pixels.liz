@@ -1,0 +1,144 @@
+-~> The graphics libraries' scenes (lib/gfx/tests) painted the way `linkz
+-~> paint` does, with what they print and the pixels that must come out:
+-~> each check is [x, y, color, tolerance per channel, what it shows]. A
+-~> soft edge covers a pixel in part, so its color has a tolerance.
+
+use "../../lib/app/host"
+use "../../lib/app/libs"
+use "../../lib/app/paint"
+use "../harness"
+
+let white = #ffffff
+let red = #ff0000
+let blue = #0000ff
+let ink = #223344
+
+function gray(v) {
+  rgb(v, v, v)
+}
+
+-~> Paints a scene of lib/gfx/tests (or code) on a w by h buffer.
+function scene(name, w, h) {
+  paint_run(fs.read(fs.join(libs_dir(), "gfx", "tests", name + ".liz")), (w, h))
+}
+
+function check(name, picture, checks) {
+  let bad = 0
+  for (let i = 0; i < len(checks); i += 1) {
+    let c = checks[i]
+    let got = img.get(picture, c[0], c[1])
+    let off = math.max(math.abs(got.r - c[2].r), math.abs(got.g - c[2].g), math.abs(got.b - c[2].b))
+    if (off > c[3]) {
+      bad += 1
+      puts("  (" + str(c[0]) + ", " + str(c[1]) + ") " + c[4] + ": got " + str(got) + ", want " + str(c[2]))
+    }
+  }
+  puts(name + ":", len(checks) - bad, "of", len(checks), "pixels right")
+}
+
+check("rect", scene("rect", 120, 80), [
+  [10, 10, red, 0, "first pixel"], [49, 39, red, 0, "last pixel"], [30, 25, red, 0, "inside"],
+  [9, 25, white, 0, "left of it"], [50, 25, white, 0, "right of it"], [30, 9, white, 0, "above"],
+  [30, 40, white, 0, "below: no off-by-one on the last row"], [59, 25, white, 0, "before the soft edge"],
+  [60, 25, rgb(128, 128, 255), 4, "left edge covers half"], [61, 25, blue, 0, "full"], [99, 25, blue, 0, "full"],
+  [100, 25, rgb(191, 191, 255), 4, "right edge covers a quarter"], [101, 25, white, 0, "after the soft edge"],
+  [0, 50, rgb(0, 170, 0), 0, "clipped shape starts at its row"], [29, 79, rgb(0, 170, 0), 0, "clipped shape, last buffer row"],
+  [30, 60, white, 0, "clipped shape, right edge"]])
+
+let green = #3fa34d
+check("circle", scene("circle", 120, 120), [
+  [60, 60, green, 0, "center"], [60, 21, green, 0, "just inside the top"], [60, 19, white, 0, "just above the top"],
+  [60, 99, green, 0, "just inside the bottom"], [60, 100, white, 0, "just below the bottom"],
+  [21, 60, green, 24, "just inside the left (soft edge)"], [18, 60, white, 0, "just outside the left"],
+  [99, 60, green, 24, "just inside the right (soft edge)"], [101, 60, white, 0, "just outside the right"],
+  [30, 30, white, 0, "corner of the box is outside the circle"]])
+
+let orange = #cc2200
+check("star", scene("star", 200, 100), [
+  [50, 50, orange, 0, "nonzero fills the middle"], [150, 50, white, 0, "evenodd leaves the middle empty"],
+  [50, 12, orange, 0, "nonzero arm"], [150, 12, orange, 0, "evenodd arm"], [150, 20, orange, 0, "evenodd arm, lower"],
+  [5, 5, white, 0, "outside"]])
+
+check("stroke", scene("stroke", 200, 100), [
+  [40, 45, ink, 0, "on the line"], [43, 47, ink, 0, "4 px from the line, inside half the width"],
+  [48, 51, white, 0, "10 px from the line, outside"], [15, 70, ink, 0, "inside the round cap"],
+  [12, 70, white, 0, "outside the cap"], [60, 20, ink, 0, "the sharp corner is round, not a gap"],
+  [100, 66, ink, 0, "valley corner"], [100, 50, #228833, 0, "the dot"], [100, 57, white, 0, "outside the dot (radius 5)"],
+  [5, 5, white, 0, "outside"]])
+
+check("brush", scene("brush", 200, 100), [
+  [70, 30, #1d1d1f, 0, "widest point (width 14)"], [70, 21, white, 0, "outside the widest point"], [5, 5, white, 0, "outside"]])
+
+-~> Text: some ink in the first line, none past its end.
+function dark(picture, x0, y0, x1, y1) {
+  let n = 0
+  for (let y = y0; y < y1; y += 1) {
+    for (let x = x0; x < x1; x += 1) {
+      let c = img.get(picture, x, y)
+      if (c.r < 128 && c.g < 128 && c.b < 128) {
+        n += 1
+      }
+    }
+  }
+  n
+}
+let words = scene("text", 200, 100)
+puts("text: first line inked", dark(words, 4, 4, 4 + 13 * 7, 17) >= 40, "nothing after it", dark(words, 4 + 13 * 7, 4, 100, 17) == 0,
+  "non-ASCII inked", dark(words, 100, 4, 100 + 7 * 7, 17) >= 30)
+
+-~> '!' is a bar of rows 2 to 8 and a dot on row 10, in columns 3 to 4.
+let glyph = paint_run("fb.fill((0, 0), (60, 60), #ffffff)\nfont.draw(\"!\", (10, 10), #000000, 1)\n" +
+  "font.draw(\"!\", (30, 10), #000000, 2)\nfont.draw(\"!\", (44, 10), #000000, 9)\n", (60, 60))
+let black = #000000
+check("glyph", glyph, [
+  [13, 12, black, 0, "top of the bar"], [13, 18, black, 0, "bottom of the bar"], [13, 19, white, 0, "gap"],
+  [13, 20, black, 0, "the dot"], [12, 15, white, 0, "left of the bar"], [14, 15, white, 0, "right of the bar"],
+  [36, 14, black, 0, "scaled bar top"], [37, 14, black, 0, "scaled bar is two wide"], [36, 27, black, 0, "scaled bar bottom"],
+  [36, 28, white, 0, "scaled gap"], [36, 29, white, 0, "scaled gap"], [36, 30, black, 0, "scaled dot"],
+  [36, 31, black, 0, "scaled dot is two tall"], [53, 20, black, 0, "clamped scale"], [55, 20, black, 0, "clamped scale"],
+  [56, 20, white, 0, "clamped scale: not wider"], [38, 20, white, 0, "right of the scaled bar"]])
+
+check("gradient", scene("gradient", 220, 120), [
+  [0, 10, red, 0, "first pixel is the first stop"], [50, 10, rgb(128, 0, 127), 1, "midpoint"],
+  [100, 10, blue, 0, "last pixel is the last stop"], [25, 10, rgb(191, 0, 64), 1, "quarter"],
+  [0, 30, gray(0), 0, "band 1 start"], [24, 30, gray(0), 0, "band 1 end is flat"], [25, 30, gray(85), 0, "band 2 start"],
+  [49, 30, gray(85), 0, "band 2 end is flat"], [60, 30, gray(170), 0, "band 3"], [99, 30, gray(255), 0, "band 4 reaches the last stop"],
+  [0, 50, red, 0, "before the edge"], [25, 50, red, 0, "still red, no blending"], [49, 50, red, 0, "last red pixel"],
+  [50, 50, blue, 0, "first blue pixel"], [99, 50, blue, 0, "after the edge"], [160, 30, gray(6), 6, "center"],
+  [175, 30, gray(132), 2, "half way out"], [189, 30, gray(250), 6, "rim"], [160, 62, white, 0, "outside the circle"],
+  [149, 75, white, 0, "before the soft edge"], [150, 75, gray(128), 2, "half covered"], [151, 75, gray(0), 0, "covered"],
+  [0, 90, red, 0, "moved: first stop"], [50, 90, rgb(128, 0, 127), 1, "moved: midpoint"], [100, 90, blue, 0, "moved: last stop"],
+  [50, 79, white, 0, "moved: nothing left behind"]])
+
+check("relgradient", scene("relgradient", 220, 140), [
+  [10, 0, rgb(249, 0, 6), 2, "small shape: top row is the first stop"],
+  [10, 19, rgb(6, 0, 249), 2, "small shape: bottom row is the last stop"],
+  [80, 0, rgb(253, 0, 2), 3, "large shape: top row is the first stop"],
+  [80, 99, rgb(2, 0, 253), 3, "large shape: bottom row is the last stop"], [80, 50, rgb(128, 0, 127), 3, "large shape: halfway"],
+  [10, 10, rgb(121, 0, 134), 2, "small shape: halfway (row 10 is 52.5%)"], [0, 120, red, 3, "left edge"],
+  [99, 120, blue, 3, "right edge"], [170, 30, black, 8, "center is the first stop"],
+  [199, 30, rgb(250, 250, 250), 12, "edge of the larger side"]])
+
+check("blend", scene("blend", 200, 40), [
+  [10, 10, gray(32), 1, "multiply darkens: 64 x 128"], [30, 10, gray(160), 1, "screen lightens"],
+  [50, 10, gray(100), 1, "overlay on a dark backdrop"], [70, 10, gray(64), 0, "darken keeps the backdrop"],
+  [90, 10, gray(200), 0, "lighten takes the layer"], [110, 10, gray(192), 1, "add"],
+  [130, 10, gray(160), 1, "opacity 0.5 halves the white"], [150, 10, red, 0, "a layer without a mode paints straight"],
+  [170, 10, gray(96), 1, "nested multiply stays inside the parent buffer"], [190, 10, gray(64), 0, "the backdrop is untouched"],
+  [10, 30, gray(64), 0, "below the layers"]])
+
+scene("spatial", 8, 8)
+
+let tiles = scene("tiles", 60, 40)
+check("tiles", tiles, [
+  [10, 5, red, 0, "the first pixel, not marked"], [24, 15, blue, 0, "the box, left tile"],
+  [28, 16, blue, 0, "the box, right tile"], [29, 16, red, 0, "right of the box"], [26, 18, red, 0, "below the box"],
+  [48, 33, blue, 0, "the corner box, cut to the picture"], [49, 34, blue, 0, "the last pixel of the picture"],
+  [47, 34, red, 0, "left of the corner box"]])
+
+-~> The raster cache drops what a paint didn't use (old versions of a dragged
+-~> shape) instead of wiping everything, and grows when one paint needs more.
+-~> The scene changes the cache's limit, so it uses the raster library itself
+-~> (a paint program sees the libraries' names but can't change them).
+let cache = fs.join(libs_dir(), "gfx", "tests", "cache.liz")
+io.write(harness_output(harness_run(cache, host_globals(img.new(32, 32)))))

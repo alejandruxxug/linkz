@@ -1,4 +1,7 @@
 -~> t() and tf(): placeholders, the English fallback, and missing keys.
+use "../i18n"
+use "../lang_en"
+use "../lang_es"
 puts(t("tool.circle"), tf("status.saved", {"file": "a.lzdraw"}))
 lang_use("es")
 puts(t("tool.circle"), tf("status.saved", {"file": "dibujo ñ.lzdraw"}), tf("refuse.position", {"expr": "horizon + 1"}))

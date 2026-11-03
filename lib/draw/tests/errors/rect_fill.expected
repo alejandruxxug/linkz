@@ -1,1 +1,1 @@
-[line 33, column 8] runtime error: rect: fill must be a color like #3fa34d, not STRING
+[line 6, column 8] runtime error: rect: fill must be a color like #3fa34d, not STRING

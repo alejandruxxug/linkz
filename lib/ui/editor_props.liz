@@ -2,6 +2,13 @@
 -~> the arguments of the call, named after the function's own parameters. A
 -~> field knows the exact span of its argument, so editing it rewrites only that.
 
+use "doc_names"
+use "editor_doc"
+use "editor_rows"
+use "editor_twoway"
+use "i18n"
+use "perf"
+
 -~> What is known about a function: {"params", "param_docs", "summary", "example"}
 -~> or null. The drawing's own functions win over the library's (`docs` is
 -~> src.library_docs()); the first one with the name wins (doc_names.liz).

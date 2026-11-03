@@ -1,0 +1,163 @@
+-~> drawing: runs a .lzdraw program with the drawing libraries around it.
+-~> Each run starts fresh (its own libraries, step count and random numbers)
+-~> and is stopped after drawing_steps steps, so a loop that never ends is an
+-~> error and not a frozen editor.
+-~>
+-~> While it runs, every shape is tagged with where it was drawn: the line of
+-~> the innermost statement of the drawing that is running (the top level, or
+-~> inside a layer, a loop or an if, never a function body) and the path of
+-~> layers around it. The libraries read both through here().
+-~>
+-~> An error raised inside a library has a position in the library, which
+-~> means nothing to the user: it is reported at that statement of the
+-~> drawing instead.
+
+use "engine"
+use "libs"
+
+-~> The step limit of a drawing.
+let drawing_steps = 2000000
+
+-~> The positions of the statements that tag shapes, as "line:column" keys.
+function drawing_user_statements(program) {
+  let set = {}
+  drawing_collect(program.statements, set)
+  set
+}
+
+function drawing_collect(statements, set) {
+  for (let i = 0; i < len(statements); i += 1) {
+    let st = statements[i]
+    set[str(st.line) + ":" + str(st.column)] = true
+    if (st.kind == "layer") {
+      drawing_collect(st.body.statements, set)
+    } elif (st.kind == "expression") {
+      let e = st.expression
+      if (e.kind == "if") {
+        drawing_block(e.consequence, set)
+        drawing_block(e.alternative, set)
+      } elif (e.kind == "while" || e.kind == "for") {
+        drawing_block(e.body, set)
+      }
+    }
+  }
+}
+
+-~> The statements of a block (an elif is an if alone in a block).
+function drawing_block(node, set) {
+  if (node == null) {
+    return
+  }
+  drawing_collect(node.statements, set)
+}
+
+-~> A tracker for one run: the hooks of lizard.run and the here() the
+-~> libraries call. Its line and column are those of the statement running
+-~> now (0 before the first one), layers the layers it is in. With lines
+-~> false, here() gives no line: render and paint follow the statements only
+-~> to place errors, and their shapes have a layer but no line.
+function drawing_tracker(program, lines = true) {
+  let tr = {"user": drawing_user_statements(program), "line": 0, "column": 0, "seen": false, "layers": []}
+  tr.on_statement = function(line, column, source) {
+    if (source == "" && tr.user[str(line) + ":" + str(column)] == true) {
+      tr.line = line
+      tr.column = column
+      tr.seen = true
+    }
+  }
+  tr.on_layer = function(name, enter, line) {
+    if (enter) {
+      push(tr.layers, name)
+    } elif (len(tr.layers) > 0) {
+      pop(tr.layers)
+    }
+  }
+  tr.here = function() {
+    let line = null
+    if (lines) {
+      line = tr.line
+    }
+    {"line": line, "layer": list.copy(tr.layers)}
+  }
+  tr
+}
+
+-~> Runs code with the hash of names `around` (the libraries, the host's
+-~> primitives) and the tracker's hooks. It gives what lizard.run gives.
+function drawing_exec(code, around, tr) {
+  lizard.run(code, {"engine": engine_name(), "steps": drawing_steps, "name": "", "globals": around,
+    "on_statement": tr.on_statement, "on_layer": tr.on_layer})
+}
+
+-~> The message of an error with its position and kind, the way the language
+-~> prints it: "[line 3, column 5] runtime error: ...".
+function drawing_message(e) {
+  "[line " + str(e.line) + ", column " + str(e.column) + "] " + e.kind + " error: " + e.message
+}
+
+-~> The syntax errors of a parse, as the language prints them, one per line.
+function drawing_syntax_text(errors) {
+  let lines = []
+  for (let i = 0; i < len(errors); i += 1) {
+    push(lines, drawing_message(errors[i]))
+  }
+  text.join(lines, "\n")
+}
+
+-~> The message of a runtime error for the user: an error in the drawing keeps
+-~> its own; one from a library gets the position of the drawing's statement
+-~> that was running (none before the first one).
+function drawing_attributed(e, tr) {
+  if (e.source == "") {
+    return drawing_message(e)
+  }
+  if (!tr.seen) {
+    return e.message
+  }
+  "[line " + str(tr.line) + ", column " + str(tr.column) + "] runtime error: " + e.message
+}
+
+-~> Runs a drawing for the editor (the old src.run): {"errors", "ms",
+-~> "printed", "shapes", "steps", "canvas"}. Each error is {"column", "line",
+-~> "message"}, its message with the kind ("runtime error: ..."); an error
+-~> from a library is at the drawing's line, column 0, with the library's
+-~> message alone. around: the host's primitives the drawing may use.
+function drawing_run(code, around = {}) {
+  let start = time.ms()
+  let out = {"errors": [], "ms": 0, "printed": "", "shapes": [], "steps": 0, "canvas": null}
+  let tree = lizard.parse(code)
+  if (len(tree.errors) > 0) {
+    for (let i = 0; i < len(tree.errors); i += 1) {
+      let e = tree.errors[i]
+      push(out.errors, {"column": e.column, "line": e.line, "message": e.kind + " error: " + e.message})
+    }
+  } else {
+    let tr = drawing_tracker(tree.program)
+    let r = null
+    try {
+      let names = hash.merge(libs_load(libs_draw, around, tr.here), {"src": {"here": tr.here}})
+      r = drawing_exec(code, hash.merge(around, names), tr)
+    } catch (e) {
+      out.errors = [{"column": 0, "line": 0, "message": e.message}]
+    }
+    if (r != null) {
+      out.shapes = r.globals.drawing
+      out.canvas = r.globals.canvas
+      out.printed = r.output
+      out.steps = r.steps
+      if (r.error != null) {
+        out.errors = [drawing_error(r.error, tr)]
+      }
+    }
+  }
+  out.ms = time.ms() - start
+  out
+}
+
+-~> An error of a run as the editor shows it.
+function drawing_error(e, tr) {
+  if (e.source == "") {
+    return {"column": e.column, "line": e.line, "message": e.kind + " error: " + e.message}
+  }
+  {"column": 0, "line": tr.line, "message": e.message}
+}

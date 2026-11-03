@@ -1,0 +1,171 @@
+-~> launcher: `linkz edit` with the splash screen. A small frameless window
+-~> shows the banner lib/ui/splash.liz drew (a lizard walking in place, the
+-~> logo, vines that grow while the editor loads, a bloom at the end); then
+-~> the window becomes the editor's.
+-~>
+-~> The banner's pieces are drawn once, into images kept by name; each frame
+-~> stacks them on the window's buffer, which shows each banner pixel as
+-~> splash_scale by splash_scale. The editor loads in the second frame, so
+-~> the first picture is on the screen while it does; the vines then grow to
+-~> the full picture and the bloom plays once. The editor never appears
+-~> before splash_min_ms, and the finished picture stays a moment.
+
+use "editor"
+use "host_fb"
+use "libs"
+
+let splash_scale = 3
+let splash_min_ms = 1200
+let splash_hold_vines_ms = 300
+let splash_hold_bloom_ms = 1000
+
+-~> The splash's pieces, drawn by lib/ui/splash.liz in a sandbox of its own:
+-~> {"info" (size, fps, lizard_at and the counts), "fb", "names"}.
+function splash_load() {
+  let fb = host_fb(img.new(1, 1))
+  let names = libs_load(["ui/splash"], {"fb": fb})
+  let info = names.splash_render()
+  if (type(info) != "HASH" || type(info.size) != "POINT" || info.fps <= 0 || info.lizards <= 0) {
+    error("splash_render gave a bad info hash")
+  }
+  {"info": info, "fb": fb, "names": names}
+}
+
+-~> Stacks the pieces of frame n on the window: lizard (walking in place),
+-~> logo and tagline, vine stage, bloom frame and the error line. A stage or
+-~> frame of -1 is none.
+function splash_frame(sp, win, n, vine, bloom, with_error) {
+  let info = sp.info
+  window.clear(win, #00000000)
+  window.blit(win, sp.fb.kept("lizard" + str(n % info.lizards)), info.lizard_at)
+  window.blit(win, sp.fb.kept("logo"), (0, 0))
+  if (vine >= 0 && vine < info.vines) {
+    window.blit(win, sp.fb.kept("vine" + str(vine)), (0, 0))
+  }
+  if (bloom >= 0 && bloom < info.bloom) {
+    window.blit(win, sp.fb.kept("bloom" + str(bloom)), (0, 0))
+  }
+  if (with_error && sp.fb.kept("error") != null) {
+    window.blit(win, sp.fb.kept("error"), (0, 0))
+  }
+}
+
+-~> The launch's state: the animation frame, the vine stage and bloom frame
+-~> shown, when the finished picture first showed, and how loading went.
+function launch_new(sp, slow) {
+  {"sp": sp, "slow": slow, "start": time.ms(), "n": -1, "stage": 0, "bloom": -1, "final_at": null,
+   "loaded": false, "ed": null, "error": null, "ticks": 0}
+}
+
+-~> Milliseconds since the splash showed, on the splash's own clock (a
+-~> quarter of the speed with --slow-splash, to watch the animation).
+function launch_clock(l) {
+  let ms = time.ms() - l.start
+  if (l.slow) {
+    ms = ms / 4
+  }
+  ms
+}
+
+-~> One animation frame further: the vines grow one stage toward the full
+-~> picture, and once they are full the bloom plays once.
+function launch_advance(l, now) {
+  let info = l.sp.info
+  if (info.vines > 0 && l.stage < info.vines - 1) {
+    l.stage += 1
+    return
+  }
+  let at_end = true
+  if (info.bloom > 0) {
+    if (l.bloom < info.bloom - 1) {
+      l.bloom += 1
+    }
+    at_end = l.bloom == info.bloom - 1
+  }
+  if (at_end && l.final_at == null) {
+    l.final_at = now
+  }
+}
+
+-~> Loading is done, the finished picture was shown long enough, and the
+-~> splash has been up for the least time.
+function launch_ready(l, now) {
+  if (!l.loaded || l.final_at == null || now < splash_min_ms) {
+    return false
+  }
+  let hold = 0
+  if (l.sp.info.bloom > 0) {
+    hold = splash_hold_bloom_ms
+  } elif (l.sp.info.vines > 0) {
+    hold = splash_hold_vines_ms
+  }
+  now - l.final_at >= hold
+}
+
+-~> Turns the splash window into the editor's window.
+function launch_become_editor(l, win, title) {
+  window.set(win, {"frameless": false, "floating": false, "scale": 2, "size": editor_size,
+    "min_size": editor_min_size, "resizable": true, "center": true, "title": title})
+  window.automation(win, editor_hooks(l.ed))
+  l.ed.force = true
+}
+
+-~> One frame of the splash. load is called once, in the second frame, and
+-~> gives the editor (or fails with the message the splash shows).
+function launch_tick(l, win, events, load) {
+  for (let i = 0; i < len(events); i += 1) {
+    let e = events[i]
+    if (e.type == "close" || (e.type == "key" && e.key == "Escape") || (e.type == "down" && l.error != null)) {
+      return false
+    }
+  }
+  l.ticks += 1
+  if (l.ticks == 2) {
+    try {
+      l.ed = load()
+    } catch (e) {
+      l.error = e.message
+      io.error("linkz: " + e.message + "\n")
+      l.sp.names.splash_error(e.message)
+    }
+    l.loaded = true
+  }
+  let now = launch_clock(l)
+  let n = math.floor(now / 1000.0 * l.sp.info.fps)
+  if (n != l.n) {
+    l.n = n
+    if (l.error == null && l.loaded) {
+      launch_advance(l, now)
+    }
+    splash_frame(l.sp, win, l.n, l.stage, l.bloom, l.error != null)
+  }
+  window.needs_paint(win)
+  true
+}
+
+-~> Runs the splash and then the editor in the same window. load gives the
+-~> editor for the window, once the splash shows. It fails with the
+-~> message of a load that went wrong, after the splash showed it.
+function launch_run(sp, title, slow, load) {
+  let info = sp.info
+  let win = window.open(info.size.x, info.size.y, title, {"scale": splash_scale, "frameless": true,
+    "transparent": true, "on_demand": true})
+  let l = launch_new(sp, slow)
+  splash_frame(sp, win, 0, 0, -1, false)
+  let editing = false
+  window.run(win, function(events) {
+    if (editing) {
+      return editor_tick(l.ed, events)
+    }
+    let going = launch_tick(l, win, events, function() { load(win) })
+    if (going && l.error == null && launch_ready(l, launch_clock(l))) {
+      launch_become_editor(l, win, title)
+      editing = true
+      editor_paint(l.ed)
+    }
+    going
+  })
+  if (l.error != null) {
+    error(l.error)
+  }
+}

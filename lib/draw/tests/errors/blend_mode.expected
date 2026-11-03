@@ -1,1 +1,1 @@
-[line 33, column 8] runtime error: blend: mode must be one of normal, multiply, screen, overlay, darken, lighten, add, not dissolve
+[line 6, column 8] runtime error: blend: mode must be one of normal, multiply, screen, overlay, darken, lighten, add, not dissolve

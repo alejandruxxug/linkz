@@ -1,0 +1,12 @@
+-~> The files a built Linkz (lizardscript build . -o linkz) carries besides
+-~> main.liz and the modules it uses: the libraries, which the commands and
+-~> the editor load by path at run time (lib/app/libs.liz), and the doc
+-~> translations. Not their tests.
+lib/app/*.liz
+lib/draw/*.liz
+lib/draw/docs/*.liz
+lib/gfx/*.liz
+lib/gfx/FONT_LICENSE
+lib/mcp/*.liz
+lib/trace/*.liz
+lib/ui/*.liz

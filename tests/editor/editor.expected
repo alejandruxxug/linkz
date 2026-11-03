@@ -1,0 +1,15 @@
+opened:  editor 1 14
+-- commands
+["AddLayer", "AddShape", "Caret", "ClickRow", "Complete", "Confirm", "Export", "Focus", "Home", "Hover", "Language", "NewDrawing", "Open", "OpenCard", "Pen", "PencilStroke", "Picker", "Ping", "Redo", "Save", "Screen", "SelectRow", "SetCode", "SetProp", "Show", "ToggleLayer", "Tool", "Undo"]
+{"ok": true, "status": "Opened $HOME/editor-test/drawing.lzdraw"}
+6 
+-- unknown and presence events
+
+-- keys and text
+line((20, 100), (380, 100), #1d1d1f, 2)x 40
+line((20, 100), (380, 100), #1d1d1f, 2) 39 
+-- an edit repaints like a fresh open
+true
+true true
+-- a drag on the canvas, one sample per injected move
+[1, 1] 

@@ -1,4 +1,4 @@
-# 🦎 Linkz: Editor Design
+run lx# 🦎 Linkz: Editor Design
 
 The motto: **the code is the drawing.** The editor isn't a text box next to a canvas. The code itself is the layers panel and the properties panel.
 

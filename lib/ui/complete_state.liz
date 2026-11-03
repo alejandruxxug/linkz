@@ -6,6 +6,14 @@
 -~>   cmp_ed_key(name, mods) any other key, then the list follows the caret
 -~>   cmp_sync()            after anything changed: close a stale list, redo the hint
 
+use "complete_model"
+use "doc_cache"
+use "editor_doc"
+use "editor_state"
+use "editor_undo"
+use "i18n"
+use "perf"
+
 let cmp = {"open": false, "items": [], "sel": 0, "top": 0, "recent": [], "dismissed": null,
            "ph": null, "word": null, "hint": null, "layout": null, "synced": ""}
 

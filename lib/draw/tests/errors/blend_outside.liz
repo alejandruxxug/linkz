@@ -1,1 +1,2 @@
+use "../../blend"
 blend("multiply")

@@ -40,6 +40,9 @@
 -~> the whole text is scanned as usual.
 -~> host/scan.go is the scanner; tests/splice.liz checks this against it.
 
+use "doc_cache"
+use "editor_doc"
+
 -~> How many lines two line lists share at the start and at the end: [head, tail],
 -~> never more than the shorter list has between them.
 function lines_common(a, b) {

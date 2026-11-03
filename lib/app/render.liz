@@ -1,0 +1,48 @@
+-~> render: linkz render drawing.lzdraw [out.svg] writes the SVG of a drawing.
+-~> What the drawing prints goes to the output first.
+
+use "drawing"
+use "libs"
+
+-~> The SVG text of a drawing, or an error with the message to show: a
+-~> syntax error lists every one, a runtime error is placed at the drawing's
+-~> line (see drawing.liz). The closing call that writes the SVG is not on
+-~> any line of the drawing: an error in it (a bad canvas) is its message
+-~> alone.
+function render_svg(code) {
+  let tree = lizard.parse(code)
+  if (len(tree.errors) > 0) {
+    error(drawing_syntax_text(tree.errors))
+  }
+  let tr = drawing_tracker(tree.program, false)
+  let names = libs_load(libs_draw, {}, tr.here)
+  let r = drawing_exec(code, names, tr)
+  io.write(r.output)
+  if (r.error != null) {
+    error(drawing_attributed(r.error, tr))
+  }
+  try {
+    return names.svg_document(r.globals.canvas, r.globals.drawing)
+  } catch (e) {
+    error(e.message)
+  }
+}
+
+-~> The command: args are the drawing and, optionally, the SVG to write
+-~> (the drawing's name with .svg by default).
+function render_command(args) {
+  if (len(args) < 1 || len(args) > 2) {
+    error("usage: linkz render drawing.lzdraw [out.svg]")
+  }
+  let input = args[0]
+  let out = input
+  if (text.ends(out, ".lzdraw")) {
+    out = text.slice(out, 0, len(out) - 7)
+  }
+  out += ".svg"
+  if (len(args) == 2) {
+    out = args[1]
+  }
+  fs.write(out, render_svg(fs.read(input)))
+  puts("wrote", out)
+}

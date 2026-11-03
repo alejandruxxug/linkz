@@ -7,6 +7,12 @@
 -~> Needs json.liz, the drawing libraries and gfx/raster.liz, and the host's
 -~> src, fb, fs and os.
 
+use "../draw/gradient"
+use "../draw/svg"
+use "../gfx/raster"
+use "json"
+use "../trace/trace"
+
 -~> ---- results ----
 
 function mcp_text(s) {
@@ -567,14 +573,18 @@ function mcp_tool_trace(args) {
     }
     options.background = args.background
   }
-  io.step_limit(mcp_trace_step_limit)
+  mcp_result(io.with_steps(mcp_trace_step_limit, function() { mcp_trace_items(path, options) }))
+}
+
+-~> The items of a trace: the code, the stats and a render of the code.
+function mcp_trace_items(path, options) {
   let result = trace(path, options)
   let items = [mcp_text(result.code), mcp_text(json.stringify(result.stats))]
   let pic = mcp_render_items(result.code, null, null)
   for (let i = 0; i < len(pic); i += 1) {
     push(items, pic[i])
   }
-  mcp_result(items)
+  items
 }
 
 -~> ---- the list ----

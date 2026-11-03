@@ -1,4 +1,6 @@
 -~> The pressure block of a pen: curve, floor, device overrides, smoothing, speed.
+use "../pens"
+use "../shapes"
 function r2(x) { math.round(x * 100) / 100.0 }
 
 -~> The curve is piecewise linear through its points.

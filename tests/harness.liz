@@ -1,0 +1,71 @@
+-~> harness: runs the library test programs (lib/*/tests/*.liz) the way the
+-~> Go host's test runners did, and compares what they print with the
+-~> .expected file next to each. A test of this folder lists the programs it
+-~> ran: "ok name", or what went wrong.
+-~>
+-~> Each program runs in a sandbox (lizard.run) named after its path, so its
+-~> own use lines find the libraries next to it, with the names `around`
+-~> gives it (and its modules) like builtins. What it prints, then its error
+-~> as the language prints it, is its output.
+
+use "../lib/app/drawing"
+use "../lib/app/engine"
+use "../lib/app/libs"
+
+-~> The .liz files of a folder, by name, without those in skip.
+function harness_programs(dir, skip = []) {
+  let out = []
+  let names = fs.list(dir)
+  for (let i = 0; i < len(names); i += 1) {
+    if (text.ends(names[i], ".liz") && list.index(skip, names[i]) < 0) {
+      push(out, fs.join(dir, names[i]))
+    }
+  }
+  out
+}
+
+-~> The output of a run: what it printed, then its error, if any.
+function harness_output(r) {
+  let out = r.output
+  if (r.error != null) {
+    out += drawing_message(r.error) + "\n"
+  }
+  out
+}
+
+-~> Runs the program at path with the names of around, and gives the run.
+function harness_run(path, around = {}) {
+  lizard.run(fs.read(path), {"name": path, "globals": around, "engine": engine_name()})
+}
+
+-~> The expected output of a program: the .expected file next to it.
+function harness_expected(path) {
+  fs.read(text.slice(path, 0, len(path) - 4) + ".expected")
+}
+
+-~> Prints "ok name" when got is want, else the first line that differs.
+function harness_check(name, got, want) {
+  if (got == want) {
+    puts("ok", name)
+    return true
+  }
+  let a = text.lines(want)
+  let b = text.lines(got)
+  let i = 0
+  while (i < len(a) && i < len(b) && a[i] == b[i]) {
+    i += 1
+  }
+  puts("FAIL", name, "at line", i + 1)
+  puts("  want:", a[i])
+  puts("  got: ", b[i])
+  false
+}
+
+-~> The name of a program for the report: its path from lib/.
+function harness_name(path) {
+  let at = text.find(path, "lib/")
+  if (at >= 0) {
+    return text.slice(path, at + 4, len(path))
+  }
+  path
+}

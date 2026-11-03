@@ -1,5 +1,11 @@
 -~> A parse error on one row can make a valid row after it look broken. The
 -~> first error is shown normally; later parse errors are marked as follow-ons.
+use "../editor_state"
+use "../editor_undo"
+use "../i18n"
+use "../view_panels"
+use "../lang_en"
+use "../lang_es"
 ed_reset("-~> lzdraw 1\n-~> A sunset in layers. Layers higher in the file are in front, and so are\n-~> the objects higher inside a layer. The loop is one object.\n\ncanvas = {\"size\": (480, 320), \"background\": #f6d9a8}\n\nlet horizon = 200\n\nlayer sun\n  circle((360, 90), 34, #zzz)\n  circle((360, 90), 56, #f2a65a66)\n\nlayer boat\n  polygon([(120, 214), (180, 214), (165, 232), (135, 232)], #3b2a6b)\n  line((150, 214), (150, 170), #3b2a6b, 3)\n  polygon([(152, 174), (152, 208), (182, 208)], #fbf8ef)\n\nlayer sea\n  layer waves\n    for (let i = 0; i < 5; i = i + 1) {\n      stroke([(40 + i * 20, horizon + 30 + i * 18), (140 + i * 30, horizon + 24 + i * 18), (240 + i * 20, horizon + 32 + i * 18), (440 - i * 10, horizon + 26 + i * 18)], #a9d3e4, 3)\n    }\n  rect((0, horizon), (480, 120), #2d6a8f)\n\nlayer sky\n  rect((0, 0), (480, horizon), #f2a65a)\n", "/d.lzdraw")
 let r = ed_run()
 for (let i = 0; i < len(ed.errors); i = i + 1) {

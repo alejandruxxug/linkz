@@ -1,8 +1,11 @@
 -~> blend() and opacity() set the style of the layer the call is in.
 -~> Tests give shapes a layer by replacing here().
+use "../blend"
+use "../here"
+use "../shapes"
 
 let path = ["a"]
-let here = function() { {"line": null, "layer": path} }
+here = function() { {"line": null, "layer": path} }
 
 blend("multiply")
 opacity(0.5)

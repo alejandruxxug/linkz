@@ -1,0 +1,8 @@
+-~> calibrate_cmd: linkz calibrate measures this machine, keeps the result
+-~> in ~/.linkz/machine.liz and prints it as JSON.
+
+use "machine"
+
+function calibrate_command(args) {
+  puts(machine_recalibrate())
+}

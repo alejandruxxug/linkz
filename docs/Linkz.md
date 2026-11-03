@@ -14,6 +14,7 @@ Private until the reveal.
 | [[Linkz – Tracing v2]] | Design: line-art tracing for anime art (strokes with width, smooth Bézier edges, hair spikes, shape snapping) |
 | [[Linkz – Architecture]] | The thin host, the lizard libraries, where new code goes |
 | [[Linkz – Language Needs]] | Every gap in lizard-script that Linkz hits, and the extensions they become |
+| [[Linkz – All Lizard Plan]] | M11: moving every Go line into the language so the repo is pure lizard |
 | [[Linkz – Build Plan]] | Milestones, ⏳ waiting on you, progress log |
 | [[Linkz – Style Guide]] | How the editor looks and what drawings look like by default |
 | [[Linkz – Tools & Setup]] | Tools, commands, every-session checklist |

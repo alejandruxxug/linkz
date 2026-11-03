@@ -14,6 +14,13 @@
 -~>            edit that moved it, its line numbers are the old ones until
 -~>            row_stmt(row) is asked for it (the panel only reads its kind and name)
 
+use "../draw/shapes"
+use "doc_cache"
+use "doc_splice"
+use "editor_doc"
+use "i18n"
+use "perf"
+
 let shape_calls = ["circle", "ellipse", "rect", "line", "polygon", "stroke", "brush"]
 
 function is_shape_call(name) {

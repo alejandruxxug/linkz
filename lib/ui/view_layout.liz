@@ -4,6 +4,14 @@
 -~> All the numbers are UI pixels (the half-resolution buffer) and come from the
 -~> style guide's metrics.
 
+use "app"
+use "app_screens"
+use "editor_state"
+use "editor_undo"
+use "i18n"
+use "view_gfx"
+use "view_items"
+
 let V = {
   "w": 512, "h": 360, "pw": 320,
   "top": 0, "pw_user": false, "ver": 0, "run_id": 0,

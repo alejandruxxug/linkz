@@ -1,0 +1,68 @@
+-~> The host's primitives as the libraries see them (host_*.liz), the event
+-~> adapter, the clock, the fingerprint, the docs and the command lines.
+-~> Run with HOME in a folder of its own (scripts/test.sh).
+
+use "../../lib/app/clock"
+use "../../lib/app/docs"
+use "../../lib/app/edit"
+use "../../lib/app/events"
+use "../../lib/app/fingerprint"
+use "../../lib/app/host"
+use "../../lib/app/trace_cmd"
+
+let dir = fs.join(fs.home(), "host-test")
+fs.mkdir(dir)
+let h = host_globals(img.new(8, 8))
+
+puts("-- fs")
+h.fs.write(fs.join(dir, "b.lzdraw"), "circle((1, 1), 1, #000)")
+h.fs.write(fs.join(dir, "a.lzdraw"), "x")
+h.fs.write(fs.join(dir, ".hidden.lzdraw"), "x")
+h.fs.write(fs.join(dir, "notes.txt"), "x")
+h.fs.mkdir(fs.join(dir, "sub.lzdraw"))
+let rows = h.fs.list(dir, ".lzdraw")
+for (let i = 0; i < len(rows); i += 1) {
+  puts(rows[i].name, text.replace(rows[i].path, dir, "$DIR"), rows[i].size, type(rows[i].mtime))
+}
+puts(len(h.fs.list(dir, "")), h.fs.list(fs.join(dir, "nope"), ".lzdraw"))
+puts(h.fs.hash(fs.join(dir, "a.lzdraw")) == fingerprint("x"), len(fingerprint("")), fingerprint("x") != fingerprint("y"))
+puts(h.fs.slash("a\\b/c"), h.fs.join("a/", "b"), h.fs.sep())
+puts(text.replace(h.os.config_dir(), fs.home(), "~"), h.os.home() == fs.home(), h.os.app_version())
+
+puts("-- clock")
+puts(clock_days(1970, 1, 1), clock_days(2000, 3, 1), clock_days(2026, 11, 3))
+let off = h.time.tz()
+puts(off % 900 == 0, math.abs(h.time.now() - (clock_local() - off)) <= 1)
+
+puts("-- events")
+let mods = {"shift": false, "alt": false, "cmd": true, "ctrl": false}
+let pen_in = {"pressure": 0.5, "raw": 0.9, "source": "trackpad", "tilt": (0.0, 0.0), "eraser": false}
+puts(events_app({"type": "down", "pos": (10, 20), "button": "right", "mods": mods, "pen": pen_in, "surface": "canvas", "surface_pos": (4, 6)}))
+puts(events_app({"type": "move", "pos": (3, 4), "mods": mods, "pen": pen_in,
+  "samples": [{"pos": (3, 4), "pressure": 0.5, "raw": 0.9, "t": 1.5}]}))
+puts(events_app({"type": "scroll", "pos": (3, 4), "dy": 2.0, "mods": mods}))
+puts(events_app({"type": "type", "text": "é", "mods": mods}).text, events_app({"type": "resize", "size": (400, 300)}))
+puts(events_app({"type": "close"}))
+
+puts("-- docs")
+let docs = docs_library()
+puts(docs.circle.params, docs.circle.param_defaults, docs.circle.doc.summary != "")
+puts(docs_library("es").circle.doc.summary != docs.circle.doc.summary, docs_library("xx") == docs,
+  docs_library("../es") == docs)
+
+puts("-- command lines")
+puts(edit_args(["--no-splash", "a.lzdraw"]), edit_args([]))
+try {
+  edit_args(["--fast"])
+} catch (e) {
+  puts(e.message)
+}
+puts(trace_args(["in.png", "out.lzdraw", "--colors", "4", "--detail", "1.5", "--max-side", "64.0"]))
+let bad = [["in.png"], ["a", "b", "--colours", "4"], ["a", "b", "--colors", "x"], ["a", "b", "--colors"]]
+for (let i = 0; i < len(bad); i += 1) {
+  try {
+    trace_args(bad[i])
+  } catch (e) {
+    puts(text.lines(e.message)[0])
+  }
+}

@@ -1,0 +1,31 @@
+30 [10, 10.0, 50.0] [39, 10.0, 50.0]
+rect: 16 of 16 pixels right
+80 null
+true
+circle: 10 of 10 pixels right
+star: 6 of 6 pixels right
+stroke: 10 of 10 pixels right
+brush: 3 of 3 pixels right
+(35, 13) (70, 26) (63, 78) 26
+text: first line inked true nothing after it true non-ASCII inked true
+glyph: 17 of 17 pixels right
+gradient: 26 of 26 pixels right
+relgradient: 10 of 10 pixels right
+blend: 11 of 11 pixels right
+query: ["1", "2"]
+edge touches: ["1"]
+same cell, no touch: []
+at: ["4"] ["2"]
+negative: ["far"]
+moved: [] ["1"]
+removed: ["4"] 3
+beyond the grid: ["9"] []
+tiles: 3 2 1
+first: 6 1200 0
+regions: [[38, 28, 40, 30], [14, 10, 19, 13]]
+second: 3 2 19 [[38, 28, 40, 30], [14, 10, 19, 13]]
+nothing dirty: 0
+tiles: 8 of 8 pixels right
+size after drag: 4 limit: 4
+still cached: true
+grew to fit: true size: 10

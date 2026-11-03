@@ -1,0 +1,67 @@
+-~> mcpdiff: compares two MCP transcripts (one JSON reply per line), as the
+-~> parity script needs them: the timings ("ms"), the step counts ("steps",
+-~> which the lizard port counts one more per shape, for here()) and the
+-~> pictures ("data", PNG text that soft edges can change by one) are left
+-~> out, and text that holds JSON is compared as JSON.
+-~>
+-~>   lizardscript tools/mcpdiff.liz a.jsonl b.jsonl
+-~>
+-~> Prints "same" or the first reply that differs, and exits with 1 then.
+
+let ignored = {"ms": true, "steps": true, "data": true}
+
+function normal(v) {
+  if (type(v) == "HASH") {
+    let out = {}
+    let ks = list.sort(keys(v))
+    for (let i = 0; i < len(ks); i += 1) {
+      if (ignored[ks[i]] != true) {
+        out[ks[i]] = normal(v[ks[i]])
+      }
+    }
+    return out
+  }
+  if (type(v) == "ARRAY") {
+    let out = []
+    for (let i = 0; i < len(v); i += 1) {
+      push(out, normal(v[i]))
+    }
+    return out
+  }
+  if (type(v) == "STRING" && (text.starts(v, "{") || text.starts(v, "["))) {
+    try {
+      return ["json", normal(json.parse(v))]
+    } catch (e) {
+    }
+  }
+  v
+}
+
+function replies(path) {
+  let out = []
+  let lines = text.lines(fs.read(path))
+  for (let i = 0; i < len(lines); i += 1) {
+    if (text.trim(lines[i]) != "") {
+      push(out, json.write(normal(json.parse(lines[i]))))
+    }
+  }
+  out
+}
+
+let args = os.args()
+if (len(args) != 2) {
+  puts("usage: lizardscript tools/mcpdiff.liz a.jsonl b.jsonl")
+  os.exit(2)
+}
+let a = replies(args[0])
+let b = replies(args[1])
+let n = math.max(len(a), len(b))
+for (let i = 0; i < n; i += 1) {
+  if (a[i] != b[i]) {
+    puts("reply", i + 1, "differs:")
+    puts("  ", a[i])
+    puts("  ", b[i])
+    os.exit(1)
+  }
+}
+puts("same (" + str(n) + " replies)")

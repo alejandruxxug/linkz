@@ -29,6 +29,10 @@
 -~> them) and is spliced again from the text that moved them last
 -~> (doc_caches.owner). Undo and redo of such an edit move the rows back.
 
+use "doc_splice"
+use "editor_doc"
+use "perf"
+
 let doc_caches = {"made": 0, "epoch": 0, "owner": null}
 
 -~> How many caches doc_cache_base looks back through for one with a parse.

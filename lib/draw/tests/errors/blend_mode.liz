@@ -1,2 +1,4 @@
-let here = function() { {"line": null, "layer": ["a"]} }
+use "../../blend"
+use "../../here"
+here = function() { {"line": null, "layer": ["a"]} }
 blend("dissolve")

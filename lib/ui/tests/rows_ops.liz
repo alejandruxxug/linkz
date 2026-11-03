@@ -1,4 +1,8 @@
 -~> Copy, cut and paste rows through the clipboard, and moving rows.
+use "../editor_doc"
+use "../editor_edit"
+use "../lang_en"
+use "../lang_es"
 let code = "let a = 1
 layer sun
   circle((1, 2), 3, #fff)

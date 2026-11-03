@@ -1,1 +1,1 @@
-[line 33, column 8] runtime error: hard: color must be a color like #3fa34d, not INTEGER
+[line 6, column 8] runtime error: hard: color must be a color like #3fa34d, not INTEGER

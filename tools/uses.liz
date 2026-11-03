@@ -1,0 +1,271 @@
+-~> uses: which modules each library file needs, worked out from its code.
+-~>
+-~>   lizardscript tools/uses.liz lib            prints the use lines every file needs
+-~>   lizardscript tools/uses.liz --check lib    exits with 1 when a file lacks a use it needs
+-~>   lizardscript tools/uses.liz --for t.liz lib   the use lines the program t.liz needs
+-~>
+-~> A file needs a module when it reads or changes a name that the module
+-~> defines at its top level and the file doesn't define itself. Names no
+-~> file defines are the language's builtins, the Terrarium or what a host
+-~> gives (fb, src, settings): they need no use. Test folders (tests/) and
+-~> translations (docs/) are not libraries. A file may use more than it
+-~> needs: a module that registers itself (a language table) is used for
+-~> what it does when it loads.
+
+-~> The Terrarium's modules: a file that says json means the Terrarium's
+-~> unless it uses a module of its own that defines one (lib/mcp/json.liz),
+-~> so these names never ask for a use.
+let uses_terrarium = {"fs": true, "os": true, "time": true, "json": true, "img": true, "clip": true,
+  "io": true, "lizard": true, "window": true, "pen": true}
+
+-~> The .liz files under dir, without tests and translations.
+function uses_files(dir) {
+  let out = []
+  let names = fs.list(dir)
+  for (let i = 0; i < len(names); i += 1) {
+    let path = fs.join(dir, names[i])
+    if (fs.info(path).dir) {
+      if (names[i] != "tests" && names[i] != "docs") {
+        out += uses_files(path)
+      }
+    } elif (text.ends(names[i], ".liz")) {
+      push(out, path)
+    }
+  }
+  out
+}
+
+-~> A scope: the names declared in it, and the scope around it.
+function uses_scope(outer) {
+  {"names": {}, "outer": outer}
+}
+
+function uses_declared(scope, name) {
+  while (scope != null) {
+    if (hash.has(scope.names, name)) {
+      return true
+    }
+    scope = scope.outer
+  }
+  false
+}
+
+-~> Walks a node and puts in free every name it reads or assigns that no
+-~> scope inside the file declares. A let declares its name in the scope it
+-~> is in, for the whole scope (a function can call itself, and a later
+-~> declaration of a name hides the module's for the whole file).
+function uses_walk(node, scope, free) {
+  if (type(node) == "ARRAY") {
+    for (let i = 0; i < len(node); i += 1) {
+      uses_walk(node[i], scope, free)
+    }
+    return
+  }
+  if (type(node) != "HASH") {
+    return
+  }
+  let kind = node.kind
+  if (kind == "name") {
+    if (!uses_declared(scope, node.value)) {
+      free[node.value] = true
+    }
+    return
+  }
+  if (kind == "program" || kind == "block") {
+    let inner = scope
+    if (kind == "block") {
+      inner = uses_scope(scope)
+    }
+    uses_declare_lets(node.statements, inner)
+    uses_walk(node.statements, inner, free)
+    return
+  }
+  if (kind == "let") {
+    uses_walk(node.value, scope, free)
+    return
+  }
+  if (kind == "function") {
+    let inner = uses_scope(scope)
+    for (let i = 0; i < len(node.params); i += 1) {
+      inner.names[node.params[i].value] = true
+    }
+    uses_walk(node.defaults, inner, free)
+    uses_walk(node.body, inner, free)
+    return
+  }
+  if (kind == "for") {
+    let inner = uses_scope(scope)
+    if (node.init != null && node.init.kind == "let") {
+      inner.names[node.init.name.value] = true
+    }
+    uses_walk([node.init, node.condition, node.update, node.body], inner, free)
+    return
+  }
+  if (kind == "try") {
+    uses_walk(node.body, scope, free)
+    let inner = uses_scope(scope)
+    if (node.error_name != null) {
+      inner.names[node.error_name.value] = true
+    }
+    uses_walk(node.catch, inner, free)
+    return
+  }
+  if (kind == "dot") {
+    uses_walk(node.left, scope, free)
+    return
+  }
+  if (kind == "layer") {
+    uses_walk(node.body, scope, free)
+    return
+  }
+  if (kind == "use") {
+    return
+  }
+  let fields = keys(node)
+  for (let i = 0; i < len(fields); i += 1) {
+    let v = node[fields[i]]
+    if (type(v) == "HASH" || type(v) == "ARRAY") {
+      uses_walk(v, scope, free)
+    }
+  }
+}
+
+-~> Declares the lets of a list of statements in scope.
+function uses_declare_lets(statements, scope) {
+  for (let i = 0; i < len(statements); i += 1) {
+    if (statements[i].kind == "let") {
+      scope.names[statements[i].name.value] = true
+    }
+  }
+}
+
+-~> What one file defines, reads and uses: {"defines", "free", "uses"}.
+function uses_read(path) {
+  let tree = lizard.parse(fs.read(path), path)
+  if (len(tree.errors) > 0) {
+    error(path + ": " + tree.errors[0].message)
+  }
+  let defines = []
+  let uses = []
+  let statements = tree.program.statements
+  for (let i = 0; i < len(statements); i += 1) {
+    let st = statements[i]
+    if (st.kind == "let") {
+      push(defines, st.name.value)
+    } elif (st.kind == "use") {
+      push(uses, st.path.value)
+    }
+  }
+  let free = {}
+  uses_walk(tree.program, uses_scope(null), free)
+  {"defines": defines, "free": keys(free), "uses": uses}
+}
+
+-~> The path of the module `to` as a use in the file `from`: relative to
+-~> from's folder, without ".liz".
+function uses_spec(from, to) {
+  let a = text.split(from, "/")
+  let b = text.split(text.slice(to, 0, len(to) - 4), "/")
+  let same = 0
+  while (same < len(a) - 1 && same < len(b) - 1 && a[same] == b[same]) {
+    same += 1
+  }
+  let parts = []
+  for (let i = same; i < len(a) - 1; i += 1) {
+    push(parts, "..")
+  }
+  for (let i = same; i < len(b); i += 1) {
+    push(parts, b[i])
+  }
+  text.join(parts, "/")
+}
+
+-~> For every file, the modules it needs, in the order the files are listed:
+-~> {path: {"needs": [spec, ...], "has": [spec, ...]}}. A name two files
+-~> define is an error. The files of `programs` (tests, tools) need modules
+-~> too, but none of them is one: what they define is their own.
+function uses_needed(files, programs = []) {
+  let info = {}
+  let owner = {}
+  for (let i = 0; i < len(programs); i += 1) {
+    info[programs[i]] = uses_read(programs[i])
+  }
+  for (let i = 0; i < len(files); i += 1) {
+    let f = files[i]
+    info[f] = uses_read(f)
+    let defs = info[f].defines
+    for (let j = 0; j < len(defs); j += 1) {
+      if (hash.has(owner, defs[j]) && owner[defs[j]] != f) {
+        error(defs[j] + " is defined by both " + owner[defs[j]] + " and " + f)
+      }
+      owner[defs[j]] = f
+    }
+  }
+  let out = {}
+  let all = files + programs
+  for (let i = 0; i < len(all); i += 1) {
+    let f = all[i]
+    let needs = {}
+    let free = info[f].free
+    for (let j = 0; j < len(free); j += 1) {
+      let o = owner[free[j]]
+      if (o != null && o != f && !text.starts(free[j], "_") && uses_terrarium[free[j]] != true) {
+        needs[o] = true
+      }
+    }
+    let specs = []
+    for (let j = 0; j < len(files); j += 1) {
+      if (hash.has(needs, files[j])) {
+        push(specs, uses_spec(f, files[j]))
+      }
+    }
+    out[f] = {"needs": specs, "has": info[f].uses}
+  }
+  out
+}
+
+function uses_main(args) {
+  let check = len(args) > 0 && args[0] == "--check"
+  if (check) {
+    args = list.slice(args, 1, len(args))
+  }
+  if (len(args) == 3 && args[0] == "--for") {
+    let n = uses_needed(uses_files(args[2]), [args[1]])[args[1]]
+    for (let j = 0; j < len(n.needs); j += 1) {
+      puts("use \"" + n.needs[j] + "\"")
+    }
+    return
+  }
+  if (len(args) != 1) {
+    puts("usage: lizardscript tools/uses.liz [--check] dir | --for program dir")
+    os.exit(2)
+  }
+  let files = uses_files(args[0])
+  let needed = uses_needed(files)
+  let wrong = 0
+  for (let i = 0; i < len(files); i += 1) {
+    let n = needed[files[i]]
+    if (check) {
+      let missing = []
+      for (let j = 0; j < len(n.needs); j += 1) {
+        if (list.index(n.has, n.needs[j]) < 0) {
+          push(missing, n.needs[j])
+        }
+      }
+      if (len(missing) > 0) {
+        wrong += 1
+        puts(files[i] + ": missing use " + text.join(missing, ", "))
+      }
+    } else {
+      puts(files[i])
+      for (let j = 0; j < len(n.needs); j += 1) {
+        puts("  use \"" + n.needs[j] + "\"")
+      }
+    }
+  }
+  if (wrong > 0) {
+    os.exit(1)
+  }
+}
+
+uses_main(os.args())

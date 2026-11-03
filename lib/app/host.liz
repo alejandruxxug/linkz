@@ -1,0 +1,18 @@
+-~> host: the primitives the libraries were written against, for one run:
+-~> fb (drawing on fb_target), fs, os, time, clip, img, io and src, made of
+-~> the Terrarium (see host_*.liz). A library loaded with libs_load(specs,
+-~> host_globals(...)) sees them like builtins.
+
+use "host_fb"
+use "host_fs"
+use "host_img"
+use "host_io"
+use "host_os"
+use "host_src"
+
+-~> The primitives, with fb drawing on target (an image, or a window when
+-~> on_window is true).
+function host_globals(target, on_window = false) {
+  {"fb": host_fb(target, on_window), "fs": host_fs(), "os": host_os(), "time": host_time(),
+   "clip": clip, "img": host_img(), "io": host_io(), "src": host_src()}
+}

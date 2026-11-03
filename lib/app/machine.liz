@@ -1,0 +1,76 @@
+-~> machine: what this computer can handle, measured once by calibrate()
+-~> (lib/gfx/calibrate.liz) and kept in ~/.linkz/machine.liz, plain lizard
+-~> data: `let machine = {...}`. It is measured again when the file is
+-~> missing or unreadable, when it is from another version of Linkz, or when
+-~> asked (linkz calibrate).
+
+use "drawing"
+use "engine"
+use "host"
+use "host_os"
+use "libs"
+use "settings"
+use "version"
+
+function machine_path() {
+  fs.join(host_config_dir(), "machine.liz")
+}
+
+-~> Runs expr with the drawing and graphics libraries on a headless buffer
+-~> of 512 by 512 and gives its value, a STRING. What it prints goes to the
+-~> output.
+function machine_run(expr) {
+  let around = host_globals(img.new(512, 512))
+  let tr = drawing_tracker(lizard.parse(expr).program, false)
+  let names = libs_load(libs_draw + libs_gfx, around, tr.here)
+  let r = lizard.run(expr, {"globals": hash.merge(around, names), "engine": engine_name(), "name": "calibrate",
+    "on_layer": tr.on_layer})
+  io.write(r.output)
+  if (r.error != null) {
+    error("calibrate: " + drawing_message(r.error))
+  }
+  if (type(r.value) != "STRING") {
+    error("calibrate gave " + type(r.value) + ", not a STRING")
+  }
+  r.value
+}
+
+-~> The kept measurement, if it is from this version.
+function machine_kept(path) {
+  try {
+    let m = settings_load_file(path).machine
+    if (type(m) == "HASH" && m.app_version == linkz_version) {
+      return m
+    }
+  } catch (e) {
+  }
+  null
+}
+
+-~> Writes the machine file's text and gives its machine hash.
+function machine_keep(path, source) {
+  fs.write(path, source)
+  let m = settings_eval(source).machine
+  if (type(m) != "HASH") {
+    error("machine file has no machine")
+  }
+  m
+}
+
+-~> The measurement for the editor: the kept one, or a new one.
+function machine_load() {
+  let path = machine_path()
+  let m = machine_kept(path)
+  if (m != null) {
+    return m
+  }
+  machine_keep(path, machine_run("machine_source(calibrate())"))
+}
+
+-~> Measures now, keeps it, and gives it as JSON text.
+function machine_recalibrate() {
+  let both = machine_run("let m = calibrate()\nmachine_source(m) + machine_json(m)")
+  let cut = text.find(both, "\n")
+  machine_keep(machine_path(), text.slice(both, 0, cut) + "\n")
+  text.slice(both, cut + 1, len(both))
+}

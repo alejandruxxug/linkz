@@ -1,0 +1,80 @@
+-~> libs: a fresh copy of some of Linkz's libraries, as one hash of names.
+-~> A drawing runs with every drawing library around it, like builtins, and
+-~> each run needs its own copy, since the libraries keep state (shapes.liz
+-~> keeps the drawing in a variable). libs_load runs them in a sandbox of
+-~> their own (lizard.run starts its modules fresh), with the names of
+-~> `around` (the host's primitives, like fb) seen by them.
+
+use "engine"
+
+-~> The library sets, in the order they used to load.
+let libs_draw = ["draw/here", "draw/geometry", "draw/pens", "draw/check", "draw/shapes",
+  "draw/gradient", "draw/blend", "draw/svg"]
+let libs_gfx = ["gfx/font_data", "gfx/font", "gfx/raster", "gfx/spatial", "gfx/tiles", "gfx/calibrate"]
+let libs_trace = ["trace/trace"]
+let libs_mcp = ["mcp/json", "mcp/tools", "mcp/server"]
+
+let _libs = {"root": null}
+
+-~> The folder of Linkz's own files: the closest folder at or above the
+-~> program's that has lib/app (the repository for `lizardscript run .` and
+-~> for the tests under lib/, "bundle:" in a built program).
+function libs_root() {
+  if (_libs.root != null) {
+    return _libs.root
+  }
+  let dir = os.program_dir()
+  while (!fs.exists(fs.join(dir, "lib", "app", "libs.liz"))) {
+    let up = fs.join(dir, "..")
+    if (up == dir) {
+      error("can't find Linkz's lib/app above " + os.program_dir())
+    }
+    dir = up
+  }
+  _libs.root = dir
+  dir
+}
+
+-~> The folder of the libraries.
+function libs_dir() {
+  fs.join(libs_root(), "lib")
+}
+
+-~> Every name the libraries `specs` (paths under lib/, like "draw/shapes")
+-~> define, from a fresh run of their files. around: names the libraries see,
+-~> like fb. here_fn: when given, it replaces the drawing libraries' here(),
+-~> which tags each shape with its line and layer (see drawing.liz).
+function libs_load(specs, around = {}, here_fn = null) {
+  let code = ""
+  for (let i = 0; i < len(specs); i += 1) {
+    code += "use \"" + specs[i] + "\" as _lib" + str(i) + "\n"
+  }
+  if (here_fn != null) {
+    code += "use \"draw/here\"\nhere = _here\n"
+  }
+  let r = lizard.run(code, {"name": fs.join(libs_dir(), "libraries"), "engine": engine_name(),
+    "globals": hash.merge(around, {"_here": here_fn})})
+  if (r.error != null) {
+    error("library " + libs_error_source(r.error) + ": " + libs_error_text(r.error))
+  }
+  let names = {}
+  for (let i = 0; i < len(specs); i += 1) {
+    names = hash.merge(names, r.globals["_lib" + str(i)])
+  }
+  names
+}
+
+-~> The library an error came from, from lib/ ("draw/shapes.liz").
+function libs_error_source(e) {
+  let dir = libs_dir() + "/"
+  if (text.starts(e.source, dir)) {
+    return text.slice(e.source, len(dir), len(e.source))
+  }
+  e.source
+}
+
+-~> An error of lizard.run as the language prints it:
+-~> "[line 3, column 5] runtime error: ...".
+function libs_error_text(e) {
+  "[line " + str(e.line) + ", column " + str(e.column) + "] " + e.kind + " error: " + e.message
+}

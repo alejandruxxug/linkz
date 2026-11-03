@@ -3,6 +3,13 @@
 -~> The host reads these keys of `app`: needs_paint, wants_hover, start, event,
 -~> paint, debug_state, debug_commands.
 
+use "app_screens"
+use "home_view"
+use "perf"
+use "view_main"
+use "lang_en"
+use "lang_es"
+
 let app = {
   "needs_paint": true,
   "wants_hover": true,

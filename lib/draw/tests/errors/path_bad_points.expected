@@ -1,1 +1,1 @@
-[line 33, column 8] runtime error: path: points must be a list of points like [(0, 0), (10, 5)] with at least one
+[line 6, column 8] runtime error: path: points must be a list of points like [(0, 0), (10, 5)] with at least one

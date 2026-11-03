@@ -10,6 +10,8 @@
 -~> An edit never changes a model, it returns a new one (the old one stays valid,
 -~> which is what undo needs). Only the cache is filled in later.
 
+use "doc_cache"
+
 function doc_new(code) {
   doc_make(text.lines(code), 1, 0, null)
 }

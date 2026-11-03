@@ -1,0 +1,32 @@
+-- tags
+[["circle", 5, ["sky"]], ["rect", 7, ["sky", "sun"]], ["line", 9, []], ["line", 9, []]] []
+-- printed and errors
+hi 3
+ [{"column": 1, "line": 3, "message": "runtime error: identifier not found: nope"}] 1
+[{"column": 5, "line": 1, "message": "syntax error: expected identifier, got \"=\""}]
+-- library errors at the drawing's line
+[{"column": 0, "line": 4, "message": "circle: center must be a point like (10, 20), not INTEGER"}]
+[{"column": 0, "line": 3, "message": "circle: center must be a point like (10, 20), not INTEGER"}]
+[{"column": 0, "line": 2, "message": "circle: center must be a point like (10, 20), not INTEGER"}]
+[{"column": 13, "line": 2, "message": "runtime error: identifier not found: nope"}]
+[{"column": 3, "line": 2, "message": "runtime error: identifier not found: nope"}]
+-- step limit, fresh runs
+[{"column": 1, "line": 1, "message": "runtime error: the program ran too long (more than 2000000 steps)"}]
+1 1
+{"size": (512, 512), "background": #ffffff} {"size": (10, 20)}
+true
+-- render
+[line 1, column 1] runtime error: circle: center must be a point like (10, 20), not INTEGER
+[line 2, column 13] runtime error: identifier not found: nope
+canvas: must be a hash like {"size": (400, 200), "background": #ffffff}, got INTEGER
+[line 2, column 1] syntax error: expected ")", got end of input
+canvas: size must be between (1, 1) and (16384, 16384), got (400, 20000)
+-- paint
+(4, 4) #ff0000
+program: [line 1, column 1] runtime error: circle: center must be a point like (10, 20), not INTEGER
+program: [line 1, column 1] runtime error: the program ran too long (more than 2000000 steps)
+(64, 32)
+size must look like 512x512
+size must look like 512x512
+size must look like 512x512
+paint: size must be between (1, 1) and (16384, 16384), got (20000, 10)

@@ -1,5 +1,11 @@
 -~> Every action that changes the text is one undo step: do it, Undo gives back the
 -~> text and the caret of before, Redo gives the text of after.
+use "../editor_doc"
+use "../editor_state"
+use "../editor_undo"
+use "../i18n"
+use "../lang_en"
+use "../lang_es"
 let doc = "layer a\n  circle((10, 10), 5, #fff)\n  rect((0, 0), (5, 5), #000)\n\nlet z = 1\n"
 
 function fresh() {

@@ -1,4 +1,9 @@
 -~> The tools: docs, run, render and svg, called through tools/call.
+use "../json"
+use "../../draw/gradient"
+use "../../draw/shapes"
+use "../server"
+use "../tools"
 
 -~> Calls a tool and returns the decoded result.
 let next_id = 0

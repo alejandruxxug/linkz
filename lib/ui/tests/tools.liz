@@ -1,4 +1,13 @@
 -~> The pure parts of the canvas gestures and the pen settings they use.
+use "../../draw/pens"
+use "../editor_doc"
+use "../editor_state"
+use "../editor_twoway"
+use "../editor_undo"
+use "../view_layout"
+use "../view_tools"
+use "../lang_en"
+use "../lang_es"
 puts(tools_color("#1d1d1f"), tools_color("#fff"), tools_color("#C0392B"))
 
 -~> A pen decides how much a mouse stroke takes its pressure from the speed.

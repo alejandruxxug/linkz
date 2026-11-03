@@ -1,0 +1,36 @@
+-~> host_img: the `img` hash the tracer uses. img.load(path, max_side = 256)
+-~> reads a PNG or JPEG, shrunk (never enlarged) until its longer side is at
+-~> most max_side, as {"size": (w, h), "pixels": [COLOR, ...]}: one flat list,
+-~> row by row from the top left, so the pixel (x, y) is pixels[y * w + x].
+-~> Transparent pixels are laid over white, so every color is opaque.
+
+function host_img() {
+  {"load": host_img_load}
+}
+
+function host_img_load(path, max_side = 256) {
+  if (type(max_side) != "INTEGER" || max_side < 1 || max_side > 8192) {
+    error("max_side must be a whole number from 1 to 8192")
+  }
+  let picture = null
+  try {
+    picture = img.load(path, max_side)
+  } catch (e) {
+    error("img.load: " + e.message)
+  }
+  let pixels = img.pixels(picture)
+  for (let i = 0; i < len(pixels); i += 1) {
+    let c = pixels[i]
+    if (c.a != 255) {
+      pixels[i] = host_over_white(c)
+    }
+  }
+  {"size": img.size(picture), "pixels": pixels}
+}
+
+-~> A color laid over white.
+function host_over_white(c) {
+  let a = c.a / 255.0
+  let white = 255 * (1 - a)
+  rgb(c.r * a + white, c.g * a + white, c.b * a + white)
+}

@@ -1,4 +1,6 @@
 -~> path(): a smooth outline with sharp corners and holes.
+use "../geometry"
+use "../shapes"
 
 -~> A square keeps its four corners (a 90 degree turn is above the default 55).
 let sq = path([(0, 0), (10, 0), (10, 10), (0, 10)], #3fa34d)

@@ -4,6 +4,9 @@
 -~> wraps. Words go through t() inside the functions only: this file loads
 -~> before the language tables, so nothing here may call t() at load time.
 
+use "editor_create"
+use "i18n"
+
 let home_ext = ".lzdraw"
 let home_recent_max = 8
 

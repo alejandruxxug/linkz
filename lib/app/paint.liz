@@ -1,0 +1,60 @@
+-~> paint: linkz paint prog.liz out.png [WxH] runs a lizard program with the
+-~> drawing and graphics libraries and fb on a transparent buffer of w by h
+-~> pixels (512 by 512 by default), then saves the buffer. It is how the
+-~> graphics libraries are tried without a window.
+
+use "drawing"
+use "host"
+use "libs"
+
+-~> The biggest width or height of a canvas or a paint buffer.
+let paint_max_side = 16384
+
+-~> "640x480" as (640, 480).
+function paint_size(s) {
+  let parts = text.split(text.lower(s), "x")
+  let w = null
+  let h = null
+  if (len(parts) == 2) {
+    w = text.number(parts[0])
+    h = text.number(parts[1])
+  }
+  if (type(w) != "INTEGER" || type(h) != "INTEGER" || w <= 0 || h <= 0 || w * h > 67108864) {
+    error("size must look like 512x512")
+  }
+  (w, h)
+}
+
+-~> Runs code on a buffer of size and gives the buffer.
+function paint_run(code, size) {
+  if (size.x > paint_max_side || size.y > paint_max_side) {
+    error("paint: size must be between (1, 1) and (" + str(paint_max_side) + ", " + str(paint_max_side) +
+      "), got " + str(size))
+  }
+  let target = img.new(size.x, size.y)
+  let tree = lizard.parse(code)
+  if (len(tree.errors) > 0) {
+    error("program: " + drawing_syntax_text(tree.errors))
+  }
+  let around = host_globals(target)
+  let tr = drawing_tracker(tree.program, false)
+  let names = libs_load(libs_draw + libs_gfx, around, tr.here)
+  let r = drawing_exec(code, hash.merge(around, names), tr)
+  io.write(r.output)
+  if (r.error != null) {
+    error("program: " + drawing_attributed(r.error, tr))
+  }
+  target
+}
+
+function paint_command(args) {
+  if (len(args) < 2 || len(args) > 3) {
+    error("usage: linkz paint prog.liz out.png [WxH]")
+  }
+  let size = (512, 512)
+  if (len(args) == 3) {
+    size = paint_size(args[2])
+  }
+  let code = fs.read(args[0])
+  img.save(paint_run(code, size), args[1])
+}

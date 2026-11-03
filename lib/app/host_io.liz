@@ -1,0 +1,26 @@
+-~> host_io: the `io` hash of the MCP server, on top of the Terrarium's io.
+-~>   read_line()        the next line of the input, or null at its end
+-~>   write(text)        to the output (the protocol)
+-~>   log(text)          a line to the error output
+-~>   with_steps(n, f)   calls f() with a step limit of its own: its steps are counted
+-~>                      from zero, at most n; past it, f fails with the step-limit error
+
+use "engine"
+
+function host_io() {
+  {"read_line": io.read_line, "write": io.write,
+   "log": function(line) { io.error(line + "\n") },
+   "with_steps": host_with_steps}
+}
+
+-~> What f() prints goes to the error output, never into the protocol.
+function host_with_steps(n, f) {
+  let r = lizard.run("f()", {"globals": {"f": f}, "steps": n, "engine": engine_name()})
+  if (r.output != "") {
+    io.error(r.output)
+  }
+  if (r.error != null) {
+    error(r.error.message)
+  }
+  r.value
+}

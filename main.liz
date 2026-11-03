@@ -1,0 +1,58 @@
+-~> Linkz draws vector art written in lizard-script.
+-~>
+-~>   linkz edit [--no-splash] [--slow-splash] [drawing.lzdraw]  opens the native editor
+-~>   linkz render drawing.lzdraw [out.svg]  writes the SVG
+-~>   linkz trace in.png out.lzdraw [--colors N] [--detail D]  traces a picture into code
+-~>   linkz paint prog.liz out.png [WxH]     runs a program headless on a buffer
+-~>   linkz calibrate                        measures this machine, prints JSON
+-~>   linkz mcp                              MCP server on stdin/stdout, for AI agents
+-~>
+-~> Run it with `lizardscript run . <command>`, or build it with
+-~> `lizardscript build . -o linkz`. A running editor is driven with
+-~> `lizardscript drive` (it used to be `linkz debug`).
+
+use "lib/app/calibrate_cmd"
+use "lib/app/edit"
+use "lib/app/mcp_cmd"
+use "lib/app/paint"
+use "lib/app/render"
+use "lib/app/trace_cmd"
+
+let usage = text.join(["usage:",
+  "  linkz edit [--no-splash] [--slow-splash] [file.lzdraw]",
+  "  linkz render file.lzdraw [out.svg]",
+  "  linkz trace in.png out.lzdraw [--colors 8] [--detail 1.5]",
+  "  linkz paint prog.liz out.png [WxH]",
+  "  linkz calibrate",
+  "  linkz mcp"], "\n")
+
+-~> The agent backdoor moved into the language: lizardscript drive.
+function debug_command(args) {
+  error("linkz debug is now `lizardscript drive Command [args...]` (with LIZARD_AUTOMATION=1 or a running editor)")
+}
+
+-~> The commands, by name: each takes the arguments after its name.
+let commands = {
+  "edit": edit_command,
+  "render": render_command,
+  "trace": trace_command,
+  "paint": paint_command,
+  "calibrate": calibrate_command,
+  "mcp": mcp_command,
+  "debug": debug_command
+}
+
+function main(args) {
+  if (len(args) < 1 || !hash.has(commands, args[0])) {
+    io.error(usage + "\n")
+    os.exit(2)
+  }
+  try {
+    commands[args[0]](list.slice(args, 1, len(args)))
+  } catch (e) {
+    io.error(e.message + "\n")
+    os.exit(1)
+  }
+}
+
+main(os.args())

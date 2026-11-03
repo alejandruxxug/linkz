@@ -11,6 +11,16 @@
 -~> The editor tells it about files with home_note_opened(path) and
 -~> home_note_saved(path).
 
+use "app_screens"
+use "editor_state"
+use "editor_undo"
+use "home_art"
+use "home_data"
+use "home_example"
+use "home_gfx"
+use "home_thumbs"
+use "i18n"
+
 -~> files: every drawing, newest first. recent: the paths opened last.
 -~> focus: the search field is being typed in. cards: the cards of the last
 -~> layout, in reading order. warm: true after a first paint, from then on

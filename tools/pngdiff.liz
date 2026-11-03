@@ -1,0 +1,53 @@
+-~> pngdiff: compares two PNG files pixel by pixel.
+-~>
+-~>   lizardscript tools/pngdiff.liz a.png b.png [tolerance]
+-~>
+-~> Prints "same", or how many pixels differ and by how much at most (in any
+-~> channel), and exits with 1 when some pixel differs by more than the
+-~> tolerance (0 by default). Two hosts can draw a soft edge (a pixel
+-~> covered in part, with partial alpha) one step apart, so the parity
+-~> script allows 1.
+
+function pngdiff(a_path, b_path, tolerance) {
+  let a = img.load(a_path)
+  let b = img.load(b_path)
+  if (img.size(a) != img.size(b)) {
+    puts("size differs:", img.size(a), img.size(b))
+    return false
+  }
+  let pa = img.pixels(a)
+  let pb = img.pixels(b)
+  let count = 0
+  let worst = 0
+  for (let i = 0; i < len(pa); i += 1) {
+    let x = pa[i]
+    let y = pb[i]
+    if (x != y) {
+      count += 1
+      let d = math.max(math.abs(x.r - y.r), math.abs(x.g - y.g), math.abs(x.b - y.b), math.abs(x.a - y.a))
+      if (x.a == 0 && y.a == 0) {
+        d = 0
+      }
+      worst = math.max(worst, d)
+    }
+  }
+  if (count == 0) {
+    puts("same")
+  } else {
+    puts(str(count) + " of " + str(len(pa)) + " pixels differ, by " + str(worst) + " at most")
+  }
+  worst <= tolerance
+}
+
+let args = os.args()
+if (len(args) < 2 || len(args) > 3) {
+  puts("usage: lizardscript tools/pngdiff.liz a.png b.png [tolerance]")
+  os.exit(2)
+}
+let tolerance = 0
+if (len(args) == 3) {
+  tolerance = text.number(args[2])
+}
+if (!pngdiff(args[0], args[1], tolerance)) {
+  os.exit(1)
+}

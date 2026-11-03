@@ -9,6 +9,14 @@
 -~> kind is fn (a drawing function), user (the document's own function), let,
 -~> layer, kw (keyword) or member (after a dot).
 
+use "../draw/pens"
+use "doc_names"
+use "editor_doc"
+use "editor_props"
+use "i18n"
+use "view_code"
+use "view_gfx"
+
 let cmp_keywords = ["let", "function", "layer", "if", "elif", "else", "for", "while", "return", "break",
                     "continue", "try", "catch", "true", "false", "null"]
 

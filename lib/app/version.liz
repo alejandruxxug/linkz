@@ -1,0 +1,5 @@
+-~> version: the app's version. A new one measures the machine again (see
+-~> machine.liz), since the drawing code may have got faster or slower.
+-~> Release builds write it here.
+
+let linkz_version = "0.1.0-dev"

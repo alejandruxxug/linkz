@@ -2,6 +2,14 @@
 -~> tab bar, the layers panel (the code), the properties panel and the status
 -~> bar. Each one has its own function so that only what changed is painted.
 
+use "editor_doc"
+use "editor_undo"
+use "home_data"
+use "i18n"
+use "view_code"
+use "view_gfx"
+use "view_layout"
+
 -~> == Toolbar and tabs ==
 
 function view_paint_toolbar() {

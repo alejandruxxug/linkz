@@ -1,4 +1,8 @@
 -~> The properties panel: fields from parameter names, edits that rewrite one span.
+use "../editor_doc"
+use "../editor_props"
+use "../lang_en"
+use "../lang_es"
 let docs = src.library_docs()
 let code = "-~> A five-point star.
 -~> center: where it is

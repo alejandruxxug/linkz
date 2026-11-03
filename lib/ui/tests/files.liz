@@ -1,4 +1,10 @@
 -~> Open, Save, dirty, and the language setting, on the in-memory files.
+use "../editor_doc"
+use "../editor_state"
+use "../editor_undo"
+use "../i18n"
+use "../lang_en"
+use "../lang_es"
 fake_files["/a.lzdraw"] = "circle((1, 2), 3, #fff)\n"
 puts(ed_open("/missing.lzdraw"), ed.status)
 puts(ed_open("/a.lzdraw"), ed.file, ed_dirty(), ed.status)
@@ -24,7 +30,7 @@ settings.language = "en"
 puts(lang_init())
 settings.language = "xx"
 puts(lang_init())
-settings = {}
+reset_settings()
 fake_os.locale = "fr"
 puts(lang_init())
 -~> set_language writes a valid settings.liz, keeping other lines.

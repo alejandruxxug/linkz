@@ -1,1 +1,1 @@
-[line 33, column 8] runtime error: path: holes need closed = true
+[line 6, column 8] runtime error: path: holes need closed = true

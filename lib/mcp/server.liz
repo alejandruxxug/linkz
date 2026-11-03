@@ -7,6 +7,9 @@
 -~>   mcp_serve()             the loop
 -~> Needs json.liz and tools.liz, and the host's io.
 
+use "json"
+use "tools"
+
 let mcp_server_version = "0.1.0"
 
 -~> The protocol versions this server speaks, newest first.
@@ -185,8 +188,7 @@ function mcp_serve() {
     if (text.trim(line) == "") {
       continue
     }
-    io.step_limit(mcp_step_limit)
-    let out = mcp_handle_line(line)
+    let out = io.with_steps(mcp_step_limit, function() { mcp_handle_line(line) })
     if (out !== null) {
       io.write(out + "\n")
     }

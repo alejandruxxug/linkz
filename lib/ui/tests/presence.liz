@@ -1,6 +1,12 @@
 -~> Focus, leave and unknown events: the status bar's mouse readout goes away
 -~> when the pointer leaves, the home screen looks at its folder again when the
 -~> window gains focus, and both screens ignore event types they don't know.
+use "../app"
+use "../home_view"
+use "../view_layout"
+use "../view_main"
+use "../lang_en"
+use "../lang_es"
 let app = {"needs_paint": false}
 let dir = "/home/u/Documents/Linkz"
 let times = {}

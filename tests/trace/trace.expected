@@ -1,0 +1,11 @@
+two colors, a square: [2, 2, 1] errors [] shapes 2 svg true area true
+a square with a hole: [2, 3, 2] errors [] shapes 2 svg true area true
+three colors in bands: [3, 3, 0] errors [] shapes 3 svg true area -
+three colors, nested: [3, 3, 2] errors [] shapes 3 svg true area -
+corners only touching are two regions: [2, 4, 0] errors [] shapes 3 svg true area -
+a speck is merged: [1, 1, 0] errors [] shapes 1 svg true area -
+no background rectangle: [2, 2, 1] errors [] shapes 2 svg true area true
+ring golden: true
+true trace: unknown option "colours" (known: colors, detail, min_area, corner, smooth, background, refine, scale, max_side)
+true trace: colors must be from 2 to 64
+true trace: options must be a hash like {"colors": 6}, not INTEGER

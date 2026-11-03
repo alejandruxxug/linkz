@@ -1,4 +1,5 @@
 -~> Strings: every escape, unicode, and what survives a round trip.
+use "../json"
 
 function show(text_in) {
   let s = json.parse(text_in)

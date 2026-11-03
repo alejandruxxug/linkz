@@ -1,1 +1,1 @@
-[line 33, column 8] runtime error: brush: pen must be a pen style like pens.ink
+[line 6, column 8] runtime error: brush: pen must be a pen style like pens.ink

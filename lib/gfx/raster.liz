@@ -12,6 +12,10 @@
 -~>   raster.paint(shapes, offset) draws a whole drawing, back to front
 -~>   raster.same_look(a, b)       whether two shapes paint the same pixels
 
+use "../draw/geometry"
+use "../draw/gradient"
+use "../draw/shapes"
+
 let raster = {}
 
 -~> Rows outside this range are never produced, so a huge shape stays cheap.

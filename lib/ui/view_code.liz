@@ -5,6 +5,8 @@
 -~>   mute, names text (bright on the selected row), colors as a 6x6 swatch
 -~>   with a 2 pixel gap before the literal.
 
+use "view_gfx"
+
 let code_keywords = ["let", "layer", "for", "while", "function", "if", "elif", "else", "return", "break",
                      "continue", "try", "catch", "true", "false", "null"]
 

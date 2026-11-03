@@ -6,6 +6,9 @@
 -~> after a restart), and one that changed gets a new thumbnail by itself.
 -~> The host only copies the pixels (fb.keep, fb.load_png, fb.blit).
 
+use "../draw/gradient"
+use "../gfx/raster"
+
 -~> What is known per card: "home_thumb_key" -> {"hash", "state": "ready" or
 -~> "error", "kept": name of the kept buffer, "size": point}. Nothing here
 -~> yet means the thumbnail is waiting.

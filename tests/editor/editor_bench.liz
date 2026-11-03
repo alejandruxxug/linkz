@@ -1,0 +1,146 @@
+-~> The editor's speed on big drawings (docs/Batches/fixtures, made by the
+-~> Go host's perf test): a full repaint, a small edit, one frame of dragging
+-~> a shape, one keystroke, and the edits that add or take away lines, each
+-~> timed as whole frames (events, run, paint). Run it alone to see the
+-~> table: lizardscript tests/editor/editor_bench.liz [rounds]
+-~> (lizardscript test --bench runs it as part of the tests, once each).
+
+use "../../lib/app/libs"
+use "rig"
+
+let rounds = 1
+if (len(os.args()) > 0) {
+  rounds = text.number(os.args()[0])
+}
+
+-~> The line of the first shape row, and of a shape row in the middle of a
+-~> drawing of n shapes (one layer line per 50 shapes).
+let first_shape = 5
+function middle(n) {
+  let i = n // 2 + 10
+  first_shape + i + i // 50
+}
+
+-~> Runs f, then a frame with the events f gives, rounds times; reports the
+-~> frame's milliseconds and the editor's phases (perf.liz) per round.
+function bench(rig, name, f, undo = null) {
+  let total = 0
+  let phases = {}
+  for (let i = 0; i < rounds; i += 1) {
+    let events = f(i)
+    let start = time.ms()
+    rig_frame(rig, events)
+    total += time.ms() - start
+    let p = rig.ed.app.debug_perf()
+    let ks = keys(p)
+    for (let k = 0; k < len(ks); k += 1) {
+      if (phases[ks[k]] == null) {
+        phases[ks[k]] = 0
+      }
+      phases[ks[k]] += p[ks[k]]
+    }
+    if (undo != null) {
+      undo()
+    }
+  }
+  let parts = []
+  let ks = list.sort(keys(phases))
+  for (let k = 0; k < len(ks); k += 1) {
+    push(parts, ks[k] + " " + str(math.round(phases[ks[k]] / rounds * 10) / 10.0))
+  }
+  puts(name, str(math.round(total / rounds * 10) / 10.0) + " ms", "(" + text.join(parts, ", ") + ")")
+  if (rig.ed.error != "") {
+    puts("  error:", rig.ed.error)
+  }
+}
+
+let sizes = [2000, 10000]
+for (let s = 0; s < len(sizes); s += 1) {
+  let count = sizes[s]
+  let k = str(count // 1000) + "k/"
+  let t0 = time.ms()
+  let code = fs.read(fs.join(libs_root(), "docs", "Batches", "fixtures", "shapes-" + str(count // 1000) + "k.lzdraw"))
+  let rig = rig_open(fs.join(fs.home(), "bench-" + str(count)), code, (800, 500))
+  let n = rig.names
+  puts(k + "open", str(math.round(time.ms() - t0)) + " ms")
+
+  bench(rig, k + "full_repaint", function(i) {
+    if (n.V.scene != null) {
+      n.tiles_mark_all(n.V.scene.tiles)
+    }
+    n.view_force_all()
+    n.app.needs_paint = true
+    []
+  })
+
+  n.ed_select(first_shape)
+  n.view_after()
+  rig_frame(rig)
+  bench(rig, k + "small_edit", function(i) {
+    n.ed_set_prop("r", str(10 + i % 2))
+    n.view_after()
+    []
+  })
+
+  let at = n.view_to_window(n.view_canvas_layout(), (400, 300)) * 0.5
+  rig_frame(rig, [{"type": "down", "pos": at}])
+  bench(rig, k + "drag_frame", function(i) {
+    let d = 2 + i % 8
+    [{"type": "move", "pos": at + (d, d / 2.0)}]
+  })
+  rig_frame(rig, [{"type": "up", "pos": at}])
+  n.ed_undo()
+  n.view_after()
+  rig_frame(rig)
+
+  n.ed_select(first_shape)
+  n.ed_set_prop("r", "20")
+  n.ed_set_caret(first_shape, 23)
+  n.view_after()
+  rig_frame(rig)
+  bench(rig, k + "keystroke", function(i) {
+    if (i % 2 == 0) {
+      return [{"type": "type", "text": "1"}]
+    }
+    [{"type": "key", "key": "Backspace"}]
+  })
+  if (rounds % 2 == 1) {
+    rig_frame(rig, [{"type": "key", "key": "Backspace"}])
+  }
+
+  let mid = middle(count)
+  let undo = function() {
+    n.ed_undo()
+    n.view_after()
+    rig_frame(rig)
+  }
+  bench(rig, k + "enter", function(i) {
+    n.ed_set_caret(mid, 1000)
+    n.view_after()
+    rig_frame(rig)
+    [{"type": "key", "key": "Enter"}]
+  }, undo)
+  bench(rig, k + "delete_line", function(i) {
+    n.ed_select_range(mid, mid)
+    n.view_after()
+    rig_frame(rig)
+    [{"type": "key", "key": "Backspace"}]
+  }, undo)
+  bench(rig, k + "paste_20", function(i) {
+    rig_clip.set(n.edit_rows_text(n.ed_model(), mid + 3, mid + 22))
+    n.ed_set_caret(mid, 0)
+    n.view_after()
+    rig_frame(rig)
+    [{"type": "key", "key": "V", "mods": {"shift": false, "alt": false, "cmd": true, "ctrl": false}}]
+  }, undo)
+
+  n.ed_set_caret(mid, 1000)
+  n.view_after()
+  rig_frame(rig)
+  bench(rig, k + "broken_keystroke", function(i) {
+    if (i % 2 == 0) {
+      return [{"type": "key", "key": "Backspace"}]
+    }
+    [{"type": "type", "text": ")"}]
+  })
+}

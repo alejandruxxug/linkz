@@ -1,7 +1,9 @@
 -~> paint_order: larger line first, creation order inside a line.
+use "../here"
+use "../shapes"
 
 let row = 0
-let here = function() { {"line": row, "layer": ["a"]} }
+here = function() { {"line": row, "layer": ["a"]} }
 function at(r, name) {
   row = r
   let s = circle((0, 0), 1, #fff)
@@ -27,7 +29,7 @@ push(made, at(5, "bottom"))
 puts(names(made))
 
 -~> Without lines (no host) it is the plain reverse.
-let here = function() { return }
+here = function() { return }
 let x = circle((0, 0), 1, #fff)
 x.args = "x"
 let y = circle((0, 0), 1, #fff)

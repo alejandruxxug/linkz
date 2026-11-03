@@ -12,6 +12,11 @@
 -~> the ones they replaced, and else the names are put together again from
 -~> the parts.
 
+use "complete_model"
+use "doc_cache"
+use "editor_doc"
+use "perf"
+
 -~> The model's names, worked out once per text.
 function doc_names(m) {
   let c = m.cache

@@ -1,4 +1,6 @@
 -~> Geometry with known answers.
+use "../geometry"
+use "../shapes"
 
 puts(lerp(0, 10, 0.25), lerp((0, 0), (10, 20), 0.5))
 puts(bezier_point((0, 0), (0, 10), (10, 10), (10, 0), 0.5))

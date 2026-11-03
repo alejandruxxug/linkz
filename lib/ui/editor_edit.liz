@@ -1,6 +1,9 @@
 -~> editor_edit: editing operations. Each one takes a model and returns a new
 -~> model (text, caret and selection), never changing the old one.
 
+use "editor_doc"
+use "editor_rows"
+
 -~> Splits typed or pasted text into lines, whatever line breaks it uses.
 function edit_split(s) {
   text.split(text.replace(s, text.char(13) + "\n", "\n"), "\n")

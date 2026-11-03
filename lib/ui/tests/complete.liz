@@ -1,5 +1,14 @@
 -~> Autocomplete: ranking, members, the document's own names, the inserted call with
 -~> its first argument selected, Tab between arguments, the signature hint, Enter, undo.
+use "../complete_model"
+use "../complete_state"
+use "../editor_commands"
+use "../editor_doc"
+use "../editor_state"
+use "../editor_undo"
+use "../i18n"
+use "../lang_en"
+use "../lang_es"
 function typed(s) {
   for (let i = 0; i < len(s); i = i + 1) {
     cmp_ed_type(s[i])

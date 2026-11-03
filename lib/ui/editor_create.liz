@@ -2,6 +2,10 @@
 -~> end up here: a shape becomes a line of code, a layer becomes `layer name`
 -~> and an empty row inside it.
 
+use "editor_doc"
+use "editor_rows"
+use "i18n"
+
 let default_canvas_size = (512, 512)
 
 -~> The code of a new shape of this kind, centered on a canvas of `size`.

@@ -1,0 +1,29 @@
+-~> host_os: the `os` and `time` hashes the editor's libraries use, on top
+-~> of the Terrarium's.
+-~>   os.config_dir()   ~/.linkz, made when missing: Linkz's settings, recent files,
+-~>                     thumbnails and the machine's measurement
+-~>   os.home(), os.locale(), os.reveal(path), os.memory()   as in the Terrarium
+-~>   os.app_version()  the version of Linkz
+-~>   time.ms()         milliseconds since the program started
+-~>   time.now()        seconds since 1970 (UTC), time.tz() the local offset in seconds
+
+use "clock"
+use "version"
+
+-~> ~/.linkz, made when missing.
+function host_config_dir() {
+  let dir = fs.join(fs.home(), ".linkz")
+  fs.mkdir(dir)
+  dir
+}
+
+function host_os() {
+  {"config_dir": host_config_dir, "home": fs.home, "locale": os.locale, "reveal": os.reveal,
+   "memory": os.memory, "app_version": function() { linkz_version }}
+}
+
+function host_time() {
+  {"ms": time.ms,
+   "now": function() { clock_unix(host_config_dir()) },
+   "tz": function() { clock_offset(host_config_dir()) }}
+}

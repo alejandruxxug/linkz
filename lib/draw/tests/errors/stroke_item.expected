@@ -1,1 +1,1 @@
-[line 33, column 8] runtime error: stroke: points must only hold points, but item 1 is INTEGER
+[line 6, column 8] runtime error: stroke: points must only hold points, but item 1 is INTEGER

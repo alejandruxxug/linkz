@@ -2,6 +2,18 @@
 -~> Each function runs one of the pure model operations, keeps the undo
 -~> history and marks the drawing to be run again. The view calls these.
 
+use "doc_cache"
+use "editor_create"
+use "editor_doc"
+use "editor_edit"
+use "editor_props"
+use "editor_rerun"
+use "editor_rows"
+use "editor_twoway"
+use "editor_undo"
+use "i18n"
+use "perf"
+
 -~> == Running the drawing ==
 
 

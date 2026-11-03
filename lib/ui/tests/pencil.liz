@@ -1,5 +1,9 @@
 -~> The pencil and the brush: recorded samples become one row.
 -~> A drag along an L shape, with a little noise on the straight parts.
+use "../editor_doc"
+use "../editor_twoway"
+use "../lang_en"
+use "../lang_es"
 function sample(x, y, p, t) {
   {"pos": (x * 2, y * 2), "canvas_pos": (x, y), "pressure": p, "t": t}
 }

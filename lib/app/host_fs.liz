@@ -1,0 +1,38 @@
+-~> host_fs: the `fs` hash the editor's libraries use, on top of the
+-~> Terrarium's fs. Paths always use "/".
+-~>   read(path), write(path, text), exists(path), mkdir(path)   as in the Terrarium
+-~>   list(dir, ext)     the files (not folders) of dir whose name ends in ext, by name,
+-~>                      without hidden ones: [{"mtime", "name", "path", "size"}]; a
+-~>                      folder that isn't there has none
+-~>   rename(from, to), copy(from, to)   refuse to replace a file
+-~>   trash(path)        moves it to the Trash
+-~>   hash(path)         the fingerprint of the file's text
+-~>   join(dir, name), slash(path), sep()
+
+use "fingerprint"
+
+function host_fs() {
+  {"read": fs.read, "write": fs.write, "exists": fs.exists, "mkdir": fs.mkdir,
+   "rename": fs.rename, "copy": fs.copy, "trash": fs.trash,
+   "list": host_fs_list, "hash": host_fs_hash, "join": fs.join, "sep": function() { "/" },
+   "slash": function(path) { text.replace(path, "\\", "/") }}
+}
+
+function host_fs_list(dir, ext) {
+  if (!fs.exists(dir)) {
+    return []
+  }
+  let out = []
+  let entries = fs.list(dir, {"info": true})
+  for (let i = 0; i < len(entries); i += 1) {
+    let e = entries[i]
+    if (!e.dir && !text.starts(e.name, ".") && (ext == "" || text.ends(e.name, ext))) {
+      push(out, {"mtime": e.mtime, "name": e.name, "path": fs.join(dir, e.name), "size": e.size})
+    }
+  }
+  out
+}
+
+function host_fs_hash(path) {
+  fingerprint(fs.read(path))
+}

@@ -1,0 +1,188 @@
+-~> host_fb: the `fb` hash the libraries draw with (gfx, the editor, the
+-~> splash), made of the Terrarium's drawing targets.
+-~>
+-~> fb draws on one target at a time, the current one, and every call leaves
+-~> the target out: fb.span(y, x0, x1, color) paints the current target. The
+-~> current target is an offscreen image while one is open (fb.offscreen),
+-~> else the named target, "ui" (the window's buffer) or "canvas" (a surface
+-~> over the window at twice its resolution, set with fb.canvas). Offscreen
+-~> images can be kept by name (fb.keep, fb.load_png) and drawn later
+-~> (fb.blit, fb.composite). Rectangles are a position and a size, two points.
+-~>
+-~> It is how the libraries written for the Go host run on the Terrarium
+-~> unchanged; the Terrarium calls take the target first.
+
+-~> A new fb drawing on ui: an image (paint, mcp, the splash), or a window
+-~> when on_window is true. With a window, fb.canvas makes the window's
+-~> "canvas" surface and fb.dirty tells the window what changed; with an
+-~> image the canvas is an image of its own and fb.dirty does nothing.
+function host_fb(ui, on_window = false) {
+  let st = {"ui": ui, "window": on_window, "canvas": null,
+    "named": "ui", "off": null, "kept": {}, "scaled": {}}
+  let fb = {}
+
+  -~> Where drawing goes now.
+  let cur = function() {
+    if (st.off != null) {
+      return st.off
+    }
+    if (st.named == "canvas" && st.canvas != null) {
+      return st.canvas
+    }
+    st.ui
+  }
+  let rect = function(pos, size) {
+    [pos.x, pos.y, size.x, size.y]
+  }
+  let kept = function(name) {
+    let b = st.kept[name]
+    if (b == null) {
+      error("no kept buffer called \"" + name + "\"")
+    }
+    b
+  }
+
+  fb.size = function() {
+    img.size(cur())
+  }
+  fb.span = function(y, x0, x1, color) {
+    img.span(cur(), y, x0, x1, color)
+  }
+  fb.spans = function(list, offset, color) {
+    img.spans(cur(), list, color, offset)
+  }
+  fb.fill = function(pos, size, color) {
+    img.fill(cur(), rect(pos, size), color)
+  }
+  -~> Makes a rectangle transparent.
+  fb.clear = function(pos, size) {
+    img.clear(cur(), #00000000, rect(pos, size))
+  }
+  fb.clip = function(pos, size) {
+    img.clip(cur(), rect(pos, size))
+  }
+  fb.unclip = function() {
+    img.unclip(cur())
+  }
+  fb.span_gradient = function(y, x0, x1, g) {
+    img.span_gradient(cur(), y, x0, x1, g)
+  }
+  fb.spans_gradient = function(list, offset, g) {
+    img.spans_gradient(cur(), list, g, offset)
+  }
+  fb.push_layer = function() {
+    img.push_layer(cur())
+  }
+  fb.pop_layer = function(mode, opacity) {
+    img.pop_layer(cur(), mode, opacity)
+  }
+  fb.composite = function(name, mode, opacity) {
+    img.composite(cur(), kept(name), mode, opacity)
+  }
+
+  -~> Drawing goes to a new transparent image of `size` until fb.screen or fb.keep.
+  fb.offscreen = function(size) {
+    st.off = img.new(size.x, size.y)
+  }
+  -~> Keeps the offscreen image under a name (replacing what had it) and
+  -~> goes back to the named target.
+  fb.keep = function(name) {
+    if (st.off == null) {
+      error("want (STRING name) while an offscreen buffer is the target")
+    }
+    st.kept[name] = st.off
+    st.off = null
+  }
+  fb.screen = function() {
+    st.off = null
+  }
+  fb.target = function(name) {
+    if (name == "canvas" && st.canvas == null) {
+      error("no canvas: call fb.canvas(pos, size) first")
+    }
+    if (name != "ui" && name != "canvas") {
+      error("unknown target \"" + str(name) + "\", want \"ui\" or \"canvas\"")
+    }
+    st.named = name
+    st.off = null
+  }
+  -~> Where the canvas shows, in ui pixels; its buffer has twice the
+  -~> resolution. A size of (0, 0) removes it.
+  fb.canvas = function(pos, size) {
+    if (size.x <= 0 || size.y <= 0) {
+      if (st.window && st.canvas != null) {
+        window.surface(st.ui, "canvas", [0, 0, 0, 0])
+      }
+      st.canvas = null
+      st.named = "ui"
+      return
+    }
+    if (st.window) {
+      st.canvas = window.surface(st.ui, "canvas", rect(pos, size), 1)
+    } elif (st.canvas == null || img.size(st.canvas) != size * 2) {
+      st.canvas = img.new(size.x * 2, size.y * 2)
+    }
+  }
+  -~> Tells the window which part of the named target changed.
+  fb.dirty = function(pos, size) {
+    if (st.off == null && st.window) {
+      window.dirty(cur(), rect(pos, size))
+    }
+  }
+  fb.save_png = function(path, pos = null, size = null) {
+    if (pos == null) {
+      img.save(cur(), path)
+    } else {
+      img.save(cur(), path, rect(pos, size))
+    }
+  }
+  fb.png_base64 = function() {
+    img.png_base64(cur())
+  }
+  -~> The image kept under name, or null: for the host, which shows the
+  -~> splash's pieces.
+  fb.kept = function(name) {
+    st.kept[name]
+  }
+  -~> Keeps a PNG file under a name, like fb.keep, and gives its size.
+  fb.load_png = function(path, name) {
+    st.kept[name] = img.load(path)
+    st.scaled[name] = {}
+    img.size(st.kept[name])
+  }
+  -~> Draws a kept image at pos, scaled to size with the nearest pixel when
+  -~> one is given.
+  fb.blit = function(name, pos, size = null) {
+    let b = kept(name)
+    if (size != null && size != img.size(b)) {
+      b = host_fb_scaled(st, name, b, size)
+    }
+    img.blit(cur(), b, pos)
+  }
+  fb
+}
+
+-~> The kept image `name` scaled to size, made once and kept until the name
+-~> is loaded again: each pixel takes the source pixel nearest to it.
+function host_fb_scaled(st, name, b, size) {
+  if (st.scaled[name] == null) {
+    st.scaled[name] = {}
+  }
+  let key = str(size)
+  if (st.scaled[name][key] != null) {
+    return st.scaled[name][key]
+  }
+  let w = int(size.x)
+  let h = int(size.y)
+  let from = img.size(b)
+  let src = img.pixels(b)
+  let out = []
+  for (let y = 0; y < h; y += 1) {
+    let row = (y * from.y // h) * from.x
+    for (let x = 0; x < w; x += 1) {
+      push(out, src[row + x * from.x // w])
+    }
+  }
+  st.scaled[name][key] = img.from_pixels((w, h), out)
+  st.scaled[name][key]
+}

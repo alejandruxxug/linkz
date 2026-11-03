@@ -5,6 +5,12 @@
 -~> An edit is {"l1", "c1", "l2", "c2", "text"}: replace that span (columns from 1,
 -~> the end just after the last character, like src.parse).
 
+use "../draw/geometry"
+use "../draw/pens"
+use "editor_doc"
+use "editor_rows"
+use "i18n"
+
 function is_refusal(r) {
   type(r) == "HASH" && r.refused != null
 }

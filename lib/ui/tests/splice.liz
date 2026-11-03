@@ -5,6 +5,12 @@
 -~> code splices too: then it must have errors, whatever they say and whatever
 -~> the statements after the broken one are; once the code is mended, all
 -~> must be exactly the full parse's again.
+use "../doc_names"
+use "../doc_splice"
+use "../editor_doc"
+use "../editor_rows"
+use "../lang_en"
+use "../lang_es"
 let code = "-~> lzdraw 1
 let horizon = 300 -~> sky line
 

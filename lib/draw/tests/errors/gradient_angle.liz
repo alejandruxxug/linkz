@@ -1,1 +1,2 @@
+use "../../gradient"
 gradient([#000, #fff], "up")

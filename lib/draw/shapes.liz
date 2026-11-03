@@ -11,6 +11,12 @@
 -~>   line, layer   where the call is in the file, when the host says so
 -~> Positions are points and colors are colors: circle((256, 256), 40, #3fa34d).
 
+use "check"
+use "geometry"
+use "gradient"
+use "here"
+use "pens"
+
 let drawing = []
 
 -~> The canvas. A drawing sets it with canvas = {"size": (400, 200), "background": #f4f1e8}.
@@ -26,44 +32,6 @@ function draw(shape) {
   }
   push(drawing, add_styles(shape, where))
   shape
-}
-
--~> Stops the drawing with a message that names the call that went wrong.
-function reject(call, message) {
-  error(call + ": " + message)
-}
-
-function is_number(v) {
-  type(v) == "INTEGER" || type(v) == "FLOAT"
-}
-
-function need_point(call, name, v) {
-  if (type(v) != "POINT") {
-    reject(call, name + " must be a point like (10, 20), not " + type(v))
-  }
-}
-
-function need_color(call, name, v) {
-  if (type(v) != "COLOR") {
-    reject(call, name + " must be a color like #3fa34d, not " + type(v))
-  }
-}
-
-function need_number(call, name, v) {
-  if (!is_number(v)) {
-    reject(call, name + " must be a number, not " + type(v))
-  }
-}
-
-function need_points(call, name, v) {
-  if (type(v) != "ARRAY" || len(v) == 0) {
-    reject(call, name + " must be a list of points like [(0, 0), (10, 5)] with at least one")
-  }
-  for (let i = 0; i < len(v); i = i + 1) {
-    if (type(v[i]) != "POINT") {
-      reject(call, name + " must only hold points, but item " + str(i) + " is " + type(v[i]))
-    }
-  }
 }
 
 function make_shape(kind, args, path, fill, stroke_color, width, anchors) {

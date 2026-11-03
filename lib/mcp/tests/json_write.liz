@@ -1,4 +1,5 @@
 -~> json.stringify: every value, and the values JSON has no word for.
+use "../json"
 
 puts(json.stringify(null))
 puts(json.stringify(true))

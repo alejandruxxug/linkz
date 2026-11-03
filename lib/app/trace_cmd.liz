@@ -1,0 +1,74 @@
+-~> trace_cmd: linkz trace in.png out.lzdraw [--colors 8] [--detail 1.5]
+-~> [--min-area 8] [--max-side 256] [--scale 1] [--corner 55] turns a picture
+-~> into drawing code (lib/trace) and says what it made.
+
+use "host_img"
+use "host_os"
+use "libs"
+
+let trace_usage = "usage: linkz trace in.png out.lzdraw [--colors 8] [--detail 1.5] [--min-area 8] [--max-side 256] [--scale 1] [--corner 55]"
+
+-~> The options the command takes, by flag, and the key of trace's options.
+let trace_flags = {"colors": "colors", "detail": "detail", "min-area": "min_area", "max-side": "max_side",
+  "scale": "scale", "corner": "corner"}
+
+-~> A number as trace takes it: a whole number is an INTEGER.
+function trace_number(v) {
+  if (type(v) == "FLOAT" && v == math.floor(v) && math.abs(v) < 1000000000000000) {
+    return math.floor(v)
+  }
+  v
+}
+
+-~> {"files": [in, out], "options": {...}} from the arguments.
+function trace_args(args) {
+  let files = []
+  let options = {}
+  for (let i = 0; i < len(args); i += 1) {
+    if (!text.starts(args[i], "--")) {
+      push(files, args[i])
+      continue
+    }
+    let name = text.slice(args[i], 2, len(args[i]))
+    let key = trace_flags[name]
+    if (key == null || i + 1 >= len(args)) {
+      error("bad option " + args[i] + "\n" + trace_usage)
+    }
+    i += 1
+    let n = text.number(args[i])
+    if (n == null) {
+      error("--" + name + " needs a number, got " + json.write(args[i]))
+    }
+    options[key] = trace_number(n)
+  }
+  if (len(files) != 2) {
+    error(trace_usage)
+  }
+  {"files": files, "options": options}
+}
+
+-~> The code and the stats of tracing the picture at path.
+function trace_file(path, options) {
+  let names = libs_load(libs_draw + libs_trace, {"img": host_img(), "time": host_time()})
+  names.trace(path, options)
+}
+
+-~> A number of the stats as the Go host printed it: whole floats without ".0".
+function trace_show(v) {
+  str(trace_number(v))
+}
+
+function trace_command(args) {
+  let a = trace_args(args)
+  let result = trace_file(a.files[0], a.options)
+  fs.write(a.files[1], result.code)
+  let st = result.stats
+  puts("wrote " + a.files[1] + ": " + trace_show(st.colors) + " colors, " + trace_show(st.regions) + " regions (" +
+    trace_show(st.holes) + " holes), " + trace_show(st.points) + " points, " + str(math.round(st.ms)) + " ms")
+  let s = st.stages
+  if (type(s) == "HASH") {
+    puts("  load " + str(math.round(s.load)) + ", quantize " + str(math.round(s.quantize)) + ", clean " +
+      str(math.round(s.clean)) + ", rings " + str(math.round(s.rings)) + ", simplify " +
+      str(math.round(s.simplify)) + ", code " + str(math.round(s.code)) + " ms")
+  }
+}

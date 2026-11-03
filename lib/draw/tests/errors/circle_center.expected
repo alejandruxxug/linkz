@@ -1,1 +1,1 @@
-[line 33, column 8] runtime error: circle: center must be a point like (10, 20), not INTEGER
+[line 6, column 8] runtime error: circle: center must be a point like (10, 20), not INTEGER

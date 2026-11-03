@@ -1,1 +1,2 @@
+use "../../gradient"
 radial((5, 5), 0, [#000, #fff])

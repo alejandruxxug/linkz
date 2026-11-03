@@ -1,0 +1,21 @@
+-~> The drawing libraries' test programs (lib/draw/tests): each uses the
+-~> libraries it tests, without a host: here() gives nothing unless the test
+-~> replaces it, so shapes have no line or layer. Those in tests/ must run;
+-~> those in tests/errors must fail. Errors are the language's own, at the
+-~> library's line when a library raised them.
+
+use "../../lib/app/libs"
+use "../harness"
+
+let dir = fs.join(libs_dir(), "draw", "tests")
+let groups = [[dir, true], [fs.join(dir, "errors"), false]]
+for (let g = 0; g < len(groups); g += 1) {
+  let files = harness_programs(groups[g][0])
+  for (let i = 0; i < len(files); i += 1) {
+    let r = harness_run(files[i])
+    if ((r.error == null) != groups[g][1]) {
+      puts("FAIL", harness_name(files[i]), "should succeed:", groups[g][1])
+    }
+    harness_check(harness_name(files[i]), harness_output(r), harness_expected(files[i]))
+  }
+}

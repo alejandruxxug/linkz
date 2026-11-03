@@ -1,0 +1,11 @@
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"0"}}}
+{"jsonrpc":"2.0","method":"notifications/initialized"}
+{"jsonrpc":"2.0","id":2,"method":"tools/list"}
+{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"run","arguments":{"code":"circle((10, 10), 5, #f00)\nlayer a\n  rect((1, 1), (4, 4), #00f)\nx = y\n"}}}
+{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"docs","arguments":{"name":"circle"}}}
+{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"render","arguments":{"code":"canvas = {\"size\": (40, 30), \"background\": #fff}\ncircle((20, 15), 9, #3fa34d)\n"}}}
+{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"run","arguments":{"code":"while (true) {}"}}}
+oops
+{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"save","arguments":{"path":"t1.lzdraw","code":"circle((1,1),1,#000)"}}}
+{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"list","arguments":{}}}
+{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"docs","arguments":{}}}

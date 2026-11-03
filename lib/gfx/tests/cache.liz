@@ -1,4 +1,6 @@
 -~> The raster cache keeps what this paint used and drops stale versions.
+use "../../draw/shapes"
+use "../raster"
 raster_cache_limit = 4
 function shape_at(x) {
   circle((x, 10), 5, #ff0000)

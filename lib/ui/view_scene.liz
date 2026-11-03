@@ -18,6 +18,17 @@
 -~> once), "layer", "styles"}. It carries the shape's layer and styles so
 -~> layer_events takes entries as it takes shapes.
 
+use "../draw/gradient"
+use "../draw/shapes"
+use "../gfx/raster"
+use "../gfx/spatial"
+use "../gfx/tiles"
+use "editor_rows"
+use "editor_undo"
+use "view_canvas"
+use "view_layout"
+use "view_tools"
+
 let scene_tile = 256
 let scene_cell = 64
 

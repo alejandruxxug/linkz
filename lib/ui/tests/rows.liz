@@ -1,4 +1,8 @@
 -~> Rows from a drawing: kinds, depth, names, flags, errors, folding, hidden layers.
+use "../editor_doc"
+use "../editor_rows"
+use "../lang_en"
+use "../lang_es"
 let code = "let horizon = 300 -~> sky line
 layer sun -~> Sun [hidden]
   circle((380, 90), 40, #e0a526) -~> core [locked]

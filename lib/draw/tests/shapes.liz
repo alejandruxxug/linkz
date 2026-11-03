@@ -1,4 +1,6 @@
 -~> The shape record each call makes.
+use "../here"
+use "../shapes"
 
 function show(s) {
   puts(s.kind, "args", len(s.args), "path", len(s.path), "fill", s.fill, "stroke", s.stroke, "width", s.width)
@@ -29,7 +31,7 @@ c.fill = #ff0000
 puts(drawing[0].fill)
 
 -~> The host's here() tags shapes with their line and layer.
-let here = function() { {"line": 42, "layer": ["sea", "waves"]} }
+here = function() { {"line": 42, "layer": ["sea", "waves"]} }
 let tagged = circle((1, 1), 1, #fff)
 puts(tagged.line, tagged.layer)
 

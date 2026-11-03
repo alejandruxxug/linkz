@@ -1,1 +1,1 @@
-[line 33, column 8] runtime error: radial: stop 1 must be a color, hard(color) or [t, color], not INTEGER
+[line 6, column 8] runtime error: radial: stop 1 must be a color, hard(color) or [t, color], not INTEGER

@@ -1,0 +1,84 @@
+-~> events: the window's events as the editor takes them. The editor was
+-~> written for the Go host's events, so this keeps them as they were:
+-~>   type        down, up, move, wheel (the window's scroll), key, text (type),
+-~>               resize, focus, leave, enter
+-~>   pos         the pointer in ui pixels
+-~>   canvas_pos  the pointer in the canvas's own (full resolution) pixels, when it is
+-~>               over the canvas
+-~>   button      0 left, 1 right, 2 middle
+-~>   samples     move: [{"pos", "canvas_pos", "pressure", "t"}], every point since the
+-~>               last frame
+-~>   dy, key, text, size, focused   as the window gives them
+-~>   mods        {"shift", "alt", "cmd", "ctrl"}, always there
+-~>   pen         {"pressure", "tilt", "rotation", "source", "eraser"}, always there
+
+let events_types = {"scroll": "wheel", "type": "text"}
+let events_buttons = {"left": 0, "right": 1, "middle": 2}
+let events_no_mods = {"shift": false, "alt": false, "cmd": false, "ctrl": false}
+
+-~> The canvas point of something with a surface (an event or a sample), or null.
+function events_canvas_pos(e) {
+  if (e.surface == "canvas") {
+    return e.surface_pos
+  }
+  null
+}
+
+function events_pen(p) {
+  if (p == null) {
+    return {"pressure": 1.0, "tilt": (0.0, 0.0), "rotation": 0.0, "source": "mouse", "eraser": false}
+  }
+  {"pressure": p.pressure, "tilt": p.tilt, "rotation": 0.0, "source": p.source, "eraser": p.eraser}
+}
+
+function events_samples(list) {
+  let out = []
+  for (let i = 0; i < len(list); i += 1) {
+    let s = list[i]
+    push(out, {"pos": s.pos, "canvas_pos": events_canvas_pos(s), "pressure": s.pressure, "t": s.t})
+  }
+  out
+}
+
+-~> The editor's event for a window event, or null for one it doesn't take
+-~> (close).
+function events_app(e) {
+  if (e.type == "close") {
+    return null
+  }
+  let type = e.type
+  if (hash.has(events_types, type)) {
+    type = events_types[type]
+  }
+  let h = {"type": type}
+  if (type == "down" || type == "up" || type == "move" || type == "wheel") {
+    h.pos = e.pos
+    let at = events_canvas_pos(e)
+    if (at != null) {
+      h.canvas_pos = at
+    }
+    h.button = 0
+    if (e.button != null) {
+      h.button = events_buttons[e.button]
+    }
+    if (type == "move") {
+      h.samples = events_samples(e.samples)
+    } elif (type == "wheel") {
+      h.dy = e.dy
+    }
+  } elif (type == "key") {
+    h.key = e.key
+  } elif (type == "text") {
+    h.text = e.text
+  } elif (type == "resize") {
+    h.size = e.size
+  } elif (type == "focus") {
+    h.focused = e.focused
+  }
+  h.mods = events_no_mods
+  if (e.mods != null) {
+    h.mods = e.mods
+  }
+  h.pen = events_pen(e.pen)
+  h
+}

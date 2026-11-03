@@ -1,1 +1,2 @@
+use "../../svg"
 svg_document(5, [])

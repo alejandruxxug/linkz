@@ -1,6 +1,15 @@
 -~> The home screen's logic on in-memory files: the folder, the list, sort,
 -~> search, recent.liz, how long ago in English and Spanish, wrapping labels,
 -~> and the actions that change files.
+use "../app"
+use "../app_screens"
+use "../editor_undo"
+use "../home_data"
+use "../home_example"
+use "../home_view"
+use "../i18n"
+use "../lang_en"
+use "../lang_es"
 let dir = "/home/u/Documents/Linkz"
 let times = {}
 os.home = function() { "/home/u" }
@@ -38,7 +47,7 @@ fs.copy = function(a, b) {
 let trashed = []
 fs.trash = function(p) { push(trashed, p); delete(fake_files, p); delete(times, p); null }
 let shown = []
-function show_screen(name, args) { push(shown, name) }
+show_screen = function(name, args) { push(shown, name) }
 function add(name, mtime) {
   let p = dir + "/" + name
   fake_files[p] = "canvas = {\"size\": (100, 50), \"background\": #ffffff}\nrect((0, 0), (50, 50), #ff0000)\n"
@@ -60,7 +69,7 @@ settings.drawings_dir = "~"
 puts(home_dir())
 settings.drawings_dir = "   "
 puts(home_dir())
-settings = {}
+reset_settings()
 puts(home_dir_label(dir), home_dir_label("/home/u"), home_dir_label("/other"))
 
 -~> == The list: newest first, only .lzdraw ==
@@ -153,7 +162,7 @@ puts(src.run(home_new_text()).errors, src.run(home_new_text()).canvas.size)
 
 -~> == Actions on the files ==
 times = {}
-fake_files = {}
+reset_files()
 add("one.lzdraw", 100)
 add("two.lzdraw", 200)
 home_scan()
@@ -187,7 +196,7 @@ puts(home_trash(u), trashed, fake_files[u.path], home_recent_load()[0] != u.path
 
 -~> == Layout at 512 x 360 ==
 times = {}
-fake_files = {}
+reset_files()
 let order = ["layers", "strokes", "night-city", "hello", "mountains", "lily", "badge", "waves", "poster", "grid", "bird", "tree"]
 for (let i = 0; i < len(order); i = i + 1) { add(order[i] + ".lzdraw", 1000 - i) }
 home_scan()
@@ -214,6 +223,6 @@ puts(home_cols(400), home_cols(512), home_cols(100), home_work_count(400), home_
 home.size = (512, 360)
 puts(home_layout().empty)
 times = {}
-fake_files = {}
+reset_files()
 home_scan()
 puts(home_layout().empty, len(home.cards))

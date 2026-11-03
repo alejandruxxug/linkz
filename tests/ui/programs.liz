@@ -1,0 +1,22 @@
+-~> The editor's test programs (lib/ui/tests): each uses the editor's
+-~> libraries it tests, with the stand-ins of tests/prelude.liz for the
+-~> host's fs, clip, os and time (all in memory) and the real src around
+-~> them. What each prints is compared with its .expected file.
+
+use "../../lib/app/host_src"
+use "../../lib/app/libs"
+use "../harness"
+
+-~> presence.liz stands in for the app with its own `let app`, which only
+-~> works where every file shares one scope (the Go host's runner); with
+-~> modules it gets rewritten when that runner goes (B042).
+
+let dir = fs.join(libs_dir(), "ui", "tests")
+let files = harness_programs(dir, ["prelude.liz", "presence.liz"])
+puts("skip ui/tests/presence.liz: it replaces the app with a let of its own")
+for (let i = 0; i < len(files); i += 1) {
+  let prelude = harness_run(fs.join(dir, "prelude.liz"))
+  let around = hash.merge(prelude.globals, {"src": host_src()})
+  let r = harness_run(files[i], around)
+  harness_check(harness_name(files[i]), harness_output(r), harness_expected(files[i]))
+}

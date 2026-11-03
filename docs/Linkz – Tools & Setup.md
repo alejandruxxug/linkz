@@ -21,6 +21,23 @@ go build -o linkz . && ./linkz render examples/hello.lzdraw
 (cd ../lizard-script && go test ./...)         # after any language change
 ```
 
+### The lizard port (B041)
+
+Linkz also runs as a lizard program (`main.liz`, `lib/app/`), next to the Go host until B042:
+
+```bash
+lizardscript run --vm . edit [--no-splash] [file.lzdraw]   # also render, trace, paint, calibrate, mcp
+lizardscript build --vm . -o linkz                         # one executable (bundle.txt lists the libraries)
+scripts/test.sh                                            # tests/ on both engines, HOME in a temp folder
+scripts/smoke_lizard.sh                                    # the commands and a driven editor window
+scripts/parity.sh                                          # the Go host and the port on the same files
+lizardscript tests/editor/editor_bench.liz 5               # the editor benchmarks (M10 fixtures)
+lizardscript tools/uses.liz --check lib                    # every library file uses what it needs
+LIZARD_AUTOMATION=1 lizardscript drive Dump                # the backdoor (was linkz debug)
+```
+
+`edit` and the `ui`/`editor` tests need `use` cycles (see [[Linkz – Language Needs]]): until lizard-script has them, build `lizardscript` with that change. `LINKZ_ENGINE=tree` runs the loaded code on the evaluator.
+
 ## ⚙️ Settings
 
 `~/.linkz/settings.liz` (the folder `os.config_dir()` gives) is lizard-script: one `let` per setting. The editor evaluates it once at startup in its own small, step-limited environment and hands the variables to the UI as a `settings` hash. A missing file means defaults; a file with a syntax or runtime error is ignored with a warning on stderr and the defaults are used.

@@ -1,1 +1,1 @@
-[line 33, column 8] runtime error: brush: pressures must be a list with one number for each point
+[line 6, column 8] runtime error: brush: pressures must be a list with one number for each point

@@ -5,6 +5,21 @@
 -~> scene's tiles (view_scene.liz), so a paint only repaints what changed.
 -~> Errors keep the last good drawing, dimmed, with a badge under it.
 
+use "../draw/geometry"
+use "../draw/gradient"
+use "../gfx/raster"
+use "../gfx/tiles"
+use "editor_doc"
+use "editor_rows"
+use "editor_state"
+use "editor_undo"
+use "i18n"
+use "perf"
+use "view_gfx"
+use "view_layout"
+use "view_scene"
+use "view_tools"
+
 -~> A shape with its path and width multiplied by k (the zoom). Shapes at 100%
 -~> are used as they are.
 function view_scale_shape(s, k) {

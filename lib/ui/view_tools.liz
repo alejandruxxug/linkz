@@ -10,6 +10,17 @@
 -~> paint (the host hands over the latest position), and a brush that is being
 -~> dragged is shown as a plain polyline until the button is released.
 
+use "../draw/gradient"
+use "../draw/pens"
+use "../gfx/raster"
+use "editor_rows"
+use "editor_state"
+use "editor_twoway"
+use "editor_undo"
+use "view_canvas"
+use "view_input"
+use "view_layout"
+
 let tools_double_ms = 450
 let tools_chunk = 24
 

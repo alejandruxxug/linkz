@@ -1,4 +1,5 @@
 -~> json.parse: every kind of value, whitespace, and the types it gives.
+use "../json"
 
 function show(text_in) {
   let v = json.parse(text_in)

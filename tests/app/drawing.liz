@@ -1,0 +1,75 @@
+-~> Running a drawing (drawing.liz): shapes are tagged with their line and
+-~> layer, what it prints and its errors come back, errors raised in a
+-~> library are placed at the drawing's line, a user's own function keeps
+-~> its errors' positions, a loop that never ends is stopped, and each run
+-~> starts fresh. Then render and paint, which place errors the same way.
+
+use "../../lib/app/drawing"
+use "../../lib/app/paint"
+use "../../lib/app/render"
+
+function tags(r) {
+  let out = []
+  for (let i = 0; i < len(r.shapes); i += 1) {
+    push(out, [r.shapes[i].kind, r.shapes[i].line, r.shapes[i].layer])
+  }
+  out
+}
+
+puts("-- tags")
+let r = drawing_run("function dot(p) {\n  circle(p, 2, #000)\n}\nlayer sky\n  dot((1, 1))\n  layer sun\n    rect((0, 0), (2, 2), #fff)\nfor (let i = 0; i < 2; i += 1) {\n  line((i, 0), (i, 5), #000, 1)\n}\n")
+puts(tags(r), r.errors)
+
+puts("-- printed and errors")
+r = drawing_run("puts(\"hi\", 1 + 2)\ncircle((1, 1), 1, #000)\nnope\n")
+puts(r.printed, r.errors, len(r.shapes))
+puts(drawing_run("let = 5").errors)
+
+puts("-- library errors at the drawing's line")
+let cases = ["let a = 1\n\n\ncircle(5, 3, #fff)\n", "layer sky\n  let x = 1\n  circle(5, 3, #fff)\n",
+  "for (let i = 0; i < 2; i = i + 1) {\n  circle(i, 3, #fff)\n}\n", "let a = 1\nlet b = a + nope\n",
+  "function f() {\n  nope\n}\nf()\n"]
+for (let i = 0; i < len(cases); i += 1) {
+  puts(drawing_run(cases[i]).errors)
+}
+
+puts("-- step limit, fresh runs")
+r = drawing_run("while (true) {}")
+puts(r.errors)
+puts(len(drawing_run("circle((1, 1), 1, #000)").shapes), len(drawing_run("circle((1, 1), 1, #000)").shapes))
+puts(drawing_run("canvas.size").canvas, drawing_run("canvas = {\"size\": (10, 20)}").canvas)
+puts(drawing_run("math.random()").steps == drawing_run("math.random()").steps)
+
+puts("-- render")
+let bad = ["circle(5, 3, #fff)\n", "let a = 1\nlet b = a + nope\n", "canvas = 5\n", "circle((1, 1)\n",
+  "canvas = {\"size\": (400, 20000)}\n"]
+for (let i = 0; i < len(bad); i += 1) {
+  try {
+    render_svg(bad[i])
+    puts("no error")
+  } catch (e) {
+    puts(e.message)
+  }
+}
+
+puts("-- paint")
+let p = paint_run("fb.fill((0, 0), (4, 4), #ff0000)", (4, 4))
+puts(img.size(p), img.get(p, 3, 3))
+let bad_paint = ["circle(5, 3, #fff)\n", "while (true) {}\n"]
+for (let i = 0; i < len(bad_paint); i += 1) {
+  try {
+    paint_run(bad_paint[i], (4, 4))
+  } catch (e) {
+    puts(e.message)
+  }
+}
+let sizes = ["64x32", "0x5", "10", "axb", "20000x10"]
+for (let i = 0; i < len(sizes); i += 1) {
+  try {
+    let size = paint_size(sizes[i])
+    paint_run("", size)
+    puts(size)
+  } catch (e) {
+    puts(e.message)
+  }
+}

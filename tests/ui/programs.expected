@@ -1,0 +1,19 @@
+skip ui/tests/presence.liz: it replaces the app with a let of its own
+ok ui/tests/commands.liz
+ok ui/tests/complete.liz
+ok ui/tests/create.liz
+ok ui/tests/edit.liz
+ok ui/tests/files.liz
+ok ui/tests/follow.liz
+ok ui/tests/home.liz
+ok ui/tests/i18n.liz
+ok ui/tests/pencil.liz
+ok ui/tests/props.liz
+ok ui/tests/rerun.liz
+ok ui/tests/rows.liz
+ok ui/tests/rows_ops.liz
+ok ui/tests/splice.liz
+ok ui/tests/tools.liz
+ok ui/tests/twoway.liz
+ok ui/tests/undo.liz
+ok ui/tests/undo_actions.liz

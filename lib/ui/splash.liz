@@ -9,6 +9,9 @@
 -~> "vines" and "bloom" are optional in the art; without them nothing is kept
 -~> for them and the info counts are 0.
 
+use "../gfx/font"
+use "splash_art"
+
 -~> Placement. The lizard walks in place under the letters "ink" of the logo
 -~> (logo-local x 24 to 80, centered on them), feet on a ground line just
 -~> below the letters. The tagline sits lower to leave room for it.

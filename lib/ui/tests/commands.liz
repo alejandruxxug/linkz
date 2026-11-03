@@ -1,4 +1,9 @@
 -~> The backdoor: a drawing made from empty with commands only.
+use "../editor_commands"
+use "../editor_undo"
+use "../i18n"
+use "../lang_en"
+use "../lang_es"
 let cmds = editor_debug_commands()
 function call(name, args) {
   let r = cmds[name](args)

@@ -23,7 +23,8 @@ Order: finish B007b (editor view) + B015 (home) → **B007c autocomplete (mandat
 | M7 | Agents | `linkz mcp`: run / render (PNG) / docs / save, protocol written in lizard |
 | M8 | Tracing | `trace.image(...)` turns a PNG into editable shapes |
 | M9 | Release | GoReleaser binaries for macOS/Windows/Linux + install script; the reveal |
-| M10 | Performance | Profile first; VM profiler + quickening (B033), language polish (B034), canvas tiles + spatial index + dirty rects (B035), then the incremental editor, instant strokes, packed number arrays. Targets: < 16 ms edits and drags at 2k shapes, 10k+ objects |
+| M10 ✅ | Performance | Profile first; VM profiler + quickening (B033), language polish (B034), canvas tiles + spatial index + dirty rects (B035), then the incremental editor, instant strokes, packed number arrays. Targets: < 16 ms edits and drags at 2k shapes, 10k+ objects |
+| M11 | All lizard | The Linkz repo has no Go: modules, reflection, io and build tools in the language (B039), Terrarium surfaces/blending/window parity/automation (B040), the port (B041), deleting the Go host (B042). Plan: [[Linkz – All Lizard Plan]] |
 
 ## 🧱 v1.1 (after the v1 finish line)
 | # | Batch | Done when |

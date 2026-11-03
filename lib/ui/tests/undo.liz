@@ -1,4 +1,9 @@
 -~> The editor state: undo and redo of edits, gestures and strokes; running and errors.
+use "../editor_doc"
+use "../editor_state"
+use "../editor_undo"
+use "../lang_en"
+use "../lang_es"
 ed_reset("circle((100, 100), 30, #3fa34d)\n", "")
 puts(ed_dirty(), len(ed.undo))
 -~> Typing along one row is one step.

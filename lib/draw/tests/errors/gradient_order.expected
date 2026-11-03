@@ -1,1 +1,1 @@
-[line 33, column 8] runtime error: linear: stops must go in order, but stop 1 is before the one above it
+[line 6, column 8] runtime error: linear: stops must go in order, but stop 1 is before the one above it

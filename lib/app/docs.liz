@@ -1,0 +1,110 @@
+-~> docs: the documentation of the drawing functions, for the editor's
+-~> tooltips and properties and for the MCP server's docs tool (what
+-~> src.library_docs gives). It is read from the -~> comments above each
+-~> function of the drawing libraries, by the same scanner the editor uses,
+-~> and translated with lib/draw/docs/<lang>.liz where it has a text.
+-~>
+-~> docs_library(lang) is {name: {"doc": {"example", "params", "summary"},
+-~> "param_defaults": [{"default", "name"}], "params": [name, ...]}}, by name.
+
+use "engine"
+use "libs"
+use "scan"
+
+let _docs = {"english": null, "by_lang": {}, "translations": {}}
+
+-~> The English docs, read once.
+function docs_english() {
+  if (_docs.english != null) {
+    return _docs.english
+  }
+  let found = {}
+  for (let i = 0; i < len(libs_draw); i += 1) {
+    let statements = scan_source(fs.read(fs.join(libs_dir(), libs_draw[i] + ".liz"))).statements
+    for (let j = 0; j < len(statements); j += 1) {
+      let st = statements[j]
+      if (st.kind == "function") {
+        found[st.name] = {"doc": st.doc, "param_defaults": st.param_defaults, "params": st.params}
+      }
+    }
+  }
+  _docs.english = docs_sorted(found)
+  _docs.english
+}
+
+-~> A copy of h with its keys in alphabetical order.
+function docs_sorted(h) {
+  let out = {}
+  let names = list.sort(keys(h))
+  for (let i = 0; i < len(names); i += 1) {
+    out[names[i]] = h[names[i]]
+  }
+  out
+}
+
+-~> The translation table of a language ({name: {"summary", "params"}}),
+-~> or null for English, an unknown language or a file that doesn't run.
+function docs_translation(lang) {
+  if (lang == "" || text.find(lang, "/") >= 0 || text.find(lang, "\\") >= 0 || text.find(lang, ".") >= 0) {
+    return null
+  }
+  if (hash.has(_docs.translations, lang)) {
+    return _docs.translations[lang]
+  }
+  let table = null
+  let path = fs.join(libs_dir(), "draw", "docs", lang + ".liz")
+  if (fs.exists(path)) {
+    let r = lizard.run(fs.read(path), {"engine": engine_name()})
+    if (r.error == null && type(r.globals["docs_" + lang]) == "HASH") {
+      table = r.globals["docs_" + lang]
+    }
+  }
+  _docs.translations[lang] = table
+  table
+}
+
+-~> The docs in a language: the English ones with the summaries and
+-~> parameter lines of the translation laid over them. A function, summary
+-~> or parameter it lacks keeps its English text.
+function docs_library(lang = "") {
+  if (hash.has(_docs.by_lang, lang)) {
+    return _docs.by_lang[lang]
+  }
+  let english = docs_english()
+  let table = docs_translation(lang)
+  if (table == null) {
+    _docs.by_lang[lang] = english
+    return english
+  }
+  let out = {}
+  let names = keys(english)
+  for (let i = 0; i < len(names); i += 1) {
+    let entry = english[names[i]]
+    let t = table[names[i]]
+    if (type(t) == "HASH") {
+      entry = docs_translated(entry, t)
+    }
+    out[names[i]] = entry
+  }
+  _docs.by_lang[lang] = out
+  out
+}
+
+-~> One function's entry with its translation t laid over it.
+function docs_translated(entry, t) {
+  let doc = hash.copy(entry.doc)
+  if (type(t.summary) == "STRING" && t.summary != "") {
+    doc.summary = t.summary
+  }
+  let params = hash.copy(doc.params)
+  if (type(t.params) == "HASH") {
+    let names = keys(t.params)
+    for (let i = 0; i < len(names); i += 1) {
+      if (hash.has(params, names[i])) {
+        params[names[i]] = t.params[names[i]]
+      }
+    }
+  }
+  doc.params = params
+  {"doc": doc, "param_defaults": entry.param_defaults, "params": entry.params}
+}

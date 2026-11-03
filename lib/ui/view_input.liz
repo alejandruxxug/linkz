@@ -2,6 +2,26 @@
 -~> keys call the ed_* functions of the editor's logic; this file only decides
 -~> which one, from where things are (view_layout).
 
+use "../draw/gradient"
+use "../draw/pens"
+use "../gfx/raster"
+use "app"
+use "app_screens"
+use "complete_state"
+use "editor_doc"
+use "editor_props"
+use "editor_state"
+use "editor_undo"
+use "home_view"
+use "i18n"
+use "view_canvas"
+use "view_code"
+use "view_items"
+use "view_layout"
+use "view_panels"
+use "view_popups"
+use "view_tools"
+
 -~> == What is under the pointer ==
 
 -~> The id of the thing at a UI point, or "". Ids: tool:x bar:x tab:close tab:plus

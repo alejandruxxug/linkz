@@ -1,0 +1,158 @@
+-~> editor: the editor in a window (lib/ui), and the loop that runs it. The
+-~> window has big pixels for the interface (scale 2) and the canvas as a
+-~> surface at the screen's full resolution. The editor's libraries are
+-~> loaded in a sandbox of their own, with the host's primitives (host.liz),
+-~> the settings and the machine's measurement around them; the loop hands
+-~> them every event and asks them to paint when they say they need it.
+-~>
+-~> Nothing runs while the editor waits: the window is on_demand, and a
+-~> frame is asked for only while app.needs_paint is true.
+
+use "drawing"
+use "events"
+use "host"
+use "libs"
+
+-~> The window's buffer at scale 2 (a window of 1024 by 720), and the smallest
+-~> one: below it the toolbar and the panels no longer fit.
+let editor_size = (512, 360)
+let editor_min_size = (320, 210)
+
+-~> The libraries the editor loads: the app and the language tables'
+-~> functions (lang_init). A test or a benchmark adds the ones it reaches into.
+let editor_modules = ["ui/i18n", "ui/app"]
+
+-~> The window options of the editor.
+function editor_options() {
+  {"scale": 2, "resizable": true, "min_size": editor_min_size, "on_demand": true, "hover": false}
+}
+
+-~> The editor on the window win, started on path ("" for the home screen):
+-~> {"win", "names" (every name the modules define), "app", "path", "error"
+-~> (the last paint's or event's), "stats"}. stand_ins replace some of the
+-~> host's primitives (a test's own clipboard).
+function editor_load(win, path, settings, machine, modules = editor_modules, stand_ins = {}) {
+  let stats = {"paint_ms": 0, "event_ms": 0, "run_ms": 0, "run_errors": 0, "frames_painted": 0,
+    "events": 0, "events_coalesced": 0}
+  let around = hash.merge(hash.merge(host_globals(win, true), {"settings": settings, "machine": machine}), stand_ins)
+  around.src.run = function(code) {
+    let r = drawing_run(code)
+    stats.run_ms = r.ms
+    stats.run_errors = len(r.errors)
+    r
+  }
+  let names = libs_load(modules, around)
+  if (type(names.app) != "HASH") {
+    error("the UI libraries must define a hash called app")
+  }
+  names.lang_init()
+  names.app.start(path)
+  {"win": win, "names": names, "app": names.app, "path": path, "error": "", "stats": stats, "force": true,
+   "hover": null}
+}
+
+-~> Remembers an error of the editor's code and prints it; the last good
+-~> frame stays.
+function editor_fail(ed, e) {
+  ed.error = "[line " + str(e.line) + ", column " + str(e.column) + "] runtime error: " + e.message
+  io.error("ui error: " + ed.error + "\n")
+}
+
+-~> One event to app.event.
+function editor_deliver(ed, e) {
+  let h = events_app(e)
+  if (h == null) {
+    return
+  }
+  let start = time.ms()
+  ed.stats.events += 1
+  try {
+    ed.app.event(h)
+  } catch (err) {
+    editor_fail(ed, err)
+  }
+  ed.stats.event_ms = time.ms() - start
+}
+
+-~> app.paint, when the editor asks for it. The flag goes down before the
+-~> paint, so a screen with more to do (the home screen makes one thumbnail
+-~> per paint) can raise it again.
+function editor_paint(ed) {
+  if (!ed.force && ed.app.needs_paint != true) {
+    return
+  }
+  let start = time.ms()
+  ed.app.needs_paint = false
+  ed.force = false
+  try {
+    ed.app.paint()
+    ed.error = ""
+    ed.stats.frames_painted += 1
+  } catch (err) {
+    editor_fail(ed, err)
+  }
+  ed.stats.paint_ms = time.ms() - start
+}
+
+-~> One frame: the events, the paint, and what the window should do next
+-~> (moves with no button held while the editor wants them, one more frame
+-~> while it needs one). It gives false when the window closes.
+function editor_tick(ed, events) {
+  let closing = false
+  for (let i = 0; i < len(events); i += 1) {
+    if (events[i].type == "close") {
+      closing = true
+    }
+    editor_deliver(ed, events[i])
+  }
+  editor_paint(ed)
+  let hover = ed.app.wants_hover == true
+  if (hover != ed.hover) {
+    window.set(ed.win, {"hover": hover})
+    ed.hover = hover
+  }
+  if (ed.app.needs_paint == true) {
+    window.needs_paint(ed.win)
+  }
+  !closing
+}
+
+-~> The editor's own timings and the phases of its last working tick
+-~> (lib/ui/perf.liz), for the backdoor's Stats.
+function editor_stats(ed) {
+  let out = hash.copy(ed.stats)
+  out.phases = {}
+  if (ed.app.debug_perf != null) {
+    try {
+      out.phases = ed.app.debug_perf()
+    } catch (e) {
+    }
+  }
+  out
+}
+
+-~> The automation hooks: Dump shows the editor's state, Stats its timings,
+-~> and Call runs the commands the editor exposes (app.debug_commands:
+-~> SetCode, Open, Save, SelectRow, SetProp, Tool, ...).
+function editor_hooks(ed) {
+  {"dump": function() { editor_dump(ed) },
+   "stats": function() { editor_stats(ed) },
+   "commands": ed.app.debug_commands}
+}
+
+-~> The window, its surfaces and the window's own stats are in Dump already.
+function editor_dump(ed) {
+  let out = {"path": ed.path, "error": ed.error, "stats": editor_stats(ed)}
+  try {
+    out.app = ed.app.debug_state()
+  } catch (e) {
+    out.app_error = e.message
+  }
+  out
+}
+
+-~> Runs the editor in its window until the window closes.
+function editor_run(ed) {
+  window.automation(ed.win, editor_hooks(ed))
+  window.run(ed.win, function(events) { editor_tick(ed, events) })
+}

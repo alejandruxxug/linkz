@@ -1,0 +1,12 @@
+-~> engine: the way Linkz runs lizard code it loads or is given (the
+-~> libraries, a drawing, the editor): on the bytecode VM, or on the
+-~> tree-walking evaluator when LINKZ_ENGINE is "tree", the fallback if the VM
+-~> ever misbehaves. Both give the same results; the VM is several times faster.
+
+-~> The engine option of lizard.run: "vm" or "evaluator".
+function engine_name() {
+  if (os.env("LINKZ_ENGINE") == "tree") {
+    return "evaluator"
+  }
+  "vm"
+}

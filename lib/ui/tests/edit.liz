@@ -1,4 +1,8 @@
 -~> Typing, Backspace, Delete, Enter, Tab and caret movement, with Spanish letters.
+use "../editor_doc"
+use "../editor_edit"
+use "../lang_en"
+use "../lang_es"
 let m = doc_new("")
 m = ed_insert(m, "let niño = 1")
 show(m)

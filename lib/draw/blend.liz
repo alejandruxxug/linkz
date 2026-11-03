@@ -6,6 +6,10 @@
 -~>     circle(...)
 -~> They set the look of the layer the call is in (see layer_styles in shapes.liz).
 
+use "check"
+use "here"
+use "shapes"
+
 let blend_modes = ["normal", "multiply", "screen", "overlay", "darken", "lighten", "add"]
 
 -~> The style of the layer the running call is in, or an error when it is not in one.

@@ -1,4 +1,6 @@
 -~> The JSON-RPC layer: initialize, ping, tools/list, errors, notifications.
+use "../json"
+use "../server"
 
 -~> One request line in, the reply text out (null when there is none).
 function send(line) {
@@ -72,25 +74,27 @@ r = json.parse(mcp_handle_line(req(99, "ping", {})))
 puts(r.id, r.result)
 
 -~> The loop itself: lines in, lines out, until the input ends. (The host's
--~> io is replaced here by a scripted one.)
+-~> io functions are replaced here by scripted ones, in the same hash, which
+-~> the server sees.)
 let script = [req(1, "ping", {}), "", "   ", "oops", req(2, "ping", {})]
 let sent = []
 let read_at = 0
-let real_io = io
-io = {
-  "read_line": function() {
-    if (read_at >= len(script)) {
-      return null
-    }
-    read_at += 1
-    script[read_at - 1]
-  },
-  "write": function(s) { push(sent, s) },
-  "log": function(s) { null },
-  "step_limit": function(n) { null }
+let real_io = hash.copy(io)
+io.read_line = function() {
+  if (read_at >= len(script)) {
+    return null
+  }
+  read_at += 1
+  script[read_at - 1]
 }
+io.write = function(s) { push(sent, s) }
+io.log = function(s) { null }
+io.with_steps = function(n, f) { f() }
 mcp_serve()
-io = real_io
+let names = keys(real_io)
+for (let i = 0; i < len(names); i += 1) {
+  io[names[i]] = real_io[names[i]]
+}
 for (let i = 0; i < len(sent); i += 1) {
   puts(sent[i])
 }

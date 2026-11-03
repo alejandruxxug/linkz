@@ -1,4 +1,7 @@
 -~> English: the fallback language. Every key the interface uses is here.
+
+use "i18n"
+
 lang_register("en", {
   "lang.name": "English",
 

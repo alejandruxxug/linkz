@@ -20,6 +20,9 @@
 -~> grey, a sharp step to red, then a smooth red to black. [t, color, "hard"]
 -~> does the same at a chosen t. Past the first and last stop the color stays.
 
+use "check"
+use "geometry"
+
 let gradient_max_steps = 64
 
 -~> True when v is a gradient value (see linear and radial).

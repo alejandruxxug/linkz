@@ -5,6 +5,8 @@
 -~> Scale is a whole number from 1 to 3 (pixels are repeated, not smoothed).
 -~> A character the font lacks is drawn as an empty box. "\n" starts a new line.
 
+use "font_data"
+
 let font = {}
 
 -~> Glyph spans already multiplied by the scale, kept per scale.

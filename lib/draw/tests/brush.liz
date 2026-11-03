@@ -1,4 +1,7 @@
 -~> Pens and brush strokes.
+use "../geometry"
+use "../pens"
+use "../shapes"
 
 puts(len(pens.list), pens.list[0].name, pens.list[4].name)
 for (let i = 0; i < len(pens.list); i = i + 1) {

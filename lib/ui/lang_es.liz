@@ -1,4 +1,7 @@
 -~> Español.
+
+use "i18n"
+
 lang_register("es", {
   "lang.name": "Español",
 

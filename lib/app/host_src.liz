@@ -1,0 +1,13 @@
+-~> host_src: the `src` hash: the language as data, for the editor and the
+-~> MCP server.
+-~>   parse(code)            lines, statements and errors (see scan.liz)
+-~>   run(code)              runs a drawing (see drawing.liz)
+-~>   library_docs(lang)     the drawing functions' docs (see docs.liz)
+
+use "docs"
+use "drawing"
+use "scan"
+
+function host_src() {
+  {"parse": scan_parse, "run": function(code) { drawing_run(code) }, "library_docs": docs_library}
+}

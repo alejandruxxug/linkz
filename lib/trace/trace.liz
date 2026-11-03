@@ -12,6 +12,9 @@
 -~> Needs the drawing libraries (simplify, polygon_area2, color_hex, svg_num)
 -~> and, for trace(), the host's img.load and time.ms.
 
+use "../draw/geometry"
+use "../draw/svg"
+
 -~> The options of trace(path, options). Anything left out takes the value shown.
 -~>   colors      how many colors the picture is reduced to (2 and up). More colors,
 -~>               more detail and more shapes.

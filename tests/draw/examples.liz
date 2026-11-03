@@ -1,0 +1,16 @@
+-~> Every example renders, and its SVG is the golden one
+-~> (lib/draw/tests/golden/<name>.svg.expected).
+
+use "../../lib/app/libs"
+use "../../lib/app/render"
+use "../harness"
+
+let examples = fs.join(libs_root(), "examples")
+let names = fs.list(examples)
+for (let i = 0; i < len(names); i += 1) {
+  if (text.ends(names[i], ".lzdraw")) {
+    let name = text.slice(names[i], 0, len(names[i]) - 7)
+    let golden = fs.read(fs.join(libs_dir(), "draw", "tests", "golden", name + ".svg.expected"))
+    harness_check(name, render_svg(fs.read(fs.join(examples, names[i]))), golden)
+  }
+}

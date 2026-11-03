@@ -1,0 +1,64 @@
+-~> The editor in a headless window: it opens a drawing and paints it,
+-~> takes clicks, keys and drags as injected input, ignores events it
+-~> doesn't know, answers the backdoor's commands, and an edit repaints the
+-~> canvas exactly as opening the edited text fresh does.
+
+use "../../lib/app/editor"
+use "../../lib/app/libs"
+use "rig"
+
+let dir = fs.join(fs.home(), "editor-test")
+let code = fs.read(fs.join(libs_root(), "examples", "hello.lzdraw"))
+let rig = rig_open(dir, code)
+let n = rig.names
+let st = editor_dump(rig.ed)
+puts("opened:", st.error, st.app.screen, st.stats.frames_painted, len(n.ed_model().lines))
+
+puts("-- commands")
+let cmds = rig.ed.app.debug_commands
+puts(list.sort(keys(cmds)))
+puts(text.replace(str(cmds.SelectRow([6])), fs.home(), "$HOME"))
+rig_frame(rig)
+puts(n.ed_model().line, editor_dump(rig.ed).error)
+
+puts("-- unknown and presence events")
+puts(rig_frame(rig, [{"type": "enter"}, {"type": "leave"}, {"type": "focus", "focused": false}, {"type": "focus", "focused": true}]))
+
+puts("-- keys and text")
+cmds.SelectRow([12])
+rig_frame(rig)
+rig_frame(rig, [{"type": "type", "text": "x"}])
+puts(n.ed_model().lines[11], n.ed_model().col)
+rig_frame(rig, [{"type": "key", "key": "Backspace"}])
+puts(n.ed_model().lines[11], n.ed_model().col, rig.ed.error)
+
+puts("-- an edit repaints like a fresh open")
+let canvas = n.view_canvas_layout().crect
+cmds.SelectRow([12])
+rig_frame(rig)
+puts(cmds.SetProp(["width", "6"]).ok)
+rig_frame(rig)
+let edited = text.join(n.ed_model().lines, "\n")
+let fresh = rig_open(fs.join(dir, "fresh"), edited)
+cmds.SelectRow([6])
+fresh.ed.app.debug_commands.SelectRow([6])
+rig_frame(rig)
+rig_frame(fresh)
+puts(text.find(edited, "#1d1d1f, 6)") >= 0, rig_shot(rig, canvas) == rig_shot(fresh, canvas))
+
+puts("-- a drag on the canvas, one sample per injected move")
+let samples = []
+let seen = rig.ed.app.event
+rig.ed.app.event = function(e) {
+  if (e.type == "move") {
+    push(samples, len(e.samples))
+  }
+  seen(e)
+}
+-~> view_to_window is in the window's full pixels; events are in the buffer's (half).
+let at = n.view_to_window(n.view_canvas_layout(), (380, 100)) * 0.5
+rig_frame(rig, [{"type": "down", "pos": at}])
+rig_frame(rig, [{"type": "move", "pos": at + (3, 1)}])
+rig_frame(rig, [{"type": "move", "pos": at + (6, 2)}, {"type": "up", "pos": at + (6, 2)}])
+rig.ed.app.event = seen
+puts(samples, rig.ed.error)

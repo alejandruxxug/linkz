@@ -2,6 +2,20 @@
 -~> changed (each panel has a key made from what it shows), draws the popups
 -~> last, and gives the agent backdoor its state and commands.
 
+use "app"
+use "app_screens"
+use "editor_commands"
+use "editor_state"
+use "editor_undo"
+use "home_view"
+use "i18n"
+use "view_canvas"
+use "view_gfx"
+use "view_input"
+use "view_layout"
+use "view_panels"
+use "view_popups"
+
 -~> == Painting ==
 
 function view_hover_is(prefixes) {

@@ -1,4 +1,7 @@
 -~> The SVG writer: helpers and a whole document.
+use "../gradient"
+use "../shapes"
+use "../svg"
 
 puts(svg_hex2(0), svg_hex2(255), svg_hex2(63), color_hex(#3fa34d))
 puts(svg_num(3), svg_num(3.0), svg_num(2.5), svg_num(0.123456), svg_num(-0.004), svg_num(1234.5678))
