@@ -166,13 +166,17 @@ func (g *game) mods() Mods {
 	}
 }
 
+// The pressure of a native reading goes through the device's response curve
+// (pressure.Shape) here, where it becomes an event: pen, penOf and
+// dragSamples are the only places.
+
 // pen reads the pressure the host/pressure monitor saw. A button must be
 // down for it to count; otherwise the pointer is a plain mouse.
 func (g *game) pen(down bool) Pen {
 	p := Pen{Pressure: 1, Source: "mouse"}
 	s := pressure.Latest()
 	if down && s.OK && s.Source != "" && s.Source != "mouse" {
-		p = Pen{Pressure: s.Pressure, Tilt: s.Tilt, Rotation: s.Rotation, Source: s.Source, Eraser: s.Eraser}
+		p = Pen{Pressure: pressure.Shape(s.Source, s.Pressure), Tilt: s.Tilt, Rotation: s.Rotation, Source: s.Source, Eraser: s.Eraser}
 	}
 	return p
 }
@@ -185,7 +189,7 @@ func repeats(k ebiten.Key) bool {
 
 // penOf turns a native sample into the pen state of an event.
 func penOf(s pressure.Sample, eraser bool) Pen {
-	return Pen{Pressure: s.Pressure, Tilt: s.Tilt, Rotation: s.Rotation, Source: s.Source, Eraser: eraser}
+	return Pen{Pressure: pressure.Shape(s.Source, s.Pressure), Tilt: s.Tilt, Rotation: s.Rotation, Source: s.Source, Eraser: eraser}
 }
 
 // lastPhase finds the newest native sample of a phase.
@@ -207,7 +211,7 @@ func dragSamples(ss []pressure.Sample, x, y int) ([]Sample, pressure.Sample, boo
 		if s.Phase != pressure.PhaseDrag {
 			continue
 		}
-		out = append(out, Sample{X: int(s.X), Y: int(s.Y), Pressure: s.Pressure, T: s.T})
+		out = append(out, Sample{X: int(s.X), Y: int(s.Y), Pressure: pressure.Shape(s.Source, s.Pressure), T: s.T})
 		last = s
 	}
 	if len(out) > 0 {

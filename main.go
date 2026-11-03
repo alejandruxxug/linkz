@@ -143,6 +143,9 @@ func edit(args []string) error {
 		fmt.Fprintln(os.Stderr, "linkz: settings ignored, using defaults:", err)
 	}
 	app.Settings = settings
+	if err := host.ApplyPressureCurves(settings); err != nil {
+		fmt.Fprintln(os.Stderr, "linkz: pressure curves ignored, using defaults:", err)
+	}
 	host.AppVersion = version
 	if machine, err := host.Machine(false, os.Stderr); err != nil {
 		fmt.Fprintln(os.Stderr, "linkz: machine not measured:", err)

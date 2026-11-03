@@ -35,6 +35,10 @@ let skip_loading_anim = true
 |---|---|---|
 | `language` | `"en"`, `"es"` | The interface language. Without it Linkz uses the system's language, else English. The editor's language command rewrites this line and keeps the others. |
 | `skip_loading_anim` | `true` / `false` (default `false`) | `true` makes `linkz edit` start without the splash screen, like `--no-splash`. |
+| `trackpad_pressure` | a hash `{"low": 0.8, "high": 1.0, "gamma": 1.5}` (these are the defaults) | The pressure curve of a Force Touch trackpad. A trackpad needs a firm press to click, so strokes start thick; the editor sees `clamp((raw - low) / (high - low), 0, 1) ** gamma` instead of the raw pressure, before the pens' own `pressure` blocks. `low` is the raw pressure that counts as none, `high` the one that counts as full, `gamma` above 1 keeps light pressure small. Keys left out keep their default; valid curves have `0 <= low < high <= 1` and `0.1 <= gamma <= 10`. A wrong curve is ignored with a warning on stderr and the defaults stay. The defaults are a starting point: tune them for your trackpad. |
+| `tablet_pressure` | a hash like `trackpad_pressure` (default `{"low": 0, "high": 1, "gamma": 1}`, no change) | The same curve for a pen tablet. A mouse has none. |
+
+To tune a pressure curve, run `go run ./tools/pressureprobe` and press as lightly and as hard as you draw: it shows the raw pressure, which the curve takes as input. Set `low` just below your lightest stroke and `high` at your hardest.
 
 `linkz edit --slow-splash` plays the splash at a quarter speed (to watch the animation); it plays even when `skip_loading_anim` is on.
 

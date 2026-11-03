@@ -1,6 +1,7 @@
 package host
 
 import (
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -8,6 +9,8 @@ import (
 
 	"lizardscript/evaluator"
 	"lizardscript/object"
+
+	"linkz/host/pressure"
 )
 
 func writeSettings(t *testing.T, body string) string {
@@ -88,5 +91,81 @@ func TestSettingsRestoreEvaluatorState(t *testing.T) {
 	}
 	if evaluator.MaxSteps != prev {
 		t.Error("evaluating settings left the step limit changed")
+	}
+}
+
+func TestApplyPressureCurves(t *testing.T) {
+	trackpad, tablet := pressure.DefaultTrackpad, pressure.Identity
+	for _, tc := range []struct {
+		name, body string
+		wantTrack  pressure.Curve
+		wantTablet pressure.Curve
+		wantErr    string
+	}{
+		{"none", "let language = \"en\"\n", trackpad, tablet, ""},
+		{"full trackpad", "let trackpad_pressure = {\"low\": 0.7, \"high\": 0.95, \"gamma\": 2}\n", pressure.Curve{Low: 0.7, High: 0.95, Gamma: 2}, tablet, ""},
+		{"partial keeps defaults", "let trackpad_pressure = {\"gamma\": 1}\n", pressure.Curve{Low: 0.8, High: 1, Gamma: 1}, tablet, ""},
+		{"tablet", "let tablet_pressure = {\"low\": 0.1}\n", trackpad, pressure.Curve{Low: 0.1, High: 1, Gamma: 1}, ""},
+		{"integers", "let tablet_pressure = {\"low\": 0, \"high\": 1, \"gamma\": 2}\n", trackpad, pressure.Curve{Low: 0, High: 1, Gamma: 2}, ""},
+		{"not a hash", "let trackpad_pressure = 3\n", trackpad, tablet, "trackpad_pressure: want a hash"},
+		{"not a number", "let trackpad_pressure = {\"low\": \"a\"}\n", trackpad, tablet, "low must be a number"},
+		{"unknown key", "let trackpad_pressure = {\"lo\": 0.1}\n", trackpad, tablet, "unknown key \"lo\""},
+		{"out of range", "let trackpad_pressure = {\"gamma\": 50}\n", trackpad, tablet, "gamma must be"},
+		{"a bad curve applies none", "let tablet_pressure = {\"low\": 0.1}\nlet trackpad_pressure = {\"high\": 0}\n", trackpad, tablet, "high must be above low"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Cleanup(func() {
+				pressure.SetCurve("trackpad", trackpad)
+				pressure.SetCurve("tablet", tablet)
+			})
+			h, err := LoadSettingsFile(writeSettings(t, tc.body))
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = ApplyPressureCurves(h)
+			if (err == nil) != (tc.wantErr == "") || err != nil && !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("error = %v, want %q", err, tc.wantErr)
+			}
+			// Probe the curves through their effect on two raw values.
+			for _, c := range []struct {
+				source string
+				want   pressure.Curve
+			}{{"trackpad", tc.wantTrack}, {"tablet", tc.wantTablet}} {
+				for _, raw := range []float64{0.3, 0.9} {
+					if got, want := pressure.Shape(c.source, raw), c.want.Apply(raw); math.Abs(got-want) > 1e-12 {
+						t.Errorf("%s Shape(%v) = %v, want %v", c.source, raw, got, want)
+					}
+				}
+			}
+		})
+	}
+	if err := ApplyPressureCurves(nil); err != nil {
+		t.Errorf("no settings gave %v", err)
+	}
+}
+
+// With a temp HOME, ~/.linkz/settings.liz is read the way the editor does.
+func TestPressureCurvesFromHome(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Cleanup(func() { pressure.SetCurve("trackpad", pressure.DefaultTrackpad) })
+	dir := filepath.Join(home, ".linkz")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "let trackpad_pressure = {\"low\": 0.5, \"high\": 1.0, \"gamma\": 1.0}\n"
+	if err := os.WriteFile(filepath.Join(dir, "settings.liz"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h, err := LoadSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ApplyPressureCurves(h); err != nil {
+		t.Fatal(err)
+	}
+	if got := pressure.Shape("trackpad", 0.75); math.Abs(got-0.5) > 1e-12 {
+		t.Errorf("Shape(0.75) = %v, want 0.5", got)
 	}
 }

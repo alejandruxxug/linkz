@@ -10,6 +10,8 @@ import (
 	"lizardscript/lexer"
 	"lizardscript/object"
 	"lizardscript/parser"
+
+	"linkz/host/pressure"
 )
 
 // SettingsSteps is the step limit for evaluating settings.liz.
@@ -103,3 +105,71 @@ func settingBool(h *object.Hash, key string) bool {
 // SkipLoadingAnim is the skip_loading_anim setting: `linkz edit` then behaves
 // as if it had --no-splash.
 func SkipLoadingAnim(h *object.Hash) bool { return settingBool(h, "skip_loading_anim") }
+
+// pressureSettings are the settings that hold a device's pressure curve,
+// by the source they shape.
+var pressureSettings = map[string]string{
+	"trackpad": "trackpad_pressure",
+	"tablet":   "tablet_pressure",
+}
+
+// ApplyPressureCurves sets the pressure curves from the settings:
+// `let trackpad_pressure = {"low": 0.8, "high": 1.0, "gamma": 1.5}`. Keys
+// left out keep their default. If any curve is wrong none is applied and the
+// error says which setting; the defaults stay.
+func ApplyPressureCurves(h *object.Hash) error {
+	if h == nil {
+		return nil
+	}
+	next := map[string]pressure.Curve{}
+	for source, name := range pressureSettings {
+		v := hashGet(h, name)
+		if v == nil {
+			continue
+		}
+		c, err := curveFromHash(source, v)
+		if err != nil {
+			return fmt.Errorf("%s: %w", name, err)
+		}
+		next[source] = c
+	}
+	for source, c := range next {
+		if err := pressure.SetCurve(source, c); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// curveFromHash reads {"low", "high", "gamma"} on top of the default curve
+// of source.
+func curveFromHash(source string, v object.Object) (pressure.Curve, error) {
+	c := pressure.Identity
+	if source == "trackpad" {
+		c = pressure.DefaultTrackpad
+	}
+	h, ok := v.(*object.Hash)
+	if !ok {
+		return c, fmt.Errorf("want a hash like {\"low\": 0.8}, got %s", v.Type())
+	}
+	fields := map[string]*float64{"low": &c.Low, "high": &c.High, "gamma": &c.Gamma}
+	var err error
+	h.Each(func(pair object.HashPair) {
+		key := pair.Key.Inspect()
+		field, known := fields[key]
+		n, isNumber := number(pair.Value)
+		switch {
+		case err != nil:
+		case !known:
+			err = fmt.Errorf("unknown key %q: a curve has low, high and gamma", key)
+		case !isNumber:
+			err = fmt.Errorf("%s must be a number, got %s", key, pair.Value.Type())
+		default:
+			*field = n
+		}
+	})
+	if err != nil {
+		return c, err
+	}
+	return c, c.Validate()
+}
