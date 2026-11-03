@@ -1,0 +1,2 @@
+canvas = {"size": (400, 20000), "background": #ffffff}
+svg_document(canvas, [])

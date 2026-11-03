@@ -1,0 +1,3 @@
+-~> A canvas with a size outside 1 to 16384 is refused.
+canvas = {"size": (-5, 0), "background": #ffffff}
+svg_document(canvas, [])

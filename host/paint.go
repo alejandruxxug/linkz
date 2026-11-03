@@ -7,9 +7,7 @@ import (
 	"linkz/lib"
 	"linkz/lib/draw"
 	"lizardscript/evaluator"
-	"lizardscript/lexer"
 	"lizardscript/object"
-	"lizardscript/parser"
 )
 
 // Paint runs a lizard program headless with the fb primitives on a UI buffer
@@ -17,6 +15,9 @@ import (
 // the graphics libraries are loaded first. It is how the lizard graphics
 // libraries get tested without a window.
 func Paint(source, out string, w, h int, stdout io.Writer) error {
+	if w < 1 || h < 1 || w > MaxCanvasSide || h > MaxCanvasSide {
+		return fmt.Errorf("paint: size must be between (1, 1) and (%d, %d), got (%d, %d)", MaxCanvasSide, MaxCanvasSide, w, h)
+	}
 	fb := NewFBUI(w, h)
 	env := object.NewEnvironment()
 	evaluator.Output = stdout
@@ -26,14 +27,11 @@ func Paint(source, out string, w, h int, stdout io.Writer) error {
 	env.Define("clip", clipHash())
 	env.Define("os", osHash())
 
-	run := func(name, code string) error {
-		p := parser.New(lexer.New(code))
-		prog := p.ParseProgram()
-		if errs := p.Errors(); len(errs) > 0 {
-			return fmt.Errorf("%s: %s", name, errs[0])
-		}
-		if e, ok := evaluator.Eval(prog, env).(*object.Error); ok {
-			return fmt.Errorf("%s: %s", name, e.Message)
+	// label starts the error message; the source is named so that errors
+	// from the libraries can be told from the user's program (named "").
+	runSrc := func(label, srcName, code string, attr *attribution) error {
+		if _, err := run(code, srcName, env, attr); err != nil {
+			return fmt.Errorf("%s: %w", label, err)
 		}
 		return nil
 	}
@@ -42,7 +40,7 @@ func Paint(source, out string, w, h int, stdout io.Writer) error {
 		if err != nil {
 			return err
 		}
-		if err := run(name, string(code)); err != nil {
+		if err := runSrc(name, "draw/"+name, string(code), nil); err != nil {
 			return err
 		}
 	}
@@ -51,12 +49,13 @@ func Paint(source, out string, w, h int, stdout io.Writer) error {
 		if err != nil {
 			return err
 		}
-		if err := run(name, string(code)); err != nil {
+		if err := runSrc(name, "gfx/"+name, string(code), nil); err != nil {
 			return err
 		}
 	}
+	defer limitSteps()()
 	defer trackLayers(env)()
-	if err := run("program", source); err != nil {
+	if err := runSrc("program", "", source, &attribution{}); err != nil {
 		return err
 	}
 	fb.off, fb.target = nil, "ui"

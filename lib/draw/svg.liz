@@ -139,8 +139,44 @@ function svg_background(canvas) {
   canvas.background
 }
 
+-~> The biggest width or height a canvas may have.
+let canvas_max_side = 16384
+
+-~> Checks a canvas: a hash whose "size" is a point with a width and a height
+-~> from 1 to 16384, and whose "background" (when it has one) is a color or a
+-~> gradient. Gives an error() if not, and null if it is fine.
+function check_canvas(canvas) {
+  if (type(canvas) != "HASH") {
+    return error("canvas: must be a hash like {\"size\": (400, 200), \"background\": #ffffff}, got " + type(canvas))
+  }
+  let size = canvas["size"]
+  if (type(size) != "POINT") {
+    return error("canvas: size must be a point like (400, 200), got " + type(size))
+  }
+  let limits = "between (1, 1) and (" + str(canvas_max_side) + ", " + str(canvas_max_side) + ")"
+  let ok = true
+  for (let i = 0; i < 2; i = i + 1) {
+    let side = size.x
+    if (i == 1) {
+      side = size.y
+    }
+    if (!(side >= 1 && side <= canvas_max_side)) {
+      ok = false
+    }
+  }
+  if (!ok) {
+    return error("canvas: size must be " + limits + ", got " + str(size))
+  }
+  let bg = canvas["background"]
+  if (bg !== null && !is_paint(bg)) {
+    return error("canvas: background must be a color or a gradient, got " + type(bg))
+  }
+  null
+}
+
 -~> The whole SVG text of a canvas and a list of shapes.
 function svg_document(canvas, shapes) {
+  check_canvas(canvas)
   let w = canvas.size.x
   let h = canvas.size.y
   svg_gradient_ids = {}

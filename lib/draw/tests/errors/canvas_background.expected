@@ -1,0 +1,1 @@
+[line 172, column 17] runtime error: canvas: background must be a color or a gradient, got STRING

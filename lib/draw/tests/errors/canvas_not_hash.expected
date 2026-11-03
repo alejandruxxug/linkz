@@ -1,0 +1,1 @@
+[line 150, column 17] runtime error: canvas: must be a hash like {"size": (400, 200), "background": #ffffff}, got INTEGER
