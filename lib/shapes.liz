@@ -1,0 +1,22 @@
+-~> shapes: the things a drawing is made of.
+-~> Every shape is a hash. Making one also draws it, and it comes back so it
+-~> can be changed afterwards: let c = circle(10, 10, 5) then c["fill"] = "red".
+
+let drawing = []
+
+function draw(shape) {
+  push(drawing, shape)
+  shape
+}
+
+function circle(x, y, r) {
+  draw({"type": "circle", "x": x, "y": y, "r": r, "fill": "#3fa34d"})
+}
+
+function rect(x, y, w, h) {
+  draw({"type": "rect", "x": x, "y": y, "w": w, "h": h, "fill": "#3fa34d"})
+}
+
+function line(x1, y1, x2, y2) {
+  draw({"type": "line", "x1": x1, "y1": y1, "x2": x2, "y2": y2, "stroke": "#1d1d1f", "width": 2})
+}

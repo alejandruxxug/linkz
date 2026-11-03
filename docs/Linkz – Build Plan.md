@@ -1,0 +1,32 @@
+# 🗓️ Linkz: Build Plan
+
+## ⏳ Waiting on you
+
+| What | Why it's blocking | Where to look | Since |
+|---|---|---|---|
+| OK to commit the divergence-log section + CLAUDE.md in lizard-script | Language work starts there | lizard-script `git status` | 2026-11-02 |
+
+## 🧱 Milestones
+
+| # | Milestone | Done when |
+|---|---|---|
+| M0 ✅ | Foundation | `linkz render examples/hello.lzdraw` writes an SVG made entirely by lizard libraries; `go test ./...` green |
+| M1 | Language basics | lizard-script has string escapes, dot access and floats, each with tests and a divergence row; `svg.liz` uses `"` and `\n` |
+| M2 | Modules | `use "shapes"` works; `lib.Order` is gone; libraries call each other by name |
+| M3 | Editor | `linkz serve` opens a page: code on the left, live SVG on the right, errors on their line; open/save `.lzdraw` |
+| M4 | Math + more shapes | `math` (sin, cos, sqrt, random), `path`, `polygon`, `group`, `color`, `transform` |
+| M5 | Raster export | A rasterizer in lizard; PNG export from the editor and `linkz render --png`; first speed measurement logged |
+| M6 | Speed | Bytecode compiler + VM in lizard-script; rasterizer re-measured |
+| M7 | Agents | `linkz mcp`: run / render (PNG) / docs / save, protocol written in lizard |
+| M8 | Tracing | `trace.image(...)` turns a PNG into editable shapes |
+| M9 | Release | GoReleaser binaries for macOS/Windows/Linux + install script; the reveal |
+
+## 📦 Batches
+
+Briefs live in `docs/Batches/B<nnn> – <name>.md`.
+
+## ✅ Progress log
+
+| Date | What | Result |
+|---|---|---|
+| 2026-11-02 | M0 Foundation | `hello.lzdraw` → 6 circles + a line in SVG; host tests green; lizard libraries do all drawing |
