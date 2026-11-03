@@ -1,0 +1,34 @@
+name: CI
+
+# Manual only for now: these workflows haven't run yet, and pushes to the
+# private repo would spend Actions minutes. To run CI on every push, put
+# back:  push:  and  pull_request:  under on:.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # go.mod says `replace lizardscript => ../lizard-script`, so the two
+      # repos must sit side by side: <workspace>/linkz and <workspace>/lizard-script.
+      - uses: actions/checkout@v4
+        with:
+          path: linkz
+      - uses: actions/checkout@v4
+        with:
+          repository: alejandruxxug/lizard-script
+          path: lizard-script
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27"
+          cache-dependency-path: linkz/go.sum
+      - name: Test
+        working-directory: linkz
+        run: go test ./...
+      - name: Cross build
+        working-directory: linkz
+        run: scripts/crossbuild.sh

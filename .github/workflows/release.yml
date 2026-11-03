@@ -1,0 +1,46 @@
+name: Release
+
+# Runs only on a version tag (git tag v0.1.0 && git push origin v0.1.0) or by
+# hand. GoReleaser makes a DRAFT release, so nothing goes public until a
+# person publishes it.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write # GoReleaser creates the release and uploads the archives
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      # go.mod says `replace lizardscript => ../lizard-script`, so the two
+      # repos must sit side by side: <workspace>/linkz and <workspace>/lizard-script.
+      - uses: actions/checkout@v4
+        with:
+          path: linkz
+          fetch-depth: 0 # the changelog reads the commit history
+      - uses: actions/checkout@v4
+        with:
+          repository: alejandruxxug/lizard-script
+          path: lizard-script
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27"
+          cache-dependency-path: linkz/go.sum
+      - name: Test
+        working-directory: linkz
+        run: go test ./...
+      - name: Cross build
+        working-directory: linkz
+        run: scripts/crossbuild.sh
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
+          workdir: linkz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}

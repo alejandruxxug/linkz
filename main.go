@@ -59,7 +59,8 @@ func main() {
 }
 
 // version is the app's version. A new one measures the machine again.
-const version = "0.1.0-dev"
+// Release builds set it with -ldflags "-X main.version=...".
+var version = "0.1.0-dev"
 
 // calibrate measures this machine, keeps the result in ~/.linkz/machine.liz
 // and prints it as JSON.

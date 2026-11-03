@@ -31,9 +31,16 @@ type Stmt struct {
 	Args                         []Arg
 	Children                     []*Stmt
 	Params                       []string
+	ParamDefs                    []ParamDef // same order as Params
 	Doc                          *Doc
 	Label                        string // trailing comment of the first line, without flags
 	Flags                        []string
+}
+
+// ParamDef is one parameter of a function and its default's source text (empty
+// when it has none).
+type ParamDef struct {
+	Name, Default string
 }
 
 // Doc is the -~> comment block above a function.
@@ -251,7 +258,10 @@ func (p *scanner) statement(pos *int, depth int) *Stmt {
 		s.Kind, s.Name = "let", toks[1].Literal
 	case t.Type == token.FUNCTION && len(toks) > 2 && toks[1].Type == token.IDENT:
 		s.Kind, s.Name = "function", toks[1].Literal
-		s.Params = params(toks[2:])
+		s.ParamDefs = p.params(toks[2:])
+		for _, d := range s.ParamDefs {
+			s.Params = append(s.Params, d.Name)
+		}
 	case t.Type == token.IF || t.Type == token.WHILE || t.Type == token.FOR:
 		s.Kind, s.Name = "block", strings.ToLower(string(t.Type))
 	case t.Type == token.IDENT:
@@ -264,21 +274,62 @@ func (p *scanner) statement(pos *int, depth int) *Stmt {
 	return s
 }
 
-// params reads the names between the parentheses of a function.
-func params(toks []token.Token) []string {
-	names := []string{}
+// params reads the parameters between the parentheses of a function, with
+// the source text of each default. It splits at commas of depth 0, so a
+// default like (0.5, 0.5) or [1, 2] or "a,b" stays in one piece.
+func (p *scanner) params(toks []token.Token) []ParamDef {
+	out := []ParamDef{}
 	if len(toks) == 0 || toks[0].Type != token.LPAREN {
-		return names
+		return out
 	}
-	for _, t := range toks[1:] {
-		if t.Type == token.RPAREN {
-			break
-		}
-		if t.Type == token.IDENT {
-			names = append(names, t.Literal)
-		}
+	closeIdx := matching(toks, 0)
+	if closeIdx < 0 {
+		closeIdx = len(toks) // unfinished list: read what is there
 	}
-	return names
+	start, depth := 1, 0
+	for k := 1; k <= closeIdx && k <= len(toks); k++ {
+		if k < closeIdx {
+			t := toks[k]
+			if isOpen(t.Type) {
+				depth++
+				continue
+			}
+			if isClose(t.Type) {
+				depth--
+				continue
+			}
+			if t.Type != token.COMMA || depth > 0 {
+				continue
+			}
+		}
+		if k > start {
+			out = append(out, p.param(toks[start:k], toks, k))
+		}
+		start = k + 1
+	}
+	return out
+}
+
+// param builds one ParamDef from its tokens. end is the index of the comma or
+// parenthesis that follows them in all (len(all) when the list is unfinished).
+func (p *scanner) param(sub, all []token.Token, end int) ParamDef {
+	d := ParamDef{}
+	if sub[0].Type != token.IDENT {
+		return d
+	}
+	d.Name = sub[0].Literal
+	if len(sub) > 2 && sub[1].Type == token.ASSIGN {
+		first := sub[2]
+		line, col := first.Line, 1<<30
+		if end < len(all) {
+			line, col = all[end].Line, all[end].Column
+		} else {
+			line = len(p.sc.runes)
+			col = len(p.sc.runes[line-1]) + 1
+		}
+		d.Default, _ = p.trimmed(first.Line, first.Column, line, col)
+	}
+	return d
 }
 
 // callOrAssign fills in a statement that starts with a name: f(...), a.b(...)

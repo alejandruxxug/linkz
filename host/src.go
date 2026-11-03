@@ -144,6 +144,7 @@ func stmtMap(s *Stmt) map[string]any {
 	}
 	if s.Kind == "function" {
 		m["params"] = paramList(s.Params)
+		m["param_defaults"] = paramDefList(s.ParamDefs)
 		m["doc"] = docMap(s.Doc)
 	}
 	return m
@@ -153,6 +154,15 @@ func paramList(names []string) []any {
 	out := []any{}
 	for _, n := range names {
 		out = append(out, n)
+	}
+	return out
+}
+
+// paramDefList is [{"name", "default"}] ("default" is "" when there is none).
+func paramDefList(defs []ParamDef) []any {
+	out := []any{}
+	for _, d := range defs {
+		out = append(out, map[string]any{"name": d.Name, "default": d.Default})
 	}
 	return out
 }
@@ -192,7 +202,7 @@ func (s *Src) libraryDocs() map[string]any {
 		walk = func(stmts []*Stmt) {
 			for _, st := range stmts {
 				if st.Kind == "function" {
-					out[st.Name] = map[string]any{"params": paramList(st.Params), "doc": docMap(st.Doc)}
+					out[st.Name] = map[string]any{"params": paramList(st.Params), "param_defaults": paramDefList(st.ParamDefs), "doc": docMap(st.Doc)}
 				}
 			}
 		}

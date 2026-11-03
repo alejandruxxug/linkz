@@ -1,0 +1,81 @@
+# GoReleaser config (v2). Releases are built by .github/workflows/release.yml
+# on a v* tag; nothing here publishes by itself when run locally with
+# `goreleaser release --snapshot --clean`.
+#
+# lizard-script is a sibling checkout (go.mod has `replace lizardscript =>
+# ../lizard-script`), so run this from a linkz folder that has lizard-script
+# next to it. The workflow does that.
+version: 2
+
+project_name: linkz
+
+before:
+  hooks:
+    - go mod download
+
+builds:
+  - id: linkz
+    main: .
+    binary: linkz
+    env:
+      - CGO_ENABLED=0
+    goos: [darwin, windows, linux]
+    goarch: [amd64, arm64]
+    ignore:
+      # Only the four systems we ship to.
+      - goos: windows
+        goarch: arm64
+      - goos: linux
+        goarch: arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+
+archives:
+  - id: linkz
+    ids: [linkz]
+    formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - README.md
+      - examples/**/*
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "Merge pull request"
+
+release:
+  # Created as a draft so a human looks at it before it goes public.
+  draft: true
+  prerelease: auto
+
+# Homebrew tap (off until the reveal). To turn it on:
+#   1. Create the repo alejandruxxug/homebrew-tap (public).
+#   2. Make a token with write access to it and add it to this repo's secrets
+#      as HOMEBREW_TAP_TOKEN; pass it in release.yml's env.
+#   3. Uncomment the block below.
+# Then users run: brew install alejandruxxug/tap/linkz
+#
+# brews:
+#   - name: linkz
+#     repository:
+#       owner: alejandruxxug
+#       name: homebrew-tap
+#       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+#     homepage: https://github.com/alejandruxxug/linkz
+#     description: "Vector art written in lizard-script"
+#     test: |
+#       assert_predicate bin/"linkz", :exist?

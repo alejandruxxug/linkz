@@ -390,3 +390,80 @@ func TestRunUserFunctionErrorKeepsPosition(t *testing.T) {
 		t.Errorf("errors = %v, want line 2", errs)
 	}
 }
+
+// Defaults with commas, brackets, strings and calls stay in one piece.
+func TestParamDefaults(t *testing.T) {
+	tests := []struct {
+		name, code string
+		names      []string
+		defaults   []string
+	}{
+		{"none", "function f() { 1 }", []string{}, []string{}},
+		{"plain", "function f(a, b) { 1 }", []string{"a", "b"}, []string{"", ""}},
+		{"point", "function f(stops, center = (0.5, 0.5), r = 0.5, steps = 0) { 1 }",
+			[]string{"stops", "center", "r", "steps"}, []string{"", "(0.5, 0.5)", "0.5", "0"}},
+		{"array", "function f(a = [1, 2, [3, 4]], b = 2) { 1 }",
+			[]string{"a", "b"}, []string{"[1, 2, [3, 4]]", "2"}},
+		{"string", `function f(s = "a, b)", t = ",") { 1 }`,
+			[]string{"s", "t"}, []string{`"a, b)"`, `","`}},
+		{"nested call", "function f(p = point(max(1, 2), (3, 4)), q) { 1 }",
+			[]string{"p", "q"}, []string{"point(max(1, 2), (3, 4))", ""}},
+		{"hash and color", `function f(h = {"a": 1, "b": 2}, c = #ff0000) { 1 }`,
+			[]string{"h", "c"}, []string{`{"a": 1, "b": 2}`, "#ff0000"}},
+		{"multi line", "function f(a,\n    b = (1,\n      2),\n    c = 3) { 1 }",
+			[]string{"a", "b", "c"}, []string{"", "(1,\n      2)", "3"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			fn := hash(list(parse(t, tc.code)["statements"])[0])
+			var names, defaults []string
+			for _, p := range list(fn["params"]) {
+				names = append(names, p.(string))
+			}
+			defs := list(fn["param_defaults"])
+			for i, d := range defs {
+				if hash(d)["name"] != names[i] {
+					t.Errorf("param_defaults[%d] name = %v, params has %s", i, hash(d)["name"], names[i])
+				}
+				defaults = append(defaults, hash(d)["default"].(string))
+			}
+			if fmt.Sprint(names) != fmt.Sprint(tc.names) || len(defs) != len(tc.names) {
+				t.Errorf("params = %q, want %q", names, tc.names)
+			}
+			if fmt.Sprint(defaults) != fmt.Sprint(tc.defaults) {
+				t.Errorf("defaults = %q, want %q", defaults, tc.defaults)
+			}
+		})
+	}
+}
+
+// Param docs follow the real parameter list, so a default with a comma no
+// longer swallows the parameters after it.
+func TestParamDocsWithCommaDefaults(t *testing.T) {
+	code := `-~> A glow.
+-~> center: where it sits
+-~> r: the radius
+function glow(center = (0.5, 0.5), r = 0.5) {
+  r
+}
+`
+	doc := hash(hash(list(parse(t, code)["statements"])[0])["doc"])
+	p := hash(doc["params"])
+	if p["center"] != "where it sits" || p["r"] != "the radius" {
+		t.Errorf("param docs = %v", p)
+	}
+}
+
+func TestLibraryDocsKeepCommaDefaults(t *testing.T) {
+	g, ok := NewSrc(nil).libraryDocs()["radial_gradient"].(map[string]any)
+	if !ok {
+		t.Skip("radial_gradient not in the library yet")
+	}
+	names := g["params"].([]any)
+	if len(names) < 4 || names[1] != "center" {
+		t.Errorf("radial_gradient params = %v", names)
+	}
+	if defs := g["param_defaults"].([]any); len(defs) != len(names) || hash(defs[1])["default"] != "(0.5, 0.5)" {
+		t.Errorf("radial_gradient defaults = %v", defs)
+	}
+}
