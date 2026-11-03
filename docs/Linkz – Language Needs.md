@@ -28,6 +28,10 @@ Measured with `go run . paint lib/gfx/tests/timing.liz out.png 512x512` (Apple s
 
 So a typical shape costs a few ms and is rasterized once (`raster.shape` caches by path and widths); redoing a long stroke or brush on every mouse move would cost 50 to 70 ms a frame, so the editor should cache or cut samples while dragging. Faster sorting of crossings or less per-edge work in lizard would help; Go is not an option (rule 1).
 
+| Tokens don't know which file they came from | `src.run` tells library errors from user errors | The host pads library sources with 100,000 blank lines and treats any line ≥ 100,000 as library | Medium (a `source` name on tokens/errors removes the hack) |
+| Optional/default parameters | `t()` + `tf()` in i18n | Two functions | B014 in progress |
+| try/catch | Failed file writes kill the call | `fs.exists` guards | B014 in progress |
+
 ## 📓 Log
 
 | Date | Need | What happened |

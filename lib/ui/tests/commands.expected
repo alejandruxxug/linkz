@@ -18,7 +18,7 @@ there is no property called nope
 > Language ["es"] true
 > Language ["xx"] false
 -~> Linkz settings
-let settings = {"language": "es"}
+let language = "es"
 
 > Open ["/d.lzdraw"] true
 > SetCode ["let nino = 1 -~> niño

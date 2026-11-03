@@ -64,60 +64,36 @@ function settings_path() {
   os.config_dir() + "/settings.liz"
 }
 
--~> Where the language code sits in the settings text: [start, end] of the code
--~> between its quotes, or null. Reads `"language": "es"` and `settings.language = "es"`.
-function settings_find(body) {
-  let at = text.find(body, "language")
-  if (at < 0) {
-    return null
-  }
-  let i = at + 8
-  if (text.slice(body, i, i + 1) == "\"") {
-    i = i + 1
-  }
-  let q1 = text.find(body, "\"", i)
-  if (q1 < 0) {
-    return null
-  }
-  let q2 = text.find(body, "\"", q1 + 1)
-  if (q2 < 0) {
-    return null
-  }
-  return [q1 + 1, q2]
-}
+-~> settings.liz is lizard code, e.g. `let language = "es"`. The host runs it
+-~> once at startup and gives its variables to the UI as the hash `settings`
+-~> (empty when there is no file or it has an error). Reading goes through
+-~> that hash; writing edits the file's text and keeps its other lines.
 
--~> The language in a settings text, or null.
-function settings_language(body) {
-  let at = settings_find(body)
-  if (at == null) {
-    return null
-  }
-  text.slice(body, at[0], at[1])
-}
-
--~> The settings text with the language set.
+-~> The settings text with `let language = "code"` set: that line replaced if
+-~> the file has one, else added at the end. Always valid lizard.
 function settings_with_language(body, code) {
-  let at = null
-  if (body != null) {
-    at = settings_find(body)
+  let line = "let language = \"" + code + "\""
+  if (body == null || text.trim(body) == "") {
+    return "-~> Linkz settings\n" + line + "\n"
   }
-  if (at != null) {
-    return text.slice(body, 0, at[0]) + code + text.slice(body, at[1], len(body))
+  let lines = text.split(body, "\n")
+  for (let i = 0; i < len(lines); i = i + 1) {
+    if (text.starts(text.trim(lines[i]), "let language")) {
+      lines[i] = line
+      return text.join(lines, "\n")
+    }
   }
-  if (body != null && text.trim(body) != "") {
-    return body + "\nsettings.language = \"" + code + "\"\n"
+  if (!text.ends(body, "\n")) {
+    body = body + "\n"
   }
-  "-~> Linkz settings\nlet settings = {\"language\": \"" + code + "\"}\n"
+  body + line + "\n"
 }
 
 -~> The language to start in: settings.liz, else the system's, else English.
 function lang_detect() {
-  let path = settings_path()
-  if (fs.exists(path)) {
-    let code = settings_language(fs.read(path))
-    if (lang_known(code)) {
-      return code
-    }
+  let code = settings.language
+  if (lang_known(code)) {
+    return code
   }
   let sys = os.locale()
   if (lang_known(sys)) {
@@ -142,5 +118,6 @@ function set_language(code) {
     body = fs.read(path)
   }
   fs.write(path, settings_with_language(body, code))
+  settings.language = code
   true
 }

@@ -13,8 +13,8 @@ import (
 // moment on the finished picture so the bloom can be seen.
 const (
 	MinSplash  = 1200 * time.Millisecond
-	HoldVines  = 300 * time.Millisecond // last vine stage, when there is no bloom
-	HoldBloom  = 400 * time.Millisecond // last bloom frame
+	HoldVines  = 300 * time.Millisecond  // last vine stage, when there is no bloom
+	HoldBloom  = 1000 * time.Millisecond // last bloom frame
 	editorW    = 1024
 	editorH    = 720
 	switchWait = 30 // ticks to wait for the window to take its new size

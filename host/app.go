@@ -31,6 +31,10 @@ type Stats struct {
 // to paint. All lizard code runs on the goroutine that calls Tick; other
 // goroutines (the backdoor) hand work over with Do.
 type App struct {
+	// Settings is the evaluated settings.liz (see LoadSettings), given to the
+	// UI as the "settings" hash. Nil means no settings.
+	Settings *object.Hash
+
 	FB    *FB
 	Src   *Src
 	Stats Stats
@@ -89,6 +93,11 @@ func (a *App) LoadWith(path string, progress func(float64)) error {
 	a.env.Define("time", timeHash())
 	a.env.Define("clip", clipHash())
 	a.env.Define("os", osHash())
+	settings := a.Settings
+	if settings == nil {
+		settings = object.NewHash()
+	}
+	a.env.Define("settings", settings)
 
 	names := lib.UIFiles()
 	codes := make([][]byte, len(names))
@@ -120,6 +129,9 @@ func (a *App) LoadWith(path string, progress func(float64)) error {
 		return fmt.Errorf("the UI libraries must define a hash called app")
 	}
 	a.app, a.path = h, path
+	if err := a.call("lang_init()", nil); err != nil { // the language: settings, then the system's
+		return err
+	}
 	err := a.call("app.start(__path)", map[string]object.Object{"__path": newStr(path)})
 	if err == nil {
 		report(1)

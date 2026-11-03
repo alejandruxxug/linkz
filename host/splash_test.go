@@ -45,7 +45,7 @@ func TestSplashFrameLayers(t *testing.T) {
 	}
 	// The tagline is drawn under the logo: some opaque pixel in its band.
 	found := false
-	for y := 56 * SplashScale; y < 66*SplashScale && !found; y++ {
+	for y := 70 * SplashScale; y < 76*SplashScale && !found; y++ {
 		for x := 0; x < img.Rect.Dx(); x++ {
 			if opaque(img, x, y) {
 				found = true
@@ -58,18 +58,43 @@ func TestSplashFrameLayers(t *testing.T) {
 	}
 }
 
-func TestSplashLizardWalksAndWraps(t *testing.T) {
+func TestSplashLizardWalksInPlace(t *testing.T) {
 	sp := newTestSplash(t)
 	same := func(a, b *image.RGBA) bool { return string(a.Pix) == string(b.Pix) }
 	f0, f1 := sp.Frame(0, -1, -1, false), sp.Frame(1, -1, -1, false)
 	if same(f0, f1) {
-		t.Error("frame 0 and frame 1 are identical: the lizard doesn't move")
+		t.Error("frame 0 and frame 1 are identical: the legs don't move")
 	}
-	// After one full trip across the banner the lizard is back at the start
-	// (6 frames of walk cycle divide the period).
-	n := sp.period / sp.Step
-	if n%sp.Lizards == 0 && !same(sp.Frame(0, -1, -1, false), sp.Frame(n, -1, -1, false)) {
-		t.Error("the lizard does not wrap around")
+	// The walk cycle repeats every 6 frames, and the lizard never wraps.
+	if !same(f0, sp.Frame(sp.Lizards, -1, -1, false)) || !same(f0, sp.Frame(100*sp.Lizards, -1, -1, false)) {
+		t.Error("the walk cycle does not repeat")
+	}
+	// Under the letters "ink": the lizard's box is centered on logo x 72 to 128
+	// and starts below the letters' bottom row (y 44), above the tagline.
+	b := sp.lizard[0].Img.Rect
+	mid := sp.LizardAt.X + b.Dx()/2
+	if mid < 98 || mid > 102 {
+		t.Errorf("lizard center x = %d, want under ink (about 100)", mid)
+	}
+	if sp.LizardAt.Y < 44 || sp.LizardAt.Y+b.Dy() > sp.H {
+		t.Errorf("lizard at y %d..%d is not below the letters", sp.LizardAt.Y, sp.LizardAt.Y+b.Dy())
+	}
+	// No movement: whatever differs between two frames lies inside the
+	// lizard's box.
+	for n := 1; n < sp.Lizards; n++ {
+		img := sp.Frame(n, -1, -1, false)
+		for y := 0; y < img.Rect.Dy(); y++ {
+			for x := 0; x < img.Rect.Dx(); x++ {
+				i := y*img.Stride + x*4
+				if string(img.Pix[i:i+4]) == string(f0.Pix[i:i+4]) {
+					continue
+				}
+				bx, by := x/SplashScale-sp.LizardAt.X, y/SplashScale-sp.LizardAt.Y
+				if bx < 0 || by < 0 || bx >= b.Dx() || by >= b.Dy() {
+					t.Fatalf("frame %d differs from frame 0 at (%d, %d), outside the lizard's box", n, x, y)
+				}
+			}
+		}
 	}
 }
 
@@ -254,6 +279,9 @@ func TestLauncherVinesGrowThenBloomThenEditor(t *testing.T) {
 	}
 	if f.bloom != 3 {
 		t.Errorf("editor appeared at bloom frame %d, want the last (3)", f.bloom)
+	}
+	if HoldBloom != time.Second {
+		t.Errorf("HoldBloom = %v, want 1 s", HoldBloom)
 	}
 	if held := f.now.Sub(f.finalAt); held < HoldBloom {
 		t.Errorf("final bloom frame held %v, want at least %v", held, HoldBloom)

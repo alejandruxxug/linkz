@@ -3,11 +3,18 @@
 -~> a lizard frame, then the logo and tagline, then a vine stage, then a
 -~> bloom frame. It needs font.liz and splash_art.liz loaded first.
 -~>   splash_render()    draws every piece and keeps it by name; returns the
--~>                      info hash the host reads (size, fps, step, counts)
--~>   splash_error(msg)  keeps "error": msg in ember under the tagline
+-~>                      info hash the host reads (size, fps, lizard_at, counts)
+-~>   splash_error(msg)  keeps "error": msg in ember over the tagline
 -~> Kept names: "lizard0".."lizardN", "logo", "vine0".., "bloom0..".
 -~> "vines" and "bloom" are optional in the art; without them nothing is kept
 -~> for them and the info counts are 0.
+
+-~> Placement. The lizard walks in place under the letters "ink" of the logo
+-~> (logo-local x 24 to 80, centered on them), feet on a ground line just
+-~> below the letters. The tagline sits lower to leave room for it.
+let splash_ink = [24, 80]
+let splash_lizard_dy = 33   -~> lizard top, from the logo's top
+let splash_tagline_dy = 10  -~> how far the tagline moves down from the art's tagline_y
 
 -~> Draws a sprite's runs [y, x0, x1, color] at a point.
 function splash_sprite(sprite, at) {
@@ -46,10 +53,11 @@ function splash_logo() {
   fb.offscreen(b["size"])
   splash_sprite(splash_art["logo"], b["logo_at"])
   let t = b["tagline"]
+  let ty = b["tagline_y"] + splash_tagline_dy
   let w = font.measure(t, 1).x
   let x = math.floor((b["size"].x - w) / 2)
-  font.draw(t, (x + 1, b["tagline_y"] + 1), b["tagline_shadow"], 1)
-  font.draw(t, (x, b["tagline_y"]), b["tagline_color"], 1)
+  font.draw(t, (x + 1, ty + 1), b["tagline_shadow"], 1)
+  font.draw(t, (x, ty), b["tagline_color"], 1)
   fb.keep("logo")
 }
 
@@ -74,12 +82,12 @@ function splash_render() {
     splash_overlays(bloom["frames"], "bloom")
   }
   let b = splash_art["banner"]
+  let lz = frames[0]["size"]
+  let ink_mid = b["logo_at"].x + math.floor((splash_ink[0] + splash_ink[1]) / 2)
   let info = {
     "size": b["size"],
     "fps": splash_art["fps"],
-    "step": splash_art["lizard_step"],
-    "lizard_y": b["lizard_y"],
-    "lizard_size": frames[0]["size"],
+    "lizard_at": (ink_mid - math.floor(lz.x / 2), b["logo_at"].y + splash_lizard_dy),
     "lizards": len(frames),
     "vines": nv,
     "bloom": nb
@@ -87,8 +95,9 @@ function splash_render() {
   info
 }
 
--~> One line of error text in ember, centered under the tagline. It is cut to
--~> fit the banner (the full text is printed to the terminal by the host).
+-~> One line of error text in ember, on a dark strip over the tagline's row
+-~> (the banner has no room under it). It is cut to fit the banner (the full
+-~> text is printed to the terminal by the host).
 function splash_error(msg) {
   let b = splash_art["banner"]
   let max = math.floor(b["size"].x / 7) - 1
@@ -96,8 +105,12 @@ function splash_error(msg) {
   if (len(line) > max) {
     line = text.slice(line, 0, max - 3) + "..."
   }
+  let ty = b["tagline_y"] + splash_tagline_dy
   fb.offscreen(b["size"])
+  for (let y = ty - 1; y < ty + 13; y = y + 1) {
+    fb.span(y, 0, b["size"].x, b["tagline_shadow"])
+  }
   let x = math.floor((b["size"].x - font.measure(line, 1).x) / 2)
-  font.draw(line, (x, b["tagline_y"] + 12), #d94a3a, 1)
+  font.draw(line, (x, ty), #d94a3a, 1)
   fb.keep("error")
 }

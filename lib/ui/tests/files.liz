@@ -16,26 +16,27 @@ ed_save("")
 let before = doc_text(ed_model())
 ed_open("/a.lzdraw")
 puts(doc_text(ed_model()) == before, ed_dirty(), len(ed.undo))
--~> Language: settings.liz, then the system's, then English.
+-~> Language: settings.language (from settings.liz), then the system's, then English.
 puts(lang_codes())
 fake_os.locale = "es"
 puts(lang_init())
-fake_files["/cfg/settings.liz"] = "let settings = {\"language\": \"en\"}\n"
+settings.language = "en"
 puts(lang_init())
-fake_files["/cfg/settings.liz"] = "-~> mine\nlet settings = {\"language\": \"xx\"}\n"
+settings.language = "xx"
 puts(lang_init())
-fake_files["/cfg/settings.liz"] = ""
+settings = {}
 fake_os.locale = "fr"
 puts(lang_init())
-puts(set_language("es"), lang_get())
+-~> set_language writes a valid settings.liz, keeping other lines.
+puts(set_language("es"), lang_get(), settings.language)
 puts(fake_files["/cfg/settings.liz"])
 puts(set_language("en"))
 puts(fake_files["/cfg/settings.liz"])
 puts(set_language("xx"), lang_get())
-fake_files["/cfg/settings.liz"] = "let settings = {\"theme\": \"dark\"}\n"
+fake_files["/cfg/settings.liz"] = "-~> mine\nlet skip_loading_anim = true"
 set_language("es")
 puts(fake_files["/cfg/settings.liz"])
 puts(lang_init())
-fake_files["/cfg/settings.liz"] = "let settings = {\"theme\": \"dark\", \"language\": \"en\"}\n"
+fake_files["/cfg/settings.liz"] = "let skip_loading_anim = true\n  let language = \"en\"\nlet theme = \"dark\"\n"
 set_language("es")
 puts(fake_files["/cfg/settings.liz"])

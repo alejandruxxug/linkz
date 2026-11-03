@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -19,6 +20,11 @@ import (
 
 // RunSteps is the step limit for running a drawing.
 const RunSteps = 2_000_000
+
+// libLineBase is added to every line of the drawing libraries' source, so an
+// error's line tells whether it came from library code (>= libLineBase) or
+// from the user's drawing, which keeps its own numbers.
+const libLineBase = 100_000
 
 // Src is the "src" hash: the language's own parser and evaluator as data, so
 // the editor (written in lizard) can read and run the user's drawing.
@@ -208,9 +214,9 @@ func (s *Src) libProgram(name string) (*ast.Program, error) {
 	if err != nil {
 		return nil, err
 	}
-	prog, errs := syntaxErrors(string(code))
+	prog, errs := syntaxErrors(strings.Repeat("\n", libLineBase) + string(code))
 	if len(errs) > 0 {
-		return nil, fmt.Errorf("library %s: [line %d, column %d] %s", name, errs[0].Line, errs[0].Column, errs[0].Message)
+		return nil, fmt.Errorf("library %s: [line %d, column %d] %s", name, errs[0].Line-libLineBase, errs[0].Column, errs[0].Message)
 	}
 	s.cache[name] = prog
 	return prog, nil
@@ -325,7 +331,7 @@ func (s *Src) Run(code string) object.Object {
 			libsLoaded = true
 			res := evaluator.Eval(prog, env)
 			if e, ok := res.(*object.Error); ok {
-				errs = []SrcError{splitPosition(e.Message)}
+				errs = []SrcError{runError(e, line)}
 			}
 		}
 	}
@@ -348,6 +354,20 @@ func (s *Src) Run(code string) object.Object {
 	hashSet(out, "canvas", canvas)
 	s.stats.RunMS, s.stats.RunErrors = ms, len(errs)
 	return out
+}
+
+// runError turns a runtime error into a SrcError. An error raised inside a
+// drawing library has a position in the library's source, which means
+// nothing to the user: it is reported at userLine (the innermost user
+// statement that was running), column 0, with the library's message alone.
+// An error in the user's own code keeps its position.
+func runError(e *object.Error, userLine int) SrcError {
+	se := splitPosition(e.Message)
+	if e.Line >= libLineBase {
+		se.Line, se.Column = userLine, 0
+		se.Message = strings.TrimPrefix(se.Message, "runtime error: ")
+	}
+	return se
 }
 
 // loadLibs evaluates the drawing libraries into env. After here.liz it

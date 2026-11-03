@@ -342,3 +342,51 @@ func TestRunReportsAndRestoresSteps(t *testing.T) {
 		t.Errorf("MaxSteps = %d, want 1000 restored", evaluator.MaxSteps)
 	}
 }
+
+func TestRunLibraryErrorReportsUserLine(t *testing.T) {
+	for _, tc := range []struct {
+		name, code string
+		line       int
+		message    string
+	}{
+		{"library check", "let a = 1\n\n\ncircle(5, 3, #fff)\n", 4,
+			"circle: center must be a point like (10, 20), not INTEGER"},
+		{"inside a layer", "layer sky\n  let x = 1\n  circle(5, 3, #fff)\n", 3,
+			"circle: center must be a point like (10, 20), not INTEGER"},
+		{"inside a loop", "for (let i = 0; i < 2; i = i + 1) {\n  circle(i, 3, #fff)\n}\n", 2, "circle: center must be a point"},
+		{"user code keeps its own position", "let a = 1\nlet b = a + nope\n", 2, "identifier not found: nope"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			errs := list(srcRun(t, tc.code)["errors"])
+			if len(errs) != 1 {
+				t.Fatalf("errors = %v", errs)
+			}
+			e := hash(errs[0])
+			msg := e["message"].(string)
+			if num(e["line"]) != tc.line || !strings.Contains(msg, tc.message) {
+				t.Errorf("error = %v, want line %d with %q", e, tc.line, tc.message)
+			}
+			if strings.Contains(msg, "[line") || strings.Contains(msg, "runtime error") && tc.name != "user code keeps its own position" {
+				t.Errorf("message still has a library position or prefix: %q", msg)
+			}
+		})
+	}
+	// Library errors have column 0; user errors have a real one.
+	lib := hash(list(srcRun(t, "circle(5, 3, #fff)\n")["errors"])[0])
+	if num(lib["column"]) != 0 {
+		t.Errorf("library error column = %v, want 0", lib["column"])
+	}
+	usr := hash(list(srcRun(t, "let b = 1 + nope\n")["errors"])[0])
+	if num(usr["column"]) == 0 {
+		t.Errorf("user error lost its column: %v", usr)
+	}
+}
+
+func TestRunUserFunctionErrorKeepsPosition(t *testing.T) {
+	// A function the user wrote runs outside the statements that count for
+	// tagging, but its errors are the user's own.
+	errs := list(srcRun(t, "function f() {\n  nope\n}\nf()\n")["errors"])
+	if len(errs) != 1 || num(hash(errs[0])["line"]) != 2 {
+		t.Errorf("errors = %v, want line 2", errs)
+	}
+}

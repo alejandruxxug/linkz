@@ -11,19 +11,21 @@ es
 en
 es
 en
-true es
+true es es
 -~> Linkz settings
-let settings = {"language": "es"}
+let language = "es"
 
 true
 -~> Linkz settings
-let settings = {"language": "en"}
+let language = "en"
 
 false en
-let settings = {"theme": "dark"}
-
-settings.language = "es"
+-~> mine
+let skip_loading_anim = true
+let language = "es"
 
 es
-let settings = {"theme": "dark", "language": "es"}
+let skip_loading_anim = true
+let language = "es"
+let theme = "dark"
 

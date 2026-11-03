@@ -1,6 +1,8 @@
 -~> Stand-ins for the host's fs, clip and os, all in memory, so the tests are
 -~> hermetic. (The host's own are not exported to other packages.)
 let fake_files = {}
+-~> The host gives the UI the evaluated settings.liz as this hash.
+let settings = {}
 let fake_clip = {"text": ""}
 let fake_os = {"locale": "en"}
 let fs = {

@@ -108,6 +108,14 @@ func edit(args []string) error {
 		}
 	}
 	app := host.NewApp(1024, 720)
+	settings, err := host.LoadSettings()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "linkz: settings ignored, using defaults:", err)
+	}
+	app.Settings = settings
+	if host.SkipLoadingAnim(settings) {
+		splash = false
+	}
 	dbg := host.NewDebug(app)
 
 	// A kill must not leave its debug file behind.
@@ -154,7 +162,7 @@ func edit(args []string) error {
 			return err
 		}
 	}
-	err := win.Run(title, w, h, handler)
+	err = win.Run(title, w, h, handler)
 	time.Sleep(150 * time.Millisecond) // let the Quit reply go out
 	if err == nil && launcher != nil {
 		err = launcher.Err

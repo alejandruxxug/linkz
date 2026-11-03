@@ -24,13 +24,10 @@ type Splash struct {
 
 	W, H       int // banner size in banner pixels
 	FPS        int
-	Step       int // pixels the lizard walks per frame
-	LizardY    int
-	LizardW    int
+	LizardAt   image.Point // where the lizard walks in place
 	Lizards    int
 	Vines      int // vine stages; 0 if the art has none
 	Bloom      int // bloom frames; 0 if the art has none
-	period     int // x positions the lizard cycles through
 	logo       *Buf
 	lizard     []*Buf
 	vine       []*Buf
@@ -69,16 +66,14 @@ func NewSplash() (*Splash, error) {
 	}
 	s.W, s.H, _ = pointInts(size)
 	s.FPS = hashInt(h, "fps")
-	s.Step = hashInt(h, "step")
-	s.LizardY = hashInt(h, "lizard_y")
-	if ls, ok := hashGet(h, "lizard_size").(*object.Point); ok {
-		s.LizardW, _, _ = pointInts(ls)
+	if at, ok := hashGet(h, "lizard_at").(*object.Point); ok {
+		x, y, _ := pointInts(at)
+		s.LizardAt = image.Pt(x, y)
 	}
 	s.Lizards, s.Vines, s.Bloom = hashInt(h, "lizards"), hashInt(h, "vines"), hashInt(h, "bloom")
 	if s.W <= 0 || s.H <= 0 || s.FPS <= 0 || s.Lizards <= 0 {
 		return nil, fmt.Errorf("splash_render gave a bad info hash")
 	}
-	s.period = s.W + s.LizardW
 	s.logo = s.fb.Kept("logo")
 	s.lizard = s.kept("lizard", s.Lizards)
 	s.vine = s.kept("vine", s.Vines)
@@ -121,12 +116,11 @@ func (s *Splash) ShowError(msg string) {
 func (s *Splash) WindowSize() (int, int) { return s.W * SplashScale, s.H * SplashScale }
 
 // Frame stacks the pieces for animation frame n and scales them to the window
-// size: lizard, logo and tagline, vine stage, bloom frame, error line. A
+// size: lizard (walking in place), logo and tagline, vine stage, bloom frame, error line. A
 // stage or bloom index out of range counts as none (-1).
 func (s *Splash) Frame(n, vine, bloom int, withError bool) *image.RGBA {
 	banner := image.NewRGBA(image.Rect(0, 0, s.W, s.H))
-	x := (n*s.Step)%s.period - s.LizardW
-	overlay(banner, s.lizard[n%s.Lizards], image.Pt(x, s.LizardY))
+	overlay(banner, s.lizard[n%s.Lizards], s.LizardAt)
 	overlay(banner, s.logo, image.Point{})
 	if vine >= 0 && vine < len(s.vine) {
 		overlay(banner, s.vine[vine], image.Point{})
