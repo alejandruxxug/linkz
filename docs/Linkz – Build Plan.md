@@ -6,7 +6,7 @@
 |---|---|---|---|
 | OK to commit the extensions-log section + CLAUDE.md in lizard-script | Language work starts there | lizard-script `git status` | 2026-11-02 |
 
-## 🌙 Overnight plan (2026-11-03, developer away until morning)
+## 🌙 Overnight plan (2026-11-03) — done, see [[2026-11-03 Overnight]]
 Order: finish B007b (editor view) + B015 (home) → **B007c autocomplete (mandatory)** → **B009** pencil/brush/anchors (v1 finish line) → v1.1 **engine** parts that need no UI approval (gradients + steps and gradient spans, blend-mode compositing, MAX OBJ calibration) → M7 MCP (agents draw by writing lizard) → M9 release *prep* only (GoReleaser config + install script; nothing published). v1.1 **UI** (R002) waits for the developer's approval in Figma. Report: `docs/Reports/2026-11-03 Overnight.md`.
 
 ## 🧱 Milestones
@@ -52,5 +52,6 @@ Briefs live in `docs/Batches/B<nnn> – <name>.md`.
 
 | Date | What | Result |
 |---|---|---|
+| 2026-11-03 | Overnight: autocomplete, gradients + blend in the editor, gradient variables, object budget, MCP (+ trace), image tracing (M8), Windows/Linux + Windows Ink, release prep, QA pass + fixes, R002 designs | See [[2026-11-03 Overnight]] |
 | 2026-11-03 | **v1 finish line (B009)** | Pencil → editable `stroke([...])`, pressure brush with 5 tunable pens, anchor drag/insert/delete rewriting single literals, shape drag, honest refusals, one undo step per gesture. Tested live through the backdoor; anchor drag ~1 ms/event, 4–14 ms/paint |
 | 2026-11-02 | M0 Foundation | `hello.lzdraw` → 6 circles + a line in SVG; host tests green; lizard libraries do all drawing |
