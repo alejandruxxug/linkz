@@ -1,0 +1,368 @@
+-~> home_data: what the home screen knows about the user's drawings, apart
+-~> from how it looks: the folder, the list (sorted, searched), the recent
+-~> ones (~/.linkz/recent.liz), how long ago a file was edited, and how a label
+-~> wraps. Words go through t() inside the functions only: this file loads
+-~> before the language tables, so nothing here may call t() at load time.
+
+let home_ext = ".lzdraw"
+let home_recent_max = 8
+
+-~> == The folder ==
+
+-~> The folder of the user's drawings: settings.drawings_dir (a leading ~/ is
+-~> the home folder), else ~/Documents/Linkz.
+function home_dir() {
+  let d = settings.drawings_dir
+  if (type(d) == "STRING" && text.trim(d) != "") {
+    d = text.trim(d)
+    if (d == "~") {
+      return os.home()
+    }
+    if (text.starts(d, "~/")) {
+      return os.home() + text.slice(d, 1, len(d))
+    }
+    return d
+  }
+  os.home() + "/Documents/Linkz"
+}
+
+-~> The folder for people: the home folder written as ~.
+function home_dir_label(dir) {
+  let h = os.home()
+  if (dir == h) {
+    return "~"
+  }
+  if (text.starts(dir, h + "/")) {
+    return "~" + text.slice(dir, len(h), len(dir))
+  }
+  dir
+}
+
+-~> == The list ==
+
+-~> Adds the name without its extension to a row of fs.list.
+function home_file(f) {
+  let stem = f.name
+  if (text.ends(stem, home_ext)) {
+    stem = text.slice(stem, 0, len(stem) - len(home_ext))
+  }
+  {"name": f.name, "stem": stem, "path": f.path, "mtime": f.mtime, "size": f.size}
+}
+
+-~> Every .lzdraw in the folder, newest edit first.
+function home_list(dir) {
+  let rows = fs.list(dir, home_ext)
+  let out = []
+  for (let i = 0; i < len(rows); i = i + 1) {
+    push(out, home_file(rows[i]))
+  }
+  home_sort(out, "edited")
+}
+
+-~> A new list in the order of `mode`: "edited" (newest first) or "name"
+-~> (A to Z, ignoring case). Ties keep the name order.
+function home_sort(files, mode) {
+  let by_name = list.sort(files, function(a, b) { text.lower(a.stem) < text.lower(b.stem) })
+  if (mode == "name") {
+    return by_name
+  }
+  list.sort(by_name, function(a, b) { a.mtime > b.mtime })
+}
+
+let home_sort_modes = ["edited", "name"]
+
+-~> The mode after `mode`, for the sort button.
+function home_next_sort(mode) {
+  let i = list.index(home_sort_modes, mode)
+  home_sort_modes[(i + 1) % len(home_sort_modes)]
+}
+
+-~> The files whose name has `query` in it, in any case. No query keeps all.
+function home_search(files, query) {
+  let q = text.lower(text.trim(query))
+  if (q == "") {
+    return files
+  }
+  let out = []
+  for (let i = 0; i < len(files); i = i + 1) {
+    if (text.find(text.lower(files[i].stem), q) >= 0) {
+      push(out, files[i])
+    }
+  }
+  out
+}
+
+-~> == Recent ==
+-~> ~/.linkz/recent.liz is lizard: a list of paths, newest first, one per line.
+-~> It is read as text (a line that is a quoted string is a path), so a hand
+-~> edit that keeps that shape works.
+
+function home_recent_path() {
+  os.config_dir() + "/recent.liz"
+}
+
+function home_quote(s) {
+  "\"" + text.replace(text.replace(s, "\\", "\\\\"), "\"", "\\\"") + "\""
+}
+
+-~> The text of recent.liz for a list of paths.
+function home_recent_text(paths) {
+  let out = ["-~> Linkz: the drawings you opened last, newest first.", "let recent = ["]
+  for (let i = 0; i < len(paths); i = i + 1) {
+    let comma = ","
+    if (i == len(paths) - 1) {
+      comma = ""
+    }
+    push(out, "  " + home_quote(paths[i]) + comma)
+  }
+  push(out, "]")
+  text.join(out, "\n") + "\n"
+}
+
+-~> The paths in the text of a recent.liz. Lines that are not a quoted string
+-~> are ignored.
+function home_recent_parse(body) {
+  let out = []
+  let lines = text.lines(body)
+  for (let i = 0; i < len(lines); i = i + 1) {
+    let s = text.trim(lines[i])
+    if (text.ends(s, ",")) {
+      s = text.slice(s, 0, len(s) - 1)
+    }
+    if (len(s) >= 2 && s[0] == "\"" && s[len(s) - 1] == "\"") {
+      push(out, home_unquote(text.slice(s, 1, len(s) - 1)))
+    }
+  }
+  out
+}
+
+function home_unquote(s) {
+  let out = ""
+  let i = 0
+  while (i < len(s)) {
+    if (s[i] == "\\" && i + 1 < len(s)) {
+      i += 1
+    }
+    out += s[i]
+    i += 1
+  }
+  out
+}
+
+-~> A new list with `path` first (once), at most home_recent_max long.
+function home_recent_add(paths, path) {
+  let out = [path]
+  for (let i = 0; i < len(paths); i = i + 1) {
+    if (paths[i] != path && len(out) < home_recent_max) {
+      push(out, paths[i])
+    }
+  }
+  out
+}
+
+function home_recent_remove(paths, path) {
+  let out = []
+  for (let i = 0; i < len(paths); i = i + 1) {
+    if (paths[i] != path) {
+      push(out, paths[i])
+    }
+  }
+  out
+}
+
+-~> `old` is `new` now (a renamed file keeps its place).
+function home_recent_replace(paths, old, new) {
+  let out = []
+  for (let i = 0; i < len(paths); i = i + 1) {
+    if (paths[i] == old) {
+      push(out, new)
+    } else {
+      push(out, paths[i])
+    }
+  }
+  out
+}
+
+function home_recent_load() {
+  let path = home_recent_path()
+  if (!fs.exists(path)) {
+    return []
+  }
+  home_recent_parse(fs.read(path))
+}
+
+function home_recent_save(paths) {
+  fs.write(home_recent_path(), home_recent_text(paths))
+}
+
+-~> The "working on" files: the recent ones that still exist, in recent order,
+-~> then (when fewer than `count`) the newest of the others. `files` must be
+-~> newest first.
+function home_working(files, paths, count) {
+  let out = []
+  let seen = {}
+  for (let i = 0; i < len(paths); i = i + 1) {
+    for (let j = 0; j < len(files); j = j + 1) {
+      if (files[j].path == paths[i] && seen[paths[i]] == null && len(out) < count) {
+        push(out, files[j])
+        seen[paths[i]] = true
+      }
+    }
+  }
+  for (let j = 0; j < len(files); j = j + 1) {
+    if (seen[files[j].path] == null && len(out) < count) {
+      push(out, files[j])
+      seen[files[j].path] = true
+    }
+  }
+  out
+}
+
+-~> == How long ago ==
+
+-~> The language keys of the weekdays, from Sunday.
+let home_weekday_keys = ["time.weekday.0", "time.weekday.1", "time.weekday.2", "time.weekday.3",
+                         "time.weekday.4", "time.weekday.5", "time.weekday.6"]
+
+-~> The language keys of the sort modes.
+let home_sort_keys = {"edited": "home.sort.edited", "name": "home.sort.name"}
+
+-~> The weekday, 0 is Sunday, of a time in seconds (tz is the offset from UTC).
+function home_weekday(secs, tz) {
+  ((secs + tz) // 86400 + 4) % 7
+}
+
+-~> Whole calendar days from `then` to `now` (both in seconds): 1 is yesterday.
+function home_days_between(then, now, tz) {
+  (now + tz) // 86400 - (then + tz) // 86400
+}
+
+-~> "2 h ago", "yesterday", "Monday", "last week", "3 wk ago", "1 mo ago".
+-~> Under a day it counts minutes and hours; after that, calendar days: 1 is
+-~> yesterday, 2 and 3 are the weekday's name, up to 6 are "n days ago", then
+-~> weeks, months (30 days) and years.
+function home_when(then, now, tz) {
+  let secs = now - then
+  if (secs < 60) {
+    return t("time.now")
+  }
+  if (secs < 3600) {
+    return tf("time.minutes", {"n": secs // 60})
+  }
+  if (secs < 86400) {
+    return tf("time.hours", {"n": secs // 3600})
+  }
+  let days = home_days_between(then, now, tz)
+  if (days <= 1) {
+    return t("time.yesterday")
+  }
+  if (days <= 3) {
+    return tf("time.on", {"day": t(home_weekday_keys[home_weekday(then, tz)])})
+  }
+  if (days < 7) {
+    return tf("time.days", {"n": days})
+  }
+  if (days < 14) {
+    return t("time.last_week")
+  }
+  if (days < 28) {
+    return tf("time.weeks", {"n": days // 7})
+  }
+  if (days < 365) {
+    let months = math.max(1, days // 30)
+    if (months == 1) {
+      return t("time.month_one")
+    }
+    return tf("time.months", {"n": months})
+  }
+  let years = days // 365
+  if (years == 1) {
+    return t("time.year_one")
+  }
+  tf("time.years", {"n": years})
+}
+
+-~> == Text that fits ==
+
+-~> The text cut to `max` characters, with … for the cut.
+function home_fit(s, max) {
+  if (len(s) <= max) {
+    return s
+  }
+  if (max <= 1) {
+    return text.slice(s, 0, math.max(max, 0))
+  }
+  text.slice(s, 0, max - 1) + "…"
+}
+
+-~> A label broken into lines of at most `max` characters, at spaces. A word
+-~> longer than a line is cut with … (nothing wraps below one character).
+function home_wrap(s, max) {
+  max = math.max(max, 1)
+  let lines = []
+  let cur = ""
+  let words = text.split(text.trim(s), " ")
+  for (let i = 0; i < len(words); i = i + 1) {
+    let w = words[i]
+    if (w == "") {
+      continue
+    }
+    if (len(w) > max) {
+      w = home_fit(w, max)
+    }
+    if (cur == "") {
+      cur = w
+    } elif (len(cur) + 1 + len(w) <= max) {
+      cur = cur + " " + w
+    } else {
+      push(lines, cur)
+      cur = w
+    }
+  }
+  if (cur != "" || len(lines) == 0) {
+    push(lines, cur)
+  }
+  lines
+}
+
+-~> == Names of files ==
+
+-~> The first of `stem`, `stem 2`, `stem 3`, ... with no file of that name in
+-~> `taken` (a list of file names with the extension).
+function home_free_name(stem, taken) {
+  let n = 1
+  let name = stem
+  while (list.index(taken, name + home_ext) >= 0) {
+    n += 1
+    name = stem + " " + str(n)
+  }
+  name
+}
+
+function home_names(files) {
+  let out = []
+  for (let i = 0; i < len(files); i = i + 1) {
+    push(out, files[i].name)
+  }
+  out
+}
+
+-~> The file name a user's text stands for, without the extension: trimmed, a
+-~> typed .lzdraw dropped. Null for a name that can't be a file: empty, a slash
+-~> or colon, or a leading dot.
+function home_clean_name(s) {
+  let name = text.trim(s)
+  if (text.ends(name, home_ext)) {
+    name = text.trim(text.slice(name, 0, len(name) - len(home_ext)))
+  }
+  if (name == "" || text.starts(name, ".") || text.find(name, "/") >= 0 || text.find(name, ":") >= 0) {
+    return null
+  }
+  name
+}
+
+-~> The text of a new, empty drawing.
+function home_new_text() {
+  let size = default_canvas_size
+  "-~> lzdraw 1\ncanvas = {\"size\": (" + str(size.x) + ", " + str(size.y) + "), \"background\": #ffffff}\n"
+}

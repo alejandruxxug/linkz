@@ -1,0 +1,169 @@
+-~> home_thumbs: the small previews on the cards. A thumbnail is the drawing
+-~> run (src.run) and painted by raster.paint into an offscreen buffer, with
+-~> the canvas scaled to fit and its background drawn, then saved as a PNG in
+-~> ~/.linkz/thumbs. The file name has a hash of the drawing's text and the
+-~> size, so a file that did not change is never painted again (not even
+-~> after a restart), and one that changed gets a new thumbnail by itself.
+-~> The host only copies the pixels (fb.keep, fb.load_png, fb.blit).
+
+-~> What is known per card: "home_thumb_key" -> {"hash", "state": "ready" or
+-~> "error", "kept": name of the kept buffer, "size": point}. Nothing here
+-~> yet means the thumbnail is waiting.
+let home_thumbs = {"made": {}, "hashes": {}, "renders": 0}
+
+function home_thumb_dir() {
+  os.config_dir() + "/thumbs"
+}
+
+-~> The hash of a file's text, asked again only when its time or size changed.
+-~> Null when the file can't be read.
+function home_hash_of(f) {
+  let hit = home_thumbs.hashes[f.path]
+  if (hit != null && hit.mtime == f.mtime && hit.size == f.size) {
+    return hit.hash
+  }
+  let h = null
+  try {
+    h = fs.hash(f.path)
+  } catch (e) {
+    h = null
+  }
+  home_thumbs.hashes[f.path] = {"mtime": f.mtime, "size": f.size, "hash": h}
+  h
+}
+
+function home_thumb_key(f, size) {
+  f.path + "|" + str(size.x) + "x" + str(size.y)
+}
+
+-~> The thumbnail record of a file at a size, or null while it waits (or when
+-~> the file changed since it was made).
+function home_thumb_get(f, size) {
+  let hit = home_thumbs.made[home_thumb_key(f, size)]
+  if (hit == null) {
+    return null
+  }
+  if (hit.hash != home_hash_of(f)) {
+    return null
+  }
+  hit
+}
+
+function home_thumb_file(hash, size) {
+  home_thumb_dir() + "/" + hash + "-" + str(size.x) + "x" + str(size.y) + ".png"
+}
+
+-~> The path a shape's points follow, all multiplied by k.
+function home_scale_path(path, k) {
+  let out = []
+  for (let i = 0; i < len(path); i = i + 1) {
+    let c = path[i]
+    let n = [c[0]]
+    for (let j = 1; j < len(c); j = j + 1) {
+      push(n, c[j] * k)
+    }
+    push(out, n)
+  }
+  out
+}
+
+-~> A copy of a shape made k times bigger (only what raster.paint reads).
+function home_scale_shape(s, k) {
+  let width = s.width
+  if (type(width) == "INTEGER" || type(width) == "FLOAT") {
+    width = width * k
+  }
+  {"path": home_scale_path(s.path, k), "fill": s.fill, "stroke": s.stroke,
+   "width": width, "rule": s.rule, "line": s.line, "widths": null}
+}
+
+-~> The size the canvas gets inside a box: as big as fits, never more than
+-~> 4 times, at least 1 pixel.
+function home_fit_canvas(canvas, box) {
+  let k = math.min(box.x / float(canvas.x), box.y / float(canvas.y), 4.0)
+  return (math.max(1, math.round(canvas.x * k)), math.max(1, math.round(canvas.y * k)))
+}
+
+-~> Paints a run drawing into a buffer of `size` (offscreen), scaled to fill it.
+function home_paint_run(r, size) {
+  let cs = (512, 512)
+  let bg = #ffffff
+  if (type(r.canvas) == "HASH") {
+    if (type(r.canvas.size) == "POINT" && r.canvas.size.x > 0 && r.canvas.size.y > 0) {
+      cs = r.canvas.size
+    }
+    if (type(r.canvas.background) == "COLOR") {
+      bg = r.canvas.background
+    }
+  }
+  let k = size.x / float(cs.x)
+  fb.fill((0, 0), size, bg)
+  let shapes = []
+  for (let i = 0; i < len(r.shapes); i = i + 1) {
+    push(shapes, home_scale_shape(r.shapes[i], k))
+  }
+  raster.paint(shapes, (0, 0))
+}
+
+-~> Makes the thumbnail of a file: from its PNG when one is saved, else by
+-~> painting it and saving the PNG. A drawing that fails to run gets state
+-~> "error" (nothing is saved). `box` is the room on the card.
+function home_thumb_make(f, box) {
+  let hash = home_hash_of(f)
+  let rec = {"hash": hash, "state": "error", "kept": "", "size": box, "message": ""}
+  home_thumbs.made[home_thumb_key(f, box)] = rec
+  if (hash == null) {
+    return rec
+  }
+  let file = home_thumb_file(hash, box)
+  let kept = "thumb:" + hash + ":" + str(box.x) + "x" + str(box.y)
+  if (fs.exists(file)) {
+    try {
+      rec.size = fb.load_png(file, kept)
+      rec.kept = kept
+      rec.state = "ready"
+      return rec
+    } catch (e) {
+      rec.state = "error"
+    }
+  }
+  home_thumbs.renders += 1
+  let drawn = false
+  try {
+    let r = src.run(fs.read(f.path))
+    if (len(r.errors) == 0) {
+      let cs = (512, 512)
+      if (type(r.canvas) == "HASH" && type(r.canvas.size) == "POINT" && r.canvas.size.x > 0 && r.canvas.size.y > 0) {
+        cs = r.canvas.size
+      }
+      let size = home_fit_canvas(cs, box)
+      fb.offscreen(size)
+      home_paint_run(r, size)
+      fs.mkdir(home_thumb_dir())
+      fb.save_png(file)
+      fb.keep(kept)
+      rec.size = size
+      rec.kept = kept
+      rec.state = "ready"
+      drawn = true
+    }
+  } catch (e) {
+    fb.screen()
+    rec.message = e.message
+  }
+  if (!drawn) {
+    fb.screen()
+    rec.state = "error"
+  }
+  rec
+}
+
+-~> Draws a thumbnail record in the thumbnail area at (x, y, w, h): centered,
+-~> scaled down by the host if the card is smaller than the saved size.
+function home_thumb_blit(rec, x, y, w, h) {
+  let s = rec.size
+  let k = math.min(w / float(s.x), h / float(s.y))
+  let dw = math.max(1, math.floor(s.x * k))
+  let dh = math.max(1, math.floor(s.y * k))
+  fb.blit(rec.kept, (x + (w - dw) // 2, y + (h - dh) // 2), (dw, dh))
+}

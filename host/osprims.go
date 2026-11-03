@@ -67,7 +67,7 @@ func WriteFileAtomic(path string, data []byte) error {
 }
 
 func fsHash() *object.Hash {
-	return builtinHash("fs", map[string]object.BuiltinFunction{
+	h := builtinHash("fs", map[string]object.BuiltinFunction{
 		"read": func(args ...object.Object) object.Object {
 			s, err := strArgs(args, 1, "1 (path)")
 			if err != nil {
@@ -98,15 +98,19 @@ func fsHash() *object.Hash {
 			return newBool(serr == nil)
 		},
 	})
+	addFSPrims(h)
+	return h
 }
 
 func timeHash() *object.Hash {
-	return builtinHash("time", map[string]object.BuiltinFunction{
+	h := builtinHash("time", map[string]object.BuiltinFunction{
 		// ms is a FLOAT: milliseconds since the program started.
 		"ms": func(args ...object.Object) object.Object {
 			return newFloat(float64(time.Since(startTime).Microseconds()) / 1000)
 		},
 	})
+	addTimePrims(h)
+	return h
 }
 
 // The clipboard goes through pbcopy/pbpaste on macOS (no cgo needed). Where
@@ -200,7 +204,7 @@ func ConfigDir() (string, error) {
 }
 
 func osHash() *object.Hash {
-	return builtinHash("os", map[string]object.BuiltinFunction{
+	h := builtinHash("os", map[string]object.BuiltinFunction{
 		"locale": func(args ...object.Object) object.Object { return newStr(Locale()) },
 		"config_dir": func(args ...object.Object) object.Object {
 			dir, err := ConfigDir()
@@ -210,4 +214,6 @@ func osHash() *object.Hash {
 			return newStr(dir)
 		},
 	})
+	addOSPrims(h)
+	return h
 }

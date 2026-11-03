@@ -277,12 +277,14 @@ func (a *App) Tick(in window.Input) window.Output {
 	if a.needsPaint() {
 		busy = true
 		start := time.Now()
+		// The flag goes down before the paint, so a screen that has more to
+		// do (the home screen makes one thumbnail per paint) can raise it again.
+		hashSet(a.app, "needs_paint", newBool(false))
 		if err := a.call("app.paint()", nil); err != nil {
 			a.fail(err)
 			painted = false
 		} else {
 			a.lastErr = ""
-			hashSet(a.app, "needs_paint", newBool(false))
 			a.Stats.Frames++
 		}
 		a.Stats.PaintMS = float64(time.Since(start).Microseconds()) / 1000

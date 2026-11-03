@@ -1,0 +1,7 @@
+-~> lzdraw 1
+canvas = {"size": (320, 400), "background": #e8f0de}
+rect((146, 250), (28, 120), #6e4a2a)
+circle((160, 180), 90, #3fa34d)
+circle((110, 210), 56, #2f6b3a)
+circle((215, 205), 60, #2f8a44)
+rect((0, 360), (320, 40), #8fbf5a)

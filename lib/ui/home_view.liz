@@ -1,0 +1,1119 @@
+-~> home_view: the home screen. `linkz edit` with no file shows a gallery of
+-~> the drawings in the Linkz folder: "Working on" (the ones opened last, big
+-~> cards, with a "+ New drawing" card first) and "All drawings" (a grid you can
+-~> sort and search), each card with a thumbnail, its name and when it was
+-~> edited, and a menu (open, rename, duplicate, show in Finder, delete).
+-~> With no drawings at all it shows the lizard, "+ New drawing" and "Open an
+-~> example". The layout follows the approved frames (positions in UI pixels).
+-~>
+-~> The app's screen router uses it through home_register(), which sets
+-~> screens["home"] = {"event", "paint", "enter", "needs_paint", "wants_hover"}.
+-~> The editor tells it about files with home_note_opened(path) and
+-~> home_note_saved(path).
+
+-~> files: every drawing, newest first. recent: the paths opened last.
+-~> focus: the search field is being typed in. cards: the cards of the last
+-~> layout, in reading order. warm: true after a first paint, from then on
+-~> a paint may make a thumbnail.
+let home = {
+  "files": [],
+  "recent": [],
+  "query": "",
+  "focus": false,
+  "sort": "edited",
+  "scroll": 0,
+  "size": (512, 360),
+  "hover": null,
+  "menu": null,
+  "dialog": null,
+  "status": "",
+  "cards": [],
+  "lay": null,
+  "warm": false,
+  "needs_paint": true,
+  "wants_hover": true
+}
+
+-~> The geometry of the approved frames.
+let home_top = 22
+let home_bottom = 16
+let home_big_w = 128
+let home_big_th = 76
+let home_small_w = 91
+let home_small_th = 50
+let home_new_w = 80
+
+-~> == State ==
+
+function home_scan() {
+  home.files = home_list(home_dir())
+  home.recent = home_recent_load()
+}
+
+function home_enter(args) {
+  fb.canvas((0, 0), (0, 0))
+  fb.target("ui")
+  home_scan()
+  home.menu = null
+  home.dialog = null
+  home.hover = null
+  home.warm = false
+  home.scroll = 0
+  home.needs_paint = true
+}
+
+function home_dirty() {
+  home.needs_paint = true
+}
+
+function home_say(msg) {
+  home.status = msg
+  home_dirty()
+}
+
+-~> The editor opened a file (or the user did here): it goes first in recent.
+function home_note_opened(path) {
+  home.recent = home_recent_add(home_recent_load(), path)
+  home_recent_save(home.recent)
+}
+
+-~> The editor saved a file: it is the one worked on last. (Its thumbnail
+-~> follows by itself, because the name of a thumbnail has the text's hash.)
+function home_note_saved(path) {
+  home_note_opened(path)
+}
+
+-~> == Layout ==
+
+function home_cols(w) {
+  math.max(1, (w - 16) // 99)
+}
+
+function home_work_count(w) {
+  math.max(0, math.min((w - 104) // 136, home_recent_max))
+}
+
+function home_card(section, f, x, y, w, th, big) {
+  let h = th + 28
+  if (big) {
+    h = th + 32
+  }
+  {"section": section, "file": f, "x": x, "y": y, "w": w, "h": h, "th": th, "big": big}
+}
+
+-~> Where everything goes, for the size and scroll now. cards are in reading
+-~> order (working on, then all); y values already include the scroll.
+function home_layout() {
+  let w = home.size.x
+  let h = home.size.y
+  let lay = {"empty": false, "cards": [], "titles": [], "new": null, "sort": null,
+             "height": 0, "grid_y": 0, "none": false}
+  let shown = home_search(home_sort(home.files, home.sort), home.query)
+  if (len(home.files) == 0 && text.trim(home.query) == "") {
+    lay.empty = true
+    home.lay = lay
+    home.cards = []
+    return lay
+  }
+  let sy = 0 - home.scroll
+  let y = 30
+  if (text.trim(home.query) == "") {
+    push(lay.titles, {"key": "home.working", "y": y + sy, "right": null})
+    let ry = y + 16 + sy
+    lay.new = {"x": 12, "y": ry, "w": home_new_w, "h": home_big_th + 32}
+    let work = home_working(home.files, home.recent, home_work_count(w))
+    for (let i = 0; i < len(work); i = i + 1) {
+      push(lay.cards, home_card("work", work[i], 12 + home_new_w + 8 + i * (home_big_w + 8), ry, home_big_w, home_big_th, true))
+    }
+    y = y + 16 + home_big_th + 32 + 10
+  }
+  push(lay.titles, {"key": "home.all", "y": y + sy, "right": home_sort_keys[home.sort]})
+  let label = t(home_sort_keys[home.sort])
+  let sx = w - 12 - len(label) * 7 - 20
+  lay.sort = {"x": sx, "y": y + sy, "w": len(label) * 7 + 22, "h": 13}
+  y = y + 16
+  lay.grid_y = y
+  let cols = home_cols(w)
+  let cell = home_small_th + 28 + 6
+  for (let i = 0; i < len(shown); i = i + 1) {
+    let row = i // cols
+    let col = i % cols
+    push(lay.cards, home_card("all", shown[i], 12 + col * (home_small_w + 8), y + row * cell + sy, home_small_w, home_small_th, false))
+  }
+  let rows = (len(shown) + cols - 1) // cols
+  lay.none = len(shown) == 0
+  lay.height = y + math.max(rows * cell, 20) + 4
+  home.lay = lay
+  home.cards = lay.cards
+  lay
+}
+
+function home_max_scroll() {
+  let lay = home_layout()
+  math.max(0, lay.height - (home.size.y - home_bottom))
+}
+
+function home_clamp_scroll() {
+  home.scroll = math.max(0, math.min(home.scroll, home_max_scroll()))
+}
+
+-~> The empty screen's pieces: where the lizard, the buttons and the lines go.
+function home_empty_layout() {
+  let w = home.size.x
+  let art = home_art.lizard
+  let k = 3
+  let ly = 72
+  let lx = (w - art.size.x * k) // 2
+  let ty = ly + art.size.y * k + 12
+  let new_label = t("home.new")
+  let bw = len(new_label) * 7 + 40
+  let by = ty + 40
+  let ex = t("home.example")
+  let ew = len(ex) * 7 + 18
+  {"lx": lx, "ly": ly, "k": k, "ty": ty,
+   "new": {"x": (w - bw) // 2, "y": by, "w": bw, "h": 26},
+   "example": {"x": (w - ew) // 2, "y": by + 34, "w": ew, "h": 16},
+   "hint_y": by + 58}
+}
+
+function home_in(r, x, y) {
+  r != null && x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h
+}
+
+function home_top_layout() {
+  let w = home.size.x
+  let lang = text.upper(lang_get())
+  let lw = len(lang) * 7 + 18
+  {"search": {"x": 150, "y": 3, "w": 212, "h": 16},
+   "lang": {"x": w - 8 - 16 - 4 - lw, "y": 4, "w": lw, "h": 14},
+   "settings": {"x": w - 8 - 16, "y": 4, "w": 16, "h": 14}}
+}
+
+function home_card_visible(c) {
+  c.y + c.h > home_top && c.y < home.size.y - home_bottom
+}
+
+-~> The menu button of a card.
+function home_card_more(c) {
+  {"x": c.x + c.w - 18, "y": c.y + 4, "w": 14, "h": 12}
+}
+
+-~> == Menu ==
+
+let home_menu_items = [
+  {"id": "open", "icon": "open", "key": "home.menu.open"},
+  {"id": "rename", "icon": "rename", "key": "home.menu.rename"},
+  {"id": "duplicate", "icon": "copy", "key": "home.menu.duplicate"},
+  {"id": "reveal", "icon": "folder", "key": "home.menu.reveal"},
+  {"id": "delete", "icon": "trash", "key": "home.menu.delete"}
+]
+
+function home_menu_open(index) {
+  let c = home.cards[index]
+  let widest = 0
+  for (let i = 0; i < len(home_menu_items); i = i + 1) {
+    widest = math.max(widest, len(t(home_menu_items[i].key)) * 7)
+  }
+  let w = widest + 28
+  let h = len(home_menu_items) * 14 + 10
+  let x = math.min(c.x + c.w - 18, home.size.x - w - 6)
+  let y = math.min(c.y + 18, home.size.y - home_bottom - h - 2)
+  home.menu = {"card": index, "file": c.file, "x": x, "y": y, "w": w, "h": h, "item": 0}
+  home_dirty()
+}
+
+-~> The row of item i of the open menu (the last item has a 4 px gap above).
+function home_menu_row(i) {
+  let m = home.menu
+  let y = m.y + 3 + i * 14
+  if (i == len(home_menu_items) - 1) {
+    y += 4
+  }
+  {"x": m.x + 1, "y": y, "w": m.w - 2, "h": 14}
+}
+
+function home_menu_hit(x, y) {
+  let m = home.menu
+  if (m == null) {
+    return -1
+  }
+  for (let i = 0; i < len(home_menu_items); i = i + 1) {
+    if (home_in(home_menu_row(i), x, y)) {
+      return i
+    }
+  }
+  -1
+}
+
+function home_menu_run(id, f) {
+  home.menu = null
+  if (id == "open") {
+    home_open(f.path)
+  } elif (id == "rename") {
+    home.dialog = {"kind": "rename", "file": f, "value": f.stem}
+  } elif (id == "duplicate") {
+    home_duplicate(f)
+  } elif (id == "reveal") {
+    try {
+      os.reveal(f.path)
+    } catch (e) {
+      home_say(e.message)
+    }
+  } elif (id == "delete") {
+    home.dialog = {"kind": "delete", "file": f}
+  }
+  home_dirty()
+}
+
+-~> == Actions ==
+
+-~> Opens a drawing in the editor.
+function home_open(path) {
+  if (!ed_open(path)) {
+    home_say(ed.status)
+    return false
+  }
+  home_note_opened(path)
+  show_screen("editor", null)
+  true
+}
+
+function home_new_drawing() {
+  let dir = home_dir()
+  let taken = home_names(home_list(dir))
+  let name = home_free_name("Untitled", taken)
+  let path = dir + "/" + name + home_ext
+  try {
+    fs.mkdir(dir)
+    fs.write(path, home_new_text())
+  } catch (e) {
+    home_say(e.message)
+    return false
+  }
+  home_scan()
+  home_open(path)
+}
+
+function home_open_example() {
+  let dir = home_dir()
+  let taken = home_names(home_list(dir))
+  let stem = text.slice(home_example.name, 0, len(home_example.name) - len(home_ext))
+  let path = dir + "/" + home_free_name(stem, taken) + home_ext
+  try {
+    fs.mkdir(dir)
+    fs.write(path, home_example.text)
+  } catch (e) {
+    home_say(e.message)
+    return false
+  }
+  home_scan()
+  home_open(path)
+}
+
+function home_duplicate(f) {
+  let dir = home_dir()
+  let taken = home_names(home_list(dir))
+  let name = home_free_name(f.stem + " " + t("home.copy"), taken)
+  let path = dir + "/" + name + home_ext
+  try {
+    fs.copy(f.path, path)
+  } catch (e) {
+    home_say(e.message)
+    return false
+  }
+  home_scan()
+  home_say(tf("home.duplicated", {"file": name + home_ext}))
+  true
+}
+
+-~> Renames a drawing to what the user typed. False (with a message) when the
+-~> name is no good or taken.
+function home_rename(f, typed) {
+  let name = home_clean_name(typed)
+  if (name == null) {
+    home_say(t("home.bad_name"))
+    return false
+  }
+  if (name == f.stem) {
+    return true
+  }
+  let path = home_dir() + "/" + name + home_ext
+  if (fs.exists(path)) {
+    home_say(tf("home.exists", {"file": name + home_ext}))
+    return false
+  }
+  try {
+    fs.rename(f.path, path)
+  } catch (e) {
+    home_say(e.message)
+    return false
+  }
+  home.recent = home_recent_replace(home.recent, f.path, path)
+  home_recent_save(home.recent)
+  home_scan()
+  home_say(tf("home.renamed", {"file": name + home_ext}))
+  true
+}
+
+-~> Moves a drawing to the Trash (the app never deletes a file itself).
+function home_trash(f) {
+  try {
+    fs.trash(f.path)
+  } catch (e) {
+    home_say(e.message)
+    return false
+  }
+  home.recent = home_recent_remove(home.recent, f.path)
+  home_recent_save(home.recent)
+  home_scan()
+  home_clamp_scroll()
+  home_say(tf("home.trashed", {"file": f.name}))
+  true
+}
+
+-~> == Painting ==
+
+function home_checker(x, y, w, h) {
+  let s = 8
+  for (let r = 0; r < h; r += s) {
+    for (let c = 0; c < w; c += s) {
+      if ((r // s + c // s) % 2 == 1) {
+        home_rect(x + c, y + r, math.min(s, w - c), math.min(s, h - r), "panel")
+      }
+    }
+  }
+}
+
+function home_paint_thumb(c, hover) {
+  let box = (c.w - 2, c.th)
+  let x = c.x + 1
+  let y = c.y + 1
+  home_rect(x, y, box.x, box.y, "coal")
+  let rec = home_thumb_get(c.file, box)
+  if (rec == null) {
+    home_checker(x, y, box.x, box.y)
+  } elif (rec.state == "ready") {
+    home_thumb_blit(rec, x, y, box.x, box.y)
+  } else {
+    home_rect(x + box.x // 5, y + box.y // 5, box.x * 3 // 5, box.y * 3 // 5, "panel")
+    home_icon("error", x + (box.x - 8) // 2, y + (box.y - 8) // 2, "ember")
+  }
+}
+
+function home_paint_card(c, hover, menu_open) {
+  let edge = "void"
+  let face = "panel"
+  let name_color = "text"
+  if (hover) {
+    edge = "lizard"
+    face = "row"
+    name_color = "bright"
+  }
+  home_outline(c.x, c.y, c.w, c.h, edge)
+  home_rect(c.x + 1, c.y + 1, c.w - 2, c.h - 2, face)
+  home_paint_thumb(c, hover)
+  home_rect(c.x + 1, c.y + 1 + c.th, c.w - 2, 1, "void")
+  let maxc = (c.w - 6) // 7
+  let name = c.file.stem
+  let when = home_when(c.file.mtime, home_now(), home_tz())
+  let line2_y = c.y + c.th + 13
+  if (c.big) {
+    name = c.file.name
+    when = tf("home.edited", {"when": when})
+    line2_y = c.y + c.th + 15
+  }
+  home_text(home_fit(name, maxc), c.x + 3, c.y + c.th + 2, name_color)
+  home_text(home_fit(when, maxc), c.x + 3, line2_y, "mute")
+  if (hover) {
+    let b = home_card_more(c)
+    let state = "hover"
+    if (menu_open) {
+      state = "pressed"
+    }
+    home_button(b.x, b.y, b.w, b.h, "more", null, state)
+  }
+}
+
+function home_paint_new_card(r, hover) {
+  home_rect(r.x, r.y, r.w, r.h, "coal")
+  let edge = "bevel"
+  if (hover) {
+    edge = "lizard"
+  }
+  home_dashed(r.x, r.y, r.w, r.h, edge)
+  let cx = r.x + r.w // 2
+  let cy = r.y + r.h // 2 - 10
+  home_outline(cx - 10, cy - 10, 20, 20, "void")
+  home_rect(cx - 9, cy - 9, 18, 18, "moss")
+  home_icon("plus", cx - 4, cy - 4, "lizard")
+  let lines = home_wrap(t("home.new"), (r.w - 2) // 7)
+  for (let i = 0; i < len(lines); i = i + 1) {
+    home_text(lines[i], cx - len(lines[i]) * 7 // 2, cy + 14 + i * 13, "lizard")
+  }
+  let k = "Cmd+N"
+  home_text(k, cx - len(k) * 7 // 2, cy + 27 + (len(lines) - 1) * 13, "mute")
+}
+
+function home_paint_title(title, w) {
+  let s = t(title.key)
+  home_text(s, 12, title.y, "mute")
+  let right_w = 0
+  if (title.right != null) {
+    right_w = len(t(title.right)) * 7 + 26
+  }
+  home_rect(12 + len(s) * 7 + 6, title.y + 7, w - 24 - len(s) * 7 - 6 - right_w, 1, "bevel")
+  if (title.right != null) {
+    let label = t(title.right)
+    let rx = w - 12 - len(label) * 7 - 20
+    home_icon("sort", rx, title.y + 3, "mute")
+    home_text(label, rx + 10, title.y, "text")
+    home_icon("chevron-down", rx + 12 + len(label) * 7, title.y + 3, "mute")
+  }
+}
+
+function home_paint_scrollbar(lay) {
+  let view = home.size.y - home_bottom
+  let max = lay.height - view
+  if (max <= 0) {
+    return null
+  }
+  let track_y = math.max(home_top + 8, lay.grid_y)
+  let track_h = view - track_y - 2
+  home_rect(home.size.x - 7, track_y, 3, track_h, "panel")
+  let thumb_h = math.max(12, track_h * view // lay.height)
+  let thumb_y = track_y + (track_h - thumb_h) * home.scroll // max
+  home_rect(home.size.x - 7, thumb_y, 3, thumb_h, "bevel")
+}
+
+function home_paint_topbar() {
+  let w = home.size.x
+  let tl = home_top_layout()
+  home_rect(0, 0, w, home_top, "panel")
+  home_rect(0, home_top - 1, w, 1, "void")
+  home_icon("layer", 8, 7, "lizard")
+  home_text("L", 20, 4, "lizard")
+  home_text("ink", 27, 4, "sky")
+  home_text("z", 48, 4, "lizard")
+  let s = tl.search
+  home_field(s.x, s.y, s.w, s.h, home.focus)
+  home_icon("search", s.x + 5, s.y + 4, "mute")
+  if (home.query == "") {
+    home_text(t("home.search"), s.x + 17, s.y + 1, "mute")
+  } else {
+    let shown = home_fit(home.query, (s.w - 24) // 7)
+    home_text(shown, s.x + 17, s.y + 1, "text")
+    if (home.focus) {
+      home_rect(s.x + 17 + len(shown) * 7, s.y + 3, 1, 10, "amber")
+    }
+  }
+  let l = tl.lang
+  let state = "normal"
+  if (home.hover != null && home.hover.kind == "lang") {
+    state = "hover"
+  }
+  home_button(l.x, l.y, l.w, l.h, "language", text.upper(lang_get()), state)
+  let g = tl.settings
+  state = "normal"
+  if (home.hover != null && home.hover.kind == "settings") {
+    state = "hover"
+  }
+  home_button(g.x, g.y, g.w, g.h, "settings", null, state)
+}
+
+function home_paint_statusbar() {
+  let w = home.size.x
+  let y = home.size.y - home_bottom
+  home_rect(0, y, w, home_bottom, "panel")
+  home_rect(0, y, w, 1, "void")
+  home_icon("folder", 6, y + 4, "mute")
+  let left = home.status
+  let color = "text"
+  if (left == "") {
+    left = home_count_text()
+    color = "mute"
+  }
+  home_text(left, 16, y + 2, color)
+  let right = "Linkz 0.1 · lizard-script"
+  home_text(right, w - 6 - len(right) * 7, y + 2, "mute")
+}
+
+function home_count_text() {
+  let n = len(home.files)
+  let label = home_dir_label(home_dir())
+  if (n == 0) {
+    return label
+  }
+  if (n == 1) {
+    return tf("home.count_one", {"dir": label})
+  }
+  tf("home.count", {"n": n, "dir": label})
+}
+
+function home_paint_empty() {
+  let e = home_empty_layout()
+  let w = home.size.x
+  let art = home_art.lizard
+  let k = e.k
+  home_rect(e.lx - 20, e.ly + art.size.y * k - 3, art.size.x * k + 40, 1, "bevel")
+  for (let i = 0; i < len(art.runs); i = i + 1) {
+    let r = art.runs[i]
+    fb.fill((e.lx + r[1] * k, e.ly + r[0] * k), ((r[2] - r[1]) * k, k), r[3])
+  }
+  let title = t("home.empty_title")
+  let sub = t("home.empty_sub")
+  home_text(title, (w - len(title) * 7) // 2, e.ty, "bright")
+  home_text(sub, (w - len(sub) * 7) // 2, e.ty + 16, "mute")
+  let b = e.new
+  home_outline(b.x, b.y, b.w, b.h, "void")
+  home_rect(b.x + 1, b.y + 1, b.w - 2, b.h - 2, "moss")
+  home_bevel(b.x + 1, b.y + 1, b.w - 2, b.h - 2, "lizard", "void")
+  if (home.hover != null && home.hover.kind == "newbtn") {
+    home_outline(b.x + 1, b.y + 1, b.w - 2, b.h - 2, "lizard")
+  }
+  home_icon("plus", b.x + 10, b.y + 9, "lizard")
+  home_text(t("home.new"), b.x + 24, b.y + 6, "bright")
+  let x = e.example
+  let state = "normal"
+  if (home.hover != null && home.hover.kind == "example") {
+    state = "hover"
+  }
+  home_button(x.x, x.y, x.w, x.h, "open", t("home.example"), state)
+  let hint = t("home.empty_hint")
+  home_text(hint, (w - len(hint) * 7) // 2, e.hint_y, "mute")
+}
+
+function home_paint_menu() {
+  let m = home.menu
+  home_rect(m.x + 2, m.y + 2, m.w, m.h, "void")
+  home_outline(m.x, m.y, m.w, m.h, "void")
+  home_rect(m.x + 1, m.y + 1, m.w - 2, m.h - 2, "row")
+  home_rect(m.x + 1, m.y + 1, m.w - 2, 1, "bevel")
+  for (let i = 0; i < len(home_menu_items); i = i + 1) {
+    let it = home_menu_items[i]
+    let r = home_menu_row(i)
+    let danger = it.id == "delete"
+    if (danger) {
+      home_rect(m.x + 4, r.y - 3, m.w - 8, 1, "bevel")
+    }
+    let text_color = "text"
+    let icon_color = "mute"
+    if (danger) {
+      text_color = "ember"
+      icon_color = "ember"
+    }
+    if (i == m.item) {
+      home_rect(r.x, r.y, r.w, r.h, "moss")
+      text_color = "bright"
+      if (!danger) {
+        icon_color = "lizard"
+      }
+    }
+    home_icon(it.icon, m.x + 6, r.y + 3, icon_color)
+    home_text(t(it.key), m.x + 18, r.y, text_color)
+  }
+}
+
+-~> The geometry of the dialog (rename or delete).
+function home_dialog_layout() {
+  let d = home.dialog
+  let w = 224
+  let lines = []
+  let h = 66
+  if (d.kind == "delete") {
+    lines = home_wrap(tf("home.delete_ask", {"file": d.file.name}), (w - 16) // 7)
+    h = 22 + len(lines) * 13 + 8 + 16 + 8
+  }
+  let x = (home.size.x - w) // 2
+  let y = (home.size.y - h) // 2 - 10
+  let ok = t("home.ok")
+  if (d.kind == "delete") {
+    ok = t("home.delete")
+  }
+  let cancel = t("home.cancel")
+  let cw = len(cancel) * 7 + 18
+  let ow = len(ok) * 7 + 18 + 10
+  let by = y + h - 8 - 16
+  {"x": x, "y": y, "w": w, "h": h, "lines": lines, "ok_label": ok, "cancel_label": cancel,
+   "cancel": {"x": x + w - 8 - cw, "y": by, "w": cw, "h": 16},
+   "ok": {"x": x + w - 8 - cw - 6 - ow, "y": by, "w": ow, "h": 16},
+   "field": {"x": x + 8, "y": y + 24, "w": w - 16, "h": 18}}
+}
+
+function home_paint_dialog() {
+  let d = home.dialog
+  let g = home_dialog_layout()
+  home_rect(g.x + 2, g.y + 2, g.w, g.h, "void")
+  home_outline(g.x, g.y, g.w, g.h, "void")
+  home_rect(g.x + 1, g.y + 1, g.w - 2, g.h - 2, "row")
+  home_rect(g.x + 1, g.y + 1, g.w - 2, 1, "bevel")
+  if (d.kind == "rename") {
+    home_text(t("home.rename_title"), g.x + 8, g.y + 6, "bright")
+    let f = g.field
+    home_field(f.x, f.y, f.w, f.h, true)
+    let shown = home_fit(d.value, (f.w - 10) // 7)
+    home_text(shown, f.x + 4, f.y + 3, "text")
+    home_rect(f.x + 4 + len(shown) * 7, f.y + 4, 1, 10, "amber")
+  } else {
+    home_text(t("home.delete_title"), g.x + 8, g.y + 6, "ember")
+    for (let i = 0; i < len(g.lines); i = i + 1) {
+      home_text(g.lines[i], g.x + 8, g.y + 22 + i * 13, "text")
+    }
+  }
+  let state = "normal"
+  if (home.hover != null && home.hover.kind == "ok") {
+    state = "hover"
+  }
+  home_button(g.ok.x, g.ok.y, g.ok.w, g.ok.h, null, g.ok_label, state)
+  state = "normal"
+  if (home.hover != null && home.hover.kind == "cancel") {
+    state = "hover"
+  }
+  home_button(g.cancel.x, g.cancel.y, g.cancel.w, g.cancel.h, null, g.cancel_label, state)
+}
+
+-~> The visible cards whose thumbnail is not made yet, in reading order.
+function home_thumbs_waiting() {
+  let todo = []
+  for (let i = 0; i < len(home.cards); i = i + 1) {
+    let c = home.cards[i]
+    if (home_card_visible(c) && home_thumb_get(c.file, (c.w - 2, c.th)) == null) {
+      push(todo, c)
+    }
+  }
+  todo
+}
+
+-~> Makes one waiting thumbnail (the first visible card without one).
+function home_thumb_step() {
+  let todo = home_thumbs_waiting()
+  if (len(todo) > 0) {
+    home_thumb_make(todo[0].file, (todo[0].w - 2, todo[0].th))
+  }
+  null
+}
+
+-~> Is the pointer over card i (or its menu button)?
+function home_hover_card(i) {
+  let h = home.hover
+  h != null && (h.kind == "card" || h.kind == "more") && h.index == i
+}
+
+function home_hover_is(kind) {
+  home.hover != null && home.hover.kind == kind
+}
+
+function home_paint() {
+  fb.target("ui")
+  fb.unclip()
+  let size = fb.size()
+  if (size != home.size) {
+    home.size = size
+    home_clamp_scroll()
+  }
+  let w = size.x
+  let h = size.y
+  home_rect(0, 0, w, h, "coal")
+  let lay = home_layout()
+  if (home.warm && !lay.empty) {
+    home_thumb_step()
+  }
+  if (lay.empty) {
+    home_paint_empty()
+  } else {
+    fb.clip((0, home_top), (w, h - home_top - home_bottom))
+    for (let i = 0; i < len(lay.titles); i = i + 1) {
+      home_paint_title(lay.titles[i], w)
+    }
+    if (lay.new != null) {
+      home_paint_new_card(lay.new, home_hover_is("new"))
+    }
+    for (let i = 0; i < len(lay.cards); i = i + 1) {
+      let c = lay.cards[i]
+      if (home_card_visible(c)) {
+        let menu_open = home.menu != null && home.menu.card == i
+        home_paint_card(c, home_hover_card(i) || menu_open, menu_open)
+      }
+    }
+    if (lay.none) {
+      home_text(tf("home.no_match", {"q": text.trim(home.query)}), 12, lay.grid_y + 4, "mute")
+    }
+    home_paint_scrollbar(lay)
+    fb.unclip()
+  }
+  home_paint_topbar()
+  home_paint_statusbar()
+  if (home.menu != null) {
+    home_paint_menu()
+  }
+  if (home.dialog != null) {
+    home_paint_dialog()
+  }
+  home.warm = true
+  home.needs_paint = !lay.empty && len(home_thumbs_waiting()) > 0
+}
+
+-~> == Events ==
+
+function home_now() {
+  time.now()
+}
+
+function home_tz() {
+  time.tz()
+}
+
+-~> What is under the pointer: {"kind": ...} or null.
+function home_hit(x, y) {
+  let w = home.size.x
+  let h = home.size.y
+  if (home.dialog != null) {
+    let g = home_dialog_layout()
+    if (home_in(g.ok, x, y)) {
+      return {"kind": "ok"}
+    }
+    if (home_in(g.cancel, x, y)) {
+      return {"kind": "cancel"}
+    }
+    if (home_in(g.field, x, y)) {
+      return {"kind": "field"}
+    }
+    return {"kind": "dialog"}
+  }
+  if (home.menu != null) {
+    let i = home_menu_hit(x, y)
+    if (i >= 0) {
+      return {"kind": "menu", "index": i}
+    }
+    if (home_in(home.menu, x, y)) {
+      return {"kind": "menu_edge"}
+    }
+  }
+  let tl = home_top_layout()
+  if (home_in(tl.search, x, y)) {
+    return {"kind": "search"}
+  }
+  if (home_in(tl.lang, x, y)) {
+    return {"kind": "lang"}
+  }
+  if (home_in(tl.settings, x, y)) {
+    return {"kind": "settings"}
+  }
+  if (y < home_top || y >= h - home_bottom) {
+    return null
+  }
+  let lay = home_layout()
+  if (lay.empty) {
+    let e = home_empty_layout()
+    if (home_in(e.new, x, y)) {
+      return {"kind": "newbtn"}
+    }
+    if (home_in(e.example, x, y)) {
+      return {"kind": "example"}
+    }
+    return null
+  }
+  if (home_in(lay.sort, x, y)) {
+    return {"kind": "sort"}
+  }
+  if (home_in(lay.new, x, y)) {
+    return {"kind": "new"}
+  }
+  for (let i = 0; i < len(lay.cards); i = i + 1) {
+    let c = lay.cards[i]
+    if (home_in(c, x, y)) {
+      if (home_in(home_card_more(c), x, y)) {
+        return {"kind": "more", "index": i}
+      }
+      return {"kind": "card", "index": i}
+    }
+  }
+  null
+}
+
+-~> The text after a key or text event edits it: Backspace takes the last
+-~> character, typed text is added. Null when the event is neither.
+function home_edit(value, e) {
+  if (e.type == "key" && e.key == "Backspace") {
+    return text.slice(value, 0, len(value) - 1)
+  }
+  if (e.type == "text" && !e.mods.cmd && !e.mods.ctrl) {
+    return value + e.text
+  }
+  null
+}
+
+function home_set_query(q) {
+  home.query = q
+  home.scroll = 0
+  home.menu = null
+  home_dirty()
+}
+
+function home_dialog_event(e) {
+  let d = home.dialog
+  if (e.type == "move") {
+    let hit = home_hit(e.pos.x, e.pos.y)
+    let was = str(home.hover)
+    home.hover = hit
+    if (str(hit) != was) {
+      home_dirty()
+    }
+    return null
+  }
+  if (e.type == "key") {
+    if (e.key == "Escape") {
+      home.dialog = null
+      home_dirty()
+      return null
+    }
+    if (e.key == "Enter" || e.key == "NumpadEnter") {
+      home_dialog_ok()
+      return null
+    }
+  }
+  if (d.kind == "rename") {
+    let v = home_edit(d.value, e)
+    if (v != null) {
+      d.value = v
+      home_dirty()
+    }
+  }
+  if (e.type == "down" && e.button == 0) {
+    let hit = home_hit(e.pos.x, e.pos.y)
+    if (hit.kind == "ok") {
+      home_dialog_ok()
+    } elif (hit.kind == "cancel") {
+      home.dialog = null
+      home_dirty()
+    }
+  }
+  null
+}
+
+function home_dialog_ok() {
+  let d = home.dialog
+  if (d.kind == "rename") {
+    if (home_rename(d.file, d.value)) {
+      home.dialog = null
+    }
+  } else {
+    home.dialog = null
+    home_trash(d.file)
+  }
+  home_dirty()
+}
+
+function home_cycle_language() {
+  let codes = lang_codes()
+  let i = list.index(codes, lang_get())
+  set_language(codes[(i + 1) % len(codes)])
+  home_dirty()
+}
+
+function home_click(hit, e) {
+  home.status = ""
+  home.focus = hit != null && hit.kind == "search"
+  if (hit == null) {
+    home_dirty()
+    return null
+  }
+  if (hit.kind == "lang") {
+    home_cycle_language()
+  } elif (hit.kind == "sort") {
+    home.sort = home_next_sort(home.sort)
+    home_dirty()
+  } elif (hit.kind == "new" || hit.kind == "newbtn") {
+    home_new_drawing()
+  } elif (hit.kind == "example") {
+    home_open_example()
+  } elif (hit.kind == "more" || (hit.kind == "card" && e.button == 1)) {
+    home_menu_open(hit.index)
+  } elif (hit.kind == "card") {
+    home_open(home.cards[hit.index].file.path)
+  }
+  home_dirty()
+}
+
+function home_event(e) {
+  if (e.type == "resize") {
+    home.size = e.size
+    home_clamp_scroll()
+    home_dirty()
+    return null
+  }
+  if (home.dialog != null) {
+    return home_dialog_event(e)
+  }
+  if (e.type == "move") {
+    let hit = home_hit(e.pos.x, e.pos.y)
+    let was = str(home.hover)
+    home.hover = hit
+    if (home.menu != null) {
+      let i = -1
+      if (hit != null && hit.kind == "menu") {
+        i = hit.index
+      }
+      if (i >= 0 && i != home.menu.item) {
+        home.menu.item = i
+        home_dirty()
+      }
+    }
+    if (str(hit) != was) {
+      home_dirty()
+    }
+    return null
+  }
+  if (e.type == "down" && (e.button == 0 || e.button == 1)) {
+    let hit = home_hit(e.pos.x, e.pos.y)
+    if (home.menu != null) {
+      let m = home.menu
+      home.menu = null
+      home_dirty()
+      if (hit != null && hit.kind == "menu") {
+        if (e.button == 0) {
+          home_menu_run(home_menu_items[hit.index].id, m.file)
+        }
+      } elif (hit != null && hit.kind == "menu_edge") {
+        home_dirty()
+      } elif (hit != null && hit.kind == "more" && hit.index == m.card) {
+        home_dirty()
+      } else {
+        home_click(hit, e)
+      }
+      return null
+    }
+    home_click(hit, e)
+    return null
+  }
+  if (e.type == "wheel") {
+    let before = home.scroll
+    home.scroll = home.scroll - math.round(e.dy * 12)
+    home_clamp_scroll()
+    if (home.scroll != before) {
+      home.menu = null
+      home_dirty()
+    }
+    return null
+  }
+  if (e.type == "key") {
+    home_key(e)
+    return null
+  }
+  if (e.type == "text") {
+    if (!e.mods.cmd && !e.mods.ctrl) {
+      home.focus = true
+      home_set_query(home.query + e.text)
+    }
+  }
+  null
+}
+
+function home_key(e) {
+  let k = e.key
+  if (k == "Escape") {
+    if (home.menu != null) {
+      home.menu = null
+    } elif (home.query != "") {
+      home_set_query("")
+    } else {
+      home.focus = false
+    }
+    home_dirty()
+    return null
+  }
+  if (e.mods.cmd && (k == "KeyN" || k == "N" || k == "n")) {
+    home_new_drawing()
+    return null
+  }
+  if (e.mods.cmd && (k == "KeyF" || k == "F" || k == "f")) {
+    home.focus = true
+    home_dirty()
+    return null
+  }
+  if (k == "Backspace" && home.query != "") {
+    home.focus = true
+    home_set_query(text.slice(home.query, 0, len(home.query) - 1))
+    return null
+  }
+  if ((k == "Enter" || k == "NumpadEnter") && home.focus && len(home.cards) > 0) {
+    let first = home.cards[0]
+    home_open(first.file.path)
+  }
+  null
+}
+
+-~> == Hooking into the app ==
+
+function home_screen() {
+  {"event": home_event, "paint": home_paint, "enter": home_enter,
+   "needs_paint": function() { home.needs_paint },
+   "wants_hover": function() { home.wants_hover }}
+}
+
+-~> Puts the home screen in the router: screens["home"].
+function home_register() {
+  screens["home"] = home_screen()
+}
+
+-~> The backdoor: add these to the app's debug_commands (Call Home, Call
+-~> OpenCard n, Call NewDrawing) and put home_debug_state() in its Dump.
+
+function home_cmd_home(args) {
+  show_screen("home", null)
+  home_debug_state()
+}
+
+-~> Opens the n-th card (0 is the first "working on" card), or the first of
+-~> "all" when there is no working row.
+function home_cmd_open_card(args) {
+  home_layout()
+  let n = args[0]
+  if (type(n) != "INTEGER" || n < 0 || n >= len(home.cards)) {
+    return {"opened": false, "error": "there is no card " + str(n)}
+  }
+  let path = home.cards[n].file.path
+  {"opened": home_open(path), "path": path}
+}
+
+function home_cmd_new_drawing(args) {
+  let ok = home_new_drawing()
+  {"created": ok, "files": len(home.files)}
+}
+
+function home_debug_commands() {
+  {"Home": home_cmd_home, "OpenCard": home_cmd_open_card, "NewDrawing": home_cmd_new_drawing}
+}
+
+function home_thumb_state(c) {
+  let rec = home_thumb_get(c.file, (c.w - 2, c.th))
+  if (rec == null) {
+    return "pending"
+  }
+  rec.state
+}
+
+function home_debug_state() {
+  let lay = home_layout()
+  let cards = []
+  for (let i = 0; i < len(home.cards); i = i + 1) {
+    let c = home.cards[i]
+    push(cards, {"index": i, "name": c.file.name, "path": c.file.path, "section": c.section,
+                 "thumb": home_thumb_state(c), "rect": [c.x, c.y, c.w, c.h]})
+  }
+  let nr = null
+  if (lay.new != null) {
+    nr = [lay.new.x, lay.new.y, lay.new.w, lay.new.h]
+  }
+  {"screen": "home", "dir": home_dir(), "files": len(home.files), "query": home.query,
+   "sort": home.sort, "scroll": home.scroll, "empty": lay.empty, "menu": home.menu != null,
+   "dialog": home.dialog != null, "status": home.status, "recent": home.recent,
+   "renders": home_thumbs.renders, "new_card": nr, "cards": cards}
+}
+
+-~> A router that already exists gets the screen now; one that is made later
+-~> (app.liz loads last) calls home_register() itself.
+try {
+  home_register()
+} catch (e) {
+  null
+}

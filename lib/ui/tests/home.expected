@@ -1,0 +1,136 @@
+/home/u/Documents/Linkz
+/art
+/home/u/Pics
+/home/u
+/home/u/Documents/Linkz
+~/Documents/Linkz ~ /other
+Zed.lzdraw night-city.lzdraw b.lzdraw a.lzdraw
+Zed /home/u/Documents/Linkz/Zed.lzdraw
+a.lzdraw b.lzdraw night-city.lzdraw Zed.lzdraw
+Zed.lzdraw night-city.lzdraw b.lzdraw a.lzdraw
+name edited edited
+0
+night-city.lzdraw
+Zed.lzdraw night-city.lzdraw b.lzdraw a.lzdraw
+a.lzdraw
+
+-~> Linkz: the drawings you opened last, newest first.
+let recent = [
+  "/x/a.lzdraw",
+  "/x/b \"quoted\".lzdraw",
+  "/x/c\\d.lzdraw"
+]
+
+true
+["/p/q.lzdraw", "/p/r.lzdraw"]
+[] -~> Linkz: the drawings you opened last, newest first.
+let recent = [
+]
+
+["b", "a", "c"]
+["z", "a", "b"]
+["9", "1", "2", "3", "4", "5", "6", "7"]
+8 8
+["b"]
+["a", "c"]
+[]
+true ["/x/a.lzdraw", "/x/b.lzdraw"]
+["/x/c.lzdraw", "/x/b.lzdraw", "/x/a.lzdraw"]
+a.lzdraw b.lzdraw Zed.lzdraw
+Zed.lzdraw night-city.lzdraw b.lzdraw
+a.lzdraw Zed.lzdraw
+a.lzdraw Zed.lzdraw night-city.lzdraw b.lzdraw
+
+-- en
+30 just now
+60 1 min ago
+300 5 min ago
+3599 59 min ago
+3600 1 h ago
+7200 2 h ago
+82800 23 h ago
+86400 yesterday
+129600 yesterday
+172800 Monday
+259200 Sunday
+345600 4 days ago
+518400 6 days ago
+604800 last week
+1036800 last week
+1209600 2 wk ago
+1900800 3 wk ago
+2419200 1 mo ago
+3024000 1 mo ago
+5184000 2 mo ago
+31536000 1 yr ago
+70000000 2 yr ago
+-- es
+30 ahora mismo
+60 hace 1 min
+300 hace 5 min
+3599 hace 59 min
+3600 hace 1 h
+7200 hace 2 h
+82800 hace 23 h
+86400 ayer
+129600 ayer
+172800 el lunes
+259200 el domingo
+345600 hace 4 días
+518400 hace 6 días
+604800 hace 1 sem.
+1036800 hace 1 sem.
+1209600 hace 2 sem.
+1900800 hace 3 sem.
+2419200 hace 1 mes
+3024000 hace 1 mes
+5184000 hace 2 meses
+31536000 hace 1 año
+70000000 hace 2 años
+-- midnight and the time zone
+1 0
+3 0
+night-city.lzdraw night-cit… a true
+["New drawing"]
+["Nuevo", "dibujo"]
+["Nuevo dibujo"]
+["a b", "c d", "e f"]
+["superca…", "word"]
+[""] [""]
+["o", "t"]
+["Move night-city.lzdraw to the", "Trash? You can still get it", "back from there."]
+my art a null null null null null
+Untitled Untitled 2 Untitled 3
+-~> lzdraw 1
+canvas = {"size": (512, 512), "background": #ffffff}
+
+[] (512, 512)
+two.lzdraw one.lzdraw
+true ["editor"] /home/u/Documents/Linkz/Untitled.lzdraw
+Untitled.lzdraw two.lzdraw one.lzdraw true
+true /home/u/Documents/Linkz/Untitled 2.lzdraw
+["/home/u/Documents/Linkz/Untitled 2.lzdraw", "/home/u/Documents/Linkz/Untitled.lzdraw"]
+true /home/u/Documents/Linkz/layers.lzdraw
+true
+false There is no file at /home/u/Documents/Linkz/missing.lzdraw
+one.lzdraw
+true Made one copy.lzdraw
+true Made one copy 2.lzdraw
+true layers.lzdraw Untitled.lzdraw Untitled 2.lzdraw two.lzdraw one.lzdraw one copy.lzdraw one copy 2.lzdraw
+false That name can't be used for a file
+false two.lzdraw already exists
+true false
+true Renamed to uno.lzdraw
+null true /home/u/Documents/Linkz/uno.lzdraw
+true ["/home/u/Documents/Linkz/uno.lzdraw"] null true Moved uno.lzdraw to the Trash
+12 46 80 108
+15 30 164 180
+[100, 46, 128, 108] [372, 46] layers.lzdraw
+[12, 180, 91, 78] [408, 180] [12, 264] [111, 348]
+436 92
+80 -54
+6 null home.all 46
+true
+3 5 1 2 3 5
+false
+true 0

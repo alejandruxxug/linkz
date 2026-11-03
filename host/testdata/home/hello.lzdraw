@@ -1,0 +1,13 @@
+-~> lzdraw 1
+-~> A row of growing circles on a line.
+
+canvas = {"size": (400, 200), "background": #f4f1e8}
+
+for (let i = 0; i < 6; i = i + 1) {
+  let c = circle((40 + i * 64, 100), 6 + i * 4, #3fa34d)
+  if (i % 2 == 1) {
+    c.fill = #e0a526
+  }
+}
+line((20, 100), (380, 100), #1d1d1f, 2)
+puts("drew", len(drawing), "shapes")

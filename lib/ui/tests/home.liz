@@ -1,0 +1,219 @@
+-~> The home screen's logic on in-memory files: the folder, the list, sort,
+-~> search, recent.liz, how long ago in English and Spanish, wrapping labels,
+-~> and the actions that change files.
+let dir = "/home/u/Documents/Linkz"
+let times = {}
+os.home = function() { "/home/u" }
+fs.list = function(d, ext) {
+  let out = []
+  let ks = keys(times)
+  for (let i = 0; i < len(ks); i = i + 1) {
+    let k = ks[i]
+    if (text.starts(k, d + "/") && text.ends(k, ext)) {
+      push(out, {"name": text.slice(k, len(d) + 1, len(k)), "path": k, "mtime": times[k], "size": 10})
+    }
+  }
+  out
+}
+fs.mkdir = function(p) { null }
+fs.write = function(p, body) {
+  fake_files[p] = body
+  if (times[p] == null) { times[p] = 500 }
+  null
+}
+fs.rename = function(a, b) {
+  if (fake_files[b] != null) { error(b + " already exists") }
+  fake_files[b] = fake_files[a]
+  times[b] = times[a]
+  delete(fake_files, a)
+  delete(times, a)
+  null
+}
+fs.copy = function(a, b) {
+  if (fake_files[b] != null) { error(b + " already exists") }
+  fake_files[b] = fake_files[a]
+  times[b] = 1
+  null
+}
+let trashed = []
+fs.trash = function(p) { push(trashed, p); delete(fake_files, p); delete(times, p); null }
+let shown = []
+function show_screen(name, args) { push(shown, name) }
+function add(name, mtime) {
+  let p = dir + "/" + name
+  fake_files[p] = "canvas = {\"size\": (100, 50), \"background\": #ffffff}\nrect((0, 0), (50, 50), #ff0000)\n"
+  times[p] = mtime
+}
+function names(files) {
+  let out = []
+  for (let i = 0; i < len(files); i = i + 1) { push(out, files[i].name) }
+  text.join(out, " ")
+}
+
+-~> == The folder ==
+puts(home_dir())
+settings.drawings_dir = "/art"
+puts(home_dir())
+settings.drawings_dir = "~/Pics"
+puts(home_dir())
+settings.drawings_dir = "~"
+puts(home_dir())
+settings.drawings_dir = "   "
+puts(home_dir())
+settings = {}
+puts(home_dir_label(dir), home_dir_label("/home/u"), home_dir_label("/other"))
+
+-~> == The list: newest first, only .lzdraw ==
+add("b.lzdraw", 200)
+add("Zed.lzdraw", 300)
+add("a.lzdraw", 100)
+add("night-city.lzdraw", 250)
+fake_files[dir + "/notes.txt"] = "x"
+times[dir + "/notes.txt"] = 999
+let files = home_list(dir)
+puts(names(files))
+puts(files[0].stem, files[0].path)
+puts(names(home_sort(files, "name")))
+puts(names(home_sort(files, "edited")))
+puts(home_next_sort("edited"), home_next_sort("name"), home_next_sort("x"))
+puts(len(home_list("/nowhere")))
+
+-~> == Search: any case, part of the name, no query keeps all ==
+puts(names(home_search(files, "NI")))
+puts(names(home_search(files, "  ")))
+puts(names(home_search(files, "a")))
+puts(names(home_search(files, "q")))
+
+-~> == recent.liz ==
+let paths = ["/x/a.lzdraw", "/x/b \"quoted\".lzdraw", "/x/c\\d.lzdraw"]
+let body = home_recent_text(paths)
+puts(body)
+puts(home_recent_parse(body) == paths)
+puts(home_recent_parse("-~> hand edit\nlet recent = [\n  \"/p/q.lzdraw\",   \n\n  \"/p/r.lzdraw\"\n]\n"))
+puts(home_recent_parse(""), home_recent_text([]))
+puts(home_recent_add(["a", "b", "c"], "b"))
+puts(home_recent_add(["a", "b"], "z"))
+let long = ["1", "2", "3", "4", "5", "6", "7", "8"]
+puts(home_recent_add(long, "9"))
+puts(len(home_recent_add(long, "9")), len(home_recent_add(long, "3")))
+puts(home_recent_remove(["a", "b", "a"], "a"))
+puts(home_recent_replace(["a", "b"], "b", "c"))
+-~> The file on disk: nothing yet, then saved and read back.
+puts(home_recent_load())
+home_recent_save(["/x/a.lzdraw", "/x/b.lzdraw"])
+puts(fake_files["/cfg/recent.liz"] != null, home_recent_load())
+home_note_opened("/x/b.lzdraw")
+home_note_opened("/x/c.lzdraw")
+puts(home_recent_load())
+
+-~> Working on: recent ones that still exist, in recent order, then the newest.
+puts(names(home_working(files, [dir + "/a.lzdraw", "/gone.lzdraw", dir + "/b.lzdraw"], 3)))
+puts(names(home_working(files, [], 3)))
+puts(names(home_working(files, [dir + "/a.lzdraw"], 2)))
+puts(names(home_working(files, [dir + "/a.lzdraw", dir + "/a.lzdraw"], 4)))
+puts(names(home_working(files, [], 0)))
+
+-~> == How long ago ==
+-~> now is Wednesday 2026-11-04 12:00 UTC
+let now = 1793793600
+let ago = [30, 60, 300, 3599, 3600, 7200, 82800, 86399 + 1, 129600, 172800, 259200, 345600, 518400, 604800, 1036800, 1209600, 1900800, 2419200, 3024000, 5184000, 31536000, 70000000]
+puts("-- en")
+lang_use("en")
+for (let i = 0; i < len(ago); i = i + 1) {
+  puts(ago[i], home_when(now - ago[i], now, 0))
+}
+puts("-- es")
+lang_use("es")
+for (let i = 0; i < len(ago); i = i + 1) {
+  puts(ago[i], home_when(now - ago[i], now, 0))
+}
+lang_use("en")
+puts("-- midnight and the time zone")
+-~> 01:00 UTC on the 4th is still the 3rd in Bogota (UTC-5)
+let early = 1793754000 + 0
+puts(home_days_between(early - 7200, early, 0), home_days_between(early - 7200, early, -18000))
+puts(home_weekday(now, 0), home_weekday(now - 86400 * 3, 0))
+
+-~> == Fitting text ==
+puts(home_fit("night-city.lzdraw", 17), home_fit("night-city.lzdraw", 10), home_fit("ab", 1), home_fit("abc", 0) == "")
+puts(home_wrap("New drawing", 11))
+puts(home_wrap("Nuevo dibujo", 11))
+puts(home_wrap("Nuevo dibujo", 12))
+puts(home_wrap("a b c d e f", 3))
+puts(home_wrap("supercalifragilistic word", 8))
+puts(home_wrap("", 8), home_wrap("   ", 8))
+puts(home_wrap("one two", 0))
+puts(home_wrap("Move night-city.lzdraw to the Trash? You can still get it back from there.", 29))
+
+-~> == Names ==
+puts(home_clean_name("  my art  "), home_clean_name("a.lzdraw"), home_clean_name("a/b"), home_clean_name(".x"), home_clean_name("  "), home_clean_name("a:b"), home_clean_name(".lzdraw"))
+puts(home_free_name("Untitled", []), home_free_name("Untitled", ["Untitled.lzdraw"]), home_free_name("Untitled", ["Untitled.lzdraw", "Untitled 2.lzdraw"]))
+puts(home_new_text())
+puts(src.run(home_new_text()).errors, src.run(home_new_text()).canvas.size)
+
+-~> == Actions on the files ==
+times = {}
+fake_files = {}
+add("one.lzdraw", 100)
+add("two.lzdraw", 200)
+home_scan()
+puts(names(home.files))
+puts(home_new_drawing(), shown, ed.file)
+puts(names(home.files), fake_files[dir + "/Untitled.lzdraw"] == home_new_text())
+puts(home_new_drawing(), ed.file)
+puts(home_recent_load())
+puts(home_open_example(), ed.file)
+puts(fake_files[dir + "/layers.lzdraw"] == home_example.text)
+puts(home_open(dir + "/missing.lzdraw"), home.status)
+-~> Duplicate: "one copy", then "one copy 2".
+let one = home.files[len(home.files) - 1]
+puts(one.name)
+puts(home_duplicate(one), home.status)
+puts(home_duplicate(one), home.status)
+puts(fake_files[dir + "/one copy.lzdraw"] == fake_files[dir + "/one.lzdraw"], names(home_list(dir)))
+-~> Rename: refuses bad and taken names, keeps recent.
+let two = home_list(dir)[0]
+puts(home_rename(one, ""), home.status)
+puts(home_rename(one, "two"), home.status)
+puts(home_rename(one, "one"), home_rename(one, "a/b"))
+home_note_opened(one.path)
+puts(home_rename(one, "  uno.lzdraw "), home.status)
+puts(fake_files[dir + "/one.lzdraw"], fake_files[dir + "/uno.lzdraw"] != null, home_recent_load()[0])
+-~> Trash: the file goes, and leaves recent.
+let uno = home_list(dir)
+let u = null
+for (let i = 0; i < len(uno); i = i + 1) { if (uno[i].name == "uno.lzdraw") { u = uno[i] } }
+puts(home_trash(u), trashed, fake_files[u.path], home_recent_load()[0] != u.path, home.status)
+
+-~> == Layout at 512 x 360 ==
+times = {}
+fake_files = {}
+let order = ["layers", "strokes", "night-city", "hello", "mountains", "lily", "badge", "waves", "poster", "grid", "bird", "tree"]
+for (let i = 0; i < len(order); i = i + 1) { add(order[i] + ".lzdraw", 1000 - i) }
+home_scan()
+home.recent = []
+home.size = (512, 360)
+let lay = home_layout()
+puts(lay.new.x, lay.new.y, lay.new.w, lay.new.h)
+puts(len(lay.cards), lay.titles[0].y, lay.titles[1].y, lay.grid_y)
+let c = lay.cards
+puts([c[0].x, c[0].y, c[0].w, c[0].h], [c[2].x, c[2].y], c[0].file.name)
+puts([c[3].x, c[3].y, c[3].w, c[3].h], [c[7].x, c[7].y], [c[8].x, c[8].y], [c[14].x, c[14].y])
+puts(lay.height, home_max_scroll())
+home.scroll = 100
+puts(home_layout().cards[3].y, home_layout().new.y)
+home.scroll = 0
+home.query = "r"
+lay = home_layout()
+puts(len(lay.cards), lay.new, lay.titles[0].key, lay.grid_y)
+home.query = "zzz"
+puts(home_layout().none)
+home.query = ""
+home.size = (400, 300)
+puts(home_cols(400), home_cols(512), home_cols(100), home_work_count(400), home_work_count(512), home_work_count(900))
+home.size = (512, 360)
+puts(home_layout().empty)
+times = {}
+fake_files = {}
+home_scan()
+puts(home_layout().empty, len(home.cards))

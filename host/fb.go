@@ -220,6 +220,8 @@ func (f *FB) Builtins() *object.Hash {
 		"canvas":    f.setCanvas,
 		"dirty":     f.markDirty,
 		"save_png":  f.savePNG,
+		"load_png":  f.loadPNG,
+		"blit":      f.blit,
 	})
 }
 

@@ -1,0 +1,156 @@
+-~> home_gfx: the small pieces the home screen is drawn with, in the Linkz
+-~> Dark style: the palette, 8x8 icons, outlines, bevelled buttons, fields and
+-~> dashed boxes. Everything draws into the UI buffer (half resolution) with
+-~> fb.fill and fb.spans, at whole pixels.
+
+let home_c = {
+  "void": #0b0c0b, "coal": #131512, "panel": #1a1d19, "row": #232721,
+  "raised": #2e332c, "bevel": #434a40, "dim": #5f685b, "mute": #a0ab9b,
+  "text": #d4dacd, "bright": #f2f5ec, "moss": #163a20, "lizard": #4fc46a,
+  "amber": #f2b33d, "ember": #f36c5b, "sky": #72b8e6, "peach": #eb9a6f
+}
+
+-~> The 8x8 icons, a row per "|", a "#" for a set pixel.
+let home_icon_art = {
+  "search": ".###....|#...#...|#...#...|#...#...|.###....|....#...|.....#..|......##",
+  "settings": "...##...|.#.##.#.|..####..|###..###|###..###|..####..|.#.##.#.|...##...",
+  "more": "........|........|........|##.##.##|##.##.##|........|........|........",
+  "folder": "........|###.....|#..####.|#......#|#......#|#......#|########|........",
+  "trash": "..####..|########|.#....#.|.#.#.##.|.#.#.##.|.#.#.##.|.#....#.|..####..",
+  "copy": "####....|#..#....|#.#####.|#.#...#.|###...#.|..#...#.|..#####.|........",
+  "rename": "........|######..|.....#..|.....#..|.##..#..|.....#..|######..|........",
+  "open": "........|.#####..|.#...#..|.#....##|.#...#.#|.#####..|........|........",
+  "sort": "...#....|..###...|.#.#.#..|...#....|...#....|...#....|...#....|........",
+  "layer": "...##...|.##..##.|#......#|.##..##.|#..##..#|.##..##.|...##...|........",
+  "language": "..####..|.#.#..#.|#..#...#|########|#..#...#|#..#...#|.#.#..#.|..####..",
+  "plus": "........|...##...|...##...|.######.|.######.|...##...|...##...|........",
+  "chevron-down": "........|........|##....##|.##..##.|..####..|...##...|........|........",
+  "error": "...##...|..####..|..####..|..####..|...##...|........|...##...|...##..."
+}
+
+-~> The icons as spans [y, x0, x1], made once.
+let home_icon_spans = {}
+
+function home_icons_init() {
+  let names = keys(home_icon_art)
+  for (let i = 0; i < len(names); i = i + 1) {
+    let rows = text.split(home_icon_art[names[i]], "|")
+    let spans = []
+    for (let y = 0; y < len(rows); y = y + 1) {
+      let x = 0
+      while (x < 8) {
+        if (rows[y][x] == "#") {
+          let e = x
+          while (e < 8 && rows[y][e] == "#") {
+            e += 1
+          }
+          push(spans, [y, x, e])
+          x = e
+        } else {
+          x += 1
+        }
+      }
+    }
+    home_icon_spans[names[i]] = spans
+  }
+}
+
+home_icons_init()
+
+function home_icon(name, x, y, color) {
+  fb.spans(home_icon_spans[name], (x, y), home_c[color])
+}
+
+function home_rect(x, y, w, h, color) {
+  fb.fill((x, y), (w, h), home_c[color])
+}
+
+function home_text(s, x, y, color) {
+  font.draw(s, (x, y), home_c[color], 1)
+}
+
+function home_text_w(s) {
+  len(s) * 7
+}
+
+-~> A 1 px outline of a box.
+function home_outline(x, y, w, h, color) {
+  home_rect(x, y, w, 1, color)
+  home_rect(x, y + h - 1, w, 1, color)
+  home_rect(x, y + 1, 1, h - 2, color)
+  home_rect(x + w - 1, y + 1, 1, h - 2, color)
+}
+
+-~> Light on the top and left edges of a box, dark on the bottom and right.
+function home_bevel(x, y, w, h, hi, lo) {
+  home_rect(x, y, w - 1, 1, hi)
+  home_rect(x, y, 1, h - 1, hi)
+  home_rect(x + 1, y + h - 1, w - 1, 1, lo)
+  home_rect(x + w - 1, y + 1, 1, h - 1, lo)
+}
+
+-~> A dashed outline, 3 on and 2 off.
+function home_dashed(x, y, w, h, color) {
+  for (let i = 0; i < w; i += 5) {
+    let l = math.min(3, w - i)
+    home_rect(x + i, y, l, 1, color)
+    home_rect(x + i, y + h - 1, l, 1, color)
+  }
+  for (let j = 0; j < h; j += 5) {
+    let l = math.min(3, h - j)
+    home_rect(x, y + j, 1, l, color)
+    home_rect(x + w - 1, y + j, 1, l, color)
+  }
+}
+
+-~> A button: state is "normal", "hover" or "pressed". It has an icon, a label,
+-~> or both (pass null for the one it lacks).
+function home_button(x, y, w, h, icon, label, state) {
+  let face = "raised"
+  let hi = "bevel"
+  let lo = "coal"
+  let off = 0
+  if (state == "hover") {
+    face = "bevel"
+    hi = "dim"
+  } elif (state == "pressed") {
+    face = "moss"
+    hi = "coal"
+    lo = "bevel"
+    off = 1
+  }
+  home_outline(x, y, w, h, "void")
+  home_rect(x + 1, y + 1, w - 2, h - 2, face)
+  home_bevel(x + 1, y + 1, w - 2, h - 2, hi, lo)
+  let cx = x + 3 + off
+  if (icon != null) {
+    if (label == null) {
+      home_icon(icon, x + (w - 8) // 2 + off, y + (h - 8) // 2 + off, "text")
+    } else {
+      home_icon(icon, cx, y + (h - 8) // 2 + off, "text")
+    }
+    cx += 10
+  }
+  if (label != null) {
+    let lx = cx
+    if (icon == null) {
+      lx += 1
+    }
+    let color = "text"
+    if (state == "pressed") {
+      color = "bright"
+    }
+    home_text(label, lx, y + (h - 13) // 2 + off, color)
+  }
+}
+
+-~> The frame of a text field: outline, inset, and the line under the top edge.
+function home_field(x, y, w, h, focused) {
+  let edge = "void"
+  if (focused) {
+    edge = "amber"
+  }
+  home_outline(x, y, w, h, edge)
+  home_rect(x + 1, y + 1, w - 2, h - 2, "coal")
+  home_rect(x + 1, y + 1, w - 2, 1, "void")
+}
