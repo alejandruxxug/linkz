@@ -134,39 +134,41 @@ let scan_carry_after = {
 }
 let scan_carry_before = {"ELSE": true, "ELIF": true, ".": true, "&&": true, "||": true}
 
--~> The text a token stands for: a string's value, else what is written.
-function scan_lit(t) {
-  if (t.type == "STRING") {
-    return t.value
+-~> The text token k stands for: a string's value, else what is written.
+function scan_lit(p, k) {
+  if (p.ty[k] == "STRING") {
+    return p.val[k]
   }
-  t.text
+  p.tx[k]
 }
 
 -~> The scanner of one source: its lines, and its tokens without comments
--~> and without what the lexer rejected. The type, line and column of token
--~> k are also ty[k], ln[k] and col[k]: the loops over tokens read those.
+-~> and without what the lexer rejected, one list per field: token k is
+-~> ty[k] (its type), ln[k], col[k], tx[k] (as written) and val[k].
 function scan_new(code) {
   let lines = text.lines(code)
   let infos = []
   for (let i = 0; i < len(lines); i += 1) {
     push(infos, scan_line(i + 1, lines[i]))
   }
-  let all = lizard.tokens(code)
-  let toks = []
+  let all = lizard.tokens(code, {"columns": true})
+  let types = all.type
   let ty = []
   let ln = []
   let col = []
-  for (let i = 0; i < len(all); i += 1) {
-    let t = all[i]
-    let k = t.type
+  let tx = []
+  let val = []
+  for (let i = 0; i < len(types); i += 1) {
+    let k = types[i]
     if (k != "COMMENT" && k != "ILLEGAL" && k != "EOF") {
-      push(toks, t)
       push(ty, k)
-      push(ln, t.line)
-      push(col, t.column)
+      push(ln, all.line[i])
+      push(col, all.column[i])
+      push(tx, all.text[i])
+      push(val, all.value[i])
     }
   }
-  {"lines": infos, "src": lines, "toks": toks, "ty": ty, "ln": ln, "col": col, "n": len(toks), "pos": 0}
+  {"lines": infos, "src": lines, "ty": ty, "ln": ln, "col": col, "tx": tx, "val": val, "n": len(ty), "pos": 0}
 }
 
 -~> Whether the statement goes on after token i, which ends a line at
@@ -272,15 +274,15 @@ let scan_blanks = {" ": true, "\t": true, "\r": true, "\n": true}
 function scan_block(p, layer_col, depth) {
   let out = []
   while (p.pos < p.n) {
-    let t = p.toks[p.pos]
-    if (scan_closes[t.type] == true) {
+    let ty = p.ty[p.pos]
+    if (scan_closes[ty] == true) {
       return out
     }
-    if (t.type == ";") {
+    if (ty == ";") {
       p.pos += 1
       continue
     }
-    if (layer_col >= 0 && t.column <= layer_col) {
+    if (layer_col >= 0 && p.col[p.pos] <= layer_col) {
       return out
     }
     push(out, scan_statement(p, depth))
@@ -308,17 +310,18 @@ function scan_stmt(line, end_line, column, depth, kind) {
 -~> The statement that starts at p.pos; p.pos moves past it.
 function scan_statement(p, depth) {
   let i = p.pos
-  let toks = p.toks
-  let t = toks[i]
+  let ty = p.ty[i]
+  let line = p.ln[i]
+  let column = p.col[i]
 
-  if (t.type == "IDENT" && t.text == "layer" && i + 1 < p.n) {
-    let n = toks[i + 1]
-    let ends_line = i + 2 >= p.n || toks[i + 2].line > t.line || scan_closes[toks[i + 2].type] == true
-    if ((n.type == "IDENT" || n.type == "STRING") && n.line == t.line && ends_line) {
-      let s = scan_stmt(t.line, t.line, t.column, depth, "layer")
-      s.name = scan_lit(n)
+  if (ty == "IDENT" && p.tx[i] == "layer" && i + 1 < p.n) {
+    let next = p.ty[i + 1]
+    let ends_line = i + 2 >= p.n || p.ln[i + 2] > line || scan_closes[p.ty[i + 2]] == true
+    if ((next == "IDENT" || next == "STRING") && p.ln[i + 1] == line && ends_line) {
+      let s = scan_stmt(line, line, column, depth, "layer")
+      s.name = scan_lit(p, i + 1)
       p.pos = i + 2
-      s.children = scan_block(p, t.column, depth + 1)
+      s.children = scan_block(p, column, depth + 1)
       if (len(s.children) > 0) {
         s.end_line = s.children[len(s.children) - 1].end_line
       }
@@ -330,21 +333,21 @@ function scan_statement(p, depth) {
   if (end <= i) {
     end = i + 1
   }
-  let s = scan_stmt(t.line, toks[end - 1].line, t.column, depth, "other")
+  let s = scan_stmt(line, p.ln[end - 1], column, depth, "other")
   p.pos = end
   let defs = []
   let count = end - i
-  if (t.type == "LET" && count > 1) {
+  if (ty == "LET" && count > 1) {
     s.kind = "let"
-    s.name = scan_lit(toks[i + 1])
-  } elif (t.type == "FUNCTION" && count > 2 && toks[i + 1].type == "IDENT") {
+    s.name = scan_lit(p, i + 1)
+  } elif (ty == "FUNCTION" && count > 2 && p.ty[i + 1] == "IDENT") {
     s.kind = "function"
-    s.name = scan_lit(toks[i + 1])
+    s.name = scan_lit(p, i + 1)
     defs = scan_params(p, i + 2, end)
-  } elif (t.type == "IF" || t.type == "WHILE" || t.type == "FOR") {
+  } elif (ty == "IF" || ty == "WHILE" || ty == "FOR") {
     s.kind = "block"
-    s.name = text.lower(t.type)
-  } elif (t.type == "IDENT") {
+    s.name = text.lower(ty)
+  } elif (ty == "IDENT") {
     scan_call_or_assign(p, s, i, end)
   }
   if (s.kind == "block" || s.kind == "function" || s.kind == "let") {
@@ -395,34 +398,33 @@ function scan_params(p, from, to) {
 -~> after it, or `to` when the list is unfinished).
 function scan_param(p, start, end, to) {
   let d = {"default": "", "name": ""}
-  let first = p.toks[start]
-  if (first.type != "IDENT") {
+  if (p.ty[start] != "IDENT") {
     return d
   }
-  d.name = scan_lit(first)
+  d.name = scan_lit(p, start)
   if (end - start > 2 && p.ty[start + 1] == "=") {
-    let value = p.toks[start + 2]
+    let value = start + 2
     let line = len(p.src)
     let col = len(p.src[line - 1]) + 1
     if (end < to) {
       line = p.ln[end]
       col = p.col[end]
     }
-    d.default = scan_trimmed(p, value.line, value.column, line, col)[0]
+    d.default = scan_trimmed(p, p.ln[value], p.col[value], line, col)[0]
   }
   d
 }
 
 -~> Fills in a statement that starts with a name: f(...), a.b(...) or x = ...
 function scan_call_or_assign(p, s, i, end) {
-  let toks = p.toks
+  let types = p.ty
   let j = i + 1
-  let name = toks[i].text
-  while (j + 1 < end && toks[j].type == "." && toks[j + 1].type == "IDENT") {
-    name += "." + toks[j + 1].text
+  let name = p.tx[i]
+  while (j + 1 < end && types[j] == "." && types[j + 1] == "IDENT") {
+    name += "." + p.tx[j + 1]
     j += 2
   }
-  if (j < end && toks[j].type == "(") {
+  if (j < end && types[j] == "(") {
     s.kind = "call"
     s.name = name
     s.callee = name
@@ -432,10 +434,10 @@ function scan_call_or_assign(p, s, i, end) {
     }
     return
   }
-  if (j < end && (toks[j].type == "=" || toks[j].type == "[")) {
+  if (j < end && (types[j] == "=" || types[j] == "[")) {
     let depth = 0
     for (let k = j; k < end; k += 1) {
-      let ty = toks[k].type
+      let ty = types[k]
       if (scan_opens[ty] == true) {
         depth += 1
       } elif (scan_closes[ty] == true) {

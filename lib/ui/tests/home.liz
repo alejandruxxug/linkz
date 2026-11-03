@@ -1,7 +1,6 @@
 -~> The home screen's logic on in-memory files: the folder, the list, sort,
 -~> search, recent.liz, how long ago in English and Spanish, wrapping labels,
 -~> and the actions that change files.
-use "../app"
 use "../app_screens"
 use "../editor_undo"
 use "../home_data"
@@ -12,7 +11,7 @@ use "../lang_en"
 use "../lang_es"
 let dir = "/home/u/Documents/Linkz"
 let times = {}
-os.home = function() { "/home/u" }
+fs.home = function() { "/home/u" }
 fs.list = function(d, ext) {
   let out = []
   let ks = keys(times)

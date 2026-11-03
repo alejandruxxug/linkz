@@ -88,8 +88,8 @@ io.read_line = function() {
   script[read_at - 1]
 }
 io.write = function(s) { push(sent, s) }
-io.log = function(_s) { null }
-io.with_steps = function(_n, f) { f() }
+linkz.log = function(_s) { null }
+linkz.with_steps = function(_n, f) { f() }
 mcp_serve()
 let names = keys(real_io)
 for (let i = 0; i < len(names); i += 1) {

@@ -393,7 +393,7 @@ function mcp_tool_svg(args) {
 -~> The folder of the user's drawings: settings.drawings_dir (a leading ~/ is
 -~> the home folder), else ~/Documents/Linkz. Same rule as the editor's.
 function mcp_drawings_dir() {
-  let home = text.replace(os.home(), "\\", "/")
+  let home = text.replace(fs.home(), "\\", "/")
   let d = settings.drawings_dir
   if (type(d) == "STRING" && text.trim(d) != "") {
     d = text.replace(text.trim(d), "\\", "/")
@@ -450,7 +450,7 @@ function mcp_resolve_file(raw, exts, add) {
   if (type(raw) != "STRING" || text.trim(raw) == "") {
     error("the argument path is required and must be a string")
   }
-  let home = mcp_clean_path(text.replace(os.home(), "\\", "/"))
+  let home = mcp_clean_path(text.replace(fs.home(), "\\", "/"))
   let dir = mcp_clean_path(mcp_drawings_dir())
   let p = text.replace(text.trim(raw), "\\", "/")
   if (p == "~" || text.starts(p, "~/")) {
@@ -579,7 +579,7 @@ function mcp_tool_trace(args) {
     }
     options.background = args.background
   }
-  mcp_result(io.with_steps(mcp_trace_step_limit, function() { mcp_trace_items(path, options) }))
+  mcp_result(linkz.with_steps(mcp_trace_step_limit, function() { mcp_trace_items(path, options) }))
 }
 
 -~> The items of a trace: the code, the stats and a render of the code.

@@ -1,0 +1,14 @@
+# B052 – The language costs left between the port and the Go host (M11)
+
+Repo: `../lizard-script` (main at f34d1ac) · From B042's Part B (`../linkz/docs/Linkz – Language Needs.md`, newest rows) · Goal: let the lizard Linkz match the Go host within 10% so the Go host can be deleted
+
+Where the port is still slower (ms per tick, lizard vs Go): 2k keystroke 14.6 vs 12.0, enter 10.7 vs 8.4, broken_keystroke 17.0 vs 12.3; 10k small_edit 5.7 vs 4.1, broken_keystroke 32.5 vs 22.0. Causes measured by B042:
+
+1. **`lizard.run` reports only the first syntax error**, so a broken text is parsed again (by `lizard.check`) to list them all. Return every syntax error (each with message, line, column, source) in the result's error (e.g. `error.errors`, keeping `error.message` the first), on both engines.
+2. **`lizard.tokens` builds one hash per token** (~0.7 µs each; 210k tokens on a 10k drawing = 150–240 ms; ~0.7 ms of every 5 KB rescan). Add a compact form: `lizard.tokens(code, {"columns": true})` → `{kind: [...], text: [...], line: [...], column: [...], end_line: [...], end_column: [...]}` (arrays of the same length), or a cheaper per-token value — measure and pick the faster that stays easy to use.
+3. **Token loops on the VM**: the editor's scanner (same algorithm as a Go one) runs ~3× slower in lizard. Profile a token-walking loop (`lizardscript --profile` on a scanner-like program over 200k tokens: indexing arrays of strings/ints, comparing short strings, building small hashes and arrays) and speed up what dominates in the VM (e.g. string equality against constants, array index with an int local, `push`, small hash literals). Add the program to `vm` benchmarks.
+4. **`on_statement` can't skip function bodies**: add an option to `lizard.run` (`"hook_depth": "top"` or `"hook_functions": false`) so the hook fires only for statements outside function bodies (layers still count), so a host needn't parse to filter them.
+5. **`lizardscript check --names a,b,c` / a project file** (`lizard.toml`? keep it lizard: a `check.liz` hash, or `-~> check names: …` comment at the top of a file) so hosts' provided names aren't "unknown"; and fix the false positive `unused-module` when a module's variable is only assigned through the use.
+6. **Startup**: Ebitengine creates the Metal device in a package `init` (~24 ms of the 28 ms start). Investigate making it lazy (only when a window opens) — e.g. a minimal patch to our copy via `replace` that upstream would accept, or importing the window package only when a program uses `window`/`pen` — and implement the cleanest option that keeps one `lizardscript` binary. Report what you chose and why; re-run `bench/compare.py`.
+
+Both engines; differential tests green; docs (TERRARIUM/SEMANTICS/DESIGN §7), guide where users see it (en + es, real outputs); `go generate ./lsp` after adding documented functions/options. Clean code. Don't commit. Never mention Linkz inside lizard-script.

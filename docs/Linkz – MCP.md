@@ -9,7 +9,7 @@ No network is used. The server talks only through stdin and stdout.
 Build once, then point the client at the binary:
 
 ```bash
-cd linkz && go build -o linkz .
+cd linkz && lizardscript build --vm . -o linkz
 ```
 
 **Claude Code**
@@ -95,12 +95,12 @@ All logic is lizard-script in `lib/mcp/`, bundled into the binary:
 
 The server environment also has the host's `img` (decode and shrink a PNG or JPEG) and loads `lib/trace` after `lib/draw`, so `trace` is the same lizard tracer the `trace` command uses.
 
-Go (`host/stdio.go`) only adds the OS primitives: `io.read_line()` (stdin, `null` at the end), `io.write(s)` (stdout, flushed), `io.log(s)` (stderr), `io.step_limit(n)` (the per-request budget) and `fb.png_base64()` (the current target as a base64 PNG). `render` is `fb.offscreen` at the canvas size, the background, then `raster.paint`, so the pixels are the ones the editor paints. Scaling to `width` / `height` scales the shapes (paths, widths, pinned gradients) before painting, so the picture is sharp, not a resized bitmap.
+The host gives it the Terrarium's `io.read_line()` (stdin, `null` at the end) and `io.write(s)` (stdout), and Linkz's `linkz.log(s)` (stderr) and `linkz.with_steps(n, f)` (the per-request budget), and `fb.png_base64()` (the current target as a base64 PNG). `render` is `fb.offscreen` at the canvas size, the background, then `raster.paint`, so the pixels are the ones the editor paints. Scaling to `width` / `height` scales the shapes (paths, widths, pinned gradients) before painting, so the picture is sharp, not a resized bitmap.
 
 ## ✅ Tests
 
-- `lib/mcp/tests/json_*.liz`: parsing, strings and unicode, writing, errors; `server_*.liz`: JSON-RPC, every tool, the path rules (run with `HOME` in a temp folder). Output is compared with the `.expected` files (`go test ./lib/mcp -update` rewrites them).
-- `lib/mcp/mcp_test.go` `TestTraceTool`: traces a generated PNG of a circle through the tool (three items, the code runs) and the refused paths and options.
-- `mcp_e2e_test.go`: builds `linkz`, starts `linkz mcp`, and sends initialize, tools/list, run, render (decodes the PNG, checks its size and pixels, also scaled), a malformed line (parse error, the server carries on), an unknown method, an endless drawing, a refused save, then EOF (exit 0); `TestMCPTrace` traces a generated circle PNG over the wire, runs the returned code and checks the image item.
+- `lib/mcp/tests/json_*.liz`: parsing, strings and unicode, writing, errors; `server_*.liz`: JSON-RPC, every tool, the path rules (run with `HOME` in a temp folder). Output is compared with the `.expected` files (`tests/mcp/programs.liz` runs them).
+- (Go, until B042) `lib/mcp/mcp_test.go` `TestTraceTool`: traced a generated PNG of a circle through the tool (three items, the code runs) and the refused paths and options.
+- (Go, until B042) `mcp_e2e_test.go`: built `linkz`; now `scripts/smoke.sh` pings `linkz mcp` and `scripts/parity.sh` replays a session (`scripts/parity/mcp.jsonl`) against the Go host's replies. It, starts `linkz mcp`, and sends initialize, tools/list, run, render (decodes the PNG, checks its size and pixels, also scaled), a malformed line (parse error, the server carries on), an unknown method, an endless drawing, a refused save, then EOF (exit 0); `TestMCPTrace` traces a generated circle PNG over the wire, runs the returned code and checks the image item.
 
 Timings (Apple silicon): a first `render` of `examples/layers.lzdraw` in a fresh server takes about 25 ms, and 6 ms once the shapes are cached; startup (loading the libraries) about 30 ms.

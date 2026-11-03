@@ -62,7 +62,7 @@ function tf(key, values) {
 }
 
 function settings_path() {
-  os.config_dir() + "/settings.liz"
+  linkz.config_dir() + "/settings.liz"
 }
 
 -~> settings.liz is lizard code, e.g. `let language = "es"`. The host runs it

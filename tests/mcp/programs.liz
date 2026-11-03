@@ -1,7 +1,7 @@
 -~> The MCP server's test programs (lib/mcp/tests): the json_ ones with the
 -~> JSON library alone, the server_ ones with the host's primitives and the
 -~> settings around the server's libraries, as `linkz mcp` has them, but
--~> with the server's log in the output (the Go host's runner had it there). Run
+-~> with the server's log in the output (the old Go host's runner had it there). Run
 -~> the tests with HOME in a folder of their own (scripts/test.sh does): the
 -~> server_ programs save files there, shown as $HOME.
 
@@ -16,7 +16,7 @@ for (let i = 0; i < len(files); i += 1) {
   let around = {}
   if (text.find(name, "/server_") >= 0) {
     around = hash.merge(host_globals(img.new(1, 1)), {"settings": {}})
-    around.io.log = function(line) { puts(line) }
+    around.linkz.log = function(line) { puts(line) }
   }
   let got = text.replace(harness_output(harness_run(files[i], around)), fs.home(), "$HOME")
   harness_check(name, got, harness_expected(files[i]))

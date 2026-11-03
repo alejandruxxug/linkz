@@ -1,0 +1,15 @@
+false 3 text text image image/png
+[]
+2
+true
+tool trace failed: only .png, .jpg, .jpeg files, not notes.txt
+true only .png, .jpg, .jpeg files, not notes.txt
+tool trace failed: an absolute path must be inside your home folder ($HOME) or the drawings folder ($HOME/Documents/Linkz)
+true an absolute path must be inside your home folder ($HOME) or the drawings folder ($HOME/Documents/Linkz)
+true there is no file $HOME/missing.png
+tool trace failed: the argument colors must be a whole number from 1 to 64
+true the argument colors must be a whole number from 1 to 64
+tool trace failed: the argument background must be true or false
+true the argument background must be true or false
+tool trace failed: the argument path is required and must be a string
+true the argument path is required and must be a string

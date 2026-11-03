@@ -1,5 +1,5 @@
 -~> The editor's speed on big drawings (docs/Batches/fixtures, made by the
--~> Go host's perf test): a full repaint, a small edit, one frame of dragging
+-~> old Go host's perf test): a full repaint, a small edit, one frame of dragging
 -~> a shape, one keystroke, and the edits that add or take away lines, each
 -~> timed as whole frames (events, run, paint). Run it alone to see the
 -~> table: lizardscript tests/editor/editor_bench.liz [rounds]

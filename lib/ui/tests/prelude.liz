@@ -13,7 +13,8 @@ let fs = {
   "exists": function(p) { fake_files[p] != null }
 }
 let clip = {"get": function() { fake_clip.text }, "set": function(s) { fake_clip.text = s; null }}
-let os = {"locale": function() { fake_os.locale }, "config_dir": function() { "/cfg" }}
+let os = {"locale": function() { fake_os.locale }}
+let linkz = {"config_dir": function() { "/cfg" }}
 
 -~> Empty the in-memory files and the settings, in place: the editor keeps
 -~> the same hashes.

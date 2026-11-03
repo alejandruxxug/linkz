@@ -208,8 +208,8 @@ function calibrate() {
     "run_ms_per_object": run,
     "bytes_per_object": calib_bytes_per_shape + calib_bytes_per_span * spans / count
   })
-  m.measured_at = time.now()
-  m.app_version = os.app_version()
+  m.measured_at = int(time.now().epoch)
+  m.app_version = linkz.version()
   m
 }
 

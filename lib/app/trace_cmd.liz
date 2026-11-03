@@ -3,7 +3,6 @@
 -~> into drawing code (lib/trace) and says what it made.
 
 use "host_img"
-use "host_os"
 use "libs"
 
 let trace_usage = "usage: linkz trace in.png out.lzdraw [--colors 8] [--detail 1.5] [--min-area 8] [--max-side 256] [--scale 1] [--corner 55]"
@@ -55,11 +54,11 @@ function trace_args(args) {
 
 -~> The code and the stats of tracing the picture at path.
 function trace_file(path, options) {
-  let names = libs_load(libs_draw + libs_trace, {"img": host_img(), "time": host_time()})
+  let names = libs_load(libs_draw + libs_trace, {"img": host_img(), "time": time})
   names.trace(path, options)
 }
 
--~> A number of the stats as the Go host printed it: whole floats without ".0".
+-~> A number of the stats as the old Go host printed it: whole floats without ".0".
 function trace_show(v) {
   str(trace_number(v))
 }

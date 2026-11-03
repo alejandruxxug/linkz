@@ -10,10 +10,10 @@ use "libs"
 -~> any line of the drawing: an error in it (a bad canvas) is its message
 -~> alone.
 function render_svg(code) {
-  let tr = drawing_tracker(code, false)
+  let tr = drawing_tracker(false)
   let r = drawing_exec(code, {}, tr)
   if (drawing_is_syntax(r.error)) {
-    error(drawing_syntax_text(code))
+    error(drawing_syntax_text(r.errors))
   }
   io.write(r.output)
   if (r.error != null) {

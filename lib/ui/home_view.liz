@@ -813,11 +813,11 @@ function home_paint() {
 -~> == Events ==
 
 function home_now() {
-  time.now()
+  int(time.now().epoch)
 }
 
 function home_tz() {
-  time.tz()
+  time.now().utc_offset
 }
 
 -~> What is under the pointer: {"kind": ...} or null.

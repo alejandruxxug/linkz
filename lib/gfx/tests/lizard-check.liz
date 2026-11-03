@@ -1,0 +1,9 @@
+-~> The names around the graphics scenes: they run with `linkz paint`, which
+-~> puts the host's names and the drawing and graphics libraries around them
+-~> (lib/app/paint.liz), so they use those without a use line.
+{
+  "names": ["fb", "src", "settings", "linkz", "raster", "rect", "circle", "brush", "font", "blend", "gradient",
+    "linear", "radial", "radial_gradient", "opacity", "pens", "drawing", "ellipse_path", "spatial_new",
+    "spatial_at", "spatial_insert", "spatial_query", "spatial_remove", "spatial_update", "tiles_new",
+    "tiles_mark", "tiles_render", "tiles_blit", "friendly_number", "machine_json", "machine_source", "recommend"]
+}

@@ -7,7 +7,7 @@
 use "drawing"
 use "engine"
 use "host"
-use "host_os"
+use "host_linkz"
 use "libs"
 use "settings"
 use "version"
@@ -21,7 +21,7 @@ function machine_path() {
 -~> output.
 function machine_run(expr) {
   let around = host_globals(img.new(512, 512))
-  let tr = drawing_tracker(expr, false)
+  let tr = drawing_tracker(false)
   let names = libs_load(libs_draw + libs_gfx, around, tr.here)
   let r = lizard.run(expr, {
     "globals": hash.merge(around, names),

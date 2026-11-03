@@ -1,0 +1,7 @@
+-~> The names around the editor's test programs: the host's (lib/lizard-check.liz)
+-~> and the stand-ins of prelude.liz, which tests/ui/programs.liz puts around
+-~> each one.
+{
+  "names": ["fb", "src", "settings", "linkz", "show", "fake_files", "fake_clip", "fake_time", "fake_os",
+    "reset_files", "reset_settings"]
+}

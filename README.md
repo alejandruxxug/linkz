@@ -2,7 +2,7 @@
 
 *lizard inkz*
 
-Vector art you write in [lizard-script](https://github.com/alejandruxxug/lizard-script). Linkz itself is built on lizard-script: the shapes, the SVG writer and everything after them are lizard code, on top of a thin Go host.
+Vector art you write in [lizard-script](https://github.com/alejandruxxug/lizard-script). Linkz itself is a lizard-script program: the shapes, the SVG writer, the editor and the app around them are all lizard code, run by `lizardscript`.
 
 ```
 -~> lzdraw 1
@@ -31,11 +31,12 @@ Both download the archive for your system from the latest release, check its sha
 
 ## Try it
 
-Linkz needs `lizard-script` checked out next to it.
+Linkz runs on `lizardscript` (build it from [lizard-script](https://github.com/alejandruxxug/lizard-script) with `go build -o lizardscript .`).
 
 ```bash
-go build -o linkz .
-./linkz render examples/hello.lzdraw   # writes examples/hello.svg
+lizardscript run . render examples/hello.lzdraw   # writes examples/hello.svg
+lizardscript run . edit                           # the editor
+lizardscript build --vm . -o linkz                # one executable: ./linkz edit
 ```
 
 The plan, the architecture and the design log are in [docs/](docs/Linkz.md).

@@ -10,8 +10,8 @@ function call(name, args) {
   puts(">", name, str(args), r.ok)
 }
 function state_line() {
-  let s = editor_debug_state()
-  puts("  caret", s.caret.line, s.caret.col, "dirty", s.dirty, "errors", len(s.errors), "shapes", s.shapes, "props", s.properties)
+  let st = editor_debug_state()
+  puts("  caret", st.caret.line, st.caret.col, "dirty", st.dirty, "errors", len(st.errors), "shapes", st.shapes, "props", st.properties)
 }
 ed_reset("", "")
 call("AddLayer", [])

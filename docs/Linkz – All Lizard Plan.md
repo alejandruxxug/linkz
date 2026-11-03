@@ -1,4 +1,6 @@
-# 🦎 Linkz: the move to all-lizard (M11)
+# 🦎 Linkz: the move to all-lizard (M11) ✅ done
+
+> **Done in B042 (2026-11-03):** the Go host is deleted. Linkz is `main.liz` + `lib/`, run by `lizardscript`, tested by `scripts/test.sh` on both engines, compared with the last Go host's outputs by `scripts/parity.sh` (goldens in `scripts/parity/golden`), and shipped by `scripts/crossbuild.sh` (`lizardscript build`). The editor benchmarks are within 10% of the Go host's (B042 report).
 
 > "Okay finish the transition for the app to be built fully on lizard." — the developer, 2026-11-03
 
@@ -6,7 +8,7 @@
 
 The Linkz repository contains **no Go**. Linkz is a lizard-script program (`main.liz` + `lib/`), run by `lizardscript` and shipped as one executable built by `lizardscript build`. Every Go line Linkz needs today moves **into the language**: the Terrarium (general modules any lizard program can use) or the lizard-script tools. The per-pixel exception (gradients, blending, compositing) becomes general Terrarium primitives.
 
-Today: ~7,200 lines of Go in `main.go`, `debugcli.go`, `host/` (without tests) and ~15,000+ lines of lizard in `lib/`.
+Before: ~7,200 lines of Go in `main.go`, `debugcli.go`, `host/` (without tests) and ~15,000+ lines of lizard in `lib/`.
 
 ## Where each Go piece goes
 
@@ -24,7 +26,7 @@ Today: ~7,200 lines of Go in `main.go`, `debugcli.go`, `host/` (without tests) a
 | `app.go`, `launcher.go`, `splash.go`, `settings.go`, `machine.go`, `paint.go`, `host.go`, `engine.go`, `conv.go` | lizard: `main.liz` and `lib/app/*.liz` | B041 |
 | `main.go` (CLI: edit, render, paint, trace, debug, calibrate, mcp) | `main.liz` with `os.args()` | B041 |
 | Go tests (`host/*_test.go`, perf, scene, incremental, ui/gfx/draw test runners) | lizard tests run by `lizardscript test` (programs + `.expected`, benchmarks with `time`), headless windows | B039 (runner), B041 (port) |
-| GoReleaser, install scripts | `lizardscript build . -o linkz` per OS, same release workflow | B042 |
+| GoReleaser, install scripts | `scripts/crossbuild.sh` (`lizardscript build --vm --os --arch`), the same archives and install scripts, a draft release by `gh` | B042 ✅ |
 
 ## Batches
 

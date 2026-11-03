@@ -19,19 +19,19 @@ function home_dir() {
   if (type(d) == "STRING" && text.trim(d) != "") {
     d = text.trim(d)
     if (d == "~") {
-      return os.home()
+      return fs.home()
     }
     if (text.starts(d, "~/")) {
-      return os.home() + text.slice(d, 1, len(d))
+      return fs.home() + text.slice(d, 1, len(d))
     }
     return d
   }
-  os.home() + "/Documents/Linkz"
+  fs.home() + "/Documents/Linkz"
 }
 
 -~> The folder for people: the home folder written as ~.
 function home_dir_label(dir) {
-  let h = os.home()
+  let h = fs.home()
   if (dir == h) {
     return "~"
   }
@@ -101,7 +101,7 @@ function home_search(files, query) {
 -~> edit that keeps that shape works.
 
 function home_recent_path() {
-  os.config_dir() + "/recent.liz"
+  linkz.config_dir() + "/recent.liz"
 }
 
 function home_quote(s) {

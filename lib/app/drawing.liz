@@ -14,70 +14,23 @@
 
 use "engine"
 use "libs"
-use "syntax"
 
 -~> The step limit of a drawing.
 let drawing_steps = 2000000
 
--~> The positions of the statements that tag shapes, as "line:column" keys,
--~> or null when every statement of the drawing does. Only the statements of
--~> a function body don't, so a drawing without the word "function" needs
--~> no parse (most drawings, and every big one so far).
-function drawing_user_statements(code) {
-  if (text.find(code, "function") < 0) {
-    return null
-  }
-  let set = {}
-  drawing_collect(lizard.parse(code).program.statements, set)
-  set
-}
-
-function drawing_collect(statements, set) {
-  for (let i = 0; i < len(statements); i += 1) {
-    let st = statements[i]
-    set[str(st.line) + ":" + str(st.column)] = true
-    if (st.kind == "layer") {
-      drawing_collect(st.body.statements, set)
-    } elif (st.kind == "expression") {
-      let e = st.expression
-      if (e.kind == "if") {
-        drawing_block(e.consequence, set)
-        drawing_block(e.alternative, set)
-      } elif (e.kind == "while" || e.kind == "for") {
-        drawing_block(e.body, set)
-      }
-    }
-  }
-}
-
--~> The statements of a block (an elif is an if alone in a block).
-function drawing_block(node, set) {
-  if (node == null) {
-    return
-  }
-  drawing_collect(node.statements, set)
-}
-
--~> A tracker for one run of code: the hooks of lizard.run and the here() the
--~> libraries call. Its line and column are those of the statement running
--~> now (0 before the first one), layers the layers it is in. With lines
+-~> A tracker for one run: the hooks of lizard.run and the here() the
+-~> libraries call. Its line and column are those of the drawing's statement
+-~> running now (0 before the first one; the run calls the hook only for the
+-~> drawing's own statements outside function bodies), layers the layers it
+-~> is in. With lines
 -~> false, here() gives no line: render and paint follow the statements only
 -~> to place errors, and their shapes have a layer but no line.
-function drawing_tracker(code, lines = true) {
-  let tr = {"user": drawing_user_statements(code), "line": 0, "column": 0, "seen": false, "layers": []}
+function drawing_tracker(lines = true) {
+  let tr = {"line": 0, "column": 0, "seen": false, "layers": []}
   tr.on_statement = function(line, column, _source) {
     tr.line = line
     tr.column = column
     tr.seen = true
-  }
-  if (tr.user != null) {
-    tr.on_statement = function(line, column, _source) {
-      if (tr.user[str(line) + ":" + str(column)] == true) {
-        tr.line = line
-        tr.column = column
-        tr.seen = true
-      }
-    }
   }
   tr.on_layer = function(name, enter, _line) {
     if (enter) {
@@ -119,6 +72,7 @@ function drawing_exec(code, around, tr, specs = libs_draw) {
     "use": specs + ["app/drawing_bridge"],
     "on_statement": tr.on_statement,
     "hook_source": name,
+    "hook_functions": false,
     "on_layer": tr.on_layer
   })
   r.drawing = null
@@ -142,9 +96,9 @@ function drawing_is_syntax(e) {
   e != null && (e.kind == "syntax" || e.kind == "lexical")
 }
 
--~> The syntax errors of code, as the language prints them, one per line.
-function drawing_syntax_text(code) {
-  let errors = syntax_errors(code)
+-~> The syntax errors of a run (r.errors), as the language prints them, one
+-~> per line.
+function drawing_syntax_text(errors) {
   let lines = []
   for (let i = 0; i < len(errors); i += 1) {
     push(lines, drawing_message(errors[i]))
@@ -173,7 +127,7 @@ function drawing_attributed(e, tr) {
 function drawing_run(code, around = {}) {
   let start = time.ms()
   let out = {"errors": [], "ms": 0, "printed": "", "shapes": [], "steps": 0, "canvas": null}
-  let tr = drawing_tracker(code)
+  let tr = drawing_tracker()
   let r = null
   try {
     r = drawing_exec(code, around, tr)
@@ -181,9 +135,8 @@ function drawing_run(code, around = {}) {
     out.errors = [{"column": 0, "line": 0, "message": e.message}]
   }
   if (r != null && drawing_is_syntax(r.error)) {
-    let errors = syntax_errors(code)
-    for (let i = 0; i < len(errors); i += 1) {
-      let e = errors[i]
+    for (let i = 0; i < len(r.errors); i += 1) {
+      let e = r.errors[i]
       push(out.errors, {"column": e.column, "line": e.line, "message": e.kind + " error: " + e.message})
     }
   } elif (r != null) {

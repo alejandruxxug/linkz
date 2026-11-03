@@ -2,7 +2,8 @@
 /linkz
 /linkz.exe
 *.svg
-*.test
-go.work
-go.work.sum
 __pycache__/
+
+# The goldens of the parity script are SVGs too.
+!scripts/parity/golden/**/*.svg
+/dist/

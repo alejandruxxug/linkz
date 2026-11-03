@@ -1,13 +1,15 @@
--~> host: the primitives the libraries were written against, for one run:
--~> fb (drawing on fb_target), fs, os, time, clip, img, io and src, made of
--~> the Terrarium (see host_*.liz). A library loaded with libs_load(specs,
--~> host_globals(...)) sees them like builtins.
+-~> host: the names the libraries get from the host, for one run: the
+-~> Terrarium's os, time, clip and io (copies, so a test can replace a
+-~> function of one); fb (drawing on a target),
+-~> fs, img and src, made of the Terrarium (see host_*.liz); and linkz, what
+-~> Linkz adds (host_linkz.liz). A library loaded with libs_load(specs,
+-~> host_globals(...)) sees them like builtins. lib/lizard-check.liz lists them
+-~> for `lizardscript check`.
 
 use "host_fb"
 use "host_fs"
 use "host_img"
-use "host_io"
-use "host_os"
+use "host_linkz"
 use "host_src"
 
 -~> The primitives, with fb drawing on target (an image, or a window when
@@ -16,11 +18,12 @@ function host_globals(target, on_window = false) {
   {
     "fb": host_fb(target, on_window),
     "fs": host_fs(),
-    "os": host_os(),
-    "time": host_time(),
-    "clip": clip,
+    "os": hash.copy(os),
+    "time": hash.copy(time),
+    "clip": hash.copy(clip),
     "img": host_img(),
-    "io": host_io(),
-    "src": host_src()
+    "io": hash.copy(io),
+    "src": host_src(),
+    "linkz": host_linkz()
   }
 }

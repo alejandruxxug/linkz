@@ -13,8 +13,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      # go.mod says `replace lizardscript => ../lizard-script`, so the two
-      # repos must sit side by side: <workspace>/linkz and <workspace>/lizard-script.
+      # Linkz runs on lizardscript, built here from the lizard-script repo,
+      # checked out next to it: <workspace>/linkz and <workspace>/lizard-script.
       - uses: actions/checkout@v4
         with:
           path: linkz
@@ -25,10 +25,21 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.27"
-          cache-dependency-path: linkz/go.sum
-      - name: Test
+          cache-dependency-path: lizard-script/go.sum
+      - name: Build lizardscript
+        working-directory: lizard-script
+        run: go build -o "$RUNNER_TEMP/lizardscript" .
+      - name: Test (both engines)
         working-directory: linkz
-        run: go test ./...
+        run: LIZARDSCRIPT="$RUNNER_TEMP/lizardscript" scripts/test.sh
+      - name: Parity with the Go host's last outputs
+        working-directory: linkz
+        run: LIZARDSCRIPT="$RUNNER_TEMP/lizardscript" scripts/parity.sh
+      - name: Format and check
+        working-directory: linkz
+        run: |
+          "$RUNNER_TEMP/lizardscript" fmt --check main.liz lib tests tools
+          "$RUNNER_TEMP/lizardscript" check main.liz lib tests tools
       - name: Cross build
         working-directory: linkz
-        run: scripts/crossbuild.sh
+        run: LIZARDSCRIPT="$RUNNER_TEMP/lizardscript" scripts/crossbuild.sh "$RUNNER_TEMP/dist"

@@ -1,6 +1,6 @@
 -~> rig: the editor in a headless window, for the tests and benchmarks: it
 -~> opens a drawing, runs frames with the events given, and reaches into the
--~> editor's own functions (rig.names) like the Go host's tests did.
+-~> editor's own functions (rig.names) like the old Go host's tests did.
 
 use "../../lib/app/editor"
 
@@ -13,13 +13,13 @@ let rig_clip_text = {"text": ""}
 let rig_clip = {"get": function() { rig_clip_text.text }, "set": function(s) { rig_clip_text.text = s }}
 
 -~> The editor on the text code (written to a file in dir), in a headless
--~> window of size: {"win", "ed", "names", "path"}.
-function rig_open(dir, code, size = editor_size) {
+-~> window of size: {"win", "ed", "names", "path"}. modules: what rig.names has.
+function rig_open(dir, code, size = editor_size, modules = rig_modules) {
   let path = fs.join(dir, "drawing.lzdraw")
   fs.mkdir(dir)
   fs.write(path, code)
   let win = window.open(size.x, size.y, "Linkz", hash.merge(editor_options(), {"headless": true}))
-  let ed = editor_load(win, path, {}, {}, rig_modules, {"clip": rig_clip})
+  let ed = editor_load(win, path, {}, {}, modules, {"clip": rig_clip})
   let rig = {"win": win, "ed": ed, "names": ed.names, "path": path}
   rig_frame(rig)
   rig

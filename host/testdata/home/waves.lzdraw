@@ -1,7 +1,0 @@
--~> lzdraw 1
-canvas = {"size": (480, 320), "background": #0f3b5a}
-let cols = [#72b8e6, #a9d3e4, #2d6a8f]
-for (let i = 0; i < 7; i = i + 1) {
-  let y = 40 + i * 40
-  stroke([(0, y), (80, y - 16), (160, y + 10), (240, y - 14), (320, y + 12), (400, y - 10), (480, y + 6)], cols[i % 3], 4 + i)
-}

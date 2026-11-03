@@ -1,0 +1,183 @@
+-~> The editor works out what it shows from the last text when it can: the
+-~> parse and the rows by splicing (lib/ui/doc_splice.liz), the panel's items
+-~> (view_items.liz), the shapes by running only the statements an edit
+-~> touched (editor_rerun.liz). This drives it through edits that add and take
+-~> away lines, break and mend the code, fold and undo, and after each one
+-~> checks that all of it is what working it out from scratch gives, and that
+-~> the canvas is the one a full repaint paints. (The old Go host's
+-~> incremental_test.go.)
+
+use "../../lib/app/drawing"
+use "../../lib/app/editor"
+use "../../lib/app/libs"
+use "rig"
+
+let n = null
+
+-~> The first 300 shapes of the 2k fixture (one layer line per 50 shapes: line
+-~> 30 is a shape row inside layer g0), with the fixture's canvas.
+function drawing_300() {
+  let lines = text.lines(fs.read(fs.join(libs_root(), "docs", "Batches", "fixtures", "shapes-2k.lzdraw")))
+  let out = list.slice(lines, 0, 3 + 6 * 51)
+  push(out, "")
+  push(out, lines[len(lines) - 1])
+  text.join(out, "\n") + "\n"
+}
+
+function key(k, mods = null) {
+  let e = {"type": "key", "key": k}
+  if (mods != null) {
+    e.mods = mods
+  }
+  e
+}
+
+function keys_of(list_in) {
+  let out = []
+  for (let i = 0; i < len(list_in); i += 1) {
+    push(out, key(list_in[i]))
+  }
+  out
+}
+
+function typed(s) {
+  [{"type": "type", "text": s}]
+}
+
+function fold_layer(name) {
+  let ls = n.doc_layers(n.ed_model())
+  for (let i = 0; i < len(ls); i += 1) {
+    if (ls[i].name == name) {
+      n.ed_toggle_fold(ls[i].line)
+    }
+  }
+  n.view_after()
+}
+
+function caret_enter(line) {
+  n.ed_set_caret(line, 1000)
+  n.view_after()
+  n.ed_key("Enter", null)
+  n.view_after()
+}
+
+-~> The steps: [name, events, or a function to call before the frame].
+let cmd = {"shift": false, "alt": false, "cmd": true, "ctrl": false}
+let steps = [
+  ["caret", function() { n.ed_set_caret(30, 1000); n.view_after() }],
+  ["enter", keys_of(["Enter"])],
+  ["type in the new row", typed("circle((10, 10), 5, #000)")],
+  ["enter again", keys_of(["Enter"])],
+  ["empty row with the caret", function() { n.view_after() }],
+  ["join the rows back", keys_of(["Backspace", "Backspace", "Backspace"])],
+  ["select a row", function() { n.ed_select_range(40, 40); n.view_after() }],
+  ["delete it", keys_of(["Backspace"])],
+  ["paste rows", function() {
+    rig_clip.set(n.edit_rows_text(n.ed_model(), 60, 69))
+    n.ed_set_caret(45, 0)
+    n.view_after()
+  }],
+  ["cmd-v", [key("V", cmd)]],
+  ["break a row", function() { n.ed_set_caret(50, 1000); n.view_after() }],
+  ["take its bracket off", keys_of(["Backspace"])],
+  ["type while broken", typed(" 1")],
+  ["take that back", keys_of(["Backspace", "Backspace"])],
+  ["mend it", typed(")")],
+  ["a row with an error", function() { n.ed_set_caret(52, 1000); n.view_after() }],
+  ["an unknown name", typed(" + nope")],
+  ["a new row under it", keys_of(["Enter"])],
+  ["mend that", keys_of(["Backspace", "Backspace", "Backspace", "Backspace", "Backspace", "Backspace", "Backspace",
+    "Backspace", "Backspace"])],
+  ["a layer line", function() { n.ed_set_caret(54, 0); n.view_after() }],
+  ["new layer", typed("layer extra\n")],
+  ["undo", function() { n.ed_undo(); n.view_after() }],
+  ["undo again", function() { n.ed_undo(); n.view_after() }],
+  ["redo", function() { n.ed_redo(); n.view_after() }],
+  ["fold a layer", function() { n.ed_toggle_fold(4); n.view_after() }],
+  ["enter while folded", function() { caret_enter(60) }],
+  ["unfold", function() { n.ed_toggle_fold(4); n.view_after() }],
+  ["fold a layer further down", function() { fold_layer("g2") }],
+  ["enter above it", function() { caret_enter(30) }],
+  ["and take it back", keys_of(["Backspace", "Backspace", "Backspace"])],
+  ["an error further down", function() {
+    n.ed_set_caret(200, 1000)
+    n.view_after()
+    n.ed_type(" + nope")
+    n.view_after()
+  }],
+  ["enter above the error", function() { caret_enter(30) }]
+]
+
+-~> A row without its lazily moved statement, to compare.
+function rows_plain(rows) {
+  let out = []
+  for (let i = 0; i < len(rows); i += 1) {
+    let r = n.hash_copy(rows[i])
+    n.row_stmt(r)
+    push(out, r)
+  }
+  out
+}
+
+-~> [parse, rows, items, shapes]: each true when it is what a fresh start gives.
+function check() {
+  let ed = n.ed
+  let V = n.V
+  let m = n.ed_model()
+  let fresh = n.doc_new(n.doc_text(m))
+  let p = n.doc_parsed(m)
+  let fp = n.doc_parsed(fresh)
+  let same_parse = len(fp.errors) > 0 || (n.parse_flat(p).statements === fp.statements && len(p.errors) == 0)
+  let same_rows = len(fp.errors) > 0 ||
+    rows_plain(n.doc_rows(m, ed.errors, ed.folded)) === rows_plain(n.doc_rows(fresh, ed.errors, ed.folded))
+  let items = n.view_items()
+  let at = V.items_at
+  let pinned = V.pinned
+  n.view_items_build(n.view_rows(), m)
+  let same_items = items === V.items && at === V.items_at && pinned === V.pinned
+  let run = drawing_run(n.doc_text(m))
+  let same_shapes = len(run.errors) > 0 || ed.shapes === run.shapes
+  [same_parse, same_rows, same_items, same_shapes]
+}
+
+-~> The canvas as it shows, then as a full repaint paints it: the same pixels.
+function same_as_repaint() {
+  let canvas = n.view_canvas_layout().crect
+  let shown = rig_shot(rig, canvas)
+  if (n.V.scene != null) {
+    n.tiles_mark_all(n.V.scene.tiles)
+  }
+  n.view_force_all()
+  n.app.needs_paint = true
+  rig_frame(rig)
+  shown == rig_shot(rig, canvas)
+}
+
+let modules = rig_modules + ["ui/doc_splice", "ui/view_items", "ui/view_canvas"]
+let drawings = [["literal", drawing_300()]]
+let zoomed = text.lines(text.replace(drawing_300(), "\"size\": (800, 600)", "\"size\": (1300, 1100)"))
+zoomed[19] += " -~> [hidden]"
+push(drawings, ["zoomed, hidden", text.join(zoomed, "\n")])
+
+let rig = null
+for (let d = 0; d < len(drawings); d += 1) {
+  rig = rig_open(fs.join(fs.home(), "incremental-" + str(d)), drawings[d][1], editor_size, modules)
+  n = rig.names
+  let bad = 0
+  for (let i = 0; i < len(steps); i += 1) {
+    let st = steps[i]
+    let events = []
+    if (type(st[1]) == "FUNCTION") {
+      st[1]()
+    } else {
+      events = st[1]
+    }
+    rig_frame(rig, events)
+    let got = check()
+    if (str(got) != "[true, true, true, true]" || !same_as_repaint() || rig.ed.error != "") {
+      bad += 1
+      puts(drawings[d][0], "/", st[0], ": [parse, rows, items, shapes] =", got, rig.ed.error)
+    }
+  }
+  puts(drawings[d][0] + ":", len(steps) - bad, "of", len(steps), "steps as from scratch")
+}

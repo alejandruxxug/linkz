@@ -9,7 +9,7 @@
 
 use "drawing"
 use "engine"
-use "host_os"
+use "host_linkz"
 
 -~> The step limit of a settings (or machine) file.
 let settings_steps = 100000

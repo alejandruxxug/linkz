@@ -1,0 +1,39 @@
+-~> The trace tool: a PNG of a circle comes back as code that runs, its
+-~> stats and a picture; files and options it refuses. The test runs with
+-~> HOME in a temporary folder, shown here as $HOME.
+use "../json"
+use "../server"
+
+function call(args) {
+  let line = json.stringify({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "trace", "arguments": args}})
+  json.parse(mcp_handle_line(line)).result
+}
+
+-~> A dark circle of radius 20 on white, 64 by 64.
+fb.offscreen((64, 64))
+fb.fill((0, 0), (64, 64), #ffffff)
+for (let y = 12; y < 52; y += 1) {
+  let dy = y + 0.5 - 32
+  let half = math.sqrt(math.max(0, 400 - dy * dy))
+  fb.span(y, math.round(32 - half), math.round(32 + half), #3b2a6b)
+}
+fb.save_png(fs.home() + "/circle.png")
+fs.write(fs.home() + "/notes.txt", "x")
+
+let r = call({"path": fs.home() + "/circle.png", "colors": 2})
+puts(r.isError, len(r.content), r.content[0].type, r.content[1].type, r.content[2].type, r.content[2].mimeType)
+puts(src.run(r.content[0].text).errors)
+puts(json.parse(r.content[1].text).colors)
+puts(len(r.content[2].data) > 100)
+let bad = [
+  {"path": fs.home() + "/notes.txt"},
+  {"path": "/etc/hosts.png"},
+  {"path": fs.home() + "/missing.png"},
+  {"path": fs.home() + "/circle.png", "colors": 0},
+  {"path": fs.home() + "/circle.png", "background": "yes"},
+  {}
+]
+for (let i = 0; i < len(bad); i += 1) {
+  let e = call(bad[i])
+  puts(e.isError, text.replace(e.content[0].text, fs.home(), "$HOME"))
+}

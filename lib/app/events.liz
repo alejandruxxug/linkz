@@ -1,5 +1,5 @@
 -~> events: the window's events as the editor takes them. The editor was
--~> written for the Go host's events, so this keeps them as they were:
+-~> written for the events of the old Go host, so this keeps them as they were:
 -~>   type        down, up, move, wheel (the window's scroll), key, text (type),
 -~>               resize, focus, leave, enter
 -~>   pos         the pointer in ui pixels

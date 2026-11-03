@@ -12,11 +12,13 @@
 -~>   debug_commands    optional: a hash of name -> function(args), merged into the backdoor commands
 -~> show_screen(name, args) makes a registered screen the current one.
 
-use "app"
-
 let screens = {}
 
 let screen_state = {"current": ""}
+
+-~> Below the names above: app.liz, which uses this file back, registers the
+-~> editor in screens while it loads.
+use "app"
 
 -~> The current screen decides app.wants_hover; needs_paint and wants_hover of a
 -~> screen may be a value or a function.

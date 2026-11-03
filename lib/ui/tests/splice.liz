@@ -69,8 +69,8 @@ function edit(lines) {
     out[at] = text.slice(out[at], 2, len(out[at]))
   } else {
     let s = out[at]
-    let c = rand(len(s) + 1)
-    out[at] = text.slice(s, 0, c) + ["1", "(", ")", ",", " ", "x", "\""][rand(7)] + text.slice(s, c, len(s))
+    let cut = rand(len(s) + 1)
+    out[at] = text.slice(s, 0, cut) + ["1", "(", ")", ",", " ", "x", "\""][rand(7)] + text.slice(s, cut, len(s))
   }
   out
 }

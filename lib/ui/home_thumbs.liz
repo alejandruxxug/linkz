@@ -15,7 +15,7 @@ use "../gfx/raster"
 let home_thumbs = {"made": {}, "hashes": {}, "renders": 0}
 
 function home_thumb_dir() {
-  os.config_dir() + "/thumbs"
+  linkz.config_dir() + "/thumbs"
 }
 
 -~> The hash of a file's text, asked again only when its time or size changed.
@@ -27,7 +27,7 @@ function home_hash_of(f) {
   }
   let h = null
   try {
-    h = fs.hash(f.path)
+    h = text.slice(fs.digest(f.path), 0, 16)
   } catch (e) {
     h = null
   }

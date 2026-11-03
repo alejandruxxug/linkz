@@ -1,0 +1,18 @@
+-~> lzdraw 1
+-~> Traced from scripts/parity/golden/trace/picture.png: 2 colors, 7 regions.
+let colors = {
+  "c1": #ffffff,
+  "c2": #cc2200
+}
+canvas = {"size": (200, 150), "background": colors.c1}
+
+layer traced
+  layer color_2
+    path([(49, 8), (52, 10), (60, 36), (92, 36), (67, 55), (75, 85), (51, 68), (25, 85), (33, 55), (8, 37), (40, 36)], colors.c2)
+    path([(149, 8), (152, 10), (159, 36), (141, 36)], colors.c2)
+    path([(108, 36), (139, 36), (135, 54), (129, 53)], colors.c2)
+    path([(161, 36), (192, 37), (166, 55), (161, 42)], colors.c2)
+    path([(133, 56), (147, 64), (149, 69), (125, 85)], colors.c2)
+    path([(164, 56), (167, 56), (175, 85), (151, 69), (151, 66)], colors.c2)
+  layer color_1
+    rect((0, 0), (200, 150), colors.c1)

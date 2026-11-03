@@ -33,10 +33,10 @@ function paint_run(code, size) {
       "), got " + str(size))
   }
   let target = img.new(size.x, size.y)
-  let tr = drawing_tracker(code, false)
+  let tr = drawing_tracker(false)
   let r = drawing_exec(code, host_globals(target), tr, libs_draw + libs_gfx)
   if (drawing_is_syntax(r.error)) {
-    error("program: " + drawing_syntax_text(code))
+    error("program: " + drawing_syntax_text(r.errors))
   }
   io.write(r.output)
   if (r.error != null) {

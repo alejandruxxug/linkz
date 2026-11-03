@@ -69,7 +69,7 @@ function mcp_tools_call(params) {
   try {
     result = mcp_run_tool(name, args)
   } catch (e) {
-    io.log("tool " + name + " failed: " + e.message)
+    linkz.log("tool " + name + " failed: " + e.message)
     return mcp_tool_error(e.message)
   }
   if (result === null) {
@@ -110,7 +110,7 @@ function mcp_dispatch(msg) {
     return mcp_error_response(id, mcp_invalid_request, "Invalid Request: a message needs a method")
   }
   if (id === null) {
-    io.log("notification " + method)
+    linkz.log("notification " + method)
     return null
   }
   if (type(id) != "STRING" && type(id) != "INTEGER") {
@@ -127,7 +127,7 @@ function mcp_dispatch(msg) {
   try {
     result = mcp_call(method, params)
   } catch (e) {
-    io.log("request " + method + " failed: " + e.message)
+    linkz.log("request " + method + " failed: " + e.message)
     return mcp_error_response(id, mcp_internal_error, "Internal error: " + e.message)
   }
   if (result["__rpc_error"] !== null) {
@@ -169,19 +169,19 @@ function mcp_handle_line(line) {
     }
     return json.stringify(reply)
   } catch (e) {
-    io.log("could not answer: " + e.message)
+    linkz.log("could not answer: " + e.message)
     return json.stringify(mcp_error_response(null, mcp_internal_error, "Internal error: " + e.message))
   }
 }
 
 function mcp_serve() {
-  io.log("linkz mcp: ready")
+  linkz.log("linkz mcp: ready")
   while (true) {
     let line = null
     try {
       line = io.read_line()
     } catch (e) {
-      io.log("linkz mcp: cannot read: " + e.message)
+      linkz.log("linkz mcp: cannot read: " + e.message)
       break
     }
     if (line === null) {
@@ -190,10 +190,10 @@ function mcp_serve() {
     if (text.trim(line) == "") {
       continue
     }
-    let out = io.with_steps(mcp_step_limit, function() { mcp_handle_line(line) })
+    let out = linkz.with_steps(mcp_step_limit, function() { mcp_handle_line(line) })
     if (out !== null) {
       io.write(out + "\n")
     }
   }
-  io.log("linkz mcp: input closed, bye")
+  linkz.log("linkz mcp: input closed, bye")
 }

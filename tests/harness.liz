@@ -1,5 +1,5 @@
 -~> harness: runs the library test programs (lib/*/tests/*.liz) the way the
--~> Go host's test runners did, and compares what they print with the
+-~> old Go host's test runners did, and compares what they print with the
 -~> .expected file next to each. A test of this folder lists the programs it
 -~> ran: "ok name", or what went wrong.
 -~>
@@ -10,14 +10,14 @@
 
 use "../lib/app/drawing"
 use "../lib/app/engine"
-use "../lib/app/libs"
 
--~> The .liz files of a folder, by name, without those in skip.
+-~> The .liz files of a folder, by name, without those in skip and the
+-~> project file of `lizardscript check` (lizard-check.liz).
 function harness_programs(dir, skip = []) {
   let out = []
   let names = fs.list(dir)
   for (let i = 0; i < len(names); i += 1) {
-    if (text.ends(names[i], ".liz") && list.index(skip, names[i]) < 0) {
+    if (text.ends(names[i], ".liz") && list.index(skip, names[i]) < 0 && names[i] != "lizard-check.liz") {
       push(out, fs.join(dir, names[i]))
     }
   }

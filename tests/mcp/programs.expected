@@ -5,3 +5,4 @@ ok mcp/tests/json_write.liz
 ok mcp/tests/server_files.liz
 ok mcp/tests/server_requests.liz
 ok mcp/tests/server_tools.liz
+ok mcp/tests/server_trace.liz

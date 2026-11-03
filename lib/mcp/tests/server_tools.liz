@@ -10,12 +10,12 @@ let next_id = 0
 function call(name, args) {
   next_id += 1
   let line = json.stringify({"jsonrpc": "2.0", "id": next_id, "method": "tools/call", "params": {"name": name, "arguments": args}})
-  let r = json.parse(mcp_handle_line(line))
-  if (r.error !== null) {
-    puts("rpc error", r.error.code, r.error.message)
+  let reply = json.parse(mcp_handle_line(line))
+  if (reply.error !== null) {
+    puts("rpc error", reply.error.code, reply.error.message)
     return null
   }
-  r.result
+  reply.result
 }
 
 function first_text(result) {

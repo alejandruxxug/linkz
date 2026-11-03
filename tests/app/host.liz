@@ -24,14 +24,14 @@ for (let i = 0; i < len(rows); i += 1) {
 }
 puts(len(h.fs.list(dir, "")), h.fs.list(fs.join(dir, "nope"), ".lzdraw"))
 h.fs.write(fs.join(dir, "c.txt"), "x")
-puts(h.fs.hash(fs.join(dir, "a.lzdraw")), h.fs.hash(fs.join(dir, "c.txt")) == h.fs.hash(fs.join(dir, "a.lzdraw")),
-  h.fs.hash(fs.join(dir, "b.lzdraw")) != h.fs.hash(fs.join(dir, "a.lzdraw")))
+puts(text.slice(h.fs.digest(fs.join(dir, "a.lzdraw")), 0, 16), h.fs.digest(fs.join(dir, "c.txt")) == h.fs.digest(fs.join(dir, "a.lzdraw")),
+  h.fs.digest(fs.join(dir, "b.lzdraw")) != h.fs.digest(fs.join(dir, "a.lzdraw")))
 puts(h.fs.slash("a\\b/c"), h.fs.join("a/", "b"), h.fs.sep())
-puts(text.replace(h.os.config_dir(), fs.home(), "~"), h.os.home() == fs.home(), h.os.app_version())
+puts(text.replace(h.linkz.config_dir(), fs.home(), "~"), h.fs.home() == fs.home(), h.linkz.version())
 
 puts("-- clock")
 let now = time.now()
-puts(type(h.time.now()), math.abs(h.time.now() - now.epoch) <= 1, h.time.tz() == now.utc_offset)
+puts(type(h.time.now().epoch), math.abs(h.time.now().epoch - now.epoch) <= 1, h.time.now().utc_offset == now.utc_offset)
 
 puts("-- events")
 let mods = {"shift": false, "alt": false, "cmd": true, "ctrl": false}

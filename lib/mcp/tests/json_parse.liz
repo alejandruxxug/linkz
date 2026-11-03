@@ -2,8 +2,8 @@
 use "../json"
 
 function show(text_in) {
-  let v = json.parse(text_in)
-  puts(type(v), json.stringify(v))
+  let value = json.parse(text_in)
+  puts(type(value), json.stringify(value))
 }
 
 show("null")

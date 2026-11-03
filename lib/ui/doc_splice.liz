@@ -38,7 +38,7 @@
 -~> (ed_run_now, doc_cache_rescan).
 -~> Anything else (a clean scan that ran on past the check) gives null, and
 -~> the whole text is scanned as usual.
--~> host/scan.go is the scanner; tests/splice.liz checks this against it.
+-~> lib/app/scan.liz is the scanner; tests/splice.liz checks this against it.
 
 use "doc_cache"
 use "editor_doc"

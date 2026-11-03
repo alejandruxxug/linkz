@@ -1,9 +1,0 @@
--~> lzdraw 1
-canvas = {"size": (320, 320), "background": #f8eef2}
-for (let k = 0; k < 6; k = k + 1) {
-  let a = k * 60deg
-  let tip = (160 + 90 * math.sin(a), 160 - 90 * math.cos(a))
-  stroke([(160, 160), tip], #f4a6c8, 40)
-  line((160, 160), tip, #c0267a, 3)
-}
-circle((160, 160), 18, #c8d84a)

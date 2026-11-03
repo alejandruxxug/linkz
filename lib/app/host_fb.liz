@@ -9,7 +9,7 @@
 -~> images can be kept by name (fb.keep, fb.load_png) and drawn later
 -~> (fb.blit, fb.composite). Rectangles are a position and a size, two points.
 -~>
--~> It is how the libraries written for the Go host run on the Terrarium
+-~> It is how the libraries written for the old Go host run on the Terrarium
 -~> unchanged; the Terrarium calls take the target first.
 
 -~> A new fb drawing on ui: an image (paint, mcp, the splash), or a window

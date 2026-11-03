@@ -1,0 +1,39 @@
+-~> host_linkz: the `linkz` hash, what Linkz's host gives its libraries
+-~> besides the Terrarium's modules (which they get as they are):
+-~>   config_dir()       ~/.linkz, made when missing: Linkz's settings, recent files,
+-~>                      thumbnails and the machine's measurement
+-~>   version()          the version of Linkz
+-~>   log(text)          a line to the error output (the MCP server's log)
+-~>   with_steps(n, f)   calls f() with a step limit of its own: its steps are counted
+-~>                      from zero, at most n; past it, f fails with the step-limit error
+
+use "engine"
+use "version"
+
+-~> ~/.linkz, made when missing.
+function host_config_dir() {
+  let dir = fs.join(fs.home(), ".linkz")
+  fs.mkdir(dir)
+  dir
+}
+
+function host_linkz() {
+  {
+    "config_dir": host_config_dir,
+    "version": function() { linkz_version },
+    "log": function(line) { io.error(line + "\n") },
+    "with_steps": host_with_steps
+  }
+}
+
+-~> What f() prints goes to the error output, never into the protocol.
+function host_with_steps(n, f) {
+  let r = lizard.run("f()", {"globals": {"f": f}, "steps": n, "engine": engine_name()})
+  if (r.output != "") {
+    io.error(r.output)
+  }
+  if (r.error != null) {
+    error(r.error.message)
+  }
+  r.value
+}

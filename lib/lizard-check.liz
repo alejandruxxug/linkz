@@ -1,0 +1,3 @@
+-~> The names Linkz's host puts around its libraries (lib/app/host.liz,
+-~> drawing.liz, editor.liz), for `lizardscript check`.
+{"names": ["fb", "src", "settings", "linkz", "drawing_run_hooks"]}
