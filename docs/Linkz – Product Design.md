@@ -49,5 +49,6 @@ Write lizard-script → see the drawing update → tweak (code or, later, drag o
 | 2026-11-02 | Mini videos in tool/pen tooltips: **later**, once the structure is solid | The developer's call |
 | 2026-11-02 | **8-bit UI** at half resolution ×2, Lizard 16 palette; the canvas stays full-res and smooth | "I also want a 8 bit style UI since it's easier for you to draw it that way"; 4× fewer pixels for lizard to fill |
 | 2026-11-02 | **Multi-language UI from the start**: `t("key")`, one lizard file per language (en, es first), Latin-1 pixel font | "from the start could we maybe add multi lang support or for it to slot in easily" |
+| 2026-11-02 | **Splash banner**: frameless, transparent window with the pixel Linkz logo, a lizard crawling behind it, "powered by lizard-script" | The developer's request; lizard pre-draws the frames, Go only flips them while the editor loads |
 | 2026-11-02 | Named **Linkz** (lizard inkz); files stay `.lzdraw` | The developer's pick |
 | 2026-11-02 | lizard-script stays its own repo; Linkz imports it | Language work counts for the course; Linkz stays private until the reveal |
