@@ -52,4 +52,5 @@ Briefs live in `docs/Batches/B<nnn> – <name>.md`.
 
 | Date | What | Result |
 |---|---|---|
+| 2026-11-03 | **v1 finish line (B009)** | Pencil → editable `stroke([...])`, pressure brush with 5 tunable pens, anchor drag/insert/delete rewriting single literals, shape drag, honest refusals, one undo step per gesture. Tested live through the backdoor; anchor drag ~1 ms/event, 4–14 ms/paint |
 | 2026-11-02 | M0 Foundation | `hello.lzdraw` → 6 circles + a line in SVG; host tests green; lizard libraries do all drawing |
