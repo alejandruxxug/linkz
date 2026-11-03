@@ -24,9 +24,10 @@
 ## 🧱 v1.1 (after the v1 finish line)
 | # | Batch | Done when |
 |---|---|---|
-| B016 | Right-click menu + Fill editor + gradients (`linear`/`radial` values in lib/draw, gradient spans in the host) | Approved R002 frames; a gradient made in the editor renders on canvas, in SVG and in PNG |
+| B016 | Right-click menu + Fill editor + gradients (`linear`/`radial` values in lib/draw, gradient spans in the host), **stepped gradients** (`steps = n`) and hard stops | Approved R002 frames; a gradient made in the editor renders on canvas, in SVG and in PNG |
 | B017 | Palette sidebar (HSV picker, recent, document palette as `let colors = {...}`) | Changing a named color updates every shape using it |
 | B018 | Artist mode (layers with thumbnails, code drawer) | Switching modes keeps the same file and selection |
+| B020 | Layer blend modes (Normal, Multiply, Screen, Overlay, Darken, Lighten, Add) + opacity: `blend("multiply")` / `opacity(0.8)` as a layer's first lines; per-layer buffers blended by the host; SVG `mix-blend-mode` | A Multiply layer darkens what's below in the canvas, PNG and SVG |
 | B019 | First-run tutorial | Runs once, skippable, en + es, `tutorial_done` in settings |
 
 ## 🗃️ Later (parked ideas)
