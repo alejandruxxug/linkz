@@ -2,10 +2,7 @@ package host
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
-	"strings"
 	"sync"
 	"time"
 
@@ -113,8 +110,9 @@ func timeHash() *object.Hash {
 	return h
 }
 
-// The clipboard goes through pbcopy/pbpaste on macOS (no cgo needed). Where
-// those don't exist it stays inside the app.
+// The clipboard goes through the system's own tools (pbcopy on macOS,
+// PowerShell on Windows, wl-copy or xclip on Linux; no cgo). The last text set
+// stays in the app, so copy and paste still work when no tool is there.
 var (
 	clipMu    sync.Mutex
 	clipLocal string
@@ -123,10 +121,8 @@ var (
 func clipGet() string {
 	clipMu.Lock()
 	defer clipMu.Unlock()
-	if runtime.GOOS == "darwin" {
-		if out, err := exec.Command("pbpaste").Output(); err == nil {
-			return string(out)
-		}
+	if text, ok := platformClipGet(); ok {
+		return text
 	}
 	return clipLocal
 }
@@ -135,11 +131,7 @@ func clipSet(text string) {
 	clipMu.Lock()
 	defer clipMu.Unlock()
 	clipLocal = text
-	if runtime.GOOS == "darwin" {
-		cmd := exec.Command("pbcopy")
-		cmd.Stdin = strings.NewReader(text)
-		cmd.Run()
-	}
+	platformClipSet(text)
 }
 
 func clipHash() *object.Hash {
@@ -156,19 +148,12 @@ func clipHash() *object.Hash {
 	})
 }
 
-// Locale is the user's UI language as a lowercase two-letter code. It reads
-// the macOS preferences, then LANG, and falls back to "en".
+// Locale is the user's UI language as a lowercase two-letter code. It asks
+// the system (macOS preferences, Windows locale), then LANG, and falls back
+// to "en".
 func Locale() string {
-	if runtime.GOOS == "darwin" {
-		if out, err := exec.Command("defaults", "read", "-g", "AppleLanguages").Output(); err == nil {
-			// ( "es-CO", "en-US" ) : the first quoted entry
-			text := string(out)
-			if i := strings.IndexByte(text, '"'); i >= 0 {
-				if code := twoLetters(text[i+1:]); code != "" {
-					return code
-				}
-			}
-		}
+	if code := platformLocale(); code != "" {
+		return code
 	}
 	for _, name := range []string{"LC_ALL", "LANG"} {
 		if code := twoLetters(os.Getenv(name)); code != "" {
@@ -211,7 +196,7 @@ func osHash() *object.Hash {
 			if err != nil {
 				return errorf("%v", err)
 			}
-			return newStr(dir)
+			return newStr(filepath.ToSlash(dir))
 		},
 	})
 	addOSPrims(h)

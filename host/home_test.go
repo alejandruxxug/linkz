@@ -376,9 +376,11 @@ func TestHomeFlows(t *testing.T) {
 	if _, err := os.Stat(victim); err == nil {
 		t.Error("the file is still there after confirming")
 	}
-	trash, _ := trashDir()
-	if _, err := os.Stat(filepath.Join(trash, filepath.Base(victim))); err != nil {
-		t.Errorf("the file is not in the Trash: %v", err)
+	// Windows has no Trash folder to look into (the Recycle Bin is the shell's).
+	if trash, err := trashDir(); err == nil {
+		if _, err := os.Stat(filepath.Join(trash, filepath.Base(victim))); err != nil {
+			t.Errorf("the file is not in the Trash: %v", err)
+		}
 	}
 
 	// New drawing creates Untitled.lzdraw and opens it; the second is Untitled 2.

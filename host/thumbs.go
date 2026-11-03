@@ -3,6 +3,7 @@ package host
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"image"
 	"image/draw"
@@ -11,7 +12,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -41,10 +41,27 @@ func addFSPrims(h *object.Hash) {
 		out := &object.Array{}
 		for _, f := range files {
 			out.Elements = append(out.Elements, fromGo(map[string]any{
-				"name": f.Name, "path": f.Path, "mtime": f.MTime, "size": f.Size,
+				"name": f.Name, "path": filepath.ToSlash(f.Path), "mtime": f.MTime, "size": f.Size,
 			}))
 		}
 		return out
+	})
+	// Lizard always sees "/" in paths (Windows takes it too); these two
+	// help it build and tidy them without knowing the system.
+	add("sep", func(args ...object.Object) object.Object { return newStr("/") })
+	add("join", func(args ...object.Object) object.Object {
+		s, err := strArgs(args, 2, "2 (dir, name)")
+		if err != nil {
+			return err
+		}
+		return newStr(filepath.ToSlash(filepath.Join(s[0], s[1])))
+	})
+	add("slash", func(args ...object.Object) object.Object {
+		s, err := strArgs(args, 1, "1 (path)")
+		if err != nil {
+			return err
+		}
+		return newStr(filepath.ToSlash(s[0]))
 	})
 	add("hash", func(args ...object.Object) object.Object {
 		s, err := strArgs(args, 1, "1 (path)")
@@ -106,7 +123,7 @@ func addOSPrims(h *object.Hash) {
 		if err != nil {
 			return errorf("%v", err)
 		}
-		return newStr(home)
+		return newStr(filepath.ToSlash(home))
 	}})
 	hashSet(h, "reveal", &object.Builtin{Name: "os.reveal", Fn: func(args ...object.Object) object.Object {
 		s, err := strArgs(args, 1, "1 (path)")
@@ -209,44 +226,42 @@ func CopyFile(from, to string) error {
 
 // runCommand runs a program; tests replace it.
 var runCommand = func(name string, args ...string) error {
-	return exec.Command(name, args...).Run()
+	return runCommandEnv(nil, name, args...)
 }
 
-// Reveal shows a file in Finder (the folder, elsewhere).
+// runCommandEnv is runCommand with extra environment variables.
+func runCommandEnv(env []string, name string, args ...string) error {
+	cmd := exec.Command(name, args...)
+	if len(env) > 0 {
+		cmd.Env = append(os.Environ(), env...)
+	}
+	hideWindow(cmd)
+	return cmd.Run()
+}
+
+// Reveal shows a file in Finder or Explorer (the folder, on Linux).
 func Reveal(path string) error {
+	path = filepath.FromSlash(path)
 	if _, err := os.Stat(path); err != nil {
 		return err
 	}
-	if runtime.GOOS == "darwin" {
-		return runCommand("open", "-R", path)
-	}
-	return runCommand("xdg-open", filepath.Dir(path))
+	return platformReveal(path)
 }
 
-// trashDir is the folder the Trash is, under the user's home.
-func trashDir() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	if runtime.GOOS == "darwin" {
-		return filepath.Join(home, ".Trash"), nil
-	}
-	return filepath.Join(home, ".local", "share", "Trash", "files"), nil
-}
+// errNoTrashDir means this system has no Trash folder to move files into
+// (Windows): the Recycle Bin is reached through platformTrash instead.
+var errNoTrashDir = errors.New("no trash folder")
 
 // Trash moves a file into the Trash. It never deletes: a name already in the
 // Trash gets " 2", " 3", ... before its extension. If the move is not
-// allowed it asks Finder to do it, and if that fails too, the file stays.
+// allowed it asks the system (Finder, gio, the Recycle Bin), and if that
+// fails too, the file stays.
 func Trash(path string) error {
+	path = filepath.FromSlash(path)
 	if _, err := os.Lstat(path); err != nil {
 		return err
 	}
-	dir, err := trashDir()
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(dir, 0o700); err == nil {
+	if dir, err := trashDir(); err == nil && os.MkdirAll(dir, 0o700) == nil {
 		base := filepath.Base(path)
 		ext := filepath.Ext(base)
 		stem := strings.TrimSuffix(base, ext)
@@ -257,15 +272,12 @@ func Trash(path string) error {
 			}
 			dest = filepath.Join(dir, fmt.Sprintf("%s %d%s", stem, n, ext))
 		}
-		if err := os.Rename(path, dest); err == nil {
+		if trashNote(path, dest) == nil && os.Rename(path, dest) == nil {
 			return nil
 		}
 	}
-	if runtime.GOOS == "darwin" {
-		script := fmt.Sprintf(`tell application "Finder" to delete POSIX file %q`, path)
-		if err := runCommand("osascript", "-e", script); err == nil {
-			return nil
-		}
+	if err := platformTrash(path); err == nil {
+		return nil
 	}
 	return fmt.Errorf("could not move %s to the Trash", path)
 }

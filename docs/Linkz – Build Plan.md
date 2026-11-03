@@ -41,7 +41,8 @@ Order: finish B007b (editor view) + B015 (home) → **B007c autocomplete (mandat
 | Mini videos in pen/tool tooltips | Needs a solid tooltip + animation structure first |
 | Own Cocoa window layer (drop Ebitengine) | After v1 |
 | Tablet pressure tested on real hardware | No tablet here |
-| Pressure on Windows/Linux | macOS first |
+| Pressure on Windows/Linux | macOS first. Windows keeps the stub (mouse, pressure 1.0); real pens need Windows Ink / `WM_POINTER` (`GetPointerPenInfo`), via `golang.org/x/sys/windows`, no cgo |
+| Windows/Linux tested on real machines | `scripts/crossbuild.sh` only proves they compile and vet; clipboard, Recycle Bin, reveal and locale need a run on a Windows PC and a Linux desktop |
 
 ## 📦 Batches
 

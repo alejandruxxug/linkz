@@ -129,6 +129,9 @@ func TestMkdirRenameCopy(t *testing.T) {
 }
 
 func TestTrash(t *testing.T) {
+	if _, err := trashDir(); err != nil {
+		t.Skip("no Trash folder on this system (Windows uses the Recycle Bin)")
+	}
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	dir := t.TempDir()

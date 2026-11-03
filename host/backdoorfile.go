@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 )
 
 // Each editor window writes its own ~/.linkz/debug-<pid>.json, so a second
@@ -18,15 +17,6 @@ type BackdoorInfo struct {
 	Port  int    `json:"port"`
 	Token string `json:"token"`
 	PID   int    `json:"pid"`
-}
-
-// pidAlive reports whether a process with that id exists.
-func pidAlive(pid int) bool {
-	if pid <= 0 {
-		return false
-	}
-	err := syscall.Kill(pid, 0)
-	return err == nil || err == syscall.EPERM
 }
 
 // backdoorFiles lists the debug files of dir with their pids.
