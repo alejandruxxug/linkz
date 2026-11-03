@@ -35,7 +35,7 @@ drawing.lzdraw ──► host.Render
 | A new shape, color helper, transform | `lib/*.liz` |
 | A file format, a protocol (JSON, MCP) | `lib/*.liz` |
 | To touch the OS (files, network, stdin, pixels in/out) | A primitive in `host/`, as small as possible |
-| A language feature (syntax, type, builtin, speed) | lizard-script repo + its `docs/DESIGN.md` divergence log |
+| A language feature (syntax, type, builtin, speed) | lizard-script repo + its `docs/DESIGN.md` extensions log |
 
 ## 🧪 Testing
 

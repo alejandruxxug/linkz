@@ -34,6 +34,6 @@ Write lizard-script → see the drawing update → tweak (code or, later, drag o
 | 2026-11-02 | Bundled MCP; agents write lizard-script, not SVG | Every agent becomes a lizard-script user |
 | 2026-11-02 | 3D only as projection to 2D | Real 3D is a second project; projection fits vector art |
 | 2026-11-02 | Image tracing is a headline feature | Picture → editable vectors |
-| 2026-11-02 | The language may diverge from the course design | "If I make it unique it isn't a bad thing" — every divergence is logged in lizard-script's DESIGN.md |
+| 2026-11-02 | The language grows beyond the course design, additively | "If I make it unique it isn't a bad thing"; "nothing diverts the go foundation so everything is purely additive" — every extension is logged in lizard-script's DESIGN.md |
 | 2026-11-02 | Named **Linkz** (lizard inkz); files stay `.lzdraw` | The developer's pick |
 | 2026-11-02 | lizard-script stays its own repo; Linkz imports it | Language work counts for the course; Linkz stays private until the reveal |

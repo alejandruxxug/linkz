@@ -16,7 +16,7 @@ Vector art written in lizard-script. **Built on lizard-script itself: Go is only
 ## Rules
 
 1. **Logic in lizard, not Go.** New features go in `lib/*.liz`. Go in `host/` only for a primitive lizard can't write (OS access). Never move logic to Go because lizard is slow or lacks a feature: log it in Language Needs and fix the language.
-2. **Language changes go to `../lizard-script`**, in that repo's style (phase packages, table-driven tests, `tests/valid` + `tests/errors` programs). Every change gets a row in its `docs/DESIGN.md` → *Divergences from the course design* (what, why, how it differs). The team sees that repo: never mention Linkz there before the reveal; describe changes as language features.
+2. **Language changes go to `../lizard-script`**, in that repo's style (phase packages, table-driven tests, `tests/valid` + `tests/errors` programs). Changes are **additive**: the Go foundation stays and existing lizard programs keep working. Every change gets a row in its `docs/DESIGN.md` → *Extensions beyond the course design* (what, why, what it adds). The team sees that repo: never mention Linkz there before the reveal; describe changes as language features.
 3. **`.lzdraw` is plain lizard-script.** Agents and the MCP write lizard-script, never raw SVG.
 4. Commit only when asked; never push lizard-script without the developer's yes.
 5. Docs: decisions → Product Design's design log; finished milestones → Build Plan's progress log.

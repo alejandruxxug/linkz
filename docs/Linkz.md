@@ -10,7 +10,7 @@ Private until the reveal.
 |---|---|
 | [[Linkz – Product Design]] | What Linkz is, the scope tiers, the design log |
 | [[Linkz – Architecture]] | The thin host, the lizard libraries, where new code goes |
-| [[Linkz – Language Needs]] | Every gap in lizard-script that Linkz hits, and its divergence log |
+| [[Linkz – Language Needs]] | Every gap in lizard-script that Linkz hits, and the extensions they become |
 | [[Linkz – Build Plan]] | Milestones, ⏳ waiting on you, progress log |
 | [[Linkz – Style Guide]] | How the editor looks and what drawings look like by default |
 | [[Linkz – Tools & Setup]] | Tools, commands, every-session checklist |
@@ -31,7 +31,7 @@ Private until the reveal.
 1. **Built on lizard.** Logic goes in lizard-script. Go only when lizard *can't* do it (talking to the OS, the runtime itself). Lizard being too slow is a reason to make lizard faster, not to move code to Go.
 2. **`.lzdraw` is plain text.** Readable, diffable, writable by agents.
 3. **Agents write lizard-script, not SVG.** The MCP runs code; it never accepts raw SVG.
-4. **Every language change is logged** as a divergence from the course design in lizard-script's `docs/DESIGN.md`.
+4. **Every language change is logged** as an extension in lizard-script's `docs/DESIGN.md`. Extensions are additive: the Go foundation stays and existing programs keep working.
 5. **One executable** to install.
 
 ## 🤔 Assumptions (took the recommended option; overturn any)

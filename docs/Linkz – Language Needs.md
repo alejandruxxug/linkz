@@ -1,6 +1,6 @@
 # 🦎 Linkz: Language Needs
 
-Every time Linkz hits something lizard-script can't do (or does slowly), it goes here. When it's built, the change lands in the lizard-script repo and gets a row in its `docs/DESIGN.md` → *Divergences from the course design*.
+Every time Linkz hits something lizard-script can't do (or does slowly), it goes here. When it's built, the change lands in the lizard-script repo and gets a row in its `docs/DESIGN.md` → *Extensions beyond the course design*.
 
 ## 🧱 Gaps
 
