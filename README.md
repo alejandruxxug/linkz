@@ -39,3 +39,12 @@ go build -o linkz .
 ```
 
 The plan, the architecture and the design log are in [docs/](docs/Linkz.md).
+
+## Contributing
+
+Linkz is open source, and anyone is welcome to tweak it and send changes back. See [CONTRIBUTING.md](CONTRIBUTING.md). Ideas for the language itself go to [lizard-script](https://github.com/alejandruxxug/lizard-script)'s proposals.
+
+## License
+
+[MIT](LICENSE) © 2026 Alejandro Urrego Giraldo and the Linkz contributors.
+
