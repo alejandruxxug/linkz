@@ -35,7 +35,7 @@ send("{\"jsonrpc\":\"2.0\",\"method\":\"something/unknown\"}")
 send(req(4, "ping", {}))
 send("{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"ping\"}")
 
--~> tools/list: the six tools, each with an object schema.
+-~> tools/list: the seven tools, each with an object schema.
 r = json.parse(mcp_handle_line(req(6, "tools/list", {})))
 let tools = r.result.tools
 for (let i = 0; i < len(tools); i += 1) {

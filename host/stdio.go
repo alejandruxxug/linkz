@@ -12,6 +12,7 @@ import (
 	"linkz/lib"
 	"linkz/lib/draw"
 	"linkz/lib/mcp"
+	"linkz/lib/trace"
 	"lizardscript/evaluator"
 	"lizardscript/lexer"
 	"lizardscript/object"
@@ -188,6 +189,7 @@ func NewMCPEnv(in io.Reader, out, errw io.Writer) (*object.Environment, error) {
 	env.Define("fs", fsHash())
 	env.Define("time", timeHash())
 	env.Define("os", osHash())
+	env.Define("img", imgHash())
 	env.Define("settings", settings)
 
 	load := func(name, code string) error { return EvalIn(env, name, code) }
@@ -202,6 +204,15 @@ func NewMCPEnv(in io.Reader, out, errw io.Writer) (*object.Environment, error) {
 	}
 	for _, name := range lib.Dir("gfx") {
 		code, err := lib.Files.ReadFile(name)
+		if err != nil {
+			return nil, err
+		}
+		if err := load(name, string(code)); err != nil {
+			return nil, err
+		}
+	}
+	for _, name := range trace.Order {
+		code, err := trace.Files.ReadFile(name)
 		if err != nil {
 			return nil, err
 		}

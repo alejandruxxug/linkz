@@ -342,6 +342,12 @@ function mcp_tool_render(args) {
   let code = mcp_need_string(args, "code")
   let want_w = mcp_opt_int(args, "width", 1, mcp_max_side)
   let want_h = mcp_opt_int(args, "height", 1, mcp_max_side)
+  mcp_result(mcp_render_items(code, want_w, want_h))
+}
+
+-~> Runs the code and gives the items of a render result: the picture, then
+-~> the errors as text when there were any. Shared by render and trace.
+function mcp_render_items(code, want_w, want_h) {
   let r = src.run(code)
   let size = mcp_canvas_size(r.canvas)
   let k = mcp_fit(size[0], size[1], want_w, want_h)
@@ -356,7 +362,7 @@ function mcp_tool_render(args) {
   if (len(r.errors) > 0) {
     push(items, mcp_text(json.stringify({"ok": false, "errors": r.errors, "printed": r.printed, "note": "the picture shows what was drawn before the first error"})))
   }
-  mcp_result(items)
+  items
 }
 
 -~> ---- svg ----
@@ -422,6 +428,13 @@ function mcp_inside(path, base) {
 -~> one must be inside the home folder (or the drawings folder). Nothing
 -~> hidden (a part starting with a dot) and only .lzdraw files.
 function mcp_resolve_path(raw) {
+  mcp_resolve_file(raw, [".lzdraw"], ".lzdraw")
+}
+
+-~> The same rules for any list of allowed extensions (lowercase, with the
+-~> dot). add is put on a name that has no extension, or "" to add nothing
+-~> (then a name without an extension is refused).
+function mcp_resolve_file(raw, exts, add) {
   if (type(raw) != "STRING" || text.trim(raw) == "") {
     error("the argument path is required and must be a string")
   }
@@ -449,7 +462,7 @@ function mcp_resolve_path(raw) {
     error("an absolute path must be inside your home folder (" + home + ") or the drawings folder (" + dir + ")")
   }
   if (p == base) {
-    error("the path is a folder, give a file name ending in .lzdraw")
+    error("the path is a folder, give a file name ending in " + text.join(exts, " or "))
   }
   let parts = text.split(text.slice(p, len(base) + 1, len(p)), "/")
   for (let i = 0; i < len(parts); i += 1) {
@@ -458,12 +471,16 @@ function mcp_resolve_path(raw) {
     }
   }
   let name = parts[len(parts) - 1]
-  if (text.find(name, ".") < 0) {
-    p = p + ".lzdraw"
-  } elif (!text.ends(name, ".lzdraw")) {
-    error("only .lzdraw files, not " + name)
+  if (text.find(name, ".") < 0 && add != "") {
+    return p + add
   }
-  p
+  let lower = text.lower(name)
+  for (let i = 0; i < len(exts); i += 1) {
+    if (text.ends(lower, exts[i])) {
+      return p
+    }
+  }
+  error("only " + text.join(exts, ", ") + " files, not " + name)
 }
 
 let mcp_code_max = 1000000
@@ -502,6 +519,64 @@ function mcp_tool_open(args) {
   mcp_result([mcp_text(fs.read(path))])
 }
 
+-~> ---- trace ----
+
+-~> The step budget of one trace call. Tracing a picture is far heavier than
+-~> painting a drawing (the tracer reads every pixel, then walks every outline),
+-~> so this tool alone gets more than the 300,000,000 of other requests. It
+-~> covers the trace and the render that follows.
+let mcp_trace_step_limit = 1000000000
+
+let mcp_image_exts = [".png", ".jpg", ".jpeg"]
+
+-~> An optional number between lo and hi, or null.
+function mcp_opt_number(args, name, lo, hi) {
+  let v = args[name]
+  if (v === null) {
+    return null
+  }
+  if ((type(v) != "INTEGER" && type(v) != "FLOAT") || v < lo || v > hi) {
+    error("the argument " + name + " must be a number from " + str(lo) + " to " + str(hi))
+  }
+  v
+}
+
+function mcp_tool_trace(args) {
+  let path = mcp_resolve_file(args.path, mcp_image_exts, "")
+  if (!fs.exists(path)) {
+    return mcp_tool_error("there is no file " + path)
+  }
+  let options = {}
+  let ints = [["colors", 1, 64], ["max_side", 16, 1024], ["min_area", 0, 100000]]
+  for (let i = 0; i < len(ints); i += 1) {
+    let v = mcp_opt_int(args, ints[i][0], ints[i][1], ints[i][2])
+    if (v !== null) {
+      options[ints[i][0]] = v
+    }
+  }
+  let nums = [["detail", 0.1, 10], ["corner", 1, 180]]
+  for (let i = 0; i < len(nums); i += 1) {
+    let v = mcp_opt_number(args, nums[i][0], nums[i][1], nums[i][2])
+    if (v !== null) {
+      options[nums[i][0]] = v
+    }
+  }
+  if (args.background !== null) {
+    if (type(args.background) != "BOOLEAN") {
+      error("the argument background must be true or false")
+    }
+    options.background = args.background
+  }
+  io.step_limit(mcp_trace_step_limit)
+  let result = trace(path, options)
+  let items = [mcp_text(result.code), mcp_text(json.stringify(result.stats))]
+  let pic = mcp_render_items(result.code, null, null)
+  for (let i = 0; i < len(pic); i += 1) {
+    push(items, pic[i])
+  }
+  mcp_result(items)
+}
+
 -~> ---- the list ----
 
 function mcp_tools() {
@@ -526,6 +601,15 @@ function mcp_tools() {
      "inputSchema": mcp_schema({"path": {"type": "string", "description": "File name or path, like sunset.lzdraw. .lzdraw is added when there is no extension."},
                                 "code": code_arg,
                                 "overwrite": {"type": "boolean", "description": "Replace the file if it exists. Default false."}}, ["path", "code"])},
+    {"name": "trace",
+     "description": "Traces a picture file (.png, .jpg or .jpeg, inside the user's home or drawings folder) into drawing code. Returns three items: the generated .lzdraw code (text), the stats as JSON (text) and a PNG render of the traced drawing, so you can compare it with the original and trace again with other settings. Pass the code to run, render or save to keep working on it. Slow for big pictures: lower max_side.",
+     "inputSchema": mcp_schema({"path": {"type": "string", "description": "The image file: an absolute path inside the home folder, ~/..., or a path relative to the drawings folder."},
+                                "colors": {"type": "integer", "minimum": 1, "maximum": 64, "description": "How many colors the drawing may use. Default 8."},
+                                "detail": {"type": "number", "minimum": 0.1, "maximum": 10, "description": "How closely outlines follow the picture; higher keeps more. Default 1.5."},
+                                "max_side": {"type": "integer", "minimum": 16, "maximum": 1024, "description": "The picture is shrunk until its longer side is at most this many pixels. Default 256."},
+                                "min_area": {"type": "integer", "minimum": 0, "maximum": 100000, "description": "Regions smaller than this many pixels are merged into a neighbour. Default 8."},
+                                "corner": {"type": "number", "minimum": 1, "maximum": 180, "description": "The turn in degrees from which an outline point stays a sharp corner. Default 55."},
+                                "background": {"type": "boolean", "description": "Write the biggest color as one rectangle behind everything. Default true."}}, ["path"])},
     {"name": "open",
      "description": "Reads a .lzdraw file and returns its code. Same path rules as save.",
      "inputSchema": mcp_schema({"path": {"type": "string", "description": "File name or path of the .lzdraw."}}, ["path"])}
@@ -552,6 +636,9 @@ function mcp_run_tool(name, args) {
   }
   if (name == "open") {
     return mcp_tool_open(args)
+  }
+  if (name == "trace") {
+    return mcp_tool_trace(args)
   }
   null
 }

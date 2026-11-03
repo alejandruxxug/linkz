@@ -5,6 +5,8 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"image"
+	"image/color"
 	"image/png"
 	"os"
 	"os/exec"
@@ -27,7 +29,12 @@ type session struct {
 // folder of its own, so nothing it saves reaches the real one.
 func start(t *testing.T, bin string) *session {
 	t.Helper()
-	home := t.TempDir()
+	return startIn(t, bin, t.TempDir())
+}
+
+// startIn is start with the given home folder.
+func startIn(t *testing.T, bin, home string) *session {
+	t.Helper()
 	cmd := exec.Command(bin, "mcp")
 	cmd.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
 	in, err := cmd.StdinPipe()
@@ -124,7 +131,7 @@ func TestMCPSession(t *testing.T) {
 	for _, tool := range m["result"].(map[string]any)["tools"].([]any) {
 		names = append(names, tool.(map[string]any)["name"].(string))
 	}
-	if got, want := len(names), 6; got != want {
+	if got, want := len(names), 7; got != want {
 		t.Fatalf("tools = %v, want %d", names, want)
 	}
 
@@ -250,6 +257,86 @@ func TestMCPRenderTime(t *testing.T) {
 		t.Logf("render %d of examples/layers.lzdraw: %v", i, took)
 		if took > 10*time.Second {
 			t.Errorf("render took %v", took)
+		}
+	}
+	s.inRaw.Close()
+	s.cmd.Wait()
+}
+
+// TestMCPTrace writes a PNG of a circle in the home folder, traces it, and
+// checks the three items: code that `run` accepts, the stats, and an image.
+func TestMCPTrace(t *testing.T) {
+	bin := filepath.Join(t.TempDir(), "linkz")
+	if out, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
+		t.Fatalf("build: %v\n%s", err, out)
+	}
+	home := t.TempDir()
+	pic := image.NewRGBA(image.Rect(0, 0, 64, 64))
+	for y := 0; y < 64; y++ {
+		for x := 0; x < 64; x++ {
+			c := color.RGBA{250, 250, 240, 255}
+			if (x-32)*(x-32)+(y-32)*(y-32) <= 20*20 {
+				c = color.RGBA{30, 90, 200, 255}
+			}
+			pic.Set(x, y, c)
+		}
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, pic); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, "circle.png"), buf.Bytes(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s := startIn(t, bin, home)
+
+	res := s.call(1, "trace", map[string]any{"path": "~/circle.png", "colors": 2})
+	items, _ := res["content"].([]any)
+	if res["isError"] == true || len(items) != 3 {
+		t.Fatalf("trace result = %v", res)
+	}
+	code := items[0].(map[string]any)["text"].(string)
+	var stats map[string]any
+	if err := json.Unmarshal([]byte(items[1].(map[string]any)["text"].(string)), &stats); err != nil {
+		t.Fatalf("stats are not JSON: %v", err)
+	}
+	if stats["colors"] == nil {
+		t.Errorf("stats = %v", stats)
+	}
+	img := items[2].(map[string]any)
+	if img["type"] != "image" || img["mimeType"] != "image/png" {
+		t.Fatalf("third item = %v", img["type"])
+	}
+	raw, err := base64.StdEncoding.DecodeString(img["data"].(string))
+	if err != nil {
+		t.Fatal(err)
+	}
+	traced, err := png.Decode(bytes.NewReader(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, g, b, _ := traced.At(traced.Bounds().Dx()/2, traced.Bounds().Dy()/2).RGBA()
+	if b>>8 < 150 || r>>8 > 100 || g>>8 > 140 {
+		t.Errorf("center of the traced picture = %d %d %d, want blue", r>>8, g>>8, b>>8)
+	}
+
+	// The code is a drawing that run accepts.
+	res = s.call(2, "run", map[string]any{"code": code})
+	var report struct {
+		OK     bool
+		Shapes int
+	}
+	if err := json.Unmarshal([]byte(res["content"].([]any)[0].(map[string]any)["text"].(string)), &report); err != nil {
+		t.Fatal(err)
+	}
+	if !report.OK || report.Shapes == 0 {
+		t.Errorf("run of the traced code = %+v", report)
+	}
+
+	// Refused paths.
+	for i, p := range []string{"/etc/hosts.png", "~/circle.txt", "~/.hidden/x.png", "~/gone.png"} {
+		if res = s.call(3+i, "trace", map[string]any{"path": p}); res["isError"] != true {
+			t.Errorf("trace %s should be refused: %v", p, res)
 		}
 	}
 	s.inRaw.Close()
