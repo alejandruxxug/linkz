@@ -66,6 +66,18 @@ Everything else in v1 serves this.
 
 8-bit UI around a smooth canvas: the UI renders at half resolution and is scaled ×2 with hard pixels; the canvas is a separate full-resolution target composited into its rect. Rules and the Lizard 16 palette are in [[Linkz – Style Guide]].
 
+## 🌍 Languages (built in from the start)
+
+| Rule | Detail |
+|---|---|
+| No hard-coded UI text | Every label, button, status message and tooltip frame goes through `t("key")` (with `{name}` placeholders: `t("status.saved", {"file": name})`). |
+| One file per language | `lib/ui/lang/en.liz`, `lib/ui/lang/es.liz`: a lizard hash of key → text. Adding a language = adding one file. `en` is the fallback for any missing key; a missing key everywhere shows the key itself (easy to spot). |
+| Which language | `settings.language` in `~/.linkz/settings.liz` (itself lizard code), else `os.locale()`, else `en`. Switchable from the toolbar; the UI repaints, nothing restarts. |
+| Tooltips | The library `-~>` doc comments are English; translations live in `lib/draw/docs/<lang>.liz` keyed by function and parameter name, falling back to English. |
+| Layout | Nothing assumes English widths: buttons and fields size from `font.measure` (Spanish runs ~25% longer). |
+| Font | The pixel font covers Latin-1 (á é í ó ú ñ ü ¿ ¡ ç …) plus a fallback box. |
+| Code stays code | lizard-script keywords (`let`, `layer`, `function`) and the language's own error messages stay English for now; translating runtime errors needs error codes in lizard-script (later). |
+
 ## 🧱 How it's built
 
 ```
