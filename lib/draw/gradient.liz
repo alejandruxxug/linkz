@@ -1,0 +1,165 @@
+-~> gradient: colors that change across a shape. A gradient is a value you
+-~> give where a fill or stroke color goes: circle((256, 256), 80, linear(...)).
+-~> It is a hash:
+-~>   kind     "linear" or "radial"
+-~>   stops    [[t, color], ...] with t from 0 to 1, in order (a hard stop is two
+-~>            stops with the same t)
+-~>   steps    0 for smooth, or the number of flat bands (2 to 64)
+-~>   from, to (linear) or center, r (radial): where it sits, in the drawing's space
+-~>   origin, axis, scale   the same, worked out for the rasterizer (fb.span_gradient)
+-~> Stops are colors (spread evenly), [t, color] pairs, or hard(color) for an
+-~> edge. A hard stop starts a new flat color where it is, with no blending
+-~> from the stop before: [#fff, #333, hard(#c00), #000] is a smooth white to
+-~> grey, a sharp step to red, then a smooth red to black. [t, color, "hard"]
+-~> does the same at a chosen t. Past the first and last stop the color stays.
+
+let gradient_max_steps = 64
+
+-~> True when v is a gradient value (see linear and radial).
+function is_gradient(v) {
+  type(v) == "HASH" && (v["kind"] == "linear" || v["kind"] == "radial") && type(v["stops"]) == "ARRAY"
+}
+
+-~> Marks a stop as an edge: its color starts right at its place instead of
+-~> blending from the stop before.
+-~> color: the color after the edge
+-~> example: linear((0, 0), (200, 0), [#f4d35e, #ee964b, hard(#e0607a), #3d1c4f])
+function hard(color) {
+  need_color("hard", "color", color)
+  {"hard": color}
+}
+
+-~> The stops as a list of [t, color], with the missing t spread evenly and
+-~> each hard stop written as two stops (the old color, then the new one).
+function gradient_stops(call, stops) {
+  if (type(stops) != "ARRAY" || len(stops) < 2) {
+    reject(call, "stops must be a list of at least two colors, like [#f4d35e, #3d1c4f]")
+  }
+  let n = len(stops)
+  let out = []
+  let before = null
+  let last_t = 0.0
+  for (let i = 0; i < n; i = i + 1) {
+    let item = stops[i]
+    let t = i / (n - 1.0)
+    let color = null
+    let edge = false
+    if (type(item) == "COLOR") {
+      color = item
+    } elif (type(item) == "HASH" && type(item["hard"]) == "COLOR") {
+      color = item["hard"]
+      edge = true
+    } elif (type(item) == "ARRAY" && (len(item) == 2 || len(item) == 3)) {
+      need_number(call, "stop " + str(i) + " position", item[0])
+      need_color(call, "stop " + str(i) + " color", item[1])
+      t = item[0]
+      color = item[1]
+      if (len(item) == 3) {
+        if (item[2] != "hard") {
+          reject(call, "stop " + str(i) + " can only have \"hard\" as its third item")
+        }
+        edge = true
+      }
+    } else {
+      reject(call, "stop " + str(i) + " must be a color, hard(color) or [t, color], not " + type(item))
+    }
+    if (t < 0 || t > 1) {
+      reject(call, "stop " + str(i) + " position must be from 0 to 1, not " + str(t))
+    }
+    if (t < last_t) {
+      reject(call, "stops must go in order, but stop " + str(i) + " is before the one above it")
+    }
+    if (edge && before !== null) {
+      push(out, [t, before])
+    }
+    push(out, [t, color])
+    before = color
+    last_t = t
+  }
+  out
+}
+
+function need_steps(call, steps) {
+  if (type(steps) != "INTEGER" || steps < 0 || steps == 1 || steps > gradient_max_steps) {
+    reject(call, "steps must be 0 (smooth) or a whole number from 2 to " + str(gradient_max_steps) + ", not " + str(steps))
+  }
+}
+
+-~> A gradient that runs along a line, from one point to another.
+-~> from: where the first stop is, a point
+-~> to: where the last stop is, a point
+-~> stops: colors, [t, color] pairs or hard(color), at least two
+-~> steps: 0 for smooth, or 2 to 64 for that many flat bands
+-~> example: rect((0, 0), (200, 100), linear((0, 0), (200, 0), [#f4d35e, #3d1c4f]))
+function linear(from, to, stops, steps = 0) {
+  need_point("linear", "from", from)
+  need_point("linear", "to", to)
+  need_steps("linear", steps)
+  let list_of_stops = gradient_stops("linear", stops)
+  let dx = float(to.x - from.x)
+  let dy = float(to.y - from.y)
+  let len2 = dx * dx + dy * dy
+  if (len2 == 0) {
+    reject("linear", "from and to must be different points")
+  }
+  {"kind": "linear", "from": from, "to": to, "stops": list_of_stops, "steps": steps,
+   "origin": from, "axis": (dx / len2, dy / len2), "scale": 0.0}
+}
+
+-~> A gradient that runs outwards from a point, as circles.
+-~> center: where the first stop is, a point
+-~> r: the distance where the last stop is, in pixels
+-~> stops: colors, [t, color] pairs or hard(color), at least two
+-~> steps: 0 for smooth, or 2 to 64 for that many flat rings
+-~> example: circle((100, 100), 80, radial((100, 100), 80, [#fff3c4, #e0607a]))
+function radial(center, r, stops, steps = 0) {
+  need_point("radial", "center", center)
+  need_number("radial", "r", r)
+  if (r <= 0) {
+    reject("radial", "r must be more than 0, not " + str(r))
+  }
+  need_steps("radial", steps)
+  let list_of_stops = gradient_stops("radial", stops)
+  {"kind": "radial", "center": center, "r": r, "stops": list_of_stops, "steps": steps,
+   "origin": center, "axis": (0.0, 0.0), "scale": 1.0 / r}
+}
+
+-~> The color of a gradient at t (0 to 1), steps included. The rasterizer does
+-~> the same for each pixel; this is for the SVG writer and for tests.
+function gradient_color_at(g, t) {
+  t = math.max(0.0, math.min(1.0, t))
+  if (g.steps >= 2) {
+    t = math.min(math.floor(t * g.steps), g.steps - 1) / (g.steps - 1.0)
+  }
+  let st = g.stops
+  if (t <= st[0][0]) {
+    return st[0][1]
+  }
+  let j = 0
+  while (j < len(st) && st[j][0] <= t) {
+    j = j + 1
+  }
+  if (j == len(st)) {
+    return st[len(st) - 1][1]
+  }
+  let a = st[j - 1]
+  let b = st[j]
+  let f = (t - a[0]) / (b[0] - a[0])
+  rgba(math.round(lerp(a[1].r, b[1].r, f)), math.round(lerp(a[1].g, b[1].g, f)),
+       math.round(lerp(a[1].b, b[1].b, f)), math.round(lerp(a[1].a, b[1].a, f)))
+}
+
+-~> The stops an SVG needs: the stops themselves, or for a stepped gradient
+-~> two stops (same color) for each band.
+function gradient_svg_stops(g) {
+  if (g.steps < 2) {
+    return g.stops
+  }
+  let out = []
+  for (let i = 0; i < g.steps; i = i + 1) {
+    let c = gradient_color_at(g, i / (g.steps - 1.0))
+    push(out, [i / float(g.steps), c])
+    push(out, [(i + 1) / float(g.steps), c])
+  }
+  out
+}

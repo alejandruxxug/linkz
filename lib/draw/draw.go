@@ -12,4 +12,4 @@ var Files embed.FS
 // Order is the order the libraries load in, since a library can use what the
 // ones before it define. here.liz must come first: the host replaces its
 // here() with the real one after loading it.
-var Order = []string{"here.liz", "geometry.liz", "pens.liz", "shapes.liz", "svg.liz"}
+var Order = []string{"here.liz", "geometry.liz", "pens.liz", "shapes.liz", "gradient.liz", "blend.liz", "svg.liz"}

@@ -1,0 +1,16 @@
+-~> Gradients painted by raster.paint: smooth, stepped, hard, radial, moved, soft ends.
+fb.fill((0, 0), (220, 120), #ffffff)
+let shapes = []
+-~> Row 0 to 19: red to blue, first pixel center is exactly the first stop.
+push(shapes, rect((0, 0), (101, 20), linear((0.5, 0), (100.5, 0), [#ff0000, #0000ff])))
+-~> Row 20 to 39: four flat bands of 25 pixels, black to white.
+push(shapes, rect((0, 20), (100, 20), linear((0, 0), (100, 0), [#000000, #ffffff], 4)))
+-~> Row 40 to 59: a hard edge in the middle.
+push(shapes, rect((0, 40), (100, 20), linear((0, 0), (100, 0), [[0, #ff0000], [0.5, #0000ff, "hard"], [1, #0000ff]])))
+-~> A radial circle, black in the middle to white at the rim.
+push(shapes, circle((160, 30), 30, radial((160, 30), 30, [#000000, #ffffff])))
+-~> A soft left edge (half of pixel 150) over the white.
+push(shapes, rect((150.5, 70), (30, 10), linear((150.5, 0), (180.5, 0), [#000000, #000000])))
+raster.paint(shapes, (0, 0))
+-~> The same gradient painted 80 rows down: it moves with the shape.
+raster.paint([rect((0, 0), (101, 20), linear((0.5, 0), (100.5, 0), [#ff0000, #0000ff]))], (0, 80))

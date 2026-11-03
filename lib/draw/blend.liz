@@ -1,0 +1,43 @@
+-~> blend: how a layer is mixed with what is behind it. Call these inside a
+-~> layer, usually as its first lines:
+-~>   layer shadows
+-~>     blend("multiply")
+-~>     opacity(0.6)
+-~>     circle(...)
+-~> They set the look of the layer the call is in (see layer_styles in shapes.liz).
+
+let blend_modes = ["normal", "multiply", "screen", "overlay", "darken", "lighten", "add"]
+
+-~> The style of the layer the running call is in, or an error when it is not in one.
+function current_layer_style(call) {
+  let where = here()
+  if (type(where) != "HASH" || type(where.layer) != "ARRAY" || len(where.layer) == 0) {
+    reject(call, call + "() goes inside a layer")
+  }
+  styles_for(where.layer)[len(where.layer) - 1]
+}
+
+-~> Sets how the layer it is in mixes with what is behind it.
+-~> mode: "normal", "multiply", "screen", "overlay", "darken", "lighten" or "add"
+-~> example: blend("multiply")
+function blend(mode) {
+  let style = current_layer_style("blend")
+  if (list.index(blend_modes, mode) < 0) {
+    reject("blend", "mode must be one of " + text.join(blend_modes, ", ") + ", not " + str(mode))
+  }
+  style.mode = mode
+  null
+}
+
+-~> Sets how see-through the layer it is in is: 1 is solid, 0 is invisible.
+-~> x: a number from 0 to 1
+-~> example: opacity(0.8)
+function opacity(x) {
+  let style = current_layer_style("opacity")
+  need_number("opacity", "x", x)
+  if (x < 0 || x > 1) {
+    reject("opacity", "x must be from 0 to 1, not " + str(x))
+  }
+  style.opacity = float(x)
+  null
+}

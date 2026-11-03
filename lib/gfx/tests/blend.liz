@@ -1,0 +1,40 @@
+-~> Layer blend modes and opacity over a dark backdrop (#404040, 64).
+-~> Each layer paints a 20 by 20 square: x = 0 multiply, 20 screen, 40 overlay,
+-~> 60 darken, 80 lighten, 100 add, 120 opacity 0.5, 140 normal (no style).
+-~> The backdrop is drawn last because shapes drawn later are behind.
+
+layer mul
+  blend("multiply")
+  rect((0, 0), (20, 20), #808080)
+layer scr
+  blend("screen")
+  rect((20, 0), (20, 20), #808080)
+layer ovl
+  blend("overlay")
+  rect((40, 0), (20, 20), #c8c8c8)
+layer dark
+  blend("darken")
+  rect((60, 0), (20, 20), #c8c8c8)
+layer light
+  blend("lighten")
+  rect((80, 0), (20, 20), #c8c8c8)
+layer plus
+  blend("add")
+  rect((100, 0), (20, 20), #808080)
+layer half
+  opacity(0.5)
+  rect((120, 0), (20, 20), #ffffff)
+layer plain
+  rect((140, 0), (20, 20), #ff0000)
+-~> A child's mode works inside its parent's buffer: the gray multiplies the
+-~> parent's white, and the result is shown at half opacity.
+layer outer
+  opacity(0.5)
+  layer inner
+    blend("multiply")
+    rect((160, 0), (20, 20), #808080)
+  rect((160, 0), (20, 20), #ffffff)
+layer base
+  rect((0, 0), (200, 40), #404040)
+
+raster.paint(drawing, (0, 0))

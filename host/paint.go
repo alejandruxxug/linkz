@@ -55,6 +55,7 @@ func Paint(source, out string, w, h int, stdout io.Writer) error {
 			return err
 		}
 	}
+	defer trackLayers(env)()
 	if err := run("program", source); err != nil {
 		return err
 	}

@@ -1,0 +1,14 @@
+["a"] [{"mode": "multiply", "opacity": 0.5}]
+[{"mode": "screen", "opacity": 0.5}] {"mode": "screen", "opacity": 0.5}
+[{"mode": "screen", "opacity": 0.5}, {"mode": "normal", "opacity": 0.25}]
+true false
+2 a a/b
+normal
+multiply
+screen
+overlay
+darken
+lighten
+add
+["shape", "open", "shape", "open", "shape", "close", "shape", "close"]
+false true

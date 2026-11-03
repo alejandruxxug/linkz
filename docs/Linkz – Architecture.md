@@ -6,6 +6,7 @@
 2. **Logic lives in `lib/*.liz`.** Shapes, SVG, rasterizing, tracing, the MCP protocol, JSON: all lizard-script.
 3. **Missing language feature → fix the language.** If lizard needs floats, `use` or more speed, that work goes into lizard-script (logged in [[Linkz – Language Needs]]), not into a Go workaround here.
 4. **Slow lizard is data.** Measure it, log it, and make the language faster.
+5. **The one exception: per-pixel color math.** Gradients and layer blend modes are evaluated by Go for each pixel, like a shader (`host/gradient.go`: `fb.span_gradient`, `fb.spans_gradient`; `host/blend.go`: `fb.push_layer`, `fb.pop_layer`, `fb.composite`). Lizard still decides everything else: it builds the gradient (stops, steps, projection axis or center, in `lib/draw/gradient.liz`), says which layers need a buffer and in which order they nest (`lib/draw/shapes.liz`, `lib/gfx/raster.liz`), and writes the SVG. Go only interpolates colors and mixes buffers. Revisit when the language is fast enough to do it per pixel.
 
 ## 🪟 The native app
 

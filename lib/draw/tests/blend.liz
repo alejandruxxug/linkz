@@ -1,0 +1,46 @@
+-~> blend() and opacity() set the style of the layer the call is in.
+-~> Tests give shapes a layer by replacing here().
+
+let path = ["a"]
+let here = function() { {"line": null, "layer": path} }
+
+blend("multiply")
+opacity(0.5)
+let s1 = rect((0, 0), (10, 10), #ff0000)
+puts(s1.layer, s1.styles)
+
+-~> The style is shared, so a call after the shape still reaches it.
+blend("screen")
+puts(s1.styles, layer_styles["a"])
+
+-~> A nested layer has its own style; the shape holds one for each level.
+path = ["a", "b"]
+opacity(0.25)
+let s2 = rect((0, 0), (10, 10), #00ff00)
+puts(s2.styles)
+puts(layer_is_styled(layer_styles["a"]), layer_is_styled({"mode": "normal", "opacity": 1.0}))
+puts(len(layer_chain(s2)), layer_chain(s2)[0][0], layer_chain(s2)[1][0])
+
+-~> Every mode is accepted.
+path = ["m"]
+for (let i = 0; i < len(blend_modes); i = i + 1) {
+  blend(blend_modes[i])
+  puts(layer_styles["m"].mode)
+}
+
+-~> Events: one group per styled layer; a layer with no style makes none.
+path = ["plain"]
+let p = rect((0, 0), (1, 1), #000)
+path = ["a"]
+let q = rect((0, 0), (1, 1), #111)
+path = ["a", "b"]
+let r = rect((0, 0), (1, 1), #222)
+path = ["a"]
+let t = rect((0, 0), (1, 1), #333)
+let ev = layer_events([p, q, r, t])
+let kinds = []
+for (let i = 0; i < len(ev); i = i + 1) {
+  push(kinds, ev[i][0])
+}
+puts(kinds)
+puts(any_styled([p]), any_styled([p, q]))

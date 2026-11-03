@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="320" viewBox="0 0 480 320">
+  <rect width="480" height="320" fill="#f4f1e8"/>
+  <defs>
+    <linearGradient id="g0" gradientUnits="userSpaceOnUse" x1="20" y1="20" x2="20" y2="170">
+      <stop offset="0" stop-color="#3d1c4f"/>
+      <stop offset="0.6" stop-color="#e0607a"/>
+      <stop offset="1" stop-color="#f4d35e"/>
+    </linearGradient>
+    <linearGradient id="g1" gradientUnits="userSpaceOnUse" x1="40" y1="0" x2="300" y2="0">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#3d1c4f"/>
+    </linearGradient>
+    <linearGradient id="g2" gradientUnits="userSpaceOnUse" x1="250" y1="0" x2="460" y2="0">
+      <stop offset="0" stop-color="#f4d35e"/>
+      <stop offset="0.33" stop-color="#ee964b"/>
+      <stop offset="0.67" stop-color="#ee964b"/>
+      <stop offset="0.67" stop-color="#e0607a"/>
+      <stop offset="1" stop-color="#3d1c4f"/>
+    </linearGradient>
+    <linearGradient id="g3" gradientUnits="userSpaceOnUse" x1="20" y1="0" x2="230" y2="0">
+      <stop offset="0" stop-color="#2d6a8f"/>
+      <stop offset="0.17" stop-color="#2d6a8f"/>
+      <stop offset="0.17" stop-color="#467fa0"/>
+      <stop offset="0.33" stop-color="#467fa0"/>
+      <stop offset="0.33" stop-color="#5f94b1"/>
+      <stop offset="0.5" stop-color="#5f94b1"/>
+      <stop offset="0.5" stop-color="#77a9c2"/>
+      <stop offset="0.67" stop-color="#77a9c2"/>
+      <stop offset="0.67" stop-color="#90bed3"/>
+      <stop offset="0.83" stop-color="#90bed3"/>
+      <stop offset="0.83" stop-color="#a9d3e4"/>
+      <stop offset="1" stop-color="#a9d3e4"/>
+    </linearGradient>
+    <radialGradient id="g4" gradientUnits="userSpaceOnUse" cx="380" cy="70" r="44">
+      <stop offset="0" stop-color="#fff3c4"/>
+      <stop offset="0.5" stop-color="#f2a65a"/>
+      <stop offset="1" stop-color="#e0607a"/>
+    </radialGradient>
+  </defs>
+  <path d="M 20 20 L 320 20 L 320 170 L 20 170 Z" fill="url(#g0)"/>
+  <path d="M 40 160 L 300 40" fill="none" stroke="url(#g1)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M 250 190 L 460 190 L 460 290 L 250 290 Z" fill="url(#g2)"/>
+  <path d="M 20 190 L 230 190 L 230 290 L 20 290 Z" fill="url(#g3)"/>
+  <path d="M 424 70 C 424 94.3 404.3 114 380 114 C 355.7 114 336 94.3 336 70 C 336 45.7 355.7 26 380 26 C 404.3 26 424 45.7 424 70 Z" fill="url(#g4)"/>
+</svg>

@@ -1,0 +1,17 @@
+-~> lzdraw 1
+-~> Gradients are values: give one wherever a fill or stroke color goes.
+-~> linear(from, to, stops) runs along a line, radial(center, r, stops) outwards.
+-~> steps = n makes n flat bands, and hard(color) is a sharp edge.
+
+canvas = {"size": (480, 320), "background": #f4f1e8}
+
+layer sun
+  circle((380, 70), 44, radial((380, 70), 44, [#fff3c4, #f2a65a, #e0607a]))
+
+layer bands
+  rect((20, 190), (210, 100), linear((20, 0), (230, 0), [#2d6a8f, #a9d3e4], 6))
+  rect((250, 190), (210, 100), linear((250, 0), (460, 0), [#f4d35e, #ee964b, hard(#e0607a), #3d1c4f]))
+
+layer sky
+  line((40, 160), (300, 40), linear((40, 0), (300, 0), [#ffffff, #3d1c4f]), 8)
+  rect((20, 20), (300, 150), linear((20, 20), (20, 170), [[0, #3d1c4f], [0.6, #e0607a], [1, #f4d35e]]))

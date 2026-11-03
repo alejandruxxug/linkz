@@ -14,6 +14,7 @@ import (
 	"lizardscript/lexer"
 	"lizardscript/object"
 	"lizardscript/parser"
+	"lizardscript/token"
 )
 
 var update = flag.Bool("update", false, "rewrite the .expected files with the current output")
@@ -111,6 +112,7 @@ func TestExamples(t *testing.T) {
 			}
 			var out bytes.Buffer
 			env := load(t, &out)
+			defer trackLayers(env)()
 			if err := run(string(source), env); err != nil {
 				t.Fatal(err)
 			}
@@ -122,4 +124,29 @@ func TestExamples(t *testing.T) {
 			check(t, filepath.Join("tests", "golden", name+".svg.expected"), svg.Value)
 		})
 	}
+}
+
+// trackLayers makes here() report the layer path, like the host does, so the
+// examples' layers reach the shapes. It returns a function that undoes it.
+func trackLayers(env *object.Environment) func() {
+	prev := evaluator.OnLayer
+	var layers []string
+	evaluator.OnLayer = func(name string, enter bool, tok token.Token) {
+		if enter {
+			layers = append(layers, name)
+		} else if len(layers) > 0 {
+			layers = layers[:len(layers)-1]
+		}
+	}
+	env.Define("here", &object.Builtin{Name: "here", Fn: func(args ...object.Object) object.Object {
+		path := &object.Array{}
+		for _, l := range layers {
+			path.Elements = append(path.Elements, &object.String{Value: l})
+		}
+		h := object.NewHash()
+		h.Set(&object.String{Value: "line"}, &object.Null{})
+		h.Set(&object.String{Value: "layer"}, path)
+		return h
+	}})
+	return func() { evaluator.OnLayer = prev }
 }

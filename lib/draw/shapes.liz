@@ -24,7 +24,7 @@ function draw(shape) {
     shape.line = where.line
     shape.layer = where.layer
   }
-  push(drawing, shape)
+  push(drawing, add_styles(shape, where))
   shape
 }
 
@@ -120,7 +120,7 @@ function paint_order(shapes) {
 function circle(center, r, fill) {
   need_point("circle", "center", center)
   need_number("circle", "r", r)
-  need_color("circle", "fill", fill)
+  need_paint("circle", "fill", fill)
   make_shape("circle", [center, r, fill], ellipse_path(center, (r, r)), fill, null, 0,
              [make_anchor(center, 0, null, "move"), make_anchor(center + (r, 0), 1, null, "radius")])
 }
@@ -133,7 +133,7 @@ function circle(center, r, fill) {
 function ellipse(center, radii, fill) {
   need_point("ellipse", "center", center)
   need_point("ellipse", "radii", radii)
-  need_color("ellipse", "fill", fill)
+  need_paint("ellipse", "fill", fill)
   make_shape("ellipse", [center, radii, fill], ellipse_path(center, radii), fill, null, 0,
              [make_anchor(center, 0, null, "move"), make_anchor(center + radii, 1, null, "corner")])
 }
@@ -146,7 +146,7 @@ function ellipse(center, radii, fill) {
 function rect(pos, size, fill) {
   need_point("rect", "pos", pos)
   need_point("rect", "size", size)
-  need_color("rect", "fill", fill)
+  need_paint("rect", "fill", fill)
   let path = [["M", pos], ["L", (pos.x + size.x, pos.y)], ["L", pos + size], ["L", (pos.x, pos.y + size.y)], ["Z"]]
   make_shape("rect", [pos, size, fill], path, fill, null, 0,
              [make_anchor(pos, 0, null, "move"), make_anchor(pos + size, 1, null, "corner")])
@@ -161,7 +161,7 @@ function rect(pos, size, fill) {
 function line(a, b, color, width) {
   need_point("line", "a", a)
   need_point("line", "b", b)
-  need_color("line", "color", color)
+  need_paint("line", "color", color)
   need_number("line", "width", width)
   make_shape("line", [a, b, color, width], [["M", a], ["L", b]], null, color, width,
              [make_anchor(a, 0, null, "point"), make_anchor(b, 1, null, "point")])
@@ -173,7 +173,7 @@ function line(a, b, color, width) {
 -~> example: polygon([(100, 20), (180, 120), (20, 120)], #c0392b)
 function polygon(points, fill) {
   need_points("polygon", "points", points)
-  need_color("polygon", "fill", fill)
+  need_paint("polygon", "fill", fill)
   let path = [["M", points[0]]]
   for (let i = 1; i < len(points); i = i + 1) {
     push(path, ["L", points[i]])
@@ -190,7 +190,7 @@ function polygon(points, fill) {
 -~> example: stroke([(40, 300), (120, 210), (260, 240), (380, 120)], #1d1d1f, 4)
 function stroke(points, color, width) {
   need_points("stroke", "points", points)
-  need_color("stroke", "color", color)
+  need_paint("stroke", "color", color)
   need_number("stroke", "width", width)
   make_shape("stroke", [points, color, width], smooth_path(points), null, color, width, anchors_of(points))
 }
@@ -336,4 +336,104 @@ function brush(points, pressures, color, pen) {
   shape.widths = widths
   shape.opacities = opacities
   shape
+}
+
+-~> Shapes also carry `styles`: one {"mode", "opacity"} hash for each level of
+-~> their `layer` path (see blend.liz). A fill or stroke is a color or a
+-~> gradient value (see gradient.liz).
+
+-~> Gives a shape the style hashes of its layer path. Returns the shape.
+function add_styles(shape, where) {
+  if (type(where) == "HASH" && type(where.layer) == "ARRAY") {
+    shape.styles = styles_for(where.layer)
+  }
+  shape
+}
+
+-~> The look of each layer, kept by the layer's path: {"mode", "opacity"}.
+-~> A shape holds the very same hashes, so blend() and opacity() reach a
+-~> shape drawn before they were called.
+let layer_styles = {}
+
+-~> The key of a layer path in layer_styles: the first `depth` names joined by "/".
+function layer_key(path, depth) {
+  text.join(list.slice(path, 0, depth), "/")
+}
+
+-~> The style hashes of every level of a layer path, outermost first (made on first use).
+function styles_for(path) {
+  let out = []
+  for (let i = 1; i <= len(path); i = i + 1) {
+    let key = layer_key(path, i)
+    if (layer_styles[key] === null) {
+      layer_styles[key] = {"mode": "normal", "opacity": 1.0}
+    }
+    push(out, layer_styles[key])
+  }
+  out
+}
+
+-~> True when a layer style changes how the layer is mixed with what is below.
+function layer_is_styled(style) {
+  style.mode != "normal" || style.opacity < 1
+}
+
+-~> The styled layers a shape is inside, outermost first: [[key, style], ...].
+function layer_chain(shape) {
+  let out = []
+  if (type(shape.styles) != "ARRAY") {
+    return out
+  }
+  for (let i = 0; i < len(shape.styles); i = i + 1) {
+    if (layer_is_styled(shape.styles[i])) {
+      push(out, [layer_key(shape.layer, i + 1), shape.styles[i]])
+    }
+  }
+  out
+}
+
+-~> True when any of the shapes sits in a layer with a blend mode or an opacity.
+function any_styled(shapes) {
+  for (let i = 0; i < len(shapes); i = i + 1) {
+    if (len(layer_chain(shapes[i])) > 0) {
+      return true
+    }
+  }
+  false
+}
+
+-~> The shapes (already in paint order) as a flat list of events, so a writer
+-~> can wrap each styled layer: ["open", style], ["shape", shape], ["close", style].
+-~> Only layers with a blend mode or an opacity open a group.
+function layer_events(ordered) {
+  let events = []
+  let open = []
+  for (let i = 0; i < len(ordered); i = i + 1) {
+    let chain = layer_chain(ordered[i])
+    let keep = 0
+    while (keep < len(open) && keep < len(chain) && open[keep][0] == chain[keep][0]) {
+      keep = keep + 1
+    }
+    while (len(open) > keep) {
+      push(events, ["close", open[len(open) - 1][1]])
+      list.remove(open, len(open) - 1)
+    }
+    for (let k = keep; k < len(chain); k = k + 1) {
+      push(events, ["open", chain[k][1]])
+      push(open, chain[k])
+    }
+    push(events, ["shape", ordered[i]])
+  }
+  while (len(open) > 0) {
+    push(events, ["close", open[len(open) - 1][1]])
+    list.remove(open, len(open) - 1)
+  }
+  events
+}
+
+-~> A fill or stroke: a color, or a gradient value from linear() or radial().
+function need_paint(call, name, v) {
+  if (!is_gradient(v)) {
+    need_color(call, name, v)
+  }
 }

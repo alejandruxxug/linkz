@@ -1,4 +1,5 @@
--~> raster: turns paths into pixel spans, using only fb.span / fb.spans.
+-~> raster: turns paths into pixel spans, using only fb.span / fb.spans (and
+-~> fb.spans_gradient, fb.push_layer, fb.pop_layer for gradients and blend modes).
 -~> A span is [y, x0, x1]: row y, from x0 up to (not including) x1. The ends
 -~> are floats, so the left and right edges of a shape are soft. A row is
 -~> sampled at its middle (y + 0.5), so there is no soft edge up or down.
@@ -331,23 +332,52 @@ function raster_shape(shape) {
   out
 }
 
-function raster_draw(spans, offset, color) {
-  fb.spans(spans, offset, color)
+-~> Draws spans in a color, or in a gradient value (linear() / radial()),
+-~> which the host evaluates for each pixel.
+function raster_draw(spans, offset, paint) {
+  if (type(paint) == "HASH") {
+    fb.spans_gradient(spans, offset, paint)
+  } else {
+    fb.spans(spans, offset, paint)
+  }
 }
 
--~> Draws shapes back to front (paint_order), each shape's fill and then its stroke.
+-~> One shape: its fill and then its stroke.
+function raster_paint_shape(s, offset) {
+  let r = raster_shape(s)
+  if (r.fill !== null) {
+    raster_draw(r.fill, offset, s.fill)
+  }
+  if (r.stroke !== null) {
+    raster_draw(r.stroke, offset, s.stroke)
+  }
+}
+
+-~> Draws shapes back to front (paint_order), each shape's fill and then its
+-~> stroke. A layer with a blend mode or an opacity (see blend.liz) is drawn
+-~> in a buffer of its own and mixed onto the one below when it is done;
+-~> a layer inside it is mixed inside that buffer. Without such layers the
+-~> shapes are drawn straight on the target.
 function raster_paint(shapes, offset) {
   let ordered = paint_order(shapes)
-  for (let i = 0; i < len(ordered); i = i + 1) {
-    let s = ordered[i]
-    let r = raster_shape(s)
-    if (r.fill !== null) {
-      raster_draw(r.fill, offset, s.fill)
+  if (!any_styled(ordered)) {
+    for (let i = 0; i < len(ordered); i = i + 1) {
+      raster_paint_shape(ordered[i], offset)
     }
-    if (r.stroke !== null) {
-      raster_draw(r.stroke, offset, s.stroke)
+    return null
+  }
+  let events = layer_events(ordered)
+  for (let i = 0; i < len(events); i = i + 1) {
+    let kind = events[i][0]
+    if (kind == "shape") {
+      raster_paint_shape(events[i][1], offset)
+    } elif (kind == "open") {
+      fb.push_layer()
+    } else {
+      fb.pop_layer(events[i][1].mode, events[i][1].opacity)
     }
   }
+  null
 }
 
 raster.fill = raster_fill

@@ -30,6 +30,7 @@ type FB struct {
 	final   *image.RGBA     // the composited window image
 	all     bool            // present everything next time
 	kept    map[string]*Buf // offscreen buffers lizard asked to keep
+	layers  []*Buf          // targets below the layer buffers (fb.push_layer)
 }
 
 // NewFB makes a framebuffer for a window of w by h pixels. The UI buffer is
@@ -222,6 +223,12 @@ func (f *FB) Builtins() *object.Hash {
 		"save_png":  f.savePNG,
 		"load_png":  f.loadPNG,
 		"blit":      f.blit,
+
+		"span_gradient":  f.spanGradient,
+		"spans_gradient": f.spansGradient,
+		"push_layer":     f.pushLayer,
+		"pop_layer":      f.popLayer,
+		"composite":      f.composite,
 	})
 }
 

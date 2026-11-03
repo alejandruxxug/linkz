@@ -232,3 +232,60 @@ font.draw("!", (44, 10), #000000, 9)
 		{38, 20, white, 0, "right of the scaled bar"},
 	})
 }
+
+func TestGradient(t *testing.T) {
+	img, _ := scene(t, "gradient", 220, 120)
+	gray := func(v uint8) [3]uint8 { return [3]uint8{v, v, v} }
+	check(t, img, []px{
+		// Smooth: the ends are the stops, the middle is halfway.
+		{0, 10, red, 0, "first pixel is the first stop"},
+		{50, 10, [3]uint8{128, 0, 127}, 1, "midpoint"},
+		{100, 10, blue, 0, "last pixel is the last stop"},
+		{25, 10, [3]uint8{191, 0, 64}, 1, "quarter"},
+		// Steps: four flat bands of 25 pixels, 0, 85, 170, 255.
+		{0, 30, gray(0), 0, "band 1 start"},
+		{24, 30, gray(0), 0, "band 1 end is flat"},
+		{25, 30, gray(85), 0, "band 2 start"},
+		{49, 30, gray(85), 0, "band 2 end is flat"},
+		{60, 30, gray(170), 0, "band 3"},
+		{99, 30, gray(255), 0, "band 4 reaches the last stop"},
+		// Hard stop: flat red, then blue, nothing between.
+		{0, 50, red, 0, "before the edge"},
+		{25, 50, red, 0, "still red, no blending"},
+		{49, 50, red, 0, "last red pixel"},
+		{50, 50, blue, 0, "first blue pixel"},
+		{99, 50, blue, 0, "after the edge"},
+		// Radial: black in the middle, white at the rim.
+		{160, 30, gray(6), 6, "center"},
+		{175, 30, gray(132), 2, "half way out"},
+		{189, 30, gray(250), 6, "rim"},
+		{160, 62, white, 0, "outside the circle"},
+		// A soft edge still blends: half of pixel 150 over white.
+		{149, 75, white, 0, "before the soft edge"},
+		{150, 75, gray(128), 2, "half covered"},
+		{151, 75, gray(0), 0, "covered"},
+		// Moved by the offset.
+		{0, 90, red, 0, "moved: first stop"},
+		{50, 90, [3]uint8{128, 0, 127}, 1, "moved: midpoint"},
+		{100, 90, blue, 0, "moved: last stop"},
+		{50, 79, white, 0, "moved: nothing left behind"},
+	})
+}
+
+func TestBlend(t *testing.T) {
+	img, _ := scene(t, "blend", 200, 40)
+	g := func(v uint8) [3]uint8 { return [3]uint8{v, v, v} }
+	check(t, img, []px{
+		{10, 10, g(32), 1, "multiply darkens: 64 x 128"},
+		{30, 10, g(160), 1, "screen lightens"},
+		{50, 10, g(100), 1, "overlay on a dark backdrop"},
+		{70, 10, g(64), 0, "darken keeps the backdrop"},
+		{90, 10, g(200), 0, "lighten takes the layer"},
+		{110, 10, g(192), 1, "add"},
+		{130, 10, g(160), 1, "opacity 0.5 halves the white"},
+		{150, 10, red, 0, "a layer without a mode paints straight"},
+		{170, 10, g(96), 1, "nested multiply stays inside the parent buffer"},
+		{190, 10, g(64), 0, "the backdrop is untouched"},
+		{10, 30, g(64), 0, "below the layers"},
+	})
+}

@@ -1,0 +1,23 @@
+-~> lzdraw 1
+-~> A layer can change how it mixes with what is behind it: blend() takes
+-~> normal, multiply, screen, overlay, darken, lighten or add, and opacity()
+-~> makes the whole layer see-through. Call them inside the layer.
+
+canvas = {"size": (480, 320), "background": #f6d9a8}
+
+layer glow
+  blend("screen")
+  opacity(0.8)
+  circle((330, 120), 70, #3a6ea5)
+
+layer shadow
+  blend("multiply")
+  circle((170, 130), 80, #c9a26b)
+  circle((250, 130), 80, #7a9ec4)
+  layer inner
+    opacity(0.5)
+    rect((60, 200), (200, 60), #5a3a2a)
+
+layer ground
+  rect((0, 270), (480, 50), #8a6a4a)
+  rect((0, 0), (480, 270), #f2a65a)

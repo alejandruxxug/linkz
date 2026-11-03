@@ -32,6 +32,7 @@ func Render(source string, out io.Writer) (string, error) {
 		}
 	}
 
+	defer trackLayers(env)()
 	if _, err := run(source, env); err != nil {
 		return "", err
 	}

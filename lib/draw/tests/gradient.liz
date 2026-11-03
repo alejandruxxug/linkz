@@ -1,0 +1,26 @@
+-~> gradient: linear and radial values, stops, hard stops, steps, and use as a fill.
+
+let g = linear((0, 0), (100, 0), [#ff0000, #0000ff])
+puts(g.kind, g.stops, g.steps, g.origin, g.axis, is_gradient(g), is_gradient(#fff), is_gradient({}))
+
+-~> Positions given, three stops.
+puts(linear((0, 0), (0, 50), [[0, #000000], [0.25, #ff0000], [1, #ffffff]]).stops)
+
+-~> A hard stop is two stops at one place: the old color, then the new one.
+puts(linear((0, 0), (10, 0), [#ffffff, #333333, hard(#cc0000), #000000]).stops)
+puts(linear((0, 0), (10, 0), [[0, #ffffff], [0.5, #00ff00, "hard"], [1, #000000]]).stops)
+
+let r = radial((50, 50), 40, [#ffffff, #000000], 4)
+puts(r.kind, r.center, r.r, r.steps, r.origin, r.scale)
+
+-~> Colors along a gradient, steps included.
+puts(gradient_color_at(g, 0), gradient_color_at(g, 0.5), gradient_color_at(g, 1), gradient_color_at(g, 2), gradient_color_at(g, -1))
+let s = linear((0, 0), (100, 0), [#000000, #ffffff], 4)
+puts(gradient_color_at(s, 0), gradient_color_at(s, 0.24), gradient_color_at(s, 0.26), gradient_color_at(s, 0.6), gradient_color_at(s, 1))
+let h = linear((0, 0), (10, 0), [#ffffff, #000000, hard(#ff0000), #ff0000])
+puts(gradient_color_at(h, 0.32), gradient_color_at(h, 0.34), gradient_color_at(h, 1))
+
+-~> A gradient goes where a color goes.
+let shape = circle((10, 10), 5, g)
+puts(shape.fill === g, rect((0, 0), (5, 5), r).fill.kind, line((0, 0), (9, 9), g, 2).stroke.kind)
+puts(stroke([(0, 0), (9, 9)], r, 2).stroke.kind, polygon([(0, 0), (9, 0), (9, 9)], g).fill.kind, ellipse((9, 9), (3, 4), g).fill.kind)
