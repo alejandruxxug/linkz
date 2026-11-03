@@ -3,6 +3,8 @@
 let fake_files = {}
 -~> The host gives the UI the evaluated settings.liz as this hash.
 let settings = {}
+let fake_time = {"now": 0}
+let time = {"ms": function() { fake_time.now }}
 let fake_clip = {"text": ""}
 let fake_os = {"locale": "en"}
 let fs = {

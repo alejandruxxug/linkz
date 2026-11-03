@@ -292,6 +292,9 @@ function view_toolbar() {
       x = x + 15
     }
   }
+  x = x + 4
+  push(out, {"id": "undo", "x": x, "y": 1, "w": 14, "h": 14, "icon": "undo", "label": "", "group": "bar"})
+  push(out, {"id": "redo", "x": x + 15, "y": 1, "w": 14, "h": 14, "icon": "redo", "label": "", "group": "bar"})
   let ex = t("button.export")
   let sv = t("button.save")
   let lg = text.upper(lang_get())
@@ -307,6 +310,22 @@ function view_toolbar() {
   if (view_has_home()) {
     push(out, {"id": "home", "x": rx - 20, "y": 1, "w": 14, "h": 14, "icon": "home", "label": "", "group": "bar"})
   }
+  out
+}
+
+-~> The x of the separator marks of the toolbar (between the groups of tools and before undo).
+function view_toolbar_seps() {
+  let out = []
+  let x = 3
+  for (let i = 0; i < len(view_tool_ids); i = i + 1) {
+    if (view_tool_ids[i] == "") {
+      push(out, x + 1)
+      x = x + 4
+    } else {
+      x = x + 15
+    }
+  }
+  push(out, x + 1)
   out
 }
 

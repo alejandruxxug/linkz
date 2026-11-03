@@ -20,7 +20,7 @@ function view_panel_key(name) {
     if (V.drag != null && V.drag.kind == "press") {
       press = V.drag.id
     }
-    return common + V.tool + "|" + view_hover_is(["tool", "bar"]) + "|" + str(V.picker) + "|" + str(view_has_home()) + "|" + press
+    return common + str(len(ed.undo) > 0) + str(len(ed.redo) > 0) + V.tool + "|" + view_hover_is(["tool", "bar"]) + "|" + str(V.picker) + "|" + str(view_has_home()) + "|" + press
   }
   if (name == "tabs") {
     return common + view_file_name() + "|" + str(ed_dirty()) + "|" + view_hover_is(["tab"])
@@ -32,7 +32,7 @@ function view_panel_key(name) {
     return common + str(V.ver) + "|" + str(V.focus) + "|" + view_hover_is(["field"]) + "|" + str(V.picker) + "|" + str(V.hover_anchor)
   }
   if (name == "status") {
-    return common + str(V.ver) + "|" + str(V.mouse_draw) + "|" + V.pen_note + "|" + V.tool
+    return common + str(V.ver) + "|" + str(V.mouse_draw) + "|" + V.pen_note + "|" + V.tool + "|" + str(ed_note_active())
   }
   view_canvas_key()
 }
@@ -55,6 +55,9 @@ function view_panel_paint(name) {
 
 -~> Shows the tooltip once the pointer has rested long enough.
 function view_tick() {
+  if (ed_note_active()) {
+    app.needs_paint = true
+  }
   if (V.tip_due > 0) {
     if (time.ms() >= V.tip_due) {
       V.tip_due = 0
@@ -120,7 +123,7 @@ function view_paint() {
   fb.unclip()
   V.paints = V.paints + 1
   V.painted_ms = time.ms() - t0
-  if (V.tip_due == 0) {
+  if (V.tip_due == 0 && !ed_note_active()) {
     app.needs_paint = false
   }
 }
@@ -287,6 +290,12 @@ function view_commands() {
       }
       r
     }
+  }
+  cmds["Undo"] = function(args) {
+    {"ok": view_undo(), "text": ed_undo_text(), "status": ed.note}
+  }
+  cmds["Redo"] = function(args) {
+    {"ok": view_redo(), "text": ed_redo_text(), "status": ed.note}
   }
   cmds["Tool"] = function(args) {
     view_commit_focus()

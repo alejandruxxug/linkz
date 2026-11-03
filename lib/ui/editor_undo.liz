@@ -11,7 +11,74 @@ let ed = {
   "errors": [], "shapes": [], "canvas": {"size": (512, 512), "background": #ffffff},
   "stale": false, "pending": true, "stats": {"ms": 0, "steps": 0}, "printed": "",
   "docs": null, "status": "", "refusal": null,
-  "color": "#1d1d1f", "width": 4, "pen": "ink"
+  "color": "#1d1d1f", "width": 4, "pen": "ink",
+  "undo_labels": [], "redo_labels": [], "label": null, "gesture_label": null,
+  "merge_col": -1, "merge_at": 0, "note": null
+}
+
+-~> How many steps the history keeps, and how long a pause (ms) ends a typing step.
+let ed_depth = 200
+let ed_pause = 1000
+
+function ed_now() {
+  time.ms()
+}
+
+-~> Names the next change for the Undo button and the status bar. key is one of the
+-~> "undo.*" texts of the language files without its prefix; vals fills its placeholders.
+function ed_label(key, vals = null) {
+  ed.label = {"key": "undo." + key, "vals": vals}
+}
+
+function ed_label_text(l) {
+  if (l == null) {
+    return ""
+  }
+  t(l.key, l.vals)
+}
+
+-~> The label a change gets: the one set with ed_label, else one made from the edit key.
+function ed_take_label(key) {
+  let l = ed.label
+  ed.label = null
+  if (l != null) {
+    return l
+  }
+  if (key == "type" || key == "backspace" || key == "delete") {
+    return {"key": "undo." + key, "vals": null}
+  }
+  {"key": "undo.edit", "vals": null}
+}
+
+function ed_push_undo(model, label) {
+  push(ed.undo, model)
+  push(ed.undo_labels, label)
+  while (len(ed.undo) > ed_depth) {
+    list.remove(ed.undo, 0)
+    list.remove(ed.undo_labels, 0)
+  }
+}
+
+-~> The text of what Undo (or Redo) would do, or "".
+function ed_undo_text() {
+  if (len(ed.undo_labels) == 0) {
+    return ""
+  }
+  ed_label_text(ed.undo_labels[len(ed.undo_labels) - 1])
+}
+
+function ed_redo_text() {
+  if (len(ed.redo_labels) == 0) {
+    return ""
+  }
+  ed_label_text(ed.redo_labels[len(ed.redo_labels) - 1])
+}
+
+-~> The status note "Undone: ..." is shown for this many ms.
+let ed_note_ms = 2500
+
+function ed_note_active() {
+  ed.note != null && ed_now() - ed.note.at < ed_note_ms
 }
 
 -~> The current model (an empty document until something is opened).
@@ -27,6 +94,10 @@ function ed_reset(code, file) {
   ed.model = doc_new(code)
   ed.undo = []
   ed.redo = []
+  ed.undo_labels = []
+  ed.redo_labels = []
+  ed.label = null
+  ed.note = null
   ed.gesture = null
   ed.merge = null
   ed.file = file
@@ -52,19 +123,34 @@ function ed_apply(newm, key) {
   if (changed) {
     ed.pending = true
     ed.refusal = null
+    let label = ed_take_label(key)
     if (ed.gesture == null) {
-      let join = key != null && key == ed.merge && len(ed.undo) > 0 && newm.line == old.line
+      let now = ed_now()
+      let join = key != null && key == ed.merge && len(ed.undo) > 0 && newm.line == old.line &&
+        old.col == ed.merge_col && now - ed.merge_at <= ed_pause
       if (!join) {
-        push(ed.undo, old)
+        ed_push_undo(old, label)
       }
       ed.redo = []
+      ed.redo_labels = []
+      ed.merge_at = now
     }
     ed.merge = key
+    ed.merge_col = newm.col
   } elif (newm.line != old.line || newm.col != old.col) {
     ed.merge = null
   }
+  ed.label = null
   ed.model = newm
   changed
+}
+
+-~> Like ed_try with a name for the change (see ed_label).
+function ed_try_as(label, vals, result) {
+  ed_label(label, vals)
+  let ok = ed_try(result, null)
+  ed.label = null
+  ok
 }
 
 -~> Applies the result of a model function: a refusal is kept for the view to
@@ -76,6 +162,7 @@ function ed_try(result, key) {
 -~> Like ed_try, but a refusal flashes row `line` (the row the canvas edit was about).
 function ed_try_at(result, key, line) {
   if (is_refusal(result)) {
+    ed.label = null
     ed_refuse(result.refused)
     ed.refusal.line = line
     return false
@@ -93,11 +180,14 @@ function ed_undo() {
   if (len(ed.undo) == 0) {
     return false
   }
+  let l = pop(ed.undo_labels)
   push(ed.redo, ed_model())
+  push(ed.redo_labels, l)
   let prev = pop(ed.undo)
   ed.pending = true
   ed.merge = null
   ed.model = prev
+  ed.note = {"text": t("undo.undone", {"what": ed_label_text(l)}), "at": ed_now()}
   true
 }
 
@@ -105,27 +195,41 @@ function ed_redo() {
   if (len(ed.redo) == 0) {
     return false
   }
+  let l = pop(ed.redo_labels)
   push(ed.undo, ed_model())
+  push(ed.undo_labels, l)
   let next = pop(ed.redo)
   ed.pending = true
   ed.merge = null
   ed.model = next
+  ed.note = {"text": t("undo.redone", {"what": ed_label_text(l)}), "at": ed_now()}
   true
 }
 
--~> Starts a gesture: until ed_end_gesture the edits don't make undo steps.
-function ed_begin_gesture() {
+-~> Starts a gesture: until ed_end_gesture the edits don't make undo steps. key
+-~> (an "undo.*" name) and vals say what the one step will be called.
+function ed_begin_gesture(key = null, vals = null) {
   ed.gesture = ed_model()
+  ed.gesture_label = null
+  if (key != null) {
+    ed.gesture_label = {"key": "undo." + key, "vals": vals}
+  }
 }
 
 -~> Ends the gesture: one undo step if the text changed since it began.
 function ed_end_gesture() {
   let start = ed.gesture
+  let label = ed.gesture_label
   ed.gesture = null
+  ed.gesture_label = null
   ed.merge = null
   if (start != null && doc_text(start) != doc_text(ed_model())) {
-    push(ed.undo, start)
+    if (label == null) {
+      label = {"key": "undo.gesture", "vals": null}
+    }
+    ed_push_undo(start, label)
     ed.redo = []
+    ed.redo_labels = []
     return true
   }
   false

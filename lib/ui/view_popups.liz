@@ -108,6 +108,18 @@ function tip_for(hover) {
   if (kind == "tool" || kind == "strip") {
     lines = tip_tool_lines(parts[1])
     anchor = view_hit_rect(hover)
+  } elif (kind == "bar" && (parts[1] == "undo" || parts[1] == "redo")) {
+    let what = ed_undo_text()
+    let title = t("button.undo")
+    if (parts[1] == "redo") {
+      what = ed_redo_text()
+      title = t("button.redo")
+    }
+    if (what != "") {
+      title = title + ": " + what
+    }
+    lines = [[tip_piece(title, 0, "bright")]]
+    anchor = view_hit_rect(hover)
   } elif (kind == "pen") {
     lines = tip_pen_lines(pens.list[int(parts[1])].name)
     anchor = view_hit_rect(hover)

@@ -7,14 +7,9 @@
 function view_paint_toolbar() {
   g_rect(0, 0, V.w, 16, P.panel)
   g_rect(0, 15, V.w, 1, P.void)
-  let x = 3
-  for (let i = 0; i < len(view_tool_ids); i = i + 1) {
-    if (view_tool_ids[i] == "") {
-      g_rect(x + 1, 3, 1, 10, P.bevel)
-      x = x + 4
-    } else {
-      x = x + 15
-    }
+  let seps = view_toolbar_seps()
+  for (let i = 0; i < len(seps); i = i + 1) {
+    g_rect(seps[i], 3, 1, 10, P.bevel)
   }
   let bs = view_toolbar()
   for (let i = 0; i < len(bs); i = i + 1) {
@@ -27,6 +22,9 @@ function view_paint_toolbar() {
     }
     if (V.drag != null && V.drag.kind == "press" && V.drag.id == b.group + ":" + b.id) {
       state = "active"
+    }
+    if ((b.id == "undo" && len(ed.undo) == 0) || (b.id == "redo" && len(ed.redo) == 0)) {
+      state = "disabled"
     }
     g_button(b.x, b.y, b.w, b.h, b.icon, b.label, state)
   }
@@ -412,6 +410,8 @@ function view_status_parts() {
   let right = []
   if (V.pen_note != "") {
     push(left, [V.tool, V.pen_note, "mute"])
+  } elif (ed_note_active()) {
+    push(left, ["", ed.note.text, "lizard"])
   } elif (ed.refusal != null) {
     push(left, ["", ed.refusal.message, "ember"])
   } else {

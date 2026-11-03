@@ -1,0 +1,34 @@
+type word | changed true | steps 1 | undo true | redo true | typing
+type then space | changed true | steps 1 | undo true | redo true | typing
+backspace | changed true | steps 1 | undo true | redo true | backspace
+delete | changed true | steps 1 | undo true | redo true | delete
+enter | changed true | steps 1 | undo true | redo true | new row
+shift+enter | changed true | steps 1 | undo true | redo true | new row
+tab | changed true | steps 1 | undo true | redo true | indent
+shift+tab | changed true | steps 1 | undo true | redo true | indent
+paste | changed true | steps 1 | undo true | redo true | paste
+cut | changed true | steps 1 | undo true | redo true | cut
+move rows | changed true | steps 1 | undo true | redo true | move rows
+add shape | changed true | steps 1 | undo true | redo true | add circle
+add layer | changed true | steps 1 | undo true | redo true | add layer
+set prop | changed true | steps 1 | undo true | redo true | change r
+layer name | changed true | steps 1 | undo true | redo true | rename layer
+hide | changed true | steps 1 | undo true | redo true | hide
+lock | changed true | steps 1 | undo true | redo true | lock
+scrub drag | changed true | steps 1 | undo true | redo true | change r
+move anchor drag | changed true | steps 1 | undo true | redo true | drag
+pencil stroke | changed true | steps 1 | undo true | redo true | draw stroke
+set code | changed true | steps 1 | undo true | redo true | replace text
+word 1
+after space 2
+after pause 3
+after caret jump 4
+backspace is its own step 5
+view state 0 false
+depth 200 200
+after save 200 false
+after open 0 0 false false
+change r | true
+Undone: change r | change r | true
+Redone: change r
+Deshecho: cambiar r | cambiar r

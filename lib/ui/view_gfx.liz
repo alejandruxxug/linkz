@@ -122,7 +122,10 @@ function g_button(x, y, w, h, icon, label, state) {
   let off = 0
   let ic = P.text
   let tc = P.text
-  if (state == "hover") {
+  if (state == "disabled") {
+    ic = P.dim
+    tc = P.dim
+  } elif (state == "hover") {
     face = P.bevel
     hi = P.dim
   } elif (state == "active") {

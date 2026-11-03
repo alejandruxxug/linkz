@@ -170,7 +170,7 @@ function view_hit_rect(id) {
 -~> Whether a hover id is something a tooltip can say more about.
 function view_tippable(id) {
   let k = text.split(id, ":")[0]
-  k == "tool" || k == "strip" || k == "pen" || k == "callee" || k == "field"
+  k == "tool" || k == "bar" || k == "strip" || k == "pen" || k == "callee" || k == "field"
 }
 
 -~> == Actions ==
@@ -221,6 +221,7 @@ function view_add_object(layer_line) {
   let m = ed_model()
   let pad = leading_ws(m.lines[layer_line - 1]) + 2
   let lines = list.slice(m.lines, 0, at) + [" " * pad] + list.slice(m.lines, at, len(m.lines))
+  ed_label("add_object")
   ed_apply(doc_with(m, lines, at + 1, pad), null)
   view_after()
 }
@@ -375,6 +376,23 @@ function view_close_tab() {
   }
 }
 
+-~> Undo and redo from the buttons: the caret and selection come back with the text.
+function view_undo() {
+  view_commit_focus()
+  let ok = ed_undo()
+  view_prepare()
+  view_after()
+  ok
+}
+
+function view_redo() {
+  view_commit_focus()
+  let ok = ed_redo()
+  view_prepare()
+  view_after()
+  ok
+}
+
 -~> Runs what a click on a toolbar, tab or strip button means.
 function view_press(id) {
   let parts = text.split(id, ":")
@@ -397,6 +415,10 @@ function view_press(id) {
       view_cycle_language()
     } elif (what == "home") {
       view_go_home()
+    } elif (what == "undo") {
+      view_undo()
+    } elif (what == "redo") {
+      view_redo()
     }
   } elif (kind == "tab") {
     if (what == "close") {
@@ -617,7 +639,7 @@ function view_scrub(e) {
   }
   if (!d.moved) {
     d.moved = true
-    ed_begin_gesture()
+    ed_begin_gesture("prop", {"name": d.box.field})
   }
   let step = 1.0
   if (e.mods.shift) {

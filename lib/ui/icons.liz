@@ -30,6 +30,7 @@ let icon_art = {
   "close": "........|.#....#.|..#..#..|...##...|...##...|..#..#..|.#....#.|........",
   "dot": "........|........|..####..|.######.|.######.|..####..|........|........",
   "comment": "........|........|........|##.##...|........|..##.##.|........|........",
+  "undo": "..#.....|.##.....|######..|.##..#..|..#...#.|......#.|.....#..|.####...",
   "home": "...##...|..####..|.######.|########|.#....#.|.#.##.#.|.#.##.#.|.######."
 }
 
@@ -69,3 +70,19 @@ function icon_spans(name, sc) {
   icon_cache[key] = out
   out
 }
+
+-~> redo is undo seen in a mirror.
+function icon_mirror(art) {
+  let rows = text.split(art, "|")
+  let out = []
+  for (let r = 0; r < len(rows); r = r + 1) {
+    let m = ""
+    for (let c = 7; c >= 0; c = c - 1) {
+      m = m + rows[r][c]
+    }
+    push(out, m)
+  }
+  text.join(out, "|")
+}
+
+icon_art["redo"] = icon_mirror(icon_art["undo"])

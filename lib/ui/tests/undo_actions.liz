@@ -1,0 +1,122 @@
+-~> Every action that changes the text is one undo step: do it, Undo gives back the
+-~> text and the caret of before, Redo gives the text of after.
+let doc = "layer a\n  circle((10, 10), 5, #fff)\n  rect((0, 0), (5, 5), #000)\n\nlet z = 1\n"
+
+function fresh() {
+  ed_reset(doc, "/d.lzdraw")
+  ed_settle()
+  fake_time.now = 0
+}
+
+-~> Runs f, then checks: one new step, undo restores text and caret, redo restores the result.
+function check(name, setup, f) {
+  setup()
+  let m0 = ed_model()
+  let before = doc_text(m0)
+  let steps = len(ed.undo)
+  f()
+  let after = doc_text(ed_model())
+  let made = len(ed.undo) - steps
+  let label = ed_undo_text()
+  let undone = ed_undo()
+  let restored = doc_text(ed_model()) == before && ed_model().line == m0.line && ed_model().col == m0.col
+  let sel_back = str(ed_model().sel) == str(m0.sel)
+  let redone = ed_redo()
+  let again = doc_text(ed_model()) == after
+  puts(name, "| changed", after != before, "| steps", made, "| undo", undone && restored && sel_back, "| redo", redone && again, "|", label)
+  ed_undo()
+}
+
+fresh()
+ed_set_caret(5, 9)
+check("type word", function() { null }, function() { ed_type("a"); ed_type("b"); ed_type("c") })
+check("type then space", function() { null }, function() { ed_type("a"); ed_type(" ") })
+check("backspace", function() { null }, function() { ed_key("Backspace", null) })
+check("delete", function() { ed_set_caret(5, 0) }, function() { ed_key("Delete", null) })
+check("enter", function() { ed_set_caret(5, 4) }, function() { ed_key("Enter", {"shift": false}) })
+check("shift+enter", function() { ed_set_caret(5, 4) }, function() { ed_key("Enter", {"shift": true}) })
+check("tab", function() { ed_set_caret(5, 4) }, function() { ed_key("Tab", null) })
+check("shift+tab", function() { ed_set_caret(2, 4) }, function() { ed_key("Tab", {"shift": true}) })
+check("paste", function() { fake_clip.text = "let q = 2\n"; ed_set_caret(5, 0) }, function() { ed_key("V", {"cmd": true}) })
+check("cut", function() { ed_select_range(2, 3) }, function() { ed_key("X", {"cmd": true}) })
+check("move rows", function() { ed_set_caret(2, 0) }, function() { ed_key("ArrowDown", {"alt": true}) })
+check("add shape", function() { ed_set_caret(4, 0) }, function() { ed_add_shape("circle") })
+check("add layer", function() { ed_set_caret(4, 0) }, function() { ed_add_layer() })
+check("set prop", function() { ed_set_caret(2, 0) }, function() { ed_set_prop("r", "9") })
+check("layer name", function() { null }, function() { ed_set_layer_name(1, "sun") })
+check("hide", function() { null }, function() { ed_set_hidden(1, true) })
+check("lock", function() { null }, function() { ed_set_locked(1, true) })
+check("scrub drag", function() { ed_set_caret(2, 0) }, function() {
+  ed_begin_gesture("prop", {"name": "r"})
+  for (let i = 1; i <= 6; i = i + 1) {
+    ed_set_prop("r", str(5 + i))
+  }
+  ed_end_gesture()
+})
+check("move anchor drag", function() { null }, function() {
+  ed_run()
+  let s = ed.shapes[1]
+  ed_begin_gesture()
+  for (let i = 1; i <= 4; i = i + 1) {
+    ed_move_anchor(s, s.anchors[0], (10 + i, 10 + i))
+  }
+  ed_end_gesture()
+})
+check("pencil stroke", function() { ed_set_caret(1, 0) }, function() {
+  pencil_commit([{"pos": (5, 5), "canvas_pos": (5, 5), "pressure": 1.0, "t": 0.0}, {"pos": (50, 50), "canvas_pos": (50, 50), "pressure": 1.0, "t": 0.1}], 1)
+})
+check("set code", function() { null }, function() { ed_set_code("circle((1, 1), 2, #fff)\n") })
+
+-~> Typing: a word is one step; a space ends it; a pause, a caret jump or another action starts a new one.
+fresh()
+ed_set_caret(5, 9)
+let n0 = len(ed.undo)
+ed_type("a")
+ed_type("b")
+puts("word", len(ed.undo) - n0)
+ed_type(" ")
+ed_type("c")
+puts("after space", len(ed.undo) - n0)
+fake_time.now = 5000
+ed_type("d")
+puts("after pause", len(ed.undo) - n0)
+ed_set_caret(1, 0)
+ed_type("e")
+puts("after caret jump", len(ed.undo) - n0)
+ed_key("Backspace", null)
+puts("backspace is its own step", len(ed.undo) - n0)
+
+-~> Not undoable: caret, selection and folds.
+fresh()
+let n1 = len(ed.undo)
+ed_set_caret(2, 3)
+ed_select_range(1, 2)
+ed_toggle_fold(1)
+puts("view state", len(ed.undo) - n1, ed_dirty())
+
+-~> The history keeps 200 steps; saving keeps it; opening a file clears it.
+fresh()
+ed_set_caret(5, 0)
+for (let i = 0; i < 250; i = i + 1) {
+  ed_key("Enter", {"shift": false})
+}
+puts("depth", len(ed.undo), len(ed.undo_labels))
+ed_save("")
+puts("after save", len(ed.undo), ed_dirty())
+fake_files["/other.lzdraw"] = "let a = 1\n"
+ed_open("/other.lzdraw")
+puts("after open", len(ed.undo), len(ed.redo), ed_undo(), ed_redo())
+
+-~> Labels and the note for the status bar.
+fresh()
+ed_set_caret(2, 0)
+ed_set_prop("r", "7")
+puts(ed_undo_text(), "|", ed_redo_text() == "")
+ed_undo()
+puts(ed.note.text, "|", ed_redo_text(), "|", ed_note_active())
+ed_redo()
+puts(ed.note.text)
+set_language("es")
+ed_undo()
+puts(ed.note.text, "|", ed_redo_text())
+set_language("en")

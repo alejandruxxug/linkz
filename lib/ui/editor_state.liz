@@ -113,14 +113,24 @@ function ed_save(path) {
 
 -~> Replaces the whole text (one undo step).
 function ed_set_code(code) {
+  ed_label("set_code")
   ed_apply(doc_new(code), null)
 }
 
 -~> == Editing ==
 
 
+function ed_word_char(ch) {
+  text.find("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_", ch) >= 0 || text.code(ch, 0) > 127
+}
+
 function ed_type(s) {
   ed_apply(ed_insert(ed_model(), s), "type")
+  -~> a space or punctuation ends the word: the next typing is a new step
+  let last = s[len(s) - 1]
+  if (last != null && !ed_word_char(last)) {
+    ed.merge = null
+  }
 }
 
 function ed_move_caret(dir, extend) {
@@ -157,27 +167,35 @@ function ed_toggle_fold(line) {
 
 
 function ed_add_shape(kind) {
-  ed_try(add_shape(ed_model(), kind, ed_canvas_size()), null)
+  ed_try_as("add_shape", {"kind": kind}, add_shape(ed_model(), kind, ed_canvas_size()))
 }
 
 function ed_add_layer() {
-  ed_try(add_layer(ed_model()), null)
+  ed_try_as("add_layer", null, add_layer(ed_model()))
 }
 
 function ed_set_prop(name, value) {
-  ed_try(set_prop(ed_model(), ed_model().line, name, value, ed_docs()), "prop:" + name)
+  ed_try_as("prop", {"name": name}, set_prop(ed_model(), ed_model().line, name, value, ed_docs()))
 }
 
 function ed_set_layer_name(line, name) {
-  ed_try(set_layer_name(ed_model(), line, name), null)
+  ed_try_as("layer_name", null, set_layer_name(ed_model(), line, name))
 }
 
 function ed_set_hidden(line, on) {
-  ed_try(set_row_hidden(ed_model(), line, on), null)
+  let key = "show"
+  if (on) {
+    key = "hide"
+  }
+  ed_try_as(key, null, set_row_hidden(ed_model(), line, on))
 }
 
 function ed_set_locked(line, on) {
-  ed_try(set_row_locked(ed_model(), line, on), null)
+  let key = "unlock"
+  if (on) {
+    key = "lock"
+  }
+  ed_try_as(key, null, set_row_locked(ed_model(), line, on))
 }
 
 -~> == The canvas editing the code ==
@@ -186,31 +204,35 @@ function ed_set_locked(line, on) {
 -~> Drag helpers: call ed_begin_gesture on mouse down and ed_end_gesture on
 -~> mouse up; in between, each move calls one of these with absolute positions.
 function ed_move_anchor(shape, anchor, pos) {
+  ed_label("move_point")
   ed_try_at(move_anchor(ed_model(), shape, anchor, pos), null, shape.line)
 }
 
 function ed_move_shape(shape, delta) {
+  ed_label("move_shape")
   ed_try_at(move_shape(ed_model(), shape, delta), null, shape.line)
 }
 
 function ed_insert_point(shape, pos) {
+  ed_label("add_point")
   ed_try_at(insert_point_near(ed_model(), shape, pos), null, shape.line)
 }
 
 function ed_remove_point(shape, index) {
+  ed_label("remove_point")
   ed_try_at(remove_point(ed_model(), shape, index), null, shape.line)
 }
 
 -~> The pencil's mouse-up: the recorded move samples become a `stroke` row in
 -~> the layer on line `layer` (null: loose, at the top). One undo step.
 function pencil_commit(samples, layer) {
-  ed_try(pencil_insert(ed_model(), samples, layer, ed.color, ed.width), "stroke")
+  ed_try_as("stroke", null, pencil_insert(ed_model(), samples, layer, ed.color, ed.width))
 }
 
 -~> The brush's mouse-up: a `brush` row with the pen's name (such as "ink") and
 -~> the pressures. source is the event's pen.source ("mouse", "trackpad", "tablet").
 function brush_commit(samples, pen, source, layer) {
-  ed_try(brush_insert(ed_model(), samples, pen, source, layer, ed.color), "stroke")
+  ed_try_as("stroke", null, brush_insert(ed_model(), samples, pen, source, layer, ed.color))
 }
 
 -~> == Keyboard ==
@@ -239,10 +261,10 @@ function ed_key(name, mods) {
       return true
     }
     if (k == "x") {
-      return ed_try(ed_cut(m), null)
+      return ed_try_as("cut", null, ed_cut(m))
     }
     if (k == "v") {
-      return ed_try(ed_paste(m), null)
+      return ed_try_as("paste", null, ed_paste(m))
     }
     if (k == "s") {
       return ed_save("")
@@ -262,6 +284,7 @@ function ed_key(name, mods) {
     return true
   }
   if (k == "enter" || k == "return") {
+    ed_label("enter")
     if (shift) {
       ed_apply(ed_enter_above(m), null)
     } else {
@@ -270,6 +293,7 @@ function ed_key(name, mods) {
     return true
   }
   if (k == "tab") {
+    ed_label("indent")
     if (shift) {
       ed_apply(ed_outdent(m), null)
     } else {
@@ -279,6 +303,7 @@ function ed_key(name, mods) {
   }
   let dir = text.replace(k, "arrow", "")
   if ((dir == "up" || dir == "down") && alt) {
+    ed_label("move_rows")
     ed_apply(ed_move_rows(m, dir), null)
     return true
   }
