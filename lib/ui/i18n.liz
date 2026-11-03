@@ -1,8 +1,8 @@
 -~> i18n: the words of the interface, one table per language.
 -~> Every label, button, status message and tooltip frame goes through
 -~>   t("key")                       a plain text
--~>   tf("key", {"file": name})      a text with {file} placeholders filled in
--~> (A function here can't have an optional argument, so it is two names.)
+-~>   t("key", {"file": name})       a text with {file} placeholders filled in
+-~> (tf is the old name of the two-argument form and still works.)
 -~> A language is one file, lib/ui/lang_<code>.liz, that calls lang_register.
 -~> A key missing in the current language falls back to English; a key missing
 -~> everywhere shows the key itself, which is easy to spot.
@@ -35,11 +35,7 @@ function lang_use(code) {
   true
 }
 
-function t(key) {
-  tf(key, null)
-}
-
-function tf(key, values) {
+function t(key, values = null) {
   let s = null
   let table = i18n.tables[i18n.lang]
   if (table != null) {
@@ -58,6 +54,11 @@ function tf(key, values) {
     }
   }
   s
+}
+
+-~> The old name of t(key, values), kept so nothing breaks.
+function tf(key, values) {
+  t(key, values)
 }
 
 function settings_path() {

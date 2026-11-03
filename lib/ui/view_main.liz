@@ -1,0 +1,355 @@
+-~> view_main: the editor screen. It paints only the panels whose content
+-~> changed (each panel has a key made from what it shows), draws the popups
+-~> last, and gives the agent backdoor its state and commands.
+
+-~> == Painting ==
+
+function view_hover_is(prefixes) {
+  let k = text.split(V.hover, ":")[0]
+  if (list.index(prefixes, k) >= 0) {
+    return V.hover
+  }
+  ""
+}
+
+-~> What a panel shows, as a text: when it changes the panel is painted again.
+function view_panel_key(name) {
+  let common = str(V.w) + "x" + str(V.h) + "|" + str(V.pw) + "|" + lang_get() + "|"
+  if (name == "toolbar") {
+    let press = ""
+    if (V.drag != null && V.drag.kind == "press") {
+      press = V.drag.id
+    }
+    return common + V.tool + "|" + view_hover_is(["tool", "bar"]) + "|" + str(V.picker) + "|" + str(view_has_home()) + "|" + press
+  }
+  if (name == "tabs") {
+    return common + view_file_name() + "|" + str(ed_dirty()) + "|" + view_hover_is(["tab"])
+  }
+  if (name == "rows") {
+    return common + str(V.ver) + "|" + str(V.top) + "|" + view_hover_is(["row", "eye", "lock", "fold", "callee", "add", "strip"]) + "|" + str(V.focus != null)
+  }
+  if (name == "props") {
+    return common + str(V.ver) + "|" + str(V.focus) + "|" + view_hover_is(["field"]) + "|" + str(V.picker) + "|" + str(V.hover_anchor)
+  }
+  if (name == "status") {
+    return common + str(V.ver) + "|" + str(V.mouse_draw) + "|" + V.pen_note + "|" + V.tool
+  }
+  view_canvas_key()
+}
+
+function view_panel_paint(name) {
+  if (name == "toolbar") {
+    view_paint_toolbar()
+  } elif (name == "tabs") {
+    view_paint_tabs()
+  } elif (name == "rows") {
+    view_paint_rows()
+  } elif (name == "props") {
+    view_paint_props()
+  } elif (name == "status") {
+    view_paint_status()
+  } else {
+    view_paint_canvas()
+  }
+}
+
+-~> Shows the tooltip once the pointer has rested long enough.
+function view_tick() {
+  if (V.tip_due > 0) {
+    if (time.ms() >= V.tip_due) {
+      V.tip_due = 0
+      if (V.dialog == null) {
+        V.tip = tip_for(V.hover)
+      }
+    } else {
+      app.needs_paint = true
+    }
+  }
+}
+
+function view_paint() {
+  let t0 = time.ms()
+  view_tick()
+  view_prepare()
+  V.cl = view_canvas_layout()
+  V.anchor_tip = tip_anchor(V.cl)
+  let now = popup_list()
+  let shape_key = popup_shape_key(now)
+  if (shape_key != V.popup_shape) {
+    let old = V.popup_rects
+    if (old != null) {
+      for (let i = 0; i < len(old); i = i + 1) {
+        view_force_rect(old[i][1])
+      }
+    }
+    V.popup_rects = now
+    V.popup_shape = shape_key
+  }
+  let panels = view_panel_rects()
+  let names = ["toolbar", "tabs", "rows", "props", "status", "canvas"]
+  let painted = false
+  for (let i = 0; i < len(names); i = i + 1) {
+    let name = names[i]
+    let key = view_panel_key(name)
+    if (V.force[name] == true || V.keys[name] != key) {
+      let r = panels[name]
+      g_ui()
+      fb.unclip()
+      g_clip(r[0], r[1], r[2], r[3])
+      view_panel_paint(name)
+      g_ui()
+      fb.unclip()
+      g_dirty(r[0], r[1], r[2], r[3])
+      V.keys[name] = key
+      painted = true
+    }
+  }
+  V.force = {}
+  let pk = popup_content_key()
+  if (painted || pk != V.popup_content) {
+    V.popup_content = pk
+    if (len(now) > 0) {
+      popup_paint()
+      for (let i = 0; i < len(now); i = i + 1) {
+        let r = now[i][1]
+        g_dirty(r[0], r[1], r[2], r[3])
+      }
+    }
+  }
+  g_ui()
+  fb.unclip()
+  V.paints = V.paints + 1
+  V.painted_ms = time.ms() - t0
+  if (V.tip_due == 0) {
+    app.needs_paint = false
+  }
+}
+
+-~> == Events and start ==
+
+function view_event(e) {
+  let ty = e.type
+  if (ty == "resize") {
+    V.w = e.size.x
+    V.h = e.size.y
+    V.pw = math.max(160, math.min(V.pw, V.w - 120))
+    view_touch()
+    view_force_all()
+  } elif (ty == "down") {
+    if (e.button == 0) {
+      view_down(e)
+    }
+  } elif (ty == "up") {
+    if (e.button == 0) {
+      view_up(e)
+    }
+  } elif (ty == "move") {
+    view_move(e)
+  } elif (ty == "wheel") {
+    view_wheel(e)
+  } elif (ty == "key") {
+    view_key(e)
+  } elif (ty == "text") {
+    view_text(e)
+  }
+}
+
+-~> Opens the editor screen. args: null keeps what is open; {"path": p} opens that
+-~> file (a new drawing for a path that is not there yet, or ""); {"new": true} starts
+-~> an empty drawing.
+function view_enter(args) {
+  let sz = fb.size()
+  V.w = sz.x
+  V.h = sz.y
+  if (V.w < 480) {
+    V.pw = V.w * 5 // 8
+  }
+  if (args != null && args.path != null) {
+    if (args.path != "" && fs.exists(args.path)) {
+      ed_open(args.path)
+      home_note_opened(args.path)
+    } else {
+      ed_reset("", args.path)
+    }
+    V.top = 0
+    V.focus = null
+    V.tool = ""
+    V.picker = false
+  } elif (args != null && args.new == true) {
+    ed_reset("", "")
+    V.top = 0
+    V.focus = null
+  }
+  if (args == null) {
+    V.top = 0
+    V.focus = null
+  }
+  V.keys = {}
+  V.popup_shape = null
+  V.popup_rects = null
+  V.tip = null
+  V.hover = ""
+  ed.pending = true
+  view_touch()
+  view_force_all()
+}
+
+-~> == The backdoor ==
+
+function view_rect_hash(r) {
+  {"x": r[0], "y": r[1], "w": r[2], "h": r[3]}
+}
+
+-~> The editor's state plus where things are on screen.
+function view_debug_state() {
+  view_prepare()
+  let st = editor_debug_state()
+  let gm = view_geom()
+  let rows = []
+  let vis = view_visible()
+  for (let i = 0; i < len(vis); i = i + 1) {
+    let it = vis[i].item
+    push(rows, {"item": it.t, "line": it.line, "kind": it.row.kind, "x": 0, "y": vis[i].y, "w": gm.pw, "h": it.h})
+  }
+  let fields = []
+  let lay = view_props_cached()
+  for (let i = 0; i < len(lay.boxes); i = i + 1) {
+    let b = lay.boxes[i]
+    push(fields, {"name": b.field, "sub": b.sub, "kind": b.kind, "text": b.text, "focus": b.focus,
+                  "x": b.x, "y": b.y, "w": b.w, "h": b.h})
+  }
+  let tools = []
+  let bs = view_toolbar()
+  for (let i = 0; i < len(bs); i = i + 1) {
+    push(tools, {"id": bs[i].group + ":" + bs[i].id, "x": bs[i].x, "y": bs[i].y, "w": bs[i].w, "h": bs[i].h})
+  }
+  for (let i = 0; i < len(vis); i = i + 1) {
+    if (vis[i].item.t == "strip") {
+      let ss = view_strip(vis[i].y, vis[i].item.depth)
+      for (let k = 0; k < len(ss); k = k + 1) {
+        push(tools, {"id": "strip:" + ss[k].id, "x": ss[k].x, "y": ss[k].y, "w": ss[k].w, "h": ss[k].h})
+      }
+    }
+  }
+  let cl = view_canvas_layout()
+  let tip = null
+  if (V.tip != null) {
+    tip = {"x": V.tip.x, "y": V.tip.y, "w": V.tip.w, "h": V.tip.h, "key": V.tip.key}
+  }
+  let focus = null
+  if (V.focus != null) {
+    focus = {"field": V.focus.field, "sub": V.focus.sub, "text": V.focus.text, "caret": V.focus.caret}
+  }
+  st.view = {"size": (V.w, V.h), "split": V.pw, "top": V.top, "rows": rows, "fields": fields, "tools": tools,
+             "props_title": lay.title, "props_msg": lay.msg,
+             "canvas": {"area": view_rect_hash([gm.cx, gm.cy, gm.cw, gm.ch]), "drawing": view_rect_hash(cl.frame),
+                        "zoom": cl.zoom, "buffer": view_rect_hash(cl.crect)},
+             "tool": V.tool, "picker": V.picker, "hover": V.hover, "tip": tip, "focus": focus,
+             "dialog": V.dialog != null, "pen": ed.pen, "paint_ms": V.painted_ms, "paints": V.paints}
+  st
+}
+
+-~> Clicks the middle of a row of code (scrolling it into view first).
+function view_click_row_cmd(line) {
+  view_prepare()
+  view_reveal(line)
+  let vis = view_visible()
+  for (let i = 0; i < len(vis); i = i + 1) {
+    if (vis[i].item.t == "row" && vis[i].item.line == line) {
+      let r = vis[i].item.row
+      let x = view_code_x(r) + 2
+      view_event({"type": "down", "button": 0, "pos": (x, vis[i].y + 9), "mods": {"shift": false, "alt": false, "cmd": false, "ctrl": false}})
+      view_event({"type": "up", "button": 0, "pos": (x, vis[i].y + 9), "mods": {"shift": false, "alt": false, "cmd": false, "ctrl": false}})
+      return true
+    }
+  }
+  false
+}
+
+function view_commands() {
+  let own = editor_debug_commands()
+  let cmds = {}
+  let names = keys(own)
+  for (let i = 0; i < len(names); i = i + 1) {
+    let name = names[i]
+    let fn = own[name]
+    cmds[name] = function(args) {
+      view_commit_focus()
+      let r = fn(args)
+      if (name == "Open" || name == "SetCode") {
+        V.top = 0
+        V.folded_seen = null
+      }
+      view_prepare()
+      view_after()
+      if (name == "Language") {
+        view_force_all()
+      }
+      r
+    }
+  }
+  cmds["Tool"] = function(args) {
+    view_commit_focus()
+    view_prepare()
+    view_press("tool:" + str(args[0]))
+    view_prepare()
+    {"ok": true, "tool": V.tool, "status": ed.status}
+  }
+  cmds["ClickRow"] = function(args) {
+    {"ok": view_click_row_cmd(args[0])}
+  }
+  cmds["Export"] = function(args) {
+    {"ok": view_export(), "status": ed.status, "path": view_png_path()}
+  }
+  cmds["Hover"] = function(args) {
+    view_prepare()
+    V.mouse = point(args[0], args[1])
+    view_update_hover(V.mouse)
+    V.tip_due = 0
+    V.tip = null
+    if (view_tippable(V.hover)) {
+      V.tip = tip_for(V.hover)
+    }
+    app.needs_paint = true
+    let lines = null
+    if (V.tip != null) {
+      lines = len(V.tip.lines)
+    }
+    {"hover": V.hover, "tip_lines": lines}
+  }
+  cmds["Home"] = function(args) {
+    view_go_home()
+    {"ok": view_has_home()}
+  }
+  cmds["Confirm"] = function(args) {
+    view_dialog_choose(str(args[0]))
+    {"ok": true}
+  }
+  cmds["Pen"] = function(args) {
+    view_choose_pen(str(args[0]))
+    {"ok": true, "pen": ed.pen}
+  }
+  cmds["Picker"] = function(args) {
+    V.picker = !V.picker
+    view_touch()
+    {"ok": true, "picker": V.picker}
+  }
+  cmds["Focus"] = function(args) {
+    view_prepare()
+    let lay = view_props_layout_build()
+    for (let i = 0; i < len(lay.boxes); i = i + 1) {
+      if (lay.boxes[i].field == str(args[0])) {
+        view_focus_box(lay.boxes[i])
+        return {"ok": true}
+      }
+    }
+    {"ok": false}
+  }
+  cmds
+}
+
+let editor_screen = {
+  "wants_hover": true,
+  "enter": view_enter, "event": view_event, "paint": view_paint,
+  "debug_state": view_debug_state
+}

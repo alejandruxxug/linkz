@@ -1,0 +1,293 @@
+-~> view_canvas: the canvas area. The surround and the frame are drawn in the UI
+-~> buffer; the drawing and the selection (outline, anchors) go into the
+-~> full-resolution canvas buffer, where one UI pixel is a 2x2 block so the
+-~> overlay looks like the rest of the UI. Errors keep the last good drawing,
+-~> dimmed, with a badge under it.
+
+-~> A shape with its path and width multiplied by k (the zoom). Shapes at 100%
+-~> are used as they are.
+function view_scale_shape(s, k) {
+  if (k == 1) {
+    return s
+  }
+  let out = hash_copy(s)
+  let path = []
+  for (let i = 0; i < len(s.path); i = i + 1) {
+    let c = s.path[i]
+    if (c[0] == "C") {
+      push(path, ["C", c[1] * k, c[2] * k, c[3] * k])
+    } elif (c[0] == "Z") {
+      push(path, ["Z"])
+    } else {
+      push(path, [c[0], c[1] * k])
+    }
+  }
+  out.path = path
+  if (type(s.width) == "INTEGER" || type(s.width) == "FLOAT") {
+    out.width = s.width * k
+  }
+  if (s.widths != null) {
+    let ws = []
+    for (let i = 0; i < len(s.widths); i = i + 1) {
+      push(ws, s.widths[i] * k)
+    }
+    out.widths = ws
+  }
+  out
+}
+
+-~> The shapes of the last run scaled to the zoom, kept until the next run or zoom.
+function view_scaled(k) {
+  let key = str(V.run_id) + "|" + str(k)
+  if (V.scaled_key != key) {
+    let out = []
+    for (let i = 0; i < len(ed.shapes); i = i + 1) {
+      push(out, view_scale_shape(ed.shapes[i], k))
+    }
+    V.scaled = out
+    V.scaled_key = key
+  }
+  V.scaled
+}
+
+-~> == The selection ==
+
+-~> The shapes of the selected rows, as [{"shape", "line"}].
+function view_selected_shapes() {
+  let m = ed_model()
+  let a = m.line
+  let b = m.line
+  if (m.sel != null) {
+    a = m.sel.from
+    b = m.sel.to
+  }
+  let out = []
+  for (let l = a; l <= b; l = l + 1) {
+    let list = ed_shapes_of(l)
+    for (let i = 0; i < len(list); i = i + 1) {
+      push(out, {"shape": list[i], "line": l, "i": i})
+    }
+  }
+  out
+}
+
+-~> The dashed box of the selection (3 pixels on, 2 off) around window pixels
+-~> x0 y0 x1 y1, snapped to the UI pixels.
+function view_sel_box(x0, y0, x1, y1) {
+  let ux0 = math.floor(x0 / 2)
+  let uy0 = math.floor(y0 / 2)
+  let ux1 = math.ceil(x1 / 2)
+  let uy1 = math.ceil(y1 / 2)
+  let w = ux1 - ux0
+  let h = uy1 - uy0
+  for (let i = 0; i < w; i = i + 5) {
+    let l = math.min(3, w - i)
+    g_rect(ux0 + i, uy0, l, 1, P.lizard)
+    g_rect(ux0 + i, uy1 - 1, l, 1, P.lizard)
+  }
+  for (let j = 0; j < h; j = j + 5) {
+    let l = math.min(3, h - j)
+    g_rect(ux0, uy0 + j, 1, l, P.lizard)
+    g_rect(ux1 - 1, uy0 + j, 1, l, P.lizard)
+  }
+}
+
+-~> A 5x5 anchor with a void outline (7x7 amber when hovered), centered at the UI pixel.
+function view_anchor(ux, uy, role, hover) {
+  let s = 5
+  let c = P.lizard
+  if (role == "radius" || role == "corner") {
+    c = P.bright
+  }
+  if (hover) {
+    s = 7
+    c = P.amber
+  }
+  let h = s // 2
+  g_rect(ux - h - 1, uy - h - 1, s + 2, s + 2, P.void)
+  g_rect(ux - h, uy - h, s, s, c)
+}
+
+-~> The UI pixel of an anchor.
+function view_anchor_ui(cl, pos) {
+  let w = view_to_window(cl, pos)
+  return [math.round(w.x / 2), math.round(w.y / 2)]
+}
+
+function view_paint_selection(cl) {
+  let sel = view_selected_shapes()
+  for (let n = 0; n < len(sel); n = n + 1) {
+    let s = sel[n].shape
+    let b = path_bounds(s.path)
+    if (b != null) {
+      let lo = view_to_window(cl, b.min)
+      let hi = view_to_window(cl, b.max)
+      let pad = 0
+      if (len(s.anchors) > 0 && s.anchors[0].role == "point") {
+        pad = 6
+      }
+      view_sel_box(lo.x - pad, lo.y - pad, hi.x + pad, hi.y + pad)
+    }
+  }
+  for (let n = 0; n < len(sel); n = n + 1) {
+    let s = sel[n].shape
+    for (let i = 0; i < len(s.anchors); i = i + 1) {
+      let a = s.anchors[i]
+      let u = view_anchor_ui(cl, a.pos)
+      let hover = V.hover_anchor != null && V.hover_anchor.line == sel[n].line && V.hover_anchor.i == sel[n].i && V.hover_anchor.anchor == i
+      if (!hover) {
+        view_anchor(u[0], u[1], a.role, false)
+      }
+    }
+  }
+  if (V.hover_anchor != null) {
+    for (let n = 0; n < len(sel); n = n + 1) {
+      let s = sel[n].shape
+      for (let i = 0; i < len(s.anchors); i = i + 1) {
+        let hv = V.hover_anchor
+        if (hv.line == sel[n].line && hv.i == sel[n].i && hv.anchor == i) {
+          let u = view_anchor_ui(cl, s.anchors[i].pos)
+          view_anchor(u[0], u[1], s.anchors[i].role, true)
+        }
+      }
+    }
+  }
+}
+
+-~> The anchor of a selected shape under a UI pixel (within 4), or null:
+-~> {"line", "i", "anchor", "pos", "role"}.
+function view_anchor_at(cl, ux, uy) {
+  let sel = view_selected_shapes()
+  let best = null
+  let best_d = 5
+  for (let n = 0; n < len(sel); n = n + 1) {
+    let s = sel[n].shape
+    for (let i = 0; i < len(s.anchors); i = i + 1) {
+      let u = view_anchor_ui(cl, s.anchors[i].pos)
+      let d = math.max(math.abs(u[0] - ux), math.abs(u[1] - uy))
+      if (d < best_d) {
+        best_d = d
+        best = {"line": sel[n].line, "i": sel[n].i, "anchor": i, "pos": s.anchors[i].pos, "role": s.anchors[i].role}
+      }
+    }
+  }
+  best
+}
+
+-~> == The shape under a point of the drawing ==
+
+-~> The topmost visible, unlocked shape at p (drawing pixels), or null.
+function view_hit_shape(cl, p) {
+  let rows = view_rows()
+  let list = shapes_to_paint(ed.shapes, rows)
+  let slack = 3 / cl.zoom
+  for (let i = len(list) - 1; i >= 0; i = i - 1) {
+    let s = list[i]
+    let locked = false
+    if (type(s.line) == "INTEGER" && s.line >= 1 && s.line <= len(rows)) {
+      locked = row_has_flag(rows, s.line, "locked")
+    }
+    if (!locked) {
+      if (s.fill != null && point_in_path(s.path, p)) {
+        return s
+      }
+      if (s.stroke != null && distance_to_path(s.path, p) <= s.width / 2 + slack) {
+        return s
+      }
+      if (s.kind == "brush" && distance_to_path(s.path, p) <= slack) {
+        return s
+      }
+    }
+  }
+  null
+}
+
+-~> Selects the row of a line and opens the layers around it.
+function view_select_line(line) {
+  let rows = view_rows()
+  let r = rows[line - 1]
+  let chain = []
+  while (r.parent > 0) {
+    r = rows[r.parent - 1]
+    push(chain, r)
+  }
+  for (let i = 0; i < len(chain); i = i + 1) {
+    if (chain[i].collapsed) {
+      ed_toggle_fold(chain[i].line)
+    }
+  }
+  ed_select(line)
+  view_touch()
+  view_reveal(line)
+}
+
+-~> == Painting ==
+
+function view_canvas_key() {
+  let cl = view_canvas_layout()
+  let m = ed_model()
+  let sel = str(m.line)
+  if (m.sel != null) {
+    sel = str(m.sel.from) + "-" + str(m.sel.to)
+  }
+  let anchor = ""
+  if (V.hover_anchor != null) {
+    anchor = str(V.hover_anchor.line) + "." + str(V.hover_anchor.i) + "." + str(V.hover_anchor.anchor)
+  }
+  str(V.run_id) + "|" + sel + "|" + str(ed.stale) + "|" + str(len(ed.errors)) + "|" + anchor + "|" + str(cl.zoom) + "|" +
+    str(cl.crect) + "|" + str(V.w) + "x" + str(V.h) + "|" + str(V.pw) + "|" + str(ed_canvas_size())
+}
+
+function view_paint_canvas_ui(cl) {
+  let gm = view_geom()
+  g_clip(gm.pw, 30, gm.w - gm.pw, gm.h - 46)
+  g_rect(gm.pw, 30, 1, gm.h - 46, P.void)
+  g_rect(gm.pw + 1, 30, 1, gm.h - 46, P.bevel)
+  g_rect(gm.cx, gm.cy, gm.cw, gm.ch, P.coal)
+  g_spans(g_checker_spans(gm.cw, gm.ch), gm.cx, gm.cy, P.checker)
+  let fr = cl.frame
+  g_frame(fr[0], fr[1], fr[2], fr[3], P.void)
+  if (ed.stale && len(ed.errors) > 0) {
+    let label = t("badge.last_good")
+    let bw = g_text_w(label) + 18
+    let bx = fr[0]
+    let by = fr[1] + fr[3] + 4
+    g_frame(bx, by, bw, 16, P.void)
+    g_rect(bx + 1, by + 1, bw - 2, 14, P.row)
+    g_icon("error", bx + 4, by + 4, P.ember)
+    g_text(label, bx + 14, by + 1, P.ember)
+  }
+}
+
+function view_paint_canvas() {
+  let gm = view_geom()
+  let cl = view_canvas_layout()
+  V.cl = cl
+  g_ui()
+  view_paint_canvas_ui(cl)
+  let cr = cl.crect
+  fb.canvas((cr[0], cr[1]), (cr[2], cr[3]))
+  g_canvas((cr[0], cr[1]))
+  fb.unclip()
+  fb.clear((0, 0), (cr[2] * 2, cr[3] * 2))
+  let off = cl.offset
+  fb.clip(off, (cl.sw, cl.sh))
+  fb.fill(off, (cl.sw, cl.sh), ed.canvas.background)
+  let shapes = shapes_to_paint(view_scaled(cl.zoom), view_rows())
+  for (let i = 0; i < len(shapes); i = i + 1) {
+    let s = shapes[i]
+    let r = raster.shape(s)
+    if (r.fill !== null) {
+      fb.spans(r.fill, off, s.fill)
+    }
+    if (r.stroke !== null) {
+      fb.spans(r.stroke, off, s.stroke)
+    }
+  }
+  if (ed.stale && len(ed.errors) > 0) {
+    fb.fill(off, (cl.sw, cl.sh), P.veil)
+  }
+  fb.unclip()
+  view_paint_selection(cl)
+  g_ui()
+}

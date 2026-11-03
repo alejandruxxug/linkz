@@ -1,0 +1,216 @@
+-~> view_code: a line of code drawn with syntax colors. The result of
+-~> code_render is kept per (text, width, selected), so a row that did not
+-~> change costs a few fb.spans calls to draw, not a pass over its characters.
+-~>   keywords sky, numbers amber, strings peach, comments and punctuation
+-~>   mute, names text (bright on the selected row), colors as a 6x6 swatch
+-~>   with a 2 pixel gap before the literal.
+
+let code_keywords = ["let", "layer", "for", "while", "function", "if", "elif", "else", "return", "break",
+                     "continue", "try", "catch", "true", "false", "null"]
+
+function code_is_digit(ch) {
+  ch != null && text.find("0123456789", ch) >= 0
+}
+
+function code_is_hex(ch) {
+  ch != null && text.find("0123456789abcdefABCDEF", ch) >= 0
+}
+
+function code_is_word(ch) {
+  ch != null && (text.find("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_", ch) >= 0 || code_is_digit(ch))
+}
+
+-~> The tokens of a line as [kind, start, end]: kind is comment, string,
+-~> color, number, word, space or punct. end is exclusive.
+function code_tokens(s) {
+  let out = []
+  let n = len(s)
+  let i = 0
+  while (i < n) {
+    let ch = s[i]
+    let e = i + 1
+    let kind = "punct"
+    if (ch == "-" && s[i + 1] == "~" && s[i + 2] == ">") {
+      kind = "comment"
+      e = n
+    } elif (ch == "\"") {
+      kind = "string"
+      while (e < n && s[e] != "\"") {
+        if (s[e] == "\\") {
+          e = e + 1
+        }
+        e = e + 1
+      }
+      e = math.min(e + 1, n)
+    } elif (ch == "#" && code_is_hex(s[i + 1])) {
+      kind = "color"
+      while (e < n && code_is_hex(s[e])) {
+        e = e + 1
+      }
+    } elif (code_is_digit(ch)) {
+      kind = "number"
+      while (e < n && (code_is_digit(s[e]) || s[e] == ".")) {
+        e = e + 1
+      }
+    } elif (code_is_word(ch)) {
+      kind = "word"
+      while (e < n && (code_is_word(s[e]) || s[e] == ".")) {
+        e = e + 1
+      }
+    } elif (ch == " " || ch == "\t") {
+      kind = "space"
+    }
+    push(out, [kind, i, e])
+    i = e
+  }
+  out
+}
+
+let code_cache = {}
+let code_cache_count = 0
+
+-~> A line drawn at the origin: {"by": {color name: spans}, "swatches": [[x, color]],
+-~> "xs": the x of every character (and one past the end), "w", "clipped"}.
+-~> maxw cuts the line with a » when it is too long (0 = no limit).
+function code_render(s, maxw, sel) {
+  let key = str(maxw) + str(sel) + "|" + s
+  let hit = code_cache[key]
+  if (hit != null) {
+    return hit
+  }
+  let by = {}
+  let swatches = []
+  let xs = []
+  let x = 0
+  let clipped = false
+  let toks = code_tokens(s)
+  let base = "text"
+  let punct = "mute"
+  if (sel) {
+    base = "bright"
+    punct = "text"
+  }
+  for (let t = 0; t < len(toks) && !clipped; t = t + 1) {
+    let tk = toks[t]
+    let word = text.slice(s, tk[1], tk[2])
+    let color = punct
+    if (tk[0] == "comment") {
+      color = "mute"
+    } elif (tk[0] == "string") {
+      color = "peach"
+    } elif (tk[0] == "number") {
+      color = "amber"
+    } elif (tk[0] == "color") {
+      color = base
+    } elif (tk[0] == "word") {
+      color = base
+      if (list.index(code_keywords, word) >= 0) {
+        color = "sky"
+      }
+    }
+    let lead = 0
+    if (tk[0] == "color") {
+      lead = 8
+    }
+    let room = len(word)
+    if (maxw > 0 && x + lead + len(word) * 7 > maxw) {
+      clipped = true
+      room = math.max(0, (maxw - x - lead) // 7 - 1)
+      if (lead > 0 && x + lead > maxw) {
+        room = 0
+        lead = 0
+      }
+    }
+    if (tk[0] == "color" && lead > 0) {
+      let c = g_hex_color(word)
+      if (c != null) {
+        push(swatches, [x, c])
+      }
+    }
+    let shown = text.slice(word, 0, room)
+    if (tk[0] != "space" && len(shown) > 0) {
+      if (by[color] == null) {
+        by[color] = []
+      }
+      let sp = g_text_spans(shown, 1)
+      for (let k = 0; k < len(sp); k = k + 1) {
+        push(by[color], [sp[k][0], sp[k][1] + x + lead, sp[k][2] + x + lead])
+      }
+    }
+    for (let k = 0; k < len(word); k = k + 1) {
+      if (k >= room) {
+        push(xs, maxw)
+      } elif (k == 0) {
+        push(xs, x)
+      } else {
+        push(xs, x + lead + k * 7)
+      }
+    }
+    x = x + lead + room * 7
+  }
+  while (len(xs) < len(s)) {
+    push(xs, maxw)
+  }
+  push(xs, x)
+  if (clipped) {
+    if (by["mute"] == null) {
+      by["mute"] = []
+    }
+    let sp = g_text_spans("»", 1)
+    for (let k = 0; k < len(sp); k = k + 1) {
+      push(by["mute"], [sp[k][0], sp[k][1] + maxw - 7, sp[k][2] + maxw - 7])
+    }
+  }
+  let out = {"by": by, "swatches": swatches, "xs": xs, "w": x, "clipped": clipped}
+  code_cache_count = code_cache_count + 1
+  if (code_cache_count > 600) {
+    code_cache = {}
+    code_cache_count = 0
+  }
+  code_cache[key] = out
+  out
+}
+
+-~> Draws a rendered line with its top left at (x, y) (UI pixels).
+function code_draw(r, x, y) {
+  let by = r.by
+  if (g.s == 2) {
+    if (r.by2 == null) {
+      let b2 = {}
+      let ks = keys(r.by)
+      for (let i = 0; i < len(ks); i = i + 1) {
+        let out = []
+        let sp = r.by[ks[i]]
+        for (let k = 0; k < len(sp); k = k + 1) {
+          push(out, [sp[k][0] * 2, sp[k][1] * 2, sp[k][2] * 2])
+          push(out, [sp[k][0] * 2 + 1, sp[k][1] * 2, sp[k][2] * 2])
+        }
+        b2[ks[i]] = out
+      }
+      r.by2 = b2
+    }
+    by = r.by2
+  }
+  let names = keys(by)
+  for (let i = 0; i < len(names); i = i + 1) {
+    g_spans(by[names[i]], x, y, P[names[i]])
+  }
+  for (let i = 0; i < len(r.swatches); i = i + 1) {
+    let sw = r.swatches[i]
+    g_rect(x + sw[0], y + 4, 6, 6, P.void)
+    g_rect(x + sw[0] + 1, y + 5, 4, 4, sw[1])
+  }
+}
+
+-~> The index of the character whose left edge is nearest to dx (the pixels from the
+-~> start of the line), 0 to len.
+function code_index_at(r, dx) {
+  let xs = r.xs
+  let best = 0
+  for (let i = 0; i < len(xs); i = i + 1) {
+    if (math.abs(xs[i] - dx) < math.abs(xs[best] - dx)) {
+      best = i
+    }
+  }
+  best
+}

@@ -28,9 +28,11 @@ d() { "$BIN" debug --pid "$PID" "$@"; echo; }
 d Wait
 has() { case "$1" in *"$2"*) ;; *) echo "expected $2 in: $1"; exit 1;; esac; }
 has "$(d Call Ping hello)" '"pong":true'
+has "$(d Dump)" '"screen":"home"'
+d Call Show editor
 d Drag 100 160 300 280 10 --pressure 0.2,1.0
 has "$(d Screenshot "$SHOT")" "$SHOT"
-has "$(d Dump)" '"held":false'
+has "$(d Dump)" '"screen":"editor"'
 d Stats
 d Quit
 wait "$PID" || true

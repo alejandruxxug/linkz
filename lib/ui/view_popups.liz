@@ -1,0 +1,378 @@
+-~> view_popups: what floats over the panels: tooltips (from the docs, after
+-~> the pointer rests ~400 ms), the pen picker, the anchor's coordinates and
+-~> the confirm dialog. A popup is drawn last, into the UI buffer and into the
+-~> canvas buffer too, so it also sits over the drawing.
+
+let tip_delay = 400
+
+-~> == Tooltips ==
+
+-~> A tooltip line is a list of pieces {"s" or "code", "dx", "c"}.
+function tip_piece(s, dx, c) {
+  {"s": s, "dx": dx, "c": c}
+}
+
+-~> The width of a piece in pixels.
+function tip_piece_w(p) {
+  if (p.code != null) {
+    return p.code.w
+  }
+  g_text_w(p.s)
+}
+
+-~> The size of a tooltip: [w, h] for its lines.
+function tip_size(lines) {
+  let w = 0
+  for (let i = 0; i < len(lines); i = i + 1) {
+    for (let k = 0; k < len(lines[i]); k = k + 1) {
+      w = math.max(w, lines[i][k].dx + tip_piece_w(lines[i][k]))
+    }
+  }
+  return [w + 14, len(lines) * 15 + 6]
+}
+
+-~> The signature "name(a, b, c)" of a function from what the editor knows of it.
+function tip_signature(name, info) {
+  name + "(" + text.join(info.params, ", ") + ")"
+}
+
+-~> The tooltip lines of a function's documentation, or null when there is none.
+-~> param is the one parameter a property field asks about (or "").
+function tip_doc_lines(name, param) {
+  let info = props_function_info(ed_model(), name, ed_docs())
+  if (info == null || info.summary == "") {
+    return null
+  }
+  let lines = [[tip_piece(name, 0, "bright"), tip_piece("(" + text.join(info.params, ", ") + ")", g_text_w(name), "mute")]]
+  push(lines, [tip_piece(info.summary, 0, "text")])
+  let dx = 56
+  for (let i = 0; i < len(info.params); i = i + 1) {
+    dx = math.max(dx, g_text_w(info.params[i]) + 14)
+  }
+  for (let i = 0; i < len(info.params); i = i + 1) {
+    let p = info.params[i]
+    if (info.param_docs[p] != null && (param == "" || param == p)) {
+      push(lines, [tip_piece(p, 0, "lizard"), tip_piece(info.param_docs[p], dx, "text")])
+    }
+  }
+  if (info.example != null && info.example != "") {
+    push(lines, [tip_piece(t("label.example"), 0, "mute"), {"code": code_render(info.example, 0, false), "dx": dx, "c": "text"}])
+  }
+  lines
+}
+
+-~> The tooltip lines of a tool button.
+function tip_tool_lines(id) {
+  let key = id
+  if (id == "function") {
+    key = "value"
+  }
+  let info = props_function_info(ed_model(), id, ed_docs())
+  if (info != null && info.summary != "") {
+    return [[tip_piece(id, 0, "bright"), tip_piece(" · " + tip_signature(id, info), g_text_w(id), "mute")]]
+  }
+  let lines = [[tip_piece(t(prefixed("tool.", key)), 0, "bright")]]
+  if (id == "pencil" || id == "brush") {
+    push(lines, [tip_piece(t(prefixed("hint.", id)), 0, "mute")])
+  }
+  lines
+}
+
+-~> The tooltip lines of a pen in the picker.
+function tip_pen_lines(name) {
+  return [[tip_piece(name, 0, "bright"), tip_piece(" · pens." + name, g_text_w(name), "mute")],
+   [tip_piece(t(prefixed("pen.", name)), 0, "text")]]
+}
+
+-~> Where a tooltip of size [w, h] goes for a thing at rect [x, y, w, h]: just below it,
+-~> a little to the right, kept inside the window, above when there is no room below.
+function tip_place(r, size, dx) {
+  let x = r[0] + dx
+  let y = r[1] + r[3] + 1
+  if (y + size[1] + 2 > V.h) {
+    y = r[1] - size[1] - 1
+  }
+  if (x + size[0] + 2 > V.w) {
+    x = V.w - size[0] - 2
+  }
+  return [math.max(0, x), math.max(0, y)]
+}
+
+-~> The tooltip for what the pointer is over, or null: {"lines", "x", "y", "w", "h"}.
+function tip_for(hover) {
+  let parts = text.split(hover, ":")
+  let kind = parts[0]
+  let lines = null
+  let anchor = null
+  let dx = 3
+  if (kind == "tool" || kind == "strip") {
+    lines = tip_tool_lines(parts[1])
+    anchor = view_hit_rect(hover)
+  } elif (kind == "pen") {
+    lines = tip_pen_lines(pens.list[int(parts[1])].name)
+    anchor = view_hit_rect(hover)
+  } elif (kind == "callee") {
+    let r = view_rows()[int(parts[1]) - 1]
+    lines = tip_doc_lines(r.callee, "")
+    anchor = view_hit_rect(hover)
+    dx = 4
+  } elif (kind == "field") {
+    let props = ed_props()
+    if (props != null && props.kind == "call") {
+      lines = tip_doc_lines(props.callee, parts[1])
+      anchor = view_hit_rect(hover)
+    }
+  }
+  if (lines == null || anchor == null) {
+    return null
+  }
+  let size = tip_size(lines)
+  let at = tip_place(anchor, size, dx)
+  {"lines": lines, "x": at[0], "y": at[1], "w": size[0], "h": size[1], "key": hover}
+}
+
+function tip_draw(tip) {
+  g_box(tip.x, tip.y, tip.w, tip.h)
+  for (let i = 0; i < len(tip.lines); i = i + 1) {
+    let y = tip.y + 4 + i * 15
+    for (let k = 0; k < len(tip.lines[i]); k = k + 1) {
+      let p = tip.lines[i][k]
+      let x = tip.x + 6 + p.dx
+      if (p.code != null) {
+        code_draw(p.code, x, y)
+      } else {
+        g_text(p.s, x, y, P[p.c])
+      }
+    }
+  }
+}
+
+-~> The coordinates box over a hovered anchor, like "(330, 58)".
+function tip_anchor(cl) {
+  if (V.hover_anchor == null) {
+    return null
+  }
+  let p = V.hover_anchor.pos
+  let s = "(" + str(math.round(p.x)) + ", " + str(math.round(p.y)) + ")"
+  let u = view_anchor_ui(cl, p)
+  let w = g_text_w(s) + 14
+  {"lines": [[tip_piece(s, 0, "amber")]], "x": math.max(2, u[0] - w - 8), "y": math.max(2, u[1] - 22), "w": w, "h": 21,
+   "key": "anchor"}
+}
+
+-~> == The pen picker ==
+
+let pick_w = 230
+let pick_row = 20
+
+-~> The picker's box: [x, y, w, h], under the brush button.
+function pick_rect() {
+  let bx = 3
+  let bs = view_toolbar()
+  for (let i = 0; i < len(bs); i = i + 1) {
+    if (bs[i].id == "brush") {
+      bx = bs[i].x
+    }
+  }
+  return [bx, 17, pick_w, len(pens.list) * pick_row + 18]
+}
+
+-~> Which pen row a UI point is on (0 up), or -1.
+function pick_at(x, y) {
+  let r = pick_rect()
+  for (let i = 0; i < len(pens.list); i = i + 1) {
+    let ry = r[1] + 16 + i * pick_row
+    if (x >= r[0] + 1 && x < r[0] + r[2] - 1 && y >= ry && y < ry + pick_row) {
+      return i
+    }
+  }
+  -1
+}
+
+-~> The preview of a pen: a short wave as a brush shape in window pixels.
+let pick_shapes = {}
+
+function pick_preview(pen, x, y, w, h) {
+  let key = pen.name + str(x) + "," + str(y)
+  let hit = pick_shapes[key]
+  if (hit != null) {
+    return hit
+  }
+  let small = hash_copy(pen)
+  small.min = pen.min * 0.45
+  small.max = pen.max * 0.45
+  small.grain = pen.grain * 0.45
+  let pts = [(x, y + h * 0.7), (x + w * 0.33, y + h * 0.15), (x + w * 0.66, y + h * 0.85), (x + w, y + h * 0.3)]
+  let s = brush(pts, [0.2, 1.0, 0.6, 0.3], P.text, small)
+  pop(drawing)
+  pick_shapes[key] = s
+  s
+}
+
+function pick_draw(current) {
+  let r = pick_rect()
+  let px = r[0]
+  let py = r[1]
+  g_box(px, py, r[2], r[3])
+  g_rect(px + 1, py + 1, r[2] - 2, 13, P.raised)
+  g_text(text.upper(t("pen.header")) + " · pens.list", px + 5, py, P.mute)
+  for (let i = 0; i < len(pens.list); i = i + 1) {
+    let pen = pens.list[i]
+    let ry = py + 16 + i * pick_row
+    let tc = P.text
+    if (pen.name == current) {
+      g_rect(px + 1, ry, r[2] - 2, pick_row, P.moss)
+      g_rect(px + 1, ry, 2, pick_row, P.lizard)
+      tc = P.bright
+    } elif (V.picker_hover == i) {
+      g_rect(px + 1, ry, r[2] - 2, pick_row, P.raised)
+    }
+    g_frame(px + 5, ry + 1, 52, 18, P.void)
+    g_rect(px + 6, ry + 2, 50, 16, P.coal)
+    g_text(pen.name, px + 62, ry + 1, tc)
+    let desc = t(prefixed("pen.", pen.name))
+    if (g_text_w(pen.name) + g_text_w(desc) + 7 < r[2] - 66) {
+      g_text(desc, px + 62 + g_text_w(pen.name) + 7, ry + 1, P.mute)
+    }
+  }
+}
+
+-~> The strokes of the previews, at full resolution, into the canvas buffer.
+function pick_draw_strokes() {
+  let r = pick_rect()
+  let cr = V.cl.crect
+  g_canvas((cr[0], cr[1]))
+  fb.unclip()
+  for (let i = 0; i < len(pens.list); i = i + 1) {
+    let ry = r[1] + 16 + i * pick_row
+    let s = pick_preview(pens.list[i], (r[0] + 9) * 2 - cr[0] * 2, (ry + 5) * 2 - cr[1] * 2, 88, 16)
+    let sp = raster.shape(s)
+    if (sp.fill !== null) {
+      fb.spans(sp.fill, (0, 0), s.fill)
+    }
+  }
+  g_ui()
+}
+
+-~> == The confirm dialog ==
+
+-~> Opens the dialog "Unsaved changes": then() runs after Save or Discard.
+function dialog_unsaved(then) {
+  let title = t("dialog.unsaved")
+  let body = t("dialog.unsaved_text", {"file": view_file_name()})
+  let labels = [["save", t("dialog.save")], ["discard", t("dialog.discard")], ["cancel", t("dialog.cancel")]]
+  let bw = 0
+  for (let i = 0; i < len(labels); i = i + 1) {
+    bw = bw + g_text_w(labels[i][1]) + 18
+  }
+  bw = bw + 4 * 2
+  let w = math.max(g_text_w(body), g_text_w(title), bw) + 24
+  let h = 4 + 15 + 15 + 8 + 14 + 8
+  let x = (V.w - w) // 2
+  let y = (V.h - h) // 2
+  let buttons = []
+  let bx = x + (w - bw) // 2
+  for (let i = 0; i < len(labels); i = i + 1) {
+    let lw = g_text_w(labels[i][1]) + 18
+    push(buttons, {"id": labels[i][0], "label": labels[i][1], "x": bx, "y": y + h - 22, "w": lw, "h": 14})
+    bx = bx + lw + 4
+  }
+  V.dialog = {"x": x, "y": y, "w": w, "h": h, "title": title, "body": body, "buttons": buttons, "then": then}
+  view_touch()
+}
+
+function dialog_draw(d) {
+  g_box(d.x, d.y, d.w, d.h)
+  g_text(d.title, d.x + 12, d.y + 4, P.bright)
+  g_text(d.body, d.x + 12, d.y + 19, P.text)
+  for (let i = 0; i < len(d.buttons); i = i + 1) {
+    let b = d.buttons[i]
+    let state = "normal"
+    if (V.hover == "dialog:" + b.id) {
+      state = "hover"
+    }
+    g_button(b.x, b.y, b.w, b.h, "", b.label, state)
+  }
+}
+
+-~> == Keeping track of what is open ==
+
+-~> The popups now open as a list of [kind, rect], the rectangles with their shadow.
+function popup_list() {
+  let out = []
+  if (V.picker) {
+    let r = pick_rect()
+    push(out, ["picker", [r[0], r[1], r[2] + 2, r[3] + 2]])
+  }
+  if (V.tip != null) {
+    push(out, ["tip", [V.tip.x, V.tip.y, V.tip.w + 2, V.tip.h + 2]])
+  }
+  if (V.anchor_tip != null) {
+    push(out, ["anchor", [V.anchor_tip.x, V.anchor_tip.y, V.anchor_tip.w + 2, V.anchor_tip.h + 2]])
+  }
+  if (V.dialog != null) {
+    push(out, ["dialog", [V.dialog.x, V.dialog.y, V.dialog.w + 2, V.dialog.h + 2]])
+  }
+  out
+}
+
+-~> A text that changes when the shapes of the popups change (not their contents).
+function popup_shape_key(list) {
+  str(list)
+}
+
+function popup_content_key() {
+  let k = str(V.picker_hover) + "|" + str(ed.stale)
+  if (V.tip != null) {
+    k = k + V.tip.key
+  }
+  if (V.dialog != null) {
+    k = k + V.hover
+  }
+  k + ed.pen
+}
+
+-~> Draws every open popup over the panels, into both buffers.
+function popup_paint() {
+  let both = []
+  if (V.picker) {
+    push(both, "picker")
+  }
+  if (V.tip != null) {
+    push(both, "tip")
+  }
+  if (V.anchor_tip != null) {
+    push(both, "anchor")
+  }
+  if (V.dialog != null) {
+    push(both, "dialog")
+  }
+  for (let pass = 0; pass < 2; pass = pass + 1) {
+    if (pass == 0) {
+      g_ui()
+      fb.unclip()
+    } elif (V.cl != null) {
+      let cr = V.cl.crect
+      g_canvas((cr[0], cr[1]))
+      fb.unclip()
+    } else {
+      break
+    }
+    for (let i = 0; i < len(both); i = i + 1) {
+      let k = both[i]
+      if (k == "picker") {
+        pick_draw(ed.pen)
+      } elif (k == "tip") {
+        tip_draw(V.tip)
+      } elif (k == "anchor") {
+        tip_draw(V.anchor_tip)
+      } else {
+        dialog_draw(V.dialog)
+      }
+    }
+  }
+  g_ui()
+  if (V.picker && V.cl != null) {
+    pick_draw_strokes()
+  }
+}

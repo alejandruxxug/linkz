@@ -1,0 +1,999 @@
+-~> view_input: what the pointer and the keyboard do in the editor. Clicks and
+-~> keys call the ed_* functions of the editor's logic; this file only decides
+-~> which one, from where things are (view_layout).
+
+-~> == What is under the pointer ==
+
+-~> The id of the thing at a UI point, or "". Ids: tool:x bar:x tab:close tab:plus
+-~> row:LINE eye:LINE lock:LINE fold:LINE callee:LINE strip:x add:LINE field:name:sub
+-~> pen:i dialog:x.
+function view_hover_at(x, y) {
+  let gm = view_geom()
+  if (V.dialog != null) {
+    for (let i = 0; i < len(V.dialog.buttons); i = i + 1) {
+      let b = V.dialog.buttons[i]
+      if (view_in(x, y, b.x, b.y, b.w, b.h)) {
+        return "dialog:" + b.id
+      }
+    }
+    return ""
+  }
+  if (V.picker) {
+    let i = pick_at(x, y)
+    if (i >= 0) {
+      return "pen:" + str(i)
+    }
+    let r = pick_rect()
+    if (view_in(x, y, r[0], r[1], r[2], r[3])) {
+      return ""
+    }
+  }
+  if (y < 16) {
+    let bs = view_toolbar()
+    for (let i = 0; i < len(bs); i = i + 1) {
+      if (view_in(x, y, bs[i].x, bs[i].y, bs[i].w, bs[i].h)) {
+        return bs[i].group + ":" + bs[i].id
+      }
+    }
+    return ""
+  }
+  if (y < 30) {
+    let tb = view_tabs()
+    if (view_in(x, y, tb.close[0] - 2, 17, 12, 13)) {
+      return "tab:close"
+    }
+    if (view_in(x, y, tb.plus[0] - 2, 17, 12, 13)) {
+      return "tab:plus"
+    }
+    return ""
+  }
+  if (x < gm.pw && y >= gm.rows_y && y < gm.lim) {
+    let vis = view_visible()
+    for (let i = 0; i < len(vis); i = i + 1) {
+      let it = vis[i].item
+      let ry = vis[i].y
+      if (y >= ry && y < ry + it.h) {
+        return view_hover_item(it, ry, x, y)
+      }
+    }
+    return ""
+  }
+  if (x < gm.pw && y >= gm.pin_y && y < gm.pin_y + 18) {
+    let pin = view_pinned_row()
+    if (pin != null) {
+      return view_hover_row(pin, x)
+    }
+    return ""
+  }
+  if (x < gm.pw && y >= gm.props_y && y < gm.status_y) {
+    let lay = view_props_cached()
+    for (let i = 0; i < len(lay.boxes); i = i + 1) {
+      let b = lay.boxes[i]
+      if (view_in(x, y, b.x, b.y, b.w, b.h)) {
+        return "field:" + b.field + ":" + str(b.sub)
+      }
+    }
+    return ""
+  }
+  ""
+}
+
+function view_hover_row(r, x) {
+  let line = str(r.line)
+  let kind = r.kind
+  if (kind != "comment" && kind != "cont" && kind != "empty") {
+    if (x >= 3 && x < 13) {
+      return "eye:" + line
+    }
+    if (x >= 13 && x < 23) {
+      return "lock:" + line
+    }
+  }
+  let cx = view_code_x(r)
+  if (r.foldable && x >= 23 + r.depth * 10 && x < 34 + r.depth * 10) {
+    return "fold:" + line
+  }
+  if (r.callee != "" && x >= cx && x < cx + 7 * len(r.callee)) {
+    return "callee:" + line
+  }
+  "row:" + line
+}
+
+function view_hover_item(it, ry, x, y) {
+  if (it.t == "row") {
+    return view_hover_row(it.row, x)
+  }
+  if (it.t == "err") {
+    return "row:" + str(it.line)
+  }
+  if (it.t == "add") {
+    return "add:" + str(it.line)
+  }
+  if (it.t == "strip") {
+    let bs = view_strip(ry, it.depth)
+    for (let i = 0; i < len(bs); i = i + 1) {
+      if (view_in(x, y, bs[i].x, bs[i].y, bs[i].w, bs[i].h)) {
+        return "strip:" + bs[i].id
+      }
+    }
+    return "row:" + str(it.line)
+  }
+  ""
+}
+
+-~> The rectangle [x, y, w, h] of the thing with this hover id, or null.
+function view_hit_rect(id) {
+  let parts = text.split(id, ":")
+  let kind = parts[0]
+  if (kind == "tool" || kind == "bar") {
+    let bs = view_toolbar()
+    for (let i = 0; i < len(bs); i = i + 1) {
+      if (bs[i].id == parts[1] && bs[i].group == kind) {
+        return [bs[i].x, bs[i].y, bs[i].w, bs[i].h]
+      }
+    }
+  } elif (kind == "strip") {
+    let vis = view_visible()
+    for (let i = 0; i < len(vis); i = i + 1) {
+      if (vis[i].item.t == "strip") {
+        let bs = view_strip(vis[i].y, vis[i].item.depth)
+        for (let k = 0; k < len(bs); k = k + 1) {
+          if (bs[k].id == parts[1]) {
+            return [bs[k].x, bs[k].y, bs[k].w, bs[k].h]
+          }
+        }
+      }
+    }
+  } elif (kind == "pen") {
+    let r = pick_rect()
+    return [r[0] + 1, r[1] + 16 + int(parts[1]) * pick_row, r[2] - 2, pick_row]
+  } elif (kind == "callee") {
+    let vis = view_visible()
+    for (let i = 0; i < len(vis); i = i + 1) {
+      if (vis[i].item.t == "row" && vis[i].item.line == int(parts[1])) {
+        let r = vis[i].item.row
+        return [view_code_x(r), vis[i].y, 7 * len(r.callee), 18]
+      }
+    }
+  } elif (kind == "field") {
+    let lay = view_props_cached()
+    for (let i = 0; i < len(lay.boxes); i = i + 1) {
+      let b = lay.boxes[i]
+      if (b.field == parts[1] && str(b.sub) == parts[2]) {
+        return [b.x, b.y, b.w, b.h]
+      }
+    }
+  }
+  null
+}
+
+-~> Whether a hover id is something a tooltip can say more about.
+function view_tippable(id) {
+  let k = text.split(id, ":")[0]
+  k == "tool" || k == "strip" || k == "pen" || k == "callee" || k == "field"
+}
+
+-~> == Actions ==
+
+-~> Settles a pending run, so the rows and the shapes are the current ones.
+function view_prepare() {
+  if (ed.pending) {
+    ed_settle()
+    V.run_id = V.run_id + 1
+    V.ver = V.ver + 1
+  }
+}
+
+-~> After the editor's state changed: repaint, and keep the caret row on screen.
+function view_after() {
+  V.ver = V.ver + 1
+  V.flash = 0
+  if (ed.refusal != null) {
+    V.flash = 1
+  }
+  view_reveal(ed_model().line)
+  app.needs_paint = true
+}
+
+-~> Adds a shape (or a value, or a layer) with a tool and focuses its first property.
+function view_add(id) {
+  let ok = false
+  if (id == "layer") {
+    ok = ed_add_layer()
+  } elif (id == "function") {
+    ok = ed_add_shape("value")
+  } else {
+    ok = ed_add_shape(id)
+  }
+  view_prepare()
+  view_after()
+  if (ok && id != "layer") {
+    view_focus_first()
+  }
+  ok
+}
+
+-~> Puts an empty row at the end of a layer, with the caret on it (the strip shows).
+function view_add_object(layer_line) {
+  let rows = view_rows()
+  let r = rows[layer_line - 1]
+  let at = r.end_line
+  let m = ed_model()
+  let pad = leading_ws(m.lines[layer_line - 1]) + 2
+  let lines = list.slice(m.lines, 0, at) + [" " * pad] + list.slice(m.lines, at, len(m.lines))
+  ed_apply(doc_with(m, lines, at + 1, pad), null)
+  view_after()
+}
+
+function view_select_tool(id) {
+  if (V.tool == id) {
+    V.tool = ""
+    V.picker = false
+  } else {
+    V.tool = id
+    V.picker = id == "brush"
+  }
+  V.pen_note = ""
+  if (V.tool == "pencil") {
+    V.pen_note = t("hint.pencil")
+  } elif (V.tool == "brush") {
+    V.pen_note = t("hint.brush")
+  }
+  V.ver = V.ver + 1
+  app.needs_paint = true
+}
+
+function view_choose_pen(name) {
+  ed.pen = name
+  V.picker = false
+  V.tool = "brush"
+  let props = ed_props()
+  if (props != null && props.kind == "call" && props.callee == "brush") {
+    ed_set_prop("pen", "pens." + name)
+  }
+  view_prepare()
+  view_after()
+}
+
+function view_cycle_language() {
+  let codes = lang_codes()
+  let at = list.index(codes, lang_get())
+  set_language(codes[(at + 1) % len(codes)])
+  V.tip = null
+  view_touch()
+  view_force_all()
+}
+
+function view_force_all() {
+  let names = keys(view_panel_rects())
+  for (let i = 0; i < len(names); i = i + 1) {
+    V.force[names[i]] = true
+  }
+  app.needs_paint = true
+}
+
+-~> A path for a drawing that has none yet: untitled.lzdraw, untitled-2.lzdraw, ...
+function view_untitled_path() {
+  let path = "untitled.lzdraw"
+  let n = 2
+  while (fs.exists(path)) {
+    path = "untitled-" + str(n) + ".lzdraw"
+    n = n + 1
+  }
+  path
+}
+
+function view_save() {
+  view_commit_focus()
+  let target = ed.file
+  if (target == "") {
+    target = view_untitled_path()
+  }
+  let ok = ed_save(target)
+  if (ok) {
+    home_note_saved(target)
+  }
+  view_after()
+  ok
+}
+
+-~> The path of the PNG that Export writes: next to the file, same name.
+function view_png_path() {
+  if (ed.file == "") {
+    return "untitled.png"
+  }
+  if (text.ends(ed.file, ".lzdraw")) {
+    return text.slice(ed.file, 0, len(ed.file) - 7) + ".png"
+  }
+  ed.file + ".png"
+}
+
+-~> Renders the drawing at its own size into an offscreen buffer and saves it as a PNG.
+function view_export() {
+  view_commit_focus()
+  view_prepare()
+  let path = view_png_path()
+  let size = ed_canvas_size()
+  let ok = true
+  try {
+    fb.offscreen(size)
+    fb.fill((0, 0), size, ed.canvas.background)
+    let shapes = ed_paint_shapes()
+    for (let i = 0; i < len(shapes); i = i + 1) {
+      let r = raster.shape(shapes[i])
+      if (r.fill !== null) {
+        fb.spans(r.fill, (0, 0), shapes[i].fill)
+      }
+      if (r.stroke !== null) {
+        fb.spans(r.stroke, (0, 0), shapes[i].stroke)
+      }
+    }
+    fb.save_png(path)
+    fb.screen()
+    ed.status = t("status.exported", {"file": path})
+  } catch (e) {
+    fb.screen()
+    ed_refuse(t("status.export_failed", {"file": path}))
+    ok = false
+  }
+  view_after()
+  ok
+}
+
+-~> Runs `then` now when nothing is unsaved, else asks first.
+function view_confirm(then) {
+  if (!ed_dirty()) {
+    then()
+    return null
+  }
+  dialog_unsaved(then)
+}
+
+function view_new_drawing() {
+  ed_reset("", "")
+  ed.pending = true
+  V.top = 0
+  V.focus = null
+  V.tool = ""
+  V.picker = false
+  V.pen_note = ""
+  view_touch()
+  view_force_all()
+}
+
+function view_go_home() {
+  if (view_has_home()) {
+    view_confirm(function() { show_screen("home", null) })
+  }
+}
+
+function view_close_tab() {
+  if (view_has_home()) {
+    view_go_home()
+  } else {
+    view_confirm(function() { view_new_drawing() })
+  }
+}
+
+-~> Runs what a click on a toolbar, tab or strip button means.
+function view_press(id) {
+  let parts = text.split(id, ":")
+  let kind = parts[0]
+  let what = parts[1]
+  if (kind == "strip") {
+    view_add(what)
+  } elif (kind == "tool") {
+    if (what == "pencil" || what == "brush") {
+      view_select_tool(what)
+    } else {
+      view_add(what)
+    }
+  } elif (kind == "bar") {
+    if (what == "save") {
+      view_save()
+    } elif (what == "export") {
+      view_export()
+    } elif (what == "lang") {
+      view_cycle_language()
+    } elif (what == "home") {
+      view_go_home()
+    }
+  } elif (kind == "tab") {
+    if (what == "close") {
+      view_close_tab()
+    } else {
+      view_confirm(function() { view_new_drawing() })
+    }
+  } elif (kind == "dialog") {
+    view_dialog_choose(what)
+  }
+}
+
+function view_dialog_choose(what) {
+  let d = V.dialog
+  if (d == null) {
+    return null
+  }
+  if (what == "cancel") {
+    V.dialog = null
+  } elif (what == "discard") {
+    V.dialog = null
+    d.then()
+  } else {
+    V.dialog = null
+    if (view_save()) {
+      d.then()
+    }
+  }
+  view_touch()
+  view_force_all()
+}
+
+-~> == Property fields ==
+
+-~> Starts editing a box of the properties panel: its text, with the caret at the end.
+-~> The first typed character replaces everything (`fresh`).
+function view_focus_box(b) {
+  V.focus = {"field": b.field, "sub": b.sub, "text": b.text, "caret": len(b.text), "fresh": true, "orig": b.text,
+             "line": ed_model().line, "kind": b.kind}
+  V.ver = V.ver + 1
+  app.needs_paint = true
+}
+
+function view_focus_first() {
+  let lay = view_props_layout_build()
+  for (let i = 0; i < len(lay.boxes); i = i + 1) {
+    let b = lay.boxes[i]
+    if (b.kind == "number" || b.kind == "point" || b.kind == "color" || b.kind == "expr") {
+      view_focus_box(b)
+      return null
+    }
+  }
+}
+
+-~> Writes the edited text into the call: for a point, into one of its two numbers.
+function view_commit_focus() {
+  let f = V.focus
+  if (f == null) {
+    return null
+  }
+  V.focus = null
+  V.ver = V.ver + 1
+  app.needs_paint = true
+  if (f.text == f.orig || ed_model().line != f.line) {
+    return null
+  }
+  let props = ed_props()
+  if (props == null) {
+    return null
+  }
+  if (props.kind == "layer") {
+    ed_set_layer_name(f.line, f.text)
+  } elif (f.kind == "point") {
+    let fld = props_field_named(props, f.field)
+    let parts = view_point_parts(fld.text)
+    if (parts != null) {
+      parts[f.sub] = text.trim(f.text)
+      ed_set_prop(f.field, "(" + parts[0] + ", " + parts[1] + ")")
+    }
+  } else {
+    ed_set_prop(f.field, f.text)
+  }
+  view_prepare()
+  view_after()
+}
+
+function view_cancel_focus() {
+  V.focus = null
+  V.ver = V.ver + 1
+  app.needs_paint = true
+}
+
+-~> A key while a field is being edited.
+function view_field_key(name, mods) {
+  let f = V.focus
+  let k = text.lower(name)
+  if (k == "enter" || k == "return") {
+    view_commit_focus()
+    return true
+  }
+  if (k == "escape") {
+    view_cancel_focus()
+    return true
+  }
+  if (k == "tab") {
+    let at = view_box_index(f)
+    let dir = 1
+    if (mods != null && mods.shift == true) {
+      dir = -1
+    }
+    view_commit_focus()
+    let lay = view_props_layout_build()
+    if (len(lay.boxes) > 0 && at >= 0) {
+      let b = lay.boxes[(at + dir + len(lay.boxes)) % len(lay.boxes)]
+      if (b.kind != "bool" && b.kind != "pen" && b.kind != "missing") {
+        view_focus_box(b)
+      }
+    }
+    return true
+  }
+  f.fresh = false
+  if (k == "backspace") {
+    if (f.caret > 0) {
+      f.text = text.slice(f.text, 0, f.caret - 1) + text.slice(f.text, f.caret, len(f.text))
+      f.caret = f.caret - 1
+    }
+  } elif (k == "delete") {
+    f.text = text.slice(f.text, 0, f.caret) + text.slice(f.text, f.caret + 1, len(f.text))
+  } elif (k == "arrowleft") {
+    f.caret = math.max(0, f.caret - 1)
+  } elif (k == "arrowright") {
+    f.caret = math.min(len(f.text), f.caret + 1)
+  } elif (k == "home") {
+    f.caret = 0
+  } elif (k == "end") {
+    f.caret = len(f.text)
+  } else {
+    return false
+  }
+  V.ver = V.ver + 1
+  app.needs_paint = true
+  true
+}
+
+function view_box_index(f) {
+  let lay = view_props_layout_build()
+  for (let i = 0; i < len(lay.boxes); i = i + 1) {
+    if (lay.boxes[i].field == f.field && lay.boxes[i].sub == f.sub) {
+      return i
+    }
+  }
+  -1
+}
+
+function view_field_text_in(s) {
+  let f = V.focus
+  if (f.fresh) {
+    f.text = s
+    f.caret = len(s)
+    f.fresh = false
+  } else {
+    f.text = text.slice(f.text, 0, f.caret) + s + text.slice(f.text, f.caret, len(f.text))
+    f.caret = f.caret + len(s)
+  }
+  V.ver = V.ver + 1
+  app.needs_paint = true
+}
+
+-~> The number a text holds, or null.
+function view_number(s) {
+  text.number(text.trim(s))
+}
+
+-~> The text of a number after a scrub: whole when it started whole, else 2 decimals.
+function view_number_text(v, whole) {
+  if (whole) {
+    return str(math.round(v))
+  }
+  str(math.round(v * 100) / 100.0)
+}
+
+-~> The click on a box of the properties panel (a press: scrub or focus on release).
+function view_press_box(b, e) {
+  if (b.kind == "bool") {
+    let line = ed_model().line
+    if (b.field == "hidden") {
+      ed_set_hidden(line, b.text != "true")
+    } else {
+      ed_set_locked(line, b.text != "true")
+    }
+    view_prepare()
+    view_after()
+    return null
+  }
+  if (b.kind == "pen") {
+    V.picker = !V.picker
+    V.tool = "brush"
+    app.needs_paint = true
+    V.ver = V.ver + 1
+    return null
+  }
+  if (b.kind == "missing") {
+    return null
+  }
+  let v = view_number(b.text)
+  if ((b.kind == "number" || b.kind == "point") && v != null) {
+    V.drag = {"kind": "scrub", "box": b, "x0": e.pos.x, "v0": v, "moved": false, "whole": type(v) == "INTEGER"}
+    return null
+  }
+  view_focus_box(b)
+}
+
+function view_scrub(e) {
+  let d = V.drag
+  let dx = e.pos.x - d.x0
+  if (!d.moved && math.abs(dx) < 2) {
+    return null
+  }
+  if (!d.moved) {
+    d.moved = true
+    ed_begin_gesture()
+  }
+  let step = 1.0
+  if (e.mods.shift) {
+    step = 10.0
+  } elif (e.mods.alt) {
+    step = 0.1
+  }
+  let nv = d.v0 + dx * step
+  let whole = d.whole && step >= 1
+  let b = d.box
+  let value = view_number_text(nv, whole)
+  if (b.kind == "point") {
+    let props = ed_props()
+    let fld = props_field_named(props, b.field)
+    let parts = view_point_parts(fld.text)
+    if (parts == null) {
+      return null
+    }
+    parts[b.sub] = value
+    value = "(" + parts[0] + ", " + parts[1] + ")"
+  }
+  ed_set_prop(b.field, value)
+  view_prepare()
+  view_after()
+}
+
+-~> == Rows ==
+
+-~> Puts the caret in a row where it was clicked.
+function view_click_row(r, x, shift) {
+  let cd = view_row_code(r)
+  let rendered = view_row_render(r)
+  let idx = code_index_at(rendered[0], x - rendered[1])
+  let m = ed_model()
+  if (shift && m.line != r.line) {
+    ed_select_range(m.line, r.line)
+  } else {
+    ed_set_caret(r.line, cd[1] + idx)
+  }
+  view_after()
+}
+
+function view_press_row(id, e) {
+  let parts = text.split(id, ":")
+  let kind = parts[0]
+  let line = int(parts[1])
+  let rows = view_rows()
+  let r = rows[line - 1]
+  if (kind == "eye") {
+    ed_set_hidden(line, !r.hidden)
+    view_prepare()
+    view_after()
+  } elif (kind == "lock") {
+    ed_set_locked(line, !r.locked)
+    view_prepare()
+    view_after()
+  } elif (kind == "fold") {
+    ed_toggle_fold(line)
+    view_after()
+  } elif (kind == "add") {
+    view_add_object(line)
+  } else {
+    view_click_row(r, e.pos.x, e.mods.shift)
+    V.drag = {"kind": "rows", "anchor": line}
+  }
+}
+
+-~> == The mouse ==
+
+function view_down(e) {
+  let p = e.pos
+  V.mouse = p
+  view_prepare()
+  V.tip = null
+  V.tip_due = 0
+  let id = view_hover_at(p.x, p.y)
+  if (V.dialog != null) {
+    V.drag = {"kind": "press", "id": id}
+    app.needs_paint = true
+    return null
+  }
+  if (V.picker) {
+    let kind = text.split(id, ":")[0]
+    if (kind == "pen") {
+      view_choose_pen(pens.list[int(text.split(id, ":")[1])].name)
+      return null
+    }
+    if (id != "tool:brush" && !(kind == "field" && id == "field:pen:0")) {
+      V.picker = false
+      V.ver = V.ver + 1
+      app.needs_paint = true
+      if (view_in(p.x, p.y, pick_rect()[0], pick_rect()[1], pick_rect()[2], pick_rect()[3])) {
+        return null
+      }
+    }
+  }
+  let gm = view_geom()
+  if (V.focus != null) {
+    let same = id == "field:" + V.focus.field + ":" + str(V.focus.sub)
+    if (!same) {
+      view_commit_focus()
+      id = view_hover_at(p.x, p.y)
+    }
+  }
+  let kind = text.split(id, ":")[0]
+  if (kind == "tool" || kind == "bar" || kind == "tab" || kind == "strip") {
+    V.drag = {"kind": "press", "id": id}
+    app.needs_paint = true
+    return null
+  }
+  if (kind == "eye" || kind == "lock" || kind == "fold" || kind == "add" || kind == "row" || kind == "callee") {
+    view_press_row(id, e)
+    return null
+  }
+  if (kind == "field") {
+    let lay = view_props_cached()
+    for (let i = 0; i < len(lay.boxes); i = i + 1) {
+      let b = lay.boxes[i]
+      if (view_in(p.x, p.y, b.x, b.y, b.w, b.h)) {
+        if (V.focus != null && V.focus.field == b.field && V.focus.sub == b.sub) {
+          let cx = b.x + 4
+          if (b.kind == "color") {
+            cx = b.x + 16
+          }
+          V.focus.caret = math.max(0, math.min(len(V.focus.text), (p.x - cx + 3) // 7))
+          V.focus.fresh = false
+          V.ver = V.ver + 1
+          app.needs_paint = true
+        } else {
+          view_press_box(b, e)
+        }
+        return null
+      }
+    }
+    return null
+  }
+  if (p.x >= gm.pw - 1 && p.x <= gm.pw + 2 && p.y >= 30 && p.y < gm.status_y) {
+    V.drag = {"kind": "split"}
+    return null
+  }
+  if (p.x >= gm.cx && p.y >= 30 && p.y < gm.status_y) {
+    view_canvas_down(e)
+  }
+}
+
+function view_move(e) {
+  let p = e.pos
+  V.mouse = p
+  if (V.drag != null) {
+    let k = V.drag.kind
+    if (k == "scrub") {
+      view_scrub(e)
+    } elif (k == "split") {
+      V.pw = math.max(160, math.min(V.w - 120, p.x))
+      view_touch()
+      view_force_all()
+    } elif (k == "rows") {
+      let id = view_hover_at(p.x, p.y)
+      let parts = text.split(id, ":")
+      if (parts[0] == "row" || parts[0] == "callee") {
+        let line = int(parts[1])
+        if (line != ed_model().line || ed_model().sel != null) {
+          ed_select_range(V.drag.anchor, line)
+          view_after()
+        }
+      }
+    } elif (k == "press") {
+      app.needs_paint = true
+    } elif (k == "canvas") {
+      view_canvas_move(e)
+    }
+    return null
+  }
+  view_update_hover(p)
+}
+
+-~> Works out what the pointer is over without a button: hover marks, the anchor
+-~> under it, the pointer's place on the drawing, and the tooltip timer.
+function view_update_hover(p) {
+  let id = view_hover_at(p.x, p.y)
+  let gm = view_geom()
+  let cl = view_canvas_layout()
+  let anchor = null
+  let draw_pos = null
+  if (V.dialog == null && !V.picker && p.x >= gm.cx && p.y >= 30 && p.y < gm.status_y) {
+    anchor = view_anchor_at(cl, p.x, p.y)
+    if (view_in(p.x, p.y, cl.frame[0] + 1, cl.frame[1] + 1, cl.frame[2] - 2, cl.frame[3] - 2)) {
+      draw_pos = view_to_drawing(cl, p.x, p.y)
+    }
+  }
+  if (str(anchor) != str(V.hover_anchor)) {
+    V.hover_anchor = anchor
+    V.anchor_tip = tip_anchor(cl)
+    app.needs_paint = true
+  }
+  if (str(draw_pos) != str(V.mouse_draw)) {
+    V.mouse_draw = draw_pos
+    app.needs_paint = true
+  }
+  if (id != V.hover) {
+    V.hover = id
+    V.tip = null
+    V.tip_due = 0
+    if (view_tippable(id)) {
+      V.tip_due = time.ms() + tip_delay
+    }
+    if (V.picker) {
+      let i = pick_at(p.x, p.y)
+      if (i != V.picker_hover) {
+        V.picker_hover = i
+      }
+    }
+    app.needs_paint = true
+  }
+}
+
+function view_up(e) {
+  let p = e.pos
+  V.mouse = p
+  let d = V.drag
+  V.drag = null
+  if (d == null) {
+    return null
+  }
+  if (d.kind == "press") {
+    let id = view_hover_at(p.x, p.y)
+    if (id == d.id) {
+      view_press(id)
+    }
+    app.needs_paint = true
+  } elif (d.kind == "scrub") {
+    if (d.moved) {
+      ed_end_gesture()
+      view_after()
+    } else {
+      view_focus_box(d.box)
+    }
+  } elif (d.kind == "canvas") {
+    view_canvas_up(e)
+  }
+  V.ver = V.ver + 1
+  app.needs_paint = true
+}
+
+function view_wheel(e) {
+  let p = e.pos
+  let gm = view_geom()
+  if (p.x < gm.pw && p.y >= 30 && p.y < gm.props_y) {
+    let n = math.max(1, math.round(math.abs(e.dy)))
+    if (e.dy > 0) {
+      V.top = math.max(0, V.top - n)
+    } else {
+      V.top = math.min(view_max_top(), V.top + n)
+    }
+    V.ver = V.ver + 1
+    app.needs_paint = true
+  }
+}
+
+-~> The farthest the layers panel can scroll: where the last item is the last shown.
+function view_max_top() {
+  let items = view_items()
+  let gm = view_geom()
+  if (len(items) == 0) {
+    return 0
+  }
+  let avail = gm.lim - gm.rows_y
+  let end = items[len(items) - 1].y + items[len(items) - 1].h
+  for (let i = 0; i < len(items); i = i + 1) {
+    if (end - (items[i].y - items[i].gap) <= avail) {
+      return i
+    }
+  }
+  len(items) - 1
+}
+
+-~> == The canvas ==
+
+-~> A press on the canvas area: pick the topmost shape under it. (Dragging shapes and
+-~> anchors, and drawing with the pencil and brush, are the canvas gestures.)
+function view_canvas_down(e) {
+  if (V.tool == "pencil" || V.tool == "brush") {
+    return null
+  }
+  let cl = view_canvas_layout()
+  let p = view_to_drawing(cl, e.pos.x, e.pos.y)
+  if (V.hover_anchor != null) {
+    return null
+  }
+  let s = view_hit_shape(cl, p)
+  if (s != null && type(s.line) == "INTEGER") {
+    view_select_line(s.line)
+  }
+}
+
+function view_canvas_move(e) {
+  null
+}
+
+function view_canvas_up(e) {
+  null
+}
+
+-~> == The keyboard ==
+
+function view_key(e) {
+  let name = e.key
+  let mods = e.mods
+  let k = text.lower(name)
+  view_prepare()
+  V.tip = null
+  V.tip_due = 0
+  if (V.dialog != null) {
+    if (k == "escape") {
+      view_dialog_choose("cancel")
+    } elif (k == "enter" || k == "return") {
+      view_dialog_choose("save")
+    }
+    return null
+  }
+  if (V.picker && k == "escape") {
+    V.picker = false
+    V.ver = V.ver + 1
+    app.needs_paint = true
+    return null
+  }
+  if (V.focus != null) {
+    let cmd = mods.cmd || mods.ctrl
+    if (!cmd && view_field_key(name, mods)) {
+      return null
+    }
+    if (cmd && k == "s") {
+      view_save()
+      return null
+    }
+    if (cmd) {
+      view_commit_focus()
+    } else {
+      return null
+    }
+  }
+  let cmd = mods.cmd || mods.ctrl
+  if (cmd && k == "s") {
+    view_save()
+    return null
+  }
+  if (cmd && k == "e") {
+    view_export()
+    return null
+  }
+  if (k == "escape") {
+    V.tool = ""
+    V.pen_note = ""
+    V.ver = V.ver + 1
+    app.needs_paint = true
+    return null
+  }
+  ed_key(name, mods)
+  view_prepare()
+  view_after()
+}
+
+function view_text(e) {
+  if (e.mods != null && (e.mods.cmd || e.mods.ctrl)) {
+    return null
+  }
+  if (V.dialog != null) {
+    return null
+  }
+  V.tip = null
+  V.tip_due = 0
+  if (V.focus != null) {
+    view_field_text_in(e.text)
+    return null
+  }
+  ed_type(e.text)
+  view_prepare()
+  view_after()
+}

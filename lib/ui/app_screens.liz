@@ -1,0 +1,51 @@
+-~> app_screens: the screens of the app and the way to go from one to another.
+-~> This file loads before the screens' own files, so each of them can register
+-~> itself when it loads:
+-~>   screens.home = {"event": ..., "paint": ..., ...}
+-~> A screen is a hash with
+-~>   event(e)          required: the host's input events (down, up, move, wheel, key, text, resize)
+-~>   paint()           required: paints what changed; keeps app.needs_paint true until done
+-~>   enter(args)       optional: called when the screen is shown (paint everything: the
+-~>                     buffers still hold the screen that was there before)
+-~>   wants_hover       optional: true to get moves while no button is held
+-~>   debug_state()     optional: a hash for the backdoor's Dump
+-~>   debug_commands    optional: a hash of name -> function(args), merged into the backdoor commands
+-~> show_screen(name, args) makes a registered screen the current one.
+
+let screens = {}
+
+let screen_state = {"current": ""}
+
+-~> The current screen decides app.wants_hover; needs_paint and wants_hover of a
+-~> screen may be a value or a function.
+function screen_value(v) {
+  if (type(v) == "FUNCTION") {
+    return v()
+  }
+  v
+}
+
+function screen_sync() {
+  let s = screens[screen_state.current]
+  if (s != null) {
+    app.wants_hover = screen_value(s.wants_hover) == true
+  }
+}
+
+function show_screen(name, args = null) {
+  let s = screens[name]
+  if (s == null) {
+    return false
+  }
+  screen_state.current = name
+  screen_sync()
+  app.needs_paint = true
+  if (s.enter != null) {
+    s.enter(args)
+  }
+  true
+}
+
+function current_screen() {
+  screens[screen_state.current]
+}

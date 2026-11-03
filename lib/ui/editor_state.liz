@@ -80,11 +80,11 @@ function ed_new() {
 -~> Opens a file. False (with a status message) if it isn't there.
 function ed_open(path) {
   if (!fs.exists(path)) {
-    ed_refuse(tf("status.no_file_at", {"file": path}))
+    ed_refuse(t("status.no_file_at", {"file": path}))
     return false
   }
   ed_reset(fs.read(path), path)
-  ed.status = tf("status.opened", {"file": path})
+  ed.status = t("status.opened", {"file": path})
   true
 }
 
@@ -99,10 +99,15 @@ function ed_save(path) {
     return false
   }
   let body = doc_text(ed_model())
-  fs.write(target, body)
+  try {
+    fs.write(target, body)
+  } catch (e) {
+    ed_refuse(t("status.save_failed", {"file": target}))
+    return false
+  }
   ed.file = target
   ed.saved = body
-  ed.status = tf("status.saved", {"file": target})
+  ed.status = t("status.saved", {"file": target})
   true
 }
 

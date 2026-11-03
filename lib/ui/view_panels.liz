@@ -1,0 +1,465 @@
+-~> view_panels: paints the editor's panels from the state: the toolbar, the
+-~> tab bar, the layers panel (the code), the properties panel and the status
+-~> bar. Each one has its own function so that only what changed is painted.
+
+-~> == Toolbar and tabs ==
+
+function view_paint_toolbar() {
+  g_rect(0, 0, V.w, 16, P.panel)
+  g_rect(0, 15, V.w, 1, P.void)
+  let x = 3
+  for (let i = 0; i < len(view_tool_ids); i = i + 1) {
+    if (view_tool_ids[i] == "") {
+      g_rect(x + 1, 3, 1, 10, P.bevel)
+      x = x + 4
+    } else {
+      x = x + 15
+    }
+  }
+  let bs = view_toolbar()
+  for (let i = 0; i < len(bs); i = i + 1) {
+    let b = bs[i]
+    let state = "normal"
+    if (b.group == "tool" && V.tool == b.id) {
+      state = "active"
+    } elif (V.hover == b.group + ":" + b.id) {
+      state = "hover"
+    }
+    if (V.drag != null && V.drag.kind == "press" && V.drag.id == b.group + ":" + b.id) {
+      state = "active"
+    }
+    g_button(b.x, b.y, b.w, b.h, b.icon, b.label, state)
+  }
+}
+
+function view_paint_tabs() {
+  let tb = view_tabs()
+  g_rect(0, 16, V.w, 14, P.coal)
+  g_rect(0, 29, V.w, 1, P.void)
+  g_rect(2, 17, tb.w, 14, P.panel)
+  g_rect(2, 17, tb.w, 1, P.lizard)
+  g_rect(1, 17, 1, 13, P.void)
+  g_rect(2 + tb.w, 17, 1, 13, P.void)
+  g_text(tb.name, 7, 17, P.text)
+  let cl = tb.close
+  if (ed_dirty()) {
+    g_icon("dot", cl[0], cl[1], P.amber)
+  } else {
+    let c = P.mute
+    if (V.hover == "tab:close") {
+      c = P.bright
+    }
+    g_icon("close", cl[0], cl[1], c)
+  }
+  let pc = P.mute
+  if (V.hover == "tab:plus") {
+    pc = P.bright
+  }
+  g_text("+", tb.plus[0], tb.plus[1], pc)
+}
+
+-~> == The layers panel ==
+
+-~> Whether a line is part of the selected rows.
+function view_selected(m, line) {
+  if (m.sel != null) {
+    return line >= m.sel.from && line <= m.sel.to
+  }
+  line == m.line
+}
+
+-~> The text of a row without its indentation and how many characters that was.
+function view_row_code(r) {
+  let lead = leading_ws(r.text)
+  return [text.slice(r.text, lead, len(r.text)), lead]
+}
+
+-~> The x of the code of a row of this depth.
+function view_code_x(r) {
+  if (r.kind == "comment") {
+    return 24 + r.depth * 10
+  }
+  46 + r.depth * 10
+}
+
+-~> A row's code rendered for its place: [rendered, x of the code, count hidden by a fold].
+function view_row_render(r) {
+  let m = ed_model()
+  let sel = view_selected(m, r.line)
+  let cx = view_code_x(r)
+  let maxw = V.pw - cx - 4
+  let count = 0
+  if (r.collapsed) {
+    count = view_hidden_count(view_rows(), r)
+    if (count > 0) {
+      maxw = maxw - (g_text_w(str(count)) + 8)
+    }
+  }
+  let cd = view_row_code(r)
+  return [code_render(cd[0], maxw, sel), cx, count]
+}
+
+-~> Draws one row of code at y: background, bars, eye and lock, guides, chevron,
+-~> icon, the code, the count of a folded one and the caret.
+function view_paint_row(r, y, pinned) {
+  let m = ed_model()
+  let sel = view_selected(m, r.line)
+  let hover = V.hover == "row:" + str(r.line) && !sel
+  let err = r.error != null
+  let pw = V.pw
+  if (sel) {
+    g_rect(0, y, pw, 18, P.moss)
+    g_rect(0, y, 2, 18, P.lizard)
+  } elif (hover) {
+    g_rect(0, y, pw, 18, P.row)
+  }
+  if (err) {
+    g_rect(0, y, 2, 18, P.ember)
+  }
+  if (V.flash > 0 && ed.refusal != null && ed.refusal.line == r.line) {
+    g_rect(0, y, 2, 18, P.amber)
+  }
+  let kind = r.kind
+  if (kind != "comment" && kind != "cont" && kind != "empty") {
+    let eye = "eye"
+    let ec = P.mute
+    if (sel) {
+      ec = P.text
+    }
+    if (r.hidden) {
+      eye = "eye-off"
+      ec = P.dim
+    }
+    if (V.hover == "eye:" + str(r.line)) {
+      ec = P.bright
+    }
+    g_icon(eye, 4, y + 5, ec)
+    let lc = P.dim
+    if (r.locked) {
+      lc = P.text
+    }
+    if (V.hover == "lock:" + str(r.line)) {
+      lc = P.bright
+    }
+    g_icon("lock", 14, y + 5, lc)
+  }
+  let x = 24 + r.depth * 10
+  if (!pinned) {
+    for (let d = 0; d < r.depth; d = d + 1) {
+      g_rect(24 + d * 10 + 3, y, 1, 18, P.bevel)
+    }
+  }
+  if (r.foldable) {
+    let chev = "chevron-down"
+    if (r.collapsed) {
+      chev = "chevron-right"
+    }
+    let cc = P.mute
+    if (V.hover == "fold:" + str(r.line)) {
+      cc = P.bright
+    }
+    g_icon(chev, x, y + 5, cc)
+  }
+  let icon = view_row_icon(r)
+  if (err && icon != "") {
+    g_icon("error", x + 10, y + 5, P.ember)
+  } elif (icon != "") {
+    let ic = P.text
+    if (sel) {
+      ic = P.lizard
+    }
+    g_icon(icon, x + 10, y + 5, ic)
+  }
+  let cd = view_row_code(r)
+  let rr = view_row_render(r)
+  let rendered = rr[0]
+  let cx = rr[1]
+  let count = rr[2]
+  code_draw(rendered, cx, y + 3)
+  if (count > 0) {
+    let cw = g_text_w(str(count))
+    let bx = pw - cw - 8
+    g_rect(bx, y + 4, cw + 4, 10, P.raised)
+    g_text(str(count), bx + 2, y + 3, P.mute)
+  }
+  if (r.line == m.line && V.focus == null && V.dialog == null) {
+    let idx = math.max(0, math.min(m.col - cd[1], len(rendered.xs) - 1))
+    let cxx = cx + rendered.xs[idx]
+    if (cxx < pw - 8) {
+      g_rect(cxx, y + 3, 1, 12, P.amber)
+    }
+  }
+  if (err) {
+    -~> a squiggle under the word the error points at
+    let e = view_error_at(r.line)
+    if (e != null) {
+      let ci = e.column - 1 - cd[1]
+      if (ci >= 0 && ci < len(rendered.xs) - 1) {
+        let ex = cx + rendered.xs[ci]
+        let n = 1
+        while (ci + n < len(cd[0]) && code_is_word(cd[0][ci + n])) {
+          n = n + 1
+        }
+        let ew = math.min(n * 7, pw - 8 - ex)
+        for (let i = 0; i < ew; i = i + 2) {
+          g_rect(ex + i, y + 15 + (i // 2) % 2, math.min(2, ew - i), 1, P.ember)
+        }
+      }
+    }
+  }
+}
+
+function view_error_at(line) {
+  for (let i = 0; i < len(ed.errors); i = i + 1) {
+    if (ed.errors[i].line == line) {
+      return ed.errors[i]
+    }
+  }
+  null
+}
+
+function view_paint_strip(it, y) {
+  let d = it.depth
+  g_rect(0, y, V.pw, 22, P.moss)
+  g_rect(0, y, 2, 22, P.lizard)
+  for (let k = 0; k < d; k = k + 1) {
+    g_rect(24 + k * 10 + 3, y, 1, 22, P.bevel)
+  }
+  g_icon("eye", 4, y + 7, P.text)
+  g_icon("lock", 14, y + 7, P.dim)
+  g_rect(35 + 10 * d, y + 5, 1, 12, P.amber)
+  let bs = view_strip(y, d)
+  for (let i = 0; i < len(bs); i = i + 1) {
+    let b = bs[i]
+    let state = "normal"
+    if (V.hover == "strip:" + b.id) {
+      state = "hover"
+    }
+    g_button(b.x, b.y, b.w, b.h, b.icon, "", state)
+  }
+  let end = bs[len(bs) - 1].x + 14
+  g_text(t("strip.hint"), end + 4, y + 5, P.mute)
+}
+
+function view_paint_err(it, y) {
+  let cx = view_code_x(it.row)
+  g_rect(0, y, 2, 16, P.ember)
+  g_rect(cx - 9, y + 2, 1, 12, P.ember)
+  let room = (V.pw - 8 - cx) // 7
+  g_text(text.slice(it.row.error, 0, room), cx, y + 1, P.ember)
+}
+
+function view_paint_add(it, y) {
+  let x = 44 + it.depth * 10
+  let c = P.dim
+  if (V.hover == "add:" + str(it.line)) {
+    c = P.mute
+  }
+  g_icon("plus", x - 10, y + 2, c)
+  g_text(t("row.add"), x, y - 1, c)
+}
+
+function view_paint_rows() {
+  let gm = view_geom()
+  let m = ed_model()
+  g_rect(0, 30, V.pw, gm.props_y - 30, P.panel)
+  g_rect(0, 30, V.pw, 13, P.raised)
+  g_rect(0, 43, V.pw, 1, P.void)
+  g_text(text.upper(t("panel.layers")), 6, 30, P.mute)
+  let fname = view_file_name()
+  g_text(fname, V.pw - g_text_w(fname) - 6, 30, P.dim)
+  g_clip(0, gm.rows_y, V.pw, gm.lim - gm.rows_y)
+  let vis = view_visible()
+  for (let i = 0; i < len(vis); i = i + 1) {
+    let it = vis[i].item
+    let y = vis[i].y
+    if (it.t == "row") {
+      view_paint_row(it.row, y, false)
+    } elif (it.t == "strip") {
+      view_paint_strip(it, y)
+    } elif (it.t == "err") {
+      view_paint_err(it, y)
+    } elif (it.t == "add") {
+      view_paint_add(it, y)
+    }
+  }
+  g_clip(0, 30, V.pw, gm.props_y - 30)
+  let sb = view_scrollbar()
+  if (sb != null) {
+    g_rect(V.pw - 5, gm.rows_y, 4, gm.lim - 1 - gm.rows_y, P.coal)
+    g_rect(V.pw - 5, sb[0], 4, sb[1], P.bevel)
+  }
+  let pin = view_pinned_row()
+  if (pin != null) {
+    g_rect(0, gm.pin_y - 1, V.pw, 1, P.void)
+    g_rect(0, gm.pin_y, V.pw, 18, P.coal)
+    view_paint_row(pin, gm.pin_y, true)
+  }
+}
+
+-~> == The properties panel ==
+
+function view_paint_box(b) {
+  g_field(b.x, b.y, b.w, b.h, b.focus)
+  if (b.kind == "bool") {
+    if (b.text == "true") {
+      g_rect(b.x + 3, b.y + 3, b.w - 6, b.h - 6, P.lizard)
+    }
+    return null
+  }
+  let tc = P.amber
+  let shown = b.text
+  if (b.kind == "color") {
+    let c = g_hex_color(b.text)
+    g_rect(b.x + 3, b.y + 4, 10, 10, P.void)
+    if (c != null) {
+      g_rect(b.x + 4, b.y + 5, 8, 8, c)
+    }
+    g_text(shown, b.x + 16, b.y + 3, P.text)
+  } else {
+    if (b.kind == "pen" || b.kind == "expr" || b.kind == "string" || b.kind == "text") {
+      tc = P.text
+    }
+    g_text(shown, b.x + 4, b.y + 3, tc)
+    if (b.kind == "pen" || (b.kind == "array" && !b.focus && b.w > g_text_w(shown) + 12)) {
+      g_icon("chevron-down", b.x + g_text_w(shown) + 6, b.y + 5, P.mute)
+    }
+  }
+  if (b.focus && V.focus != null) {
+    let cx = b.x + 4 + V.focus.caret * 7
+    if (b.kind == "color") {
+      cx = b.x + 16 + V.focus.caret * 7
+    }
+    g_rect(cx, b.y + 3, 1, 12, P.amber)
+  }
+}
+
+function view_hint(lay) {
+  let m = ed_model()
+  let props = lay.props
+  if (props == null) {
+    return lay.hint
+  }
+  if (props.kind == "layer") {
+    return lay.hint
+  }
+  if (V.hover_anchor != null) {
+    let p = V.hover_anchor.pos
+    return t("hint.anchor", {"n": V.hover_anchor.anchor, "pos": "(" + str(math.round(p.x)) + ", " + str(math.round(p.y)) + ")"})
+  }
+  if (props.callee == "brush") {
+    return t("hint.restyle")
+  }
+  t("word.line") + " " + str(m.line) + " · " + t("hint.drag")
+}
+
+function view_paint_props() {
+  let gm = view_geom()
+  let y = gm.props_y
+  let lay = view_props_cached()
+  g_rect(0, y, V.pw, gm.status_y - y, P.panel)
+  g_rect(0, y, V.pw, 1, P.void)
+  g_rect(0, y + 1, V.pw, 15, P.raised)
+  g_rect(0, y + 16, V.pw, 1, P.void)
+  g_text(lay.title, 6, y + 2, P.mute)
+  if (lay.msg != "") {
+    g_text(lay.msg, 6, y + 24, P.mute)
+  }
+  for (let i = 0; i < len(lay.labels); i = i + 1) {
+    let l = lay.labels[i]
+    g_text(l.s, l.x, l.y, P.mute)
+  }
+  for (let i = 0; i < len(lay.boxes); i = i + 1) {
+    view_paint_box(lay.boxes[i])
+  }
+  let hint = view_hint(lay)
+  if (hint != "") {
+    g_text(hint, 6, y + 45, P.mute)
+  }
+}
+
+-~> == The status bar ==
+
+function view_thousands(n) {
+  let s = str(n)
+  let sep = t("num.thousands")
+  let out = ""
+  for (let i = 0; i < len(s); i = i + 1) {
+    if (i > 0 && (len(s) - i) % 3 == 0) {
+      out = out + sep
+    }
+    out = out + s[i]
+  }
+  out
+}
+
+-~> The parts of the status bar: [icon, text, color name].
+function view_status_parts() {
+  let left = [["canvas", view_file_name(), "text"]]
+  let errs = ed.errors
+  if (len(errs) > 0) {
+    let line = errs[0].line
+    let key = "state.error"
+    if (len(errs) > 1) {
+      key = "state.errors"
+    }
+    push(left, ["error", t(key, {"n": len(errs), "line": line}), "ember"])
+  } elif (ed_dirty()) {
+    push(left, ["dot", t("state.unsaved"), "amber"])
+  } else {
+    push(left, ["check", t("state.saved"), "lizard"])
+  }
+  let right = []
+  if (V.pen_note != "") {
+    push(left, [V.tool, V.pen_note, "mute"])
+  } elif (ed.refusal != null) {
+    push(left, ["", ed.refusal.message, "ember"])
+  } else {
+    push(left, ["", t("stat.steps", {"n": view_thousands(ed.stats.steps), "ms": math.round(ed.stats.ms)}), "mute"])
+    if (V.mouse_draw != null) {
+      push(right, ["", "x " + str(math.round(V.mouse_draw.x)) + " y " + str(math.round(V.mouse_draw.y)), "mute"])
+    }
+  }
+  push(right, ["", str(math.round(view_canvas_layout().zoom * 100)) + "%", "mute"])
+  push(right, ["language", text.upper(lang_get()), "text"])
+  return [left, right]
+}
+
+function view_paint_status() {
+  let gm = view_geom()
+  let y = gm.status_y
+  g_rect(0, y, V.w, 16, P.panel)
+  g_rect(0, y, V.w, 1, P.void)
+  let parts = view_status_parts()
+  let left = parts[0]
+  let right = parts[1]
+  let x = 6
+  for (let i = 0; i < len(left); i = i + 1) {
+    let p = left[i]
+    if (p[0] != "") {
+      g_icon(p[0], x, y + 4, P[p[2]])
+      x = x + 10
+    }
+    g_text(p[1], x, y + 2, P[p[2]])
+    x = x + g_text_w(p[1]) + 6
+    if (i < len(left) - 1) {
+      g_rect(x, y + 4, 1, 8, P.bevel)
+    }
+    x = x + 7
+  }
+  x = V.w - 6
+  for (let i = len(right) - 1; i >= 0; i = i - 1) {
+    let p = right[i]
+    x = x - g_text_w(p[1])
+    g_text(p[1], x, y + 2, P[p[2]])
+    if (p[0] != "") {
+      x = x - 10
+      g_icon(p[0], x, y + 4, P[p[2]])
+    }
+    x = x - 7
+    if (i > 0) {
+      g_rect(x, y + 4, 1, 8, P.bevel)
+    }
+    x = x - 6
+  }
+}

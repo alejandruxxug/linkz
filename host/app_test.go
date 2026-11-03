@@ -122,28 +122,11 @@ func TestAppPlaceholderEvents(t *testing.T) {
 	}
 
 	mustCall("Wait")
-	// A press inside the UI: pos is in UI pixels (window / 2), x*2 in the window.
+	// A press inside the UI goes through app.event to the editor screen.
 	mustCall("Click", "50", "60")
-	d := mustCall("Dump")
-	state := d["app"].(map[string]any)
-	if mouse := state["mouse"].([]any); mouse[0].(float64) != 50 || mouse[1].(float64) != 60 {
-		t.Errorf("mouse = %v, want [50 60] (UI pixels)", mouse)
-	}
-	if state["held"] != false {
-		t.Errorf("held = %v after a click", state["held"])
-	}
-
-	// A click inside the canvas rect carries canvas_pos at full resolution.
-	mustCall("Click", "100.5", "20")
-	state = mustCall("Dump")["app"].(map[string]any)
-	cp, _ := state["canvas_pos"].([]any)
-	if len(cp) != 2 || cp[0].(float64) != 21 || cp[1].(float64) != 24 { // canvas at UI (90,8): (201-180, 40-16)
-		t.Errorf("canvas_pos = %v, want [21 24]", state["canvas_pos"])
-	}
-	// ...and not outside it.
-	mustCall("Click", "10", "10")
-	if state = mustCall("Dump")["app"].(map[string]any); state["canvas_pos"] != nil {
-		t.Errorf("canvas_pos outside the canvas = %v", state["canvas_pos"])
+	state := mustCall("Dump")["app"].(map[string]any)
+	if state["screen"] != "editor" {
+		t.Errorf("screen = %v, want editor", state["screen"])
 	}
 
 	// Drag injects every step (no coalescing), with the pressure ramp.
@@ -162,14 +145,15 @@ func TestAppPlaceholderEvents(t *testing.T) {
 		t.Errorf("Ping = %v", out)
 	}
 	l := mustCall("List")
-	if names := l["app"].([]any); len(names) != 1 || names[0] != "Ping" {
+	found := map[string]bool{}
+	for _, n := range l["app"].([]any) {
+		found[n.(string)] = true
+	}
+	if !found["Ping"] || !found["SelectRow"] || !found["Tool"] {
 		t.Errorf("app commands = %v", l["app"])
 	}
 	if _, err := dbg.cmds["Call"]([]string{"Nope"}); err == nil {
 		t.Error("calling an unknown command should fail")
-	}
-	if _, err := dbg.cmds["Save"](nil); err == nil {
-		t.Error("the placeholder has no Save: expected an error")
 	}
 
 	// Screenshot is the composited window (full resolution).

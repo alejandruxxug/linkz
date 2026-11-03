@@ -124,7 +124,7 @@ function set_prop(m, line, name, value, docs) {
   }
   let f = props_field_named(props, name)
   if (f == null) {
-    return {"refused": tf("refuse.no_field", {"name": name})}
+    return {"refused": t("refuse.no_field", {"name": name})}
   }
   let v = text.trim(value)
   if (v == "") {

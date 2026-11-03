@@ -1,0 +1,224 @@
+-~> view_gfx: the small pieces the editor's view is drawn with: the Linkz Dark
+-~> palette and rectangles, text, icons, buttons and fields, in whole pixels.
+-~> Everything goes through the drawing context `g`, so the same code draws into
+-~> the half-resolution UI buffer (scale 1) or into the full-resolution canvas
+-~> buffer (scale 2, where one UI pixel is a 2x2 block). Positions are always
+-~> in UI pixels of the window; g.ox and g.oy say where the target's top left is.
+
+let P = {
+  "void": #0b0c0b, "coal": #131512, "panel": #1a1d19, "row": #232721,
+  "raised": #2e332c, "bevel": #434a40, "dim": #5f685b, "mute": #a0ab9b,
+  "text": #d4dacd, "bright": #f2f5ec, "moss": #163a20, "lizard": #4fc46a,
+  "amber": #f2b33d, "ember": #f36c5b, "sky": #72b8e6, "peach": #eb9a6f,
+  "checker": #161815, "veil": #13151273
+}
+
+let g = {"s": 1, "ox": 0, "oy": 0}
+
+-~> Draw into the UI buffer.
+function g_ui() {
+  g.s = 1
+  g.ox = 0
+  g.oy = 0
+  fb.target("ui")
+}
+
+-~> Draw into the canvas buffer, whose top left is at `origin` (UI pixels).
+function g_canvas(origin) {
+  g.s = 2
+  g.ox = origin.x
+  g.oy = origin.y
+  fb.target("canvas")
+}
+
+function g_rect(x, y, w, h, c) {
+  fb.fill(((x - g.ox) * g.s, (y - g.oy) * g.s), (w * g.s, h * g.s), c)
+}
+
+-~> Tells the host which part of the current target changed (UI pixels).
+function g_dirty(x, y, w, h) {
+  fb.dirty(((x - g.ox) * g.s, (y - g.oy) * g.s), (w * g.s, h * g.s))
+}
+
+function g_clip(x, y, w, h) {
+  fb.clip(((x - g.ox) * g.s, (y - g.oy) * g.s), (w * g.s, h * g.s))
+}
+
+-~> Draws spans [y, x0, x1] (already at the scale) with their top left at (x, y).
+function g_spans(spans, x, y, c) {
+  fb.spans(spans, ((x - g.ox) * g.s, (y - g.oy) * g.s), c)
+}
+
+-~> The spans of a text at a scale, from its top left, kept.
+let g_text_cache = {1: {}, 2: {}}
+let g_text_count = 0
+
+function g_text_spans(s, sc) {
+  let cache = g_text_cache[sc]
+  let hit = cache[s]
+  if (hit != null) {
+    return hit
+  }
+  let out = []
+  let adv = 7 * sc
+  for (let i = 0; i < len(s); i = i + 1) {
+    let ch = s[i]
+    if (ch != " ") {
+      let gl = font_glyph(ch, sc)
+      let at = i * adv
+      for (let k = 0; k < len(gl); k = k + 1) {
+        push(out, [gl[k][0], gl[k][1] + at, gl[k][2] + at])
+      }
+    }
+  }
+  g_text_count = g_text_count + 1
+  if (g_text_count > 3000) {
+    g_text_cache = {1: {}, 2: {}}
+    g_text_count = 0
+    cache = g_text_cache[sc]
+  }
+  cache[s] = out
+  out
+}
+
+-~> How wide a text is in UI pixels (the font is 7 wide at scale 1).
+function g_text_w(s) {
+  len(s) * 7
+}
+
+-~> Draws a text with its top left at (x, y).
+function g_text(s, x, y, c) {
+  if (len(s) > 0) {
+    g_spans(g_text_spans(s, g.s), x, y, c)
+  }
+}
+
+function g_icon(name, x, y, c) {
+  g_spans(icon_spans(name, g.s), x, y, c)
+}
+
+-~> A 1 pixel outline of a rectangle.
+function g_frame(x, y, w, h, c) {
+  g_rect(x, y, w, 1, c)
+  g_rect(x, y + h - 1, w, 1, c)
+  g_rect(x, y + 1, 1, h - 2, c)
+  g_rect(x + w - 1, y + 1, 1, h - 2, c)
+}
+
+-~> A bevel inside a rectangle: `hi` on the top and left, `lo` on the bottom and right.
+function g_bevel(x, y, w, h, hi, lo) {
+  g_rect(x, y, w - 1, 1, hi)
+  g_rect(x, y, 1, h - 1, hi)
+  g_rect(x + 1, y + h - 1, w - 1, 1, lo)
+  g_rect(x + w - 1, y + 1, 1, h - 1, lo)
+}
+
+-~> A button: void outline, face, bevel. state is "normal", "hover" or
+-~> "active" (pressed). With a label the icon sits at +3 and the label at +13.
+function g_button(x, y, w, h, icon, label, state) {
+  let face = P.raised
+  let hi = P.bevel
+  let lo = P.coal
+  let off = 0
+  let ic = P.text
+  let tc = P.text
+  if (state == "hover") {
+    face = P.bevel
+    hi = P.dim
+  } elif (state == "active") {
+    face = P.moss
+    hi = P.coal
+    lo = P.bevel
+    off = 1
+    ic = P.lizard
+    tc = P.bright
+  }
+  g_frame(x, y, w, h, P.void)
+  g_rect(x + 1, y + 1, w - 2, h - 2, face)
+  g_bevel(x + 1, y + 1, w - 2, h - 2, hi, lo)
+  let cx = x + 3 + off
+  if (icon != "") {
+    if (label == "") {
+      g_icon(icon, x + (w - 8) // 2 + off, y + (h - 8) // 2 + off, ic)
+    } else {
+      g_icon(icon, cx, y + (h - 8) // 2 + off, ic)
+    }
+    cx = cx + 10
+  }
+  if (label != "") {
+    let lx = cx
+    if (icon == "") {
+      lx = lx + 1
+    }
+    g_text(label, lx, y + (h - 13) // 2 + off, tc)
+  }
+}
+
+-~> An inset field: void outline (amber when focused), coal inside, a void line on top.
+function g_field(x, y, w, h, focused) {
+  let edge = P.void
+  if (focused) {
+    edge = P.amber
+  }
+  g_frame(x, y, w, h, edge)
+  g_rect(x + 1, y + 1, w - 2, h - 2, P.coal)
+  g_rect(x + 1, y + 1, w - 2, 1, P.void)
+}
+
+-~> A box with a 2 pixel drop shadow, for tooltips and menus: void outline, row fill, bevel line.
+function g_box(x, y, w, h) {
+  g_rect(x + 2, y + 2, w, h, P.void)
+  g_frame(x, y, w, h, P.void)
+  g_rect(x + 1, y + 1, w - 2, h - 2, P.row)
+  g_rect(x + 1, y + 1, w - 2, 1, P.bevel)
+}
+
+-~> A color from the hex digits of a literal (3, 6 or 8 digits) without its alpha, or null.
+function g_hex_color(s) {
+  let digits = text.lower(text.replace(s, "#", ""))
+  if (len(digits) == 3) {
+    digits = digits[0] + digits[0] + digits[1] + digits[1] + digits[2] + digits[2]
+  }
+  if (len(digits) != 6 && len(digits) != 8) {
+    return null
+  }
+  let v = []
+  for (let i = 0; i < 6; i = i + 1) {
+    let d = text.find("0123456789abcdef", digits[i])
+    if (d < 0) {
+      return null
+    }
+    push(v, d)
+  }
+  rgb(v[0] * 16 + v[1], v[2] * 16 + v[3], v[4] * 16 + v[5])
+}
+
+-~> The dark squares of a checker, as spans, for an area of w by h (16 pixel squares).
+let g_checker_cache = {}
+
+function g_checker_spans(w, h) {
+  let key = str(w) + "x" + str(h)
+  let hit = g_checker_cache[key]
+  if (hit != null) {
+    return hit
+  }
+  let out = []
+  for (let j = 0; j * 16 < h; j = j + 1) {
+    for (let i = 0; i * 16 < w; i = i + 1) {
+      if ((i + j) % 2 == 1) {
+        let x1 = math.min(i * 16 + 16, w)
+        for (let y = j * 16; y < math.min(j * 16 + 16, h); y = y + 1) {
+          push(out, [y, i * 16, x1])
+        }
+      }
+    }
+  }
+  g_checker_cache = {}
+  g_checker_cache[key] = out
+  out
+}
+
+-~> A language key made of a group and a name, like prefixed("pen.", "ink").
+function prefixed(group, name) {
+  group + name
+}

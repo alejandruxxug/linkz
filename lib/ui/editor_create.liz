@@ -83,7 +83,7 @@ function add_shape(m, kind, size) {
   }
   let code = create_template(kind, size)
   if (code == null) {
-    return {"refused": tf("refuse.shape", {"kind": kind})}
+    return {"refused": t("refuse.shape", {"kind": kind})}
   }
   create_rows(m, [code], 0)
 }

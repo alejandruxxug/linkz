@@ -1,0 +1,534 @@
+-~> view_layout: where everything is. The editor's view keeps its state in `V`
+-~> and works out the places of the toolbar, the rows, the properties fields and
+-~> the canvas from it, so that painting and clicking use the same numbers.
+-~> All the numbers are UI pixels (the half-resolution buffer) and come from the
+-~> style guide's metrics.
+
+let V = {
+  "w": 512, "h": 360, "pw": 320,
+  "top": 0, "ver": 0, "run_id": 0,
+  "mouse": (0, 0), "mouse_in": false,
+  "tool": "", "picker": false, "picker_hover": -1,
+  "hover": "", "tip": null, "tip_key": "", "tip_since": 0, "tip_due": 0,
+  "dialog": null, "focus": null, "drag": null, "flash": 0,
+  "keys": {}, "force": {}, "popup_rect": null,
+  "items": null, "items_ver": -1, "items_key": "", "rows": null, "rows_ver": -1,
+  "paints": 0, "painted_ms": 0, "pen_note": "", "hover_anchor": null,
+  "zoom": 1.0, "crect": null, "drawing_rect": null, "hits": {}
+}
+
+-~> Something the editor's state or the layers changed: everything that reads it repaints.
+function view_touch() {
+  V.ver = V.ver + 1
+  app.needs_paint = true
+}
+
+function view_geom() {
+  let h = V.h
+  let props_y = h - 78
+  {"w": V.w, "h": h, "pw": V.pw, "props_y": props_y, "status_y": h - 16, "lim": props_y - 20,
+   "pin_y": props_y - 19, "main_y": 30, "rows_y": 45,
+   "cx": V.pw + 2, "cy": 30, "cw": V.w - V.pw - 2, "ch": h - 46}
+}
+
+function view_in(x, y, rx, ry, rw, rh) {
+  x >= rx && x < rx + rw && y >= ry && y < ry + rh
+}
+
+-~> The panels as [x, y, w, h], to know which ones a popup covers.
+function view_panel_rects() {
+  let gm = view_geom()
+  {"toolbar": [0, 0, gm.w, 16], "tabs": [0, 16, gm.w, 14],
+   "rows": [0, 30, gm.pw, gm.props_y - 30], "props": [0, gm.props_y, gm.pw, gm.status_y - gm.props_y],
+   "status": [0, gm.status_y, gm.w, 16], "canvas": [gm.pw, 30, gm.w - gm.pw, gm.h - 46]}
+}
+
+-~> Marks every panel a rectangle touches to be painted again.
+function view_force_rect(r) {
+  if (r == null) {
+    return null
+  }
+  let panels = view_panel_rects()
+  let names = keys(panels)
+  for (let i = 0; i < len(names); i = i + 1) {
+    let p = panels[names[i]]
+    if (r[0] < p[0] + p[2] && r[0] + r[2] > p[0] && r[1] < p[1] + p[3] && r[1] + r[3] > p[1]) {
+      V.force[names[i]] = true
+    }
+  }
+  app.needs_paint = true
+}
+
+-~> == The rows of the layers panel ==
+
+-~> The rows of the document (ed_rows), kept until the editor's state changes.
+function view_rows() {
+  if (V.rows == null || V.rows_ver != V.ver) {
+    V.rows = ed_rows()
+    V.rows_ver = V.ver
+  }
+  V.rows
+}
+
+function view_pinned_row() {
+  let rows = view_rows()
+  for (let i = 0; i < len(rows); i = i + 1) {
+    if (rows[i].kind == "canvas") {
+      return rows[i]
+    }
+  }
+  null
+}
+
+-~> What a row is shown with: its icon.
+function view_row_icon(r) {
+  let k = r.kind
+  if (k == "layer") {
+    return "layer"
+  }
+  if (k == "shape") {
+    if (r.callee == "ellipse") {
+      return "circle"
+    }
+    return r.callee
+  }
+  if (k == "value" || k == "definition") {
+    return "function"
+  }
+  if (k == "canvas") {
+    return "canvas"
+  }
+  if (k == "comment" || k == "cont") {
+    return ""
+  }
+  "block"
+}
+
+-~> How many lines hide inside a folded row.
+function view_hidden_count(rows, r) {
+  let n = 0
+  for (let l = r.line + 1; l <= r.end_line; l = l + 1) {
+    if (rows[l - 1].kind != "empty") {
+      n = n + 1
+    }
+  }
+  n
+}
+
+-~> The items of the layers panel, top to bottom: {"t": row|gap|add|strip|err,
+-~> "line", "row", "h", "gap" (extra room above), "y" (offset from the first item),
+-~> "depth"}. A run of blank lines is one 4 pixel gap; the canvas row is pinned
+-~> at the bottom so it is not here; an empty row with the caret is the tool strip.
+function view_items() {
+  if (V.items != null && V.items_ver == V.ver) {
+    return V.items
+  }
+  let rows = view_rows()
+  let m = ed_model()
+  let adds = {}
+  for (let i = 0; i < len(rows); i = i + 1) {
+    let r = rows[i]
+    if (r.kind == "layer" && r.visible && !r.collapsed) {
+      if (adds[r.end_line] == null) {
+        adds[r.end_line] = []
+      }
+      push(adds[r.end_line], r)
+    }
+  }
+  let items = []
+  let off = 0
+  for (let i = 0; i < len(rows); i = i + 1) {
+    let r = rows[i]
+    let item = null
+    if (r.visible && r.kind != "canvas") {
+      if (r.kind == "empty") {
+        if (r.line == m.line) {
+          item = {"t": "strip", "line": r.line, "row": r, "h": 22, "gap": 0, "depth": r.depth}
+        } elif (len(items) > 0 && items[len(items) - 1].t != "gap") {
+          item = {"t": "gap", "line": r.line, "row": r, "h": 4, "gap": 0, "depth": 0}
+        }
+      } else {
+        let gap = 0
+        if (r.kind == "layer") {
+          gap = 4
+        }
+        item = {"t": "row", "line": r.line, "row": r, "h": 18, "gap": gap, "depth": r.depth}
+      }
+    }
+    if (item != null) {
+      item.y = off + item.gap
+      off = item.y + item.h
+      push(items, item)
+      if (item.t == "row" && r.error != null) {
+        let e = {"t": "err", "line": r.line, "row": r, "h": 16, "gap": 0, "depth": r.depth, "y": off}
+        off = off + 16
+        push(items, e)
+      }
+    }
+    let ends = adds[r.line]
+    if (ends != null) {
+      for (let k = len(ends) - 1; k >= 0; k = k - 1) {
+        if (i + 1 < len(rows) && rows[i + 1].kind == "empty" && rows[i + 1].line == m.line) {
+          continue
+        }
+        let a = {"t": "add", "line": ends[k].line, "row": ends[k], "h": 10, "gap": 0, "depth": ends[k].depth + 1, "y": off}
+        off = off + 10
+        push(items, a)
+      }
+    }
+  }
+  V.items = items
+  V.items_ver = V.ver
+  V.visible = null
+  items
+}
+
+-~> The items that fit on screen from V.top: [{"item", "y"}] with absolute y.
+function view_visible() {
+  let items = view_items()
+  let gm = view_geom()
+  if (V.top >= len(items)) {
+    V.top = math.max(0, len(items) - 1)
+  }
+  if (V.top < 0) {
+    V.top = 0
+  }
+  let out = []
+  if (len(items) == 0) {
+    return out
+  }
+  let start = items[V.top].y - items[V.top].gap
+  for (let i = V.top; i < len(items); i = i + 1) {
+    let it = items[i]
+    let y = gm.rows_y + it.y - start
+    if (y + it.h > gm.lim) {
+      break
+    }
+    push(out, {"item": it, "y": y, "i": i})
+  }
+  out
+}
+
+-~> Scrolls so the item of this line is on screen.
+function view_reveal(line) {
+  let items = view_items()
+  let at = -1
+  for (let i = 0; i < len(items); i = i + 1) {
+    if (items[i].line == line && (items[i].t == "row" || items[i].t == "strip")) {
+      at = i
+    }
+  }
+  if (at < 0) {
+    return null
+  }
+  let first = at
+  if (at + 1 < len(items) && items[at + 1].t == "err") {
+    at = at + 1
+  }
+  if (first < V.top) {
+    V.top = first
+    return null
+  }
+  if (at < V.top) {
+    V.top = at
+    return null
+  }
+  for (let n = 0; n < len(items); n = n + 1) {
+    let vis = view_visible()
+    let found = false
+    for (let k = 0; k < len(vis); k = k + 1) {
+      if (vis[k].i == at) {
+        found = true
+      }
+    }
+    if (found || V.top >= at) {
+      return null
+    }
+    V.top = V.top + 1
+  }
+}
+
+-~> The scrollbar's thumb as [y, h], or null when every item is on screen.
+function view_scrollbar() {
+  let items = view_items()
+  let vis = view_visible()
+  if (len(items) == 0 || (V.top == 0 && len(vis) >= len(items))) {
+    return null
+  }
+  let gm = view_geom()
+  let track = gm.lim - 1 - gm.rows_y
+  let th = math.max(8, track * len(vis) // len(items))
+  let ty = gm.rows_y + (track - th) * V.top // math.max(1, len(items) - len(vis))
+  return [ty, th]
+}
+
+-~> == Tabs and toolbar ==
+
+function view_file_name() {
+  if (ed.file == "") {
+    return t("tab.untitled")
+  }
+  let parts = text.split(ed.file, "/")
+  parts[len(parts) - 1]
+}
+
+function view_has_home() {
+  screens.home != null
+}
+
+-~> The tool buttons in the order of the toolbar; "" is a separator.
+let view_tool_ids = ["circle", "rect", "line", "polygon", "stroke", "", "pencil", "brush", "", "text", "function", "layer"]
+
+-~> The buttons of the toolbar: [{"id", "x", "y", "w", "h", "icon", "label"}].
+function view_toolbar() {
+  let out = []
+  let x = 3
+  for (let i = 0; i < len(view_tool_ids); i = i + 1) {
+    let id = view_tool_ids[i]
+    if (id == "") {
+      x = x + 4
+    } else {
+      push(out, {"id": id, "x": x, "y": 1, "w": 14, "h": 14, "icon": id, "label": "", "group": "tool"})
+      x = x + 15
+    }
+  }
+  let ex = t("button.export")
+  let sv = t("button.save")
+  let lg = text.upper(lang_get())
+  let ex_w = g_text_w(ex) + 18
+  let sv_w = g_text_w(sv) + 18
+  let lg_w = g_text_w(lg) + 18
+  let rx = V.w - 3 - ex_w
+  push(out, {"id": "export", "x": rx, "y": 1, "w": ex_w, "h": 14, "icon": "export", "label": ex, "group": "bar"})
+  rx = rx - (sv_w + 2)
+  push(out, {"id": "save", "x": rx, "y": 1, "w": sv_w, "h": 14, "icon": "save", "label": sv, "group": "bar"})
+  rx = rx - (lg_w + 6)
+  push(out, {"id": "lang", "x": rx, "y": 1, "w": lg_w, "h": 14, "icon": "language", "label": lg, "group": "bar"})
+  if (view_has_home()) {
+    push(out, {"id": "home", "x": rx - 20, "y": 1, "w": 14, "h": 14, "icon": "home", "label": "", "group": "bar"})
+  }
+  out
+}
+
+-~> The tab bar: the one open drawing, its close mark and the + for a new one.
+function view_tabs() {
+  let name = view_file_name()
+  let w = g_text_w(name) + 26
+  {"name": name, "w": w, "close": [7 + g_text_w(name) + 4, 20, 8, 8], "plus": [2 + w + 6, 17, 7, 13],
+   "tab": [2, 17, w, 13]}
+}
+
+-~> The eight tools of the inline strip on an empty row at y: [{"id", "x", "y", "w", "h"}].
+let view_strip_ids = ["circle", "rect", "line", "polygon", "stroke", "text", "function", "layer"]
+
+function view_strip(y, depth) {
+  let out = []
+  let bx = 40 + 10 * depth
+  for (let i = 0; i < len(view_strip_ids); i = i + 1) {
+    push(out, {"id": view_strip_ids[i], "x": bx + i * 15, "y": y + 4, "w": 14, "h": 14, "icon": view_strip_ids[i]})
+  }
+  out
+}
+
+-~> == The canvas ==
+
+-~> Where the drawing sits: the zoom, its rectangle in UI pixels and its place
+-~> in the canvas buffer. The canvas buffer normally covers the canvas area; with
+-~> the pen picker open it covers the whole window (the picker draws smooth
+-~> strokes outside the area).
+function view_canvas_layout() {
+  let gm = view_geom()
+  let size = ed_canvas_size()
+  let zoom = 1.0
+  let steps = [1.0, 0.75, 0.5, 0.25]
+  for (let i = 0; i < len(steps); i = i + 1) {
+    zoom = steps[i]
+    if (size.x * zoom <= gm.cw * 2 - 4 && size.y * zoom <= gm.ch * 2 - 4) {
+      break
+    }
+  }
+  let sw = math.round(size.x * zoom)
+  let sh = math.round(size.y * zoom)
+  let dx = ((gm.cw * 2 - sw) // 4) * 2
+  let dy = ((gm.ch * 2 - sh) // 4) * 2
+  -~> the drawing's top left in window pixels (two per UI pixel)
+  let wx = gm.cx * 2 + dx
+  let wy = gm.cy * 2 + dy
+  let crect = [gm.cx, gm.cy, gm.cw, gm.ch]
+  if (V.picker) {
+    crect = [0, 0, gm.w, gm.h]
+  }
+  {"zoom": zoom, "sw": sw, "sh": sh, "wx": wx, "wy": wy, "crect": crect,
+   "frame": [wx // 2 - 1, wy // 2 - 1, (sw + 1) // 2 + 2, (sh + 1) // 2 + 2],
+   "offset": (wx - crect[0] * 2, wy - crect[1] * 2)}
+}
+
+-~> A point of the drawing as window pixels (two per UI pixel).
+function view_to_window(cl, p) {
+  (cl.wx + p.x * cl.zoom, cl.wy + p.y * cl.zoom)
+}
+
+-~> A point of the window (in UI pixels, may be halves) as a point of the drawing.
+function view_to_drawing(cl, ux, uy) {
+  ((ux * 2 - cl.wx) / cl.zoom, (uy * 2 - cl.wy) / cl.zoom)
+}
+
+-~> == The properties panel ==
+
+function view_props_title(props, line) {
+  let head = text.upper(t("panel.properties"))
+  if (props != null && props.kind == "call") {
+    return head + " · " + props.callee + " · " + t("word.line") + " " + str(line)
+  }
+  if (props != null) {
+    return head + " · " + t("tool.layer") + " · " + t("word.line") + " " + str(line)
+  }
+  head + " · " + t("word.line") + " " + str(line)
+}
+
+function view_field_text(f) {
+  if (V.focus != null && V.focus.field == f.name) {
+    return V.focus.text
+  }
+  f.text
+}
+
+-~> The numbers inside a point's text "(360, 90)" as two strings, or null.
+function view_point_parts(s) {
+  if (!text.starts(s, "(") || !text.ends(s, ")")) {
+    return null
+  }
+  let parts = text.split(text.slice(s, 1, len(s) - 1), ",")
+  if (len(parts) != 2) {
+    return null
+  }
+  return [text.trim(parts[0]), text.trim(parts[1])]
+}
+
+-~> The fields to show for a call: the ones the panel has room for. A brush
+-~> keeps its pressures to itself.
+function view_shown_fields(props) {
+  let out = []
+  for (let i = 0; i < len(props.fields); i = i + 1) {
+    let f = props.fields[i]
+    if (!(props.callee == "brush" && f.name == "pressures")) {
+      push(out, f)
+    }
+  }
+  out
+}
+
+-~> The panel's layout, kept until the editor's state, the focus or the language change.
+function view_props_cached() {
+  let key = str(V.ver) + "|" + str(V.focus) + "|" + str(V.picker) + "|" + lang_get() + "|" + str(V.pw) + "|" + str(V.h)
+  if (V.pl == null || V.pl_key != key) {
+    V.pl = view_props_layout_build()
+    V.pl_key = key
+  }
+  V.pl
+}
+
+-~> What the panel shows, with places: {"title", "labels": [{x, y, s}], "boxes": [...],
+-~> "msg", "hint"}. A box is {"field", "sub", "kind", "x", "y", "w", "h", "text", "focus"}.
+function view_props_layout_build() {
+  let gm = view_geom()
+  let m = ed_model()
+  let props = ed_props()
+  let y = gm.props_y + 22
+  let out = {"title": view_props_title(props, m.line), "labels": [], "boxes": [], "msg": "", "hint": "", "props": props}
+  if (props == null) {
+    let row = ed_rows()[m.line - 1]
+    if (row.kind == "empty") {
+      out.msg = t("hint.empty")
+      out.hint = t("hint.keys")
+    } else {
+      out.msg = t("props.empty")
+    }
+    return out
+  }
+  let x = 6
+  if (props.kind == "layer") {
+    let nm = text.lower(t("props.name"))
+    push(out.labels, {"x": x, "y": y + 2, "s": nm})
+    let bx = x + g_text_w(nm) + 4
+    let txt = props.name
+    if (V.focus != null && V.focus.field == "name") {
+      txt = V.focus.text
+    }
+    let bw = math.max(g_text_w(txt) + 8, 60)
+    push(out.boxes, {"field": "name", "sub": 0, "kind": "text", "x": bx, "y": y, "w": bw, "h": 18, "text": txt,
+                     "focus": V.focus != null && V.focus.field == "name"})
+    x = bx + bw + 12
+    let flags = [["hidden", props.hidden], ["locked", props.locked]]
+    for (let i = 0; i < 2; i = i + 1) {
+      let lab = text.lower(t(prefixed("props.", flags[i][0])))
+      push(out.labels, {"x": x, "y": y + 2, "s": lab})
+      push(out.boxes, {"field": flags[i][0], "sub": 0, "kind": "bool", "x": x + g_text_w(lab) + 4, "y": y + 3, "w": 12, "h": 12,
+                       "text": str(flags[i][1]), "focus": false})
+      x = x + g_text_w(lab) + 4 + 12 + 10
+    }
+    out.hint = t("hint.layer")
+    return out
+  }
+  let fields = view_shown_fields(props)
+  for (let i = 0; i < len(fields); i = i + 1) {
+    let f = fields[i]
+    let ftxt = view_field_text(f)
+    let focused = V.focus != null && V.focus.field == f.name
+    push(out.labels, {"x": x, "y": y + 2, "s": f.name})
+    let lw = g_text_w(f.name) + 4
+    let fx = x + lw
+    if (f.kind == "point" && !f.missing && view_point_parts(f.text) != null) {
+      let pp = view_point_parts(f.text)
+      let parts = [pp[0], pp[1]]
+      if (focused) {
+        parts[V.focus.sub] = V.focus.text
+      }
+      push(out.labels, {"x": fx, "y": y + 2, "s": "("})
+      fx = fx + 8
+      let aw = g_text_w(parts[0]) + 8
+      push(out.boxes, {"field": f.name, "sub": 0, "kind": "point", "x": fx, "y": y, "w": aw, "h": 18, "text": parts[0],
+                       "focus": focused && V.focus.sub == 0})
+      fx = fx + g_text_w(parts[0]) + 10
+      push(out.labels, {"x": fx - 2, "y": y + 2, "s": ","})
+      fx = fx + 6
+      let bw = g_text_w(parts[1]) + 8
+      push(out.boxes, {"field": f.name, "sub": 1, "kind": "point", "x": fx, "y": y, "w": bw, "h": 18, "text": parts[1],
+                       "focus": focused && V.focus.sub == 1})
+      fx = fx + g_text_w(parts[1]) + 9
+      push(out.labels, {"x": fx, "y": y + 2, "s": ")"})
+      x = fx + 12
+    } else {
+      let kind = f.kind
+      let shown = ftxt
+      let w = g_text_w(shown) + 8
+      if (kind == "color") {
+        w = g_text_w(shown) + 22
+      } elif (kind == "array") {
+        shown = t("field.points", {"n": len(f.items)})
+        if (props.callee == "brush") {
+          shown = str(len(f.items))
+        }
+        if (focused) {
+          shown = ftxt
+        }
+        w = g_text_w(shown) + 8
+        if (props.callee != "brush") {
+          w = g_text_w(shown) + 20
+        }
+      } elif (f.name == "pen") {
+        w = g_text_w(shown) + 20
+        kind = "pen"
+      } elif (f.missing) {
+        shown = ""
+        w = 28
+        kind = "missing"
+      }
+      w = math.max(w, 20)
+      push(out.boxes, {"field": f.name, "sub": 0, "kind": kind, "x": fx, "y": y, "w": w, "h": 18, "text": shown,
+                       "focus": focused || (kind == "pen" && V.picker)})
+      x = fx + w + 8
+    }
+  }
+  out
+}
