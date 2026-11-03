@@ -28,6 +28,7 @@
 | B017 | Palette sidebar (HSV picker, recent, document palette as `let colors = {...}`) | Changing a named color updates every shape using it |
 | B018 | Artist mode (layers with thumbnails, code drawer) | Switching modes keeps the same file and selection |
 | B020 | Layer blend modes (Normal, Multiply, Screen, Overlay, Darken, Lighten, Add) + opacity: `blend("multiply")` / `opacity(0.8)` as a layer's first lines; per-layer buffers blended by the host; SVG `mix-blend-mode` | A Multiply layer darkens what's below in the canvas, PNG and SVG |
+| B021 | **Recommended MAX OBJ COUNT** derived at runtime: host `os.memory()` (total/free RAM) + a ~200 ms lizard calibration (ms per object for a standard mix, span-cache bytes per object) → min(memory cap, repaint-budget cap) with headroom, cached per machine/app version; New drawing dialog shows it and writes `canvas.max_objects`; status bar `objects n / max` (amber ≥ 80%, ember over); opening on a slower machine warns without editing the file | The estimate is reproducible on this Mac, shown in the dialog and status bar, and rises when speed improves |
 | B019 | First-run tutorial | Runs once, skippable, en + es, `tutorial_done` in settings |
 
 ## 🗃️ Later (parked ideas)
