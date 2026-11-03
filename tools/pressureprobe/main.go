@@ -1,4 +1,4 @@
-// pressureprobe shows live trackpad pressure. It is a throwaway dev tool:
+// pressureprobe shows live trackpad and pen pressure. It is a throwaway dev tool:
 // Ebitengine draws here ONLY for that reason. Linkz itself never draws
 // with Ebitengine.
 package main
@@ -26,6 +26,9 @@ func (g *game) Update() error {
 		g.started = true
 		g.ok = pressure.Start()
 		fmt.Println("monitor installed:", g.ok)
+		if !g.ok {
+			fmt.Println("pressure monitor unavailable")
+		}
 	}
 	s := pressure.Latest()
 	if s != g.last {
