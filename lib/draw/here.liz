@@ -1,0 +1,13 @@
+-~> here: where the drawing code is running.
+-~> This file loads FIRST. The host replaces `here` with a function that
+-~> returns {"line": n, "layer": ["sea", "waves"]} for the call being run; this
+-~> default returns null, so shapes drawn without a host have no line or layer.
+
+function here() {
+  return
+}
+
+-~> TODO(B011): replace this with the null value the language is getting.
+-~> lizard-script has no null literal yet, so this is one: an `if` that does
+-~> not run gives null.
+let nothing = if (false) { 1 }

@@ -1,0 +1,28 @@
+circle args 3 path 6 fill #3fa34d stroke null width 0
+  anchor (100, 80) arg 0 item null move
+  anchor (120, 80) arg 1 item null radius
+["M", (120, 80)] ["Z"] null null null null
+ellipse args 3 path 6 fill #e0a526 stroke null width 0
+  anchor (50, 50) arg 0 item null move
+  anchor (80, 60) arg 1 item null corner
+rect args 3 path 5 fill #2d6a8f stroke null width 0
+  anchor (10, 20) arg 0 item null move
+  anchor (110, 60) arg 1 item null corner
+[["M", (10, 20)], ["L", (110, 20)], ["L", (110, 60)], ["L", (10, 60)], ["Z"]]
+line args 4 path 2 fill null stroke #000000 width 3
+  anchor (0, 0) arg 0 item null point
+  anchor (10, 10) arg 1 item null point
+polygon args 2 path 4 fill #c0392b stroke null width 0
+  anchor (0, 0) arg 0 item 0 point
+  anchor (10, 0) arg 0 item 1 point
+  anchor (5, 8) arg 0 item 2 point
+stroke args 3 path 3 fill null stroke #1d1d1f width 4
+  anchor (0, 0) arg 0 item 0 point
+  anchor (10, 10) arg 0 item 1 point
+  anchor (20, 0) arg 0 item 2 point
+[["M", (5, 5)], ["L", (5, 5)]]
+[["M", (5, 5)], ["L", (9, 9)]]
+9
+#ff0000
+42 ["sea", "waves"]
+(512, 512) #ffffff

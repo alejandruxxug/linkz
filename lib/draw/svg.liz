@@ -1,0 +1,85 @@
+-~> svg: turns the drawing into SVG text, one <path> for each shape.
+-~> The shapes are painted in paint_order(): bottom row first, so a shape that
+-~> is higher in the file ends up in front of the ones below it.
+
+let hex_digits = "0123456789abcdef"
+
+function svg_hex2(n) {
+  hex_digits[n // 16] + hex_digits[n % 16]
+}
+
+-~> A color as "#rrggbb" (the alpha is written separately as an opacity).
+function color_hex(c) {
+  "#" + svg_hex2(c.r) + svg_hex2(c.g) + svg_hex2(c.b)
+}
+
+-~> A number with at most two decimals and no needless ".0".
+function svg_num(n) {
+  let r = math.round(n * 100) / 100.0
+  if (r == math.floor(r)) {
+    return str(math.floor(r))
+  }
+  str(r)
+}
+
+function point_text(p) {
+  svg_num(p.x) + " " + svg_num(p.y)
+}
+
+-~> The d="..." text of a path.
+function path_data(path) {
+  let out = []
+  for (let i = 0; i < len(path); i = i + 1) {
+    let cmd = path[i]
+    let op = cmd[0]
+    if (op == "Z") {
+      push(out, "Z")
+    } elif (op == "C") {
+      push(out, "C " + point_text(cmd[1]) + " " + point_text(cmd[2]) + " " + point_text(cmd[3]))
+    } else {
+      push(out, op + " " + point_text(cmd[1]))
+    }
+  }
+  text.join(out, " ")
+}
+
+function svg_attr(name, value) {
+  " " + name + "=\"" + value + "\""
+}
+
+-~> The fill or stroke attributes for one color: none when there is no color.
+function paint_attrs(name, c) {
+  if (type(c) != "COLOR") {
+    return svg_attr(name, "none")
+  }
+  let out = svg_attr(name, color_hex(c))
+  if (c.a != 255) {
+    out = out + svg_attr(name + "-opacity", svg_num(c.a / 255.0))
+  }
+  out
+}
+
+-~> One <path> element for a shape.
+function svg_shape(shape) {
+  let out = "<path" + svg_attr("d", path_data(shape.path)) + paint_attrs("fill", shape.fill)
+  if (type(shape.stroke) == "COLOR") {
+    out = out + paint_attrs("stroke", shape.stroke) + svg_attr("stroke-width", svg_num(shape.width))
+    out = out + svg_attr("stroke-linecap", "round") + svg_attr("stroke-linejoin", "round")
+  }
+  out + "/>"
+}
+
+-~> The whole SVG text of a canvas and a list of shapes.
+function svg_document(canvas, shapes) {
+  let w = canvas.size.x
+  let h = canvas.size.y
+  let nl = "\n"
+  let out = "<svg xmlns=\"http://www.w3.org/2000/svg\"" + svg_attr("width", svg_num(w)) + svg_attr("height", svg_num(h))
+  out = out + svg_attr("viewBox", "0 0 " + svg_num(w) + " " + svg_num(h)) + ">" + nl
+  out = out + "  <rect" + svg_attr("width", svg_num(w)) + svg_attr("height", svg_num(h)) + paint_attrs("fill", canvas.background) + "/>" + nl
+  let back_to_front = paint_order(shapes)
+  for (let i = 0; i < len(back_to_front); i = i + 1) {
+    out = out + "  " + svg_shape(back_to_front[i]) + nl
+  }
+  out + "</svg>" + nl
+}

@@ -1,0 +1,2 @@
+draw error: stroke: points must only hold points, but item 1 is INTEGER
+[line 36, column 3] runtime error: identifier not found: bad_argument

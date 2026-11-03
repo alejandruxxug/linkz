@@ -1,0 +1,2 @@
+draw error: circle: center must be a point like (10, 20), not INTEGER
+[line 36, column 3] runtime error: identifier not found: bad_argument

@@ -1,0 +1,36 @@
+-~> paint_order: larger line first, creation order inside a line.
+
+let row = 0
+let here = function() { {"line": row, "layer": ["a"]} }
+function at(r, name) {
+  row = r
+  let s = circle((0, 0), 1, #fff)
+  s.args = name
+  s
+}
+function names(list_of_shapes) {
+  let out = []
+  let order = paint_order(list_of_shapes)
+  for (let i = 0; i < len(order); i = i + 1) {
+    push(out, order[i].args)
+  }
+  out
+}
+
+-~> Row 1 is in front of row 5; the loop on row 3 paints its rounds in order.
+let made = [at(1, "top")]
+for (let i = 0; i < 3; i = i + 1) {
+  row = 3
+  push(made, at(3, "loop" + str(i)))
+}
+push(made, at(5, "bottom"))
+puts(names(made))
+
+-~> Without lines (no host) it is the plain reverse.
+let here = function() { return }
+let x = circle((0, 0), 1, #fff)
+x.args = "x"
+let y = circle((0, 0), 1, #fff)
+y.args = "y"
+puts(names([x, y]))
+puts(len(paint_order([])))

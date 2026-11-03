@@ -1,0 +1,342 @@
+-~> shapes: the things a drawing is made of.
+-~> Every call draws a shape and also returns it, so it can be changed
+-~> afterwards. A shape is a hash:
+-~>   kind     "circle", "rect", ...
+-~>   args     the values the call got
+-~>   path     [["M", p], ["L", p], ["C", c1, c2, p], ["Z"]] with absolute points
+-~>   fill     a color or null     stroke  a color or null     width  a number
+-~>   widths, opacities   per point, only for brush (from the pen), else null
+-~>   anchors  [{"pos": p, "arg": i, "item": j or null, "role": ...}]: which
+-~>            argument (and which element of an array argument) a handle edits
+-~>   line, layer   where the call is in the file, when the host says so
+-~> Positions are points and colors are colors: circle((256, 256), 40, #3fa34d).
+
+let drawing = []
+
+-~> The canvas. A drawing sets it with canvas = {"size": (400, 200), "background": #f4f1e8}.
+let canvas = {"size": (512, 512), "background": #ffffff}
+
+-~> Adds a shape to the drawing, tagging it with the line and layer the host
+-~> reports through here(). Returns the shape.
+function draw(shape) {
+  let where = here()
+  if (type(where) == "HASH") {
+    shape.line = where.line
+    shape.layer = where.layer
+  }
+  push(drawing, shape)
+  shape
+}
+
+-~> TODO(B011): replace the puts and the `bad_argument` line with error(call + ": " + message).
+-~> lizard-script has no error() yet. The message is printed and then an
+-~> unknown name stops the program, so the error says `bad_argument`.
+function reject(call, message) {
+  puts("draw error: " + call + ": " + message)
+  bad_argument
+}
+
+function is_number(v) {
+  type(v) == "INTEGER" || type(v) == "FLOAT"
+}
+
+function need_point(call, name, v) {
+  if (type(v) != "POINT") {
+    reject(call, name + " must be a point like (10, 20), not " + type(v))
+  }
+}
+
+function need_color(call, name, v) {
+  if (type(v) != "COLOR") {
+    reject(call, name + " must be a color like #3fa34d, not " + type(v))
+  }
+}
+
+function need_number(call, name, v) {
+  if (!is_number(v)) {
+    reject(call, name + " must be a number, not " + type(v))
+  }
+}
+
+function need_points(call, name, v) {
+  if (type(v) != "ARRAY" || len(v) == 0) {
+    reject(call, name + " must be a list of points like [(0, 0), (10, 5)] with at least one")
+  }
+  for (let i = 0; i < len(v); i = i + 1) {
+    if (type(v[i]) != "POINT") {
+      reject(call, name + " must only hold points, but item " + str(i) + " is " + type(v[i]))
+    }
+  }
+}
+
+function make_shape(kind, args, path, fill, stroke_color, width, anchors) {
+  draw({"kind": kind, "args": args, "path": path, "fill": fill, "stroke": stroke_color, "width": width,
+        "widths": nothing, "opacities": nothing, "anchors": anchors, "line": nothing, "layer": nothing})
+}
+
+function make_anchor(pos, arg, item, role) {
+  {"pos": pos, "arg": arg, "item": item, "role": role}
+}
+
+function anchors_of(points) {
+  let out = []
+  for (let i = 0; i < len(points); i = i + 1) {
+    push(out, make_anchor(points[i], 0, i, "point"))
+  }
+  out
+}
+
+-~> The closed path of an ellipse as four cubic Beziers (0.5523 is the
+-~> constant that makes them round).
+function ellipse_path(center, radii) {
+  let k = 0.5522847498
+  let cx = center.x
+  let cy = center.y
+  let rx = radii.x
+  let ry = radii.y
+  return [["M", (cx + rx, cy)],
+   ["C", (cx + rx, cy + ry * k), (cx + rx * k, cy + ry), (cx, cy + ry)],
+   ["C", (cx - rx * k, cy + ry), (cx - rx, cy + ry * k), (cx - rx, cy)],
+   ["C", (cx - rx, cy - ry * k), (cx - rx * k, cy - ry), (cx, cy - ry)],
+   ["C", (cx + rx * k, cy - ry), (cx + rx, cy - ry * k), (cx + rx, cy)],
+   ["Z"]]
+}
+
+-~> The shapes in the order they are painted, back to front. Rows lower in the
+-~> file are behind, so a larger `line` paints first; shapes from the same row
+-~> (a loop, or a user function) keep their creation order, so later ones land
+-~> on top. Without lines from the host it is the plain reverse of draw order.
+function paint_order(shapes) {
+  for (let i = 0; i < len(shapes); i = i + 1) {
+    if (type(shapes[i].line) != "INTEGER") {
+      return list.reverse(shapes)
+    }
+  }
+  list.sort(shapes, function(a, b) { a.line > b.line })
+}
+
+-~> Draws a filled circle.
+-~> center: the middle of the circle, a point
+-~> r: the radius in pixels
+-~> fill: the color inside
+-~> example: circle((256, 256), 40, #3fa34d)
+function circle(center, r, fill) {
+  need_point("circle", "center", center)
+  need_number("circle", "r", r)
+  need_color("circle", "fill", fill)
+  make_shape("circle", [center, r, fill], ellipse_path(center, (r, r)), fill, nothing, 0,
+             [make_anchor(center, 0, nothing, "move"), make_anchor(center + (r, 0), 1, nothing, "radius")])
+}
+
+-~> Draws a filled ellipse.
+-~> center: the middle of the ellipse, a point
+-~> radii: half the width and half the height, a point like (60, 30)
+-~> fill: the color inside
+-~> example: ellipse((256, 256), (60, 30), #e0a526)
+function ellipse(center, radii, fill) {
+  need_point("ellipse", "center", center)
+  need_point("ellipse", "radii", radii)
+  need_color("ellipse", "fill", fill)
+  make_shape("ellipse", [center, radii, fill], ellipse_path(center, radii), fill, nothing, 0,
+             [make_anchor(center, 0, nothing, "move"), make_anchor(center + radii, 1, nothing, "corner")])
+}
+
+-~> Draws a filled rectangle.
+-~> pos: the top-left corner, a point
+-~> size: width and height, a point like (120, 60)
+-~> fill: the color inside
+-~> example: rect((20, 20), (120, 60), #2d6a8f)
+function rect(pos, size, fill) {
+  need_point("rect", "pos", pos)
+  need_point("rect", "size", size)
+  need_color("rect", "fill", fill)
+  let path = [["M", pos], ["L", (pos.x + size.x, pos.y)], ["L", pos + size], ["L", (pos.x, pos.y + size.y)], ["Z"]]
+  make_shape("rect", [pos, size, fill], path, fill, nothing, 0,
+             [make_anchor(pos, 0, nothing, "move"), make_anchor(pos + size, 1, nothing, "corner")])
+}
+
+-~> Draws a straight line with round ends.
+-~> a: where the line starts, a point
+-~> b: where the line ends, a point
+-~> color: the color of the line
+-~> width: the thickness in pixels
+-~> example: line((20, 100), (380, 100), #1d1d1f, 2)
+function line(a, b, color, width) {
+  need_point("line", "a", a)
+  need_point("line", "b", b)
+  need_color("line", "color", color)
+  need_number("line", "width", width)
+  make_shape("line", [a, b, color, width], [["M", a], ["L", b]], nothing, color, width,
+             [make_anchor(a, 0, nothing, "point"), make_anchor(b, 1, nothing, "point")])
+}
+
+-~> Draws a filled shape with straight sides.
+-~> points: the corners in order, a list of points
+-~> fill: the color inside
+-~> example: polygon([(100, 20), (180, 120), (20, 120)], #c0392b)
+function polygon(points, fill) {
+  need_points("polygon", "points", points)
+  need_color("polygon", "fill", fill)
+  let path = [["M", points[0]]]
+  for (let i = 1; i < len(points); i = i + 1) {
+    push(path, ["L", points[i]])
+  }
+  push(path, ["Z"])
+  make_shape("polygon", [points, fill], path, fill, nothing, 0, anchors_of(points))
+}
+
+-~> Draws a smooth curve that passes through every point. One point is a
+-~> dot and two are a straight line. The ends are round.
+-~> points: the spots the curve goes through, a list of points
+-~> color: the color of the line
+-~> width: the thickness in pixels
+-~> example: stroke([(40, 300), (120, 210), (260, 240), (380, 120)], #1d1d1f, 4)
+function stroke(points, color, width) {
+  need_points("stroke", "points", points)
+  need_color("stroke", "color", color)
+  need_number("stroke", "width", width)
+  make_shape("stroke", [points, color, width], smooth_path(points), nothing, color, width, anchors_of(points))
+}
+
+-~> Where the outline of a brush stroke gets its points: a list of
+-~> {"pos", "w" (width), "op" (opacity)} along the smooth curve, 8 per piece.
+function brush_samples(points, widths, opacities) {
+  let n = len(points)
+  let steps = 8
+  let samples = []
+  let pieces = catmull_rom(points)
+  for (let i = 0; i < len(pieces); i = i + 1) {
+    let piece = pieces[i]
+    for (let s = 0; s < steps; s = s + 1) {
+      let t = s / float(steps)
+      push(samples, {"pos": bezier_point(points[i], piece[0], piece[1], piece[2], t),
+                     "w": lerp(widths[i], widths[i + 1], t), "op": lerp(opacities[i], opacities[i + 1], t)})
+    }
+  }
+  push(samples, {"pos": points[n - 1], "w": widths[n - 1], "op": opacities[n - 1]})
+  samples
+}
+
+-~> The unit vector along v, or (1, 0) when v has no length.
+function unit_vector(v) {
+  let l = math.sqrt(float(v.x * v.x + v.y * v.y))
+  if (l == 0) {
+    return (1.0, 0.0)
+  }
+  v / l
+}
+
+-~> The filled outline of a variable-width stroke: down the left side, round
+-~> around the end, back up the right side, round around the start.
+function brush_outline(samples, pen) {
+  let n = len(samples)
+  let along = [0.0]
+  for (let i = 1; i < n; i = i + 1) {
+    push(along, along[i - 1] + math.dist(samples[i - 1].pos, samples[i].pos))
+  }
+  let total = along[n - 1]
+  let left = []
+  let right = []
+  let tangents = []
+  let halves = []
+  for (let i = 0; i < n; i = i + 1) {
+    let a = samples[math.max(i - 1, 0)].pos
+    let b = samples[math.min(i + 1, n - 1)].pos
+    let tan = unit_vector(b - a)
+    let frac = 0.0
+    if (total > 0) {
+      frac = along[i] / total
+    }
+    let half = samples[i].w * pen_taper(pen, frac) / 2.0
+    if (pen.grain > 0) {
+      half = half + pen.grain * (pen_noise(i) - 0.5)
+    }
+    half = math.max(0.1, half)
+    let normal = (-tan.y, tan.x)
+    push(tangents, tan)
+    push(halves, half)
+    push(left, samples[i].pos + normal * half)
+    push(right, samples[i].pos - normal * half)
+  }
+
+  let path = [["M", left[0]]]
+  for (let i = 1; i < n; i = i + 1) {
+    push(path, ["L", left[i]])
+  }
+  let end = samples[n - 1].pos
+  let endn = (-tangents[n - 1].y, tangents[n - 1].x)
+  for (let j = 1; j < 6; j = j + 1) {
+    let a = j / 6.0 * math.pi
+    push(path, ["L", end + (endn * math.cos(a) + tangents[n - 1] * math.sin(a)) * halves[n - 1]])
+  }
+  for (let i = n - 1; i >= 0; i = i - 1) {
+    push(path, ["L", right[i]])
+  }
+  let begin = samples[0].pos
+  let beginn = (-tangents[0].y, tangents[0].x)
+  for (let j = 1; j < 6; j = j + 1) {
+    let a = j / 6.0 * math.pi
+    push(path, ["L", begin - (beginn * math.cos(a) + tangents[0] * math.sin(a)) * halves[0]])
+  }
+  push(path, ["Z"])
+  path
+}
+
+-~> The color with its opacity multiplied by `op` (0 to 1).
+function fade_color(color, op) {
+  rgba(color.r, color.g, color.b, math.round(color.a * math.max(0.0, math.min(1.0, op))))
+}
+
+-~> Draws a smooth curve whose width and opacity follow the pressure of the
+-~> pen that drew it. The raw pressures are kept, so a different pen restyles
+-~> the same stroke.
+-~> points: the spots the curve goes through, a list of points
+-~> pressures: one number from 0 to 1 for each point
+-~> color: the color of the ink
+-~> pen: a pen style such as pens.ink, pens.pencil or pens.calligraphy
+-~> example: brush([(40, 300), (120, 210), (260, 240)], [0.2, 0.9, 0.4], #1d1d1f, pens.ink)
+function brush(points, pressures, color, pen) {
+  need_points("brush", "points", points)
+  if (type(pressures) != "ARRAY" || len(pressures) != len(points)) {
+    reject("brush", "pressures must be a list with one number for each point")
+  }
+  for (let i = 0; i < len(pressures); i = i + 1) {
+    need_number("brush", "pressures item " + str(i), pressures[i])
+  }
+  need_color("brush", "color", color)
+  if (type(pen) != "HASH" || !is_number(pen.min) || !is_number(pen.max)) {
+    reject("brush", "pen must be a pen style like pens.ink")
+  }
+
+  let n = len(points)
+  let widths = []
+  let opacities = []
+  for (let i = 0; i < n; i = i + 1) {
+    let a = points[math.min(i + 1, n - 1)] - points[math.max(i - 1, 0)]
+    let angle = 0.0
+    if (a.x != 0 || a.y != 0) {
+      angle = math.atan2(a.y, a.x)
+    }
+    let r = pen_response(pen, pressures[i], angle)
+    push(widths, r[0])
+    push(opacities, r[1])
+  }
+
+  let mean = 0.0
+  let widest = 0.0
+  for (let i = 0; i < n; i = i + 1) {
+    mean = mean + opacities[i] / n
+    widest = math.max(widest, widths[i])
+  }
+
+  let path = nothing
+  if (n == 1) {
+    path = ellipse_path(points[0], (math.max(0.1, widths[0] / 2.0), math.max(0.1, widths[0] / 2.0)))
+  } else {
+    path = brush_outline(brush_samples(points, widths, opacities), pen)
+  }
+  let shape = make_shape("brush", [points, pressures, color, pen], path, fade_color(color, mean), nothing, widest, anchors_of(points))
+  shape.widths = widths
+  shape.opacities = opacities
+  shape
+}

@@ -1,0 +1,24 @@
+-~> lzdraw 1
+-~> Smooth strokes and the five pens.
+
+canvas = {"size": (480, 400), "background": #fbf8ef}
+
+-~> The same wave drawn by each pen: pressure rises and falls along it.
+let pressures = [0.15, 0.8, 0.5, 1.0, 0.3, 0.7]
+let names = ["ink", "pencil", "marker", "brush", "calligraphy"]
+let colors = [#1d1d1f, #4a4a4a, #2d6a8f, #c0392b, #3b2a6b]
+for (let i = 0; i < len(pens.list); i = i + 1) {
+  let y = 50 + i * 54
+  let wave = [(40, y + 14), (110, y - 14), (190, y + 10), (270, y - 14), (350, y + 12), (430, y - 8)]
+  brush(wave, pressures, colors[i], pens.list[i])
+}
+
+-~> A plain smooth curve with a dot on each of its points. Rows higher in the
+-~> file are in front, so the dots come first and the curve is drawn under them.
+let pts = [(40, 330), (120, 290), (200, 360), (290, 300), (380, 350), (440, 310)]
+for (let i = 0; i < len(pts); i = i + 1) {
+  stroke([pts[i]], #fbf8ef, 5)
+  circle(pts[i], 7, #1d1d1f)
+}
+stroke(pts, #3fa34d, 5)
+line((40, 385), (440, 385), #1d1d1f, 1)

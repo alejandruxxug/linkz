@@ -1,0 +1,2 @@
+draw error: line: width must be a number, not STRING
+[line 36, column 3] runtime error: identifier not found: bad_argument

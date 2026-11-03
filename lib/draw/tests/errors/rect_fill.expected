@@ -1,0 +1,2 @@
+draw error: rect: fill must be a color like #3fa34d, not STRING
+[line 36, column 3] runtime error: identifier not found: bad_argument

@@ -1,0 +1,2 @@
+draw error: brush: pen must be a pen style like pens.ink
+[line 36, column 3] runtime error: identifier not found: bad_argument

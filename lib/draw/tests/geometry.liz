@@ -1,0 +1,68 @@
+-~> Geometry with known answers.
+
+puts(lerp(0, 10, 0.25), lerp((0, 0), (10, 20), 0.5))
+puts(bezier_point((0, 0), (0, 10), (10, 10), (10, 0), 0.5))
+puts(point_line_distance((5, 3), (0, 0), (10, 0)), point_line_distance((1, 1), (2, 2), (2, 2)))
+
+let seg = closest_on_segment((15, 5), (0, 0), (10, 0))
+puts(seg.point, seg.t, seg.dist)
+puts(closest_on_segment((4, 3), (0, 0), (10, 0)).dist)
+
+-~> Catmull-Rom: a curve through its points, straight when they are collinear.
+let pieces = catmull_rom([(0, 0), (6, 0), (12, 0)])
+puts(len(pieces), pieces[0][2], pieces[1][2], pieces[0][0])
+puts(smooth_path([(5, 5)]))
+puts(smooth_path([(5, 5), (9, 9)]))
+puts(len(smooth_path([(0, 0), (10, 5), (20, 0), (30, 5)])))
+
+-~> Flattening: a straight cubic becomes one line; a round one stays within
+-~> the tolerance of the real curve.
+let straight = flatten_path([["M", (0, 0)], ["C", (3, 0), (6, 0), (9, 0)]], 0.25)
+puts(len(straight), len(straight[0].points), straight[0].closed)
+
+let c = circle((100, 100), 50, #3fa34d)
+let flat = flatten_path(c.path, 0.25)
+puts(len(flat), flat[0].closed)
+let worst = 0.0
+for (let i = 0; i < len(flat[0].points); i = i + 1) {
+  let off = math.abs(math.dist(flat[0].points[i], (100, 100)) - 50)
+  if (off > worst) {
+    worst = off
+  }
+}
+puts(worst < 0.3, len(flat[0].points) > 16)
+
+-~> Bounds and hit-testing.
+let b = path_bounds(c.path)
+puts(b.min, b.max)
+puts(path_bounds([]))
+puts(point_in_path(c.path, (100, 100)), point_in_path(c.path, (140, 100)), point_in_path(c.path, (151, 100)), point_in_path(c.path, (140, 140)))
+let sq = rect((10, 10), (20, 20), #000)
+puts(point_in_path(sq.path, (15, 15)), point_in_path(sq.path, (35, 15)), point_in_path(sq.path, (15, 9)))
+
+-~> Two squares drawn the same way: the overlap still counts as inside (nonzero).
+let both = [["M", (0, 0)], ["L", (20, 0)], ["L", (20, 20)], ["L", (0, 20)], ["Z"],
+            ["M", (10, 10)], ["L", (30, 10)], ["L", (30, 30)], ["L", (10, 30)], ["Z"]]
+puts(point_in_path(both, (15, 15)), point_in_path(both, (5, 5)), point_in_path(both, (25, 5)))
+
+puts(distance_to_polyline([(0, 0), (10, 0), (10, 10)], (5, 4), false))
+puts(distance_to_polyline([(0, 0), (10, 0), (10, 10)], (1, 9), false), distance_to_polyline([(0, 0), (10, 0), (10, 10)], (1, 9), true))
+puts(distance_to_path(sq.path, (20, 5)), distance_to_path(sq.path, (20, 20)))
+
+-~> nearest_on_path tells which command holds the closest spot.
+let near = nearest_on_path(sq.path, (20, 5))
+puts(near.point, near.command, near.t, near.dist)
+let wavy = stroke([(0, 0), (10, 10), (20, 0), (30, 10)], #000, 2)
+let nw = nearest_on_path(wavy.path, (22, -5))
+puts(nw.command, nw.dist < 6)
+puts(nearest_on_path([], (1, 1)))
+
+-~> simplify keeps the ends and drops what bends less than the tolerance.
+puts(simplify([(0, 0), (5, 0.1), (10, 0), (15, 5), (20, 0)], 1))
+puts(simplify([(0, 0), (5, 0.1), (10, 0)], 0))
+puts(simplify([(0, 0), (1, 1)], 5), simplify([(3, 3)], 5))
+let line_pts = []
+for (let i = 0; i < 50; i = i + 1) {
+  push(line_pts, (i * 2, i))
+}
+puts(len(simplify(line_pts, 0.5)))

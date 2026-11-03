@@ -1,0 +1,2 @@
+draw error: brush: pressures must be a list with one number for each point
+[line 36, column 3] runtime error: identifier not found: bad_argument

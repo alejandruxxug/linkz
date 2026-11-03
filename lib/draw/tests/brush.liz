@@ -1,0 +1,50 @@
+-~> Pens and brush strokes.
+
+puts(len(pens.list), pens.list[0].name, pens.list[4].name)
+for (let i = 0; i < len(pens.list); i = i + 1) {
+  let p = pens.list[i]
+  puts(p.name, p.min, p.max, p.taper, p.opacity, p.nib, p.grain)
+}
+
+-~> What a pen does at a point: [width, opacity].
+puts(pen_response(pens.ink, 0, 0), pen_response(pens.ink, 1, 0), pen_response(pens.ink, 5, 0))
+puts(pen_response(pens.pencil, 0, 0), pen_response(pens.pencil, 1, 0))
+puts(pen_response(pens.marker, 0.1, 0), pen_response(pens.marker, 0.9, 0))
+-~> The calligraphy nib is at 45 degrees: thin along it, thick across it.
+let along = pen_response(pens.calligraphy, 1, 45deg)
+let across = pen_response(pens.calligraphy, 1, 135deg)
+puts(along[0], math.round(across[0] * 100) / 100.0)
+puts(pen_taper(pens.ink, 0), pen_taper(pens.ink, 0.5), pen_taper(pens.ink, 1), pen_taper(pens.marker, 0))
+puts(pen_noise(1) == pen_noise(1), pen_noise(1) != pen_noise(2), pen_noise(7) >= 0, pen_noise(7) < 1)
+
+let pts = [(40, 100), (120, 40), (200, 100), (280, 40)]
+let b = brush(pts, [0.2, 0.9, 0.5, 0.1], #1d1d1f, pens.ink)
+puts(b.kind, len(b.args), b.stroke, b.fill, len(b.anchors), b.anchors[2].item)
+puts(len(b.widths), len(b.opacities), b.widths[0], b.widths[1])
+puts(b.path[0][0], b.path[len(b.path) - 1][0], len(b.path))
+
+-~> The same stroke with another pen has other widths: the pressures are kept.
+let m = brush(pts, [0.2, 0.9, 0.5, 0.1], #1d1d1f, pens.marker)
+puts(m.widths, m.opacities, m.fill)
+puts(m.args[1])
+
+-~> The outline is a closed shape you can hit-test.
+puts(point_in_path(b.path, (120, 40)), point_in_path(b.path, (120, 200)))
+let mid = catmull_rom(pts)[0]
+let on_curve = bezier_point(pts[0], mid[0], mid[1], mid[2], 0.5)
+puts(point_in_path(m.path, on_curve), point_in_path(m.path, on_curve + (0, 30)))
+
+-~> One point is a round dot, two points a straight stroke.
+let dot = brush([(50, 50)], [1], #000, pens.marker)
+puts(point_in_path(dot.path, (50, 50)), point_in_path(dot.path, (50, 58)), point_in_path(dot.path, (50, 70)))
+let two = brush([(0, 0), (100, 0)], [1, 1], #000, pens.marker)
+puts(path_bounds(two.path))
+
+-~> A pencil has a grainy edge: its outline is not as even as the marker's.
+let pc = brush(pts, [0.5, 0.5, 0.5, 0.5], #000, pens.pencil)
+puts(len(pc.path) == len(b.path), pc.fill)
+
+-~> A pen you write yourself works too.
+let mine = {"name": "mine", "min": 2, "max": 2, "taper": 0, "opacity": [1, 1], "nib": nothing, "grain": 0}
+let own = brush([(0, 0), (30, 0)], [0.5, 0.5], #fff, mine)
+puts(own.widths, path_bounds(own.path))

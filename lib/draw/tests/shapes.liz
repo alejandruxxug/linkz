@@ -1,0 +1,37 @@
+-~> The shape record each call makes.
+
+function show(s) {
+  puts(s.kind, "args", len(s.args), "path", len(s.path), "fill", s.fill, "stroke", s.stroke, "width", s.width)
+  for (let i = 0; i < len(s.anchors); i = i + 1) {
+    let a = s.anchors[i]
+    puts("  anchor", a.pos, "arg", a.arg, "item", a.item, a.role)
+  }
+}
+
+let c = circle((100, 80), 20, #3fa34d)
+show(c)
+puts(c.path[0], c.path[len(c.path) - 1], c.line, c.layer, c.widths, c.opacities)
+show(ellipse((50, 50), (30, 10), #e0a526))
+show(rect((10, 20), (100, 40), #2d6a8f))
+puts(rect((10, 20), (100, 40), #2d6a8f).path)
+show(line((0, 0), (10, 10), #000, 3))
+show(polygon([(0, 0), (10, 0), (5, 8)], #c0392b))
+show(stroke([(0, 0), (10, 10), (20, 0)], #1d1d1f, 4))
+
+-~> A stroke of one point is a dot, two points a straight line.
+puts(stroke([(5, 5)], #000, 6).path)
+puts(stroke([(5, 5), (9, 9)], #000, 6).path)
+
+-~> Shapes land in the drawing in the order they were drawn, and the call
+-~> returns the shape itself, so changing it later changes the drawing.
+puts(len(drawing))
+c.fill = #ff0000
+puts(drawing[0].fill)
+
+-~> The host's here() tags shapes with their line and layer.
+let here = function() { {"line": 42, "layer": ["sea", "waves"]} }
+let tagged = circle((1, 1), 1, #fff)
+puts(tagged.line, tagged.layer)
+
+-~> The canvas.
+puts(canvas.size, canvas.background)
