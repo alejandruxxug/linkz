@@ -6,15 +6,15 @@
 
 let V = {
   "w": 512, "h": 360, "pw": 320,
-  "top": 0, "ver": 0, "run_id": 0,
-  "mouse": (0, 0), "mouse_in": false,
+  "top": 0, "pw_user": false, "ver": 0, "run_id": 0,
+  "mouse": (0, 0), "mouse_in": false, "overflow": false,
   "tool": "", "picker": false, "picker_hover": -1,
   "hover": "", "tip": null, "tip_key": "", "tip_since": 0, "tip_due": 0,
   "dialog": null, "focus": null, "drag": null, "flash": 0,
   "keys": {}, "force": {}, "popup_rect": null,
   "items": null, "items_ver": -1, "items_key": "", "rows": null, "rows_ver": -1,
   "paints": 0, "painted_ms": 0, "pen_note": "", "hover_anchor": null,
-  "zoom": 1.0, "crect": null, "drawing_rect": null, "hits": {}
+  "zoom": 1.0, "host_origin": null, "crect": null, "drawing_rect": null, "hits": {}
 }
 
 -~> Something the editor's state or the layers changed: everything that reads it repaints.
@@ -279,54 +279,122 @@ function view_has_home() {
 -~> The tool buttons in the order of the toolbar; "" is a separator.
 let view_tool_ids = ["circle", "rect", "line", "polygon", "stroke", "", "pencil", "brush", "", "text", "function", "layer"]
 
--~> The buttons of the toolbar: [{"id", "x", "y", "w", "h", "icon", "label"}].
-function view_toolbar() {
-  let out = []
-  let x = 3
-  for (let i = 0; i < len(view_tool_ids); i = i + 1) {
-    let id = view_tool_ids[i]
-    if (id == "") {
-      x = x + 4
-    } else {
-      push(out, {"id": id, "x": x, "y": 1, "w": 14, "h": 14, "icon": id, "label": "", "group": "tool"})
-      x = x + 15
-    }
-  }
-  x = x + 4
-  push(out, {"id": "undo", "x": x, "y": 1, "w": 14, "h": 14, "icon": "undo", "label": "", "group": "bar"})
-  push(out, {"id": "redo", "x": x + 15, "y": 1, "w": 14, "h": 14, "icon": "redo", "label": "", "group": "bar"})
+-~> One button of the toolbar.
+function tb_button(id, group, x, y, w, icon, label) {
+  {"id": id, "x": x, "y": y, "w": w, "h": 14, "icon": icon, "label": label, "group": group}
+}
+
+-~> The right side of the toolbar, left to right: home, language, save, export.
+-~> `compact` leaves the words off save and export. Returns [buttons, width].
+function tb_right(compact) {
   let ex = t("button.export")
   let sv = t("button.save")
   let lg = text.upper(lang_get())
   let ex_w = g_text_w(ex) + 18
   let sv_w = g_text_w(sv) + 18
-  let lg_w = g_text_w(lg) + 18
-  let rx = V.w - 3 - ex_w
-  push(out, {"id": "export", "x": rx, "y": 1, "w": ex_w, "h": 14, "icon": "export", "label": ex, "group": "bar"})
-  rx = rx - (sv_w + 2)
-  push(out, {"id": "save", "x": rx, "y": 1, "w": sv_w, "h": 14, "icon": "save", "label": sv, "group": "bar"})
-  rx = rx - (lg_w + 6)
-  push(out, {"id": "lang", "x": rx, "y": 1, "w": lg_w, "h": 14, "icon": "language", "label": lg, "group": "bar"})
-  if (view_has_home()) {
-    push(out, {"id": "home", "x": rx - 20, "y": 1, "w": 14, "h": 14, "icon": "home", "label": "", "group": "bar"})
+  if (compact) {
+    ex = ""
+    sv = ""
+    ex_w = 14
+    sv_w = 14
   }
-  out
+  let lg_w = g_text_w(lg) + 18
+  let w = ex_w + 3 + sv_w + 2 + lg_w + 6
+  let list = [["export", ex, ex_w, "export"], ["save", sv, sv_w, "save"], ["lang", lg, lg_w, "language"]]
+  if (view_has_home()) {
+    w = w + 20
+  }
+  [list, w]
+}
+
+-~> Where everything on the toolbar goes for the window's width: {"buttons", "seps",
+-~> "hidden"}. A narrow window drops the words of save and export first; a narrower
+-~> one moves the last tools into the » menu (shown in the tab row while open).
+function view_toolbar_layout() {
+  let tools = []
+  for (let i = 0; i < len(view_tool_ids); i = i + 1) {
+    push(tools, view_tool_ids[i])
+  }
+  -~> the left side wants: every tool, a gap, undo and redo
+  let n_tools = 0
+  for (let i = 0; i < len(tools); i = i + 1) {
+    if (tools[i] != "") {
+      n_tools = n_tools + 1
+    }
+  }
+  let left_w = 3 + n_tools * 15 + 8 + 4 + 30
+  let right = tb_right(false)
+  if (left_w + right[1] + 6 > V.w) {
+    right = tb_right(true)
+  }
+  let budget = V.w - right[1] - 6
+  let keep = n_tools
+  if (left_w > budget) {
+    -~> room for undo, redo, a gap and the » button
+    keep = math.max(0, (budget - 3 - 8 - 4 - 30 - 20) // 15)
+    keep = math.min(keep, n_tools)
+  }
+  let out = []
+  let seps = []
+  let hidden = []
+  let x = 3
+  let seen = 0
+  for (let i = 0; i < len(tools); i = i + 1) {
+    let id = tools[i]
+    if (id == "") {
+      if (seen < keep) {
+        push(seps, x + 1)
+        x = x + 4
+      }
+    } else {
+      seen = seen + 1
+      if (seen <= keep) {
+        push(out, tb_button(id, "tool", x, 1, 14, id, ""))
+        x = x + 15
+      } else {
+        push(hidden, {"id": id, "group": "tool", "icon": id})
+      }
+    }
+  }
+  x = x + 4
+  push(seps, x + 1)
+  push(out, tb_button("undo", "bar", x, 1, 14, "undo", ""))
+  push(out, tb_button("redo", "bar", x + 15, 1, 14, "redo", ""))
+  if (len(hidden) > 0) {
+    push(out, tb_button("more", "bar", x + 34, 1, 14, "more", ""))
+  }
+  let rx = V.w - 3
+  let bs = right[0]
+  for (let i = 0; i < len(bs); i = i + 1) {
+    rx = rx - bs[i][2]
+    push(out, tb_button(bs[i][0], "bar", rx, 1, bs[i][2], bs[i][3], bs[i][1]))
+    if (bs[i][0] == "export") {
+      rx = rx - 2
+    } elif (bs[i][0] == "save") {
+      rx = rx - 6
+    }
+  }
+  if (view_has_home()) {
+    push(out, tb_button("home", "bar", rx - 20, 1, 14, "home", ""))
+  }
+  -~> the hidden tools sit in the tab row, right under the » button
+  if (V.overflow && len(hidden) > 0) {
+    for (let i = 0; i < len(hidden); i = i + 1) {
+      push(out, tb_button(hidden[i].id, "tool", 3 + i * 15, 16, 14, hidden[i].icon, ""))
+    }
+  }
+  {"buttons": out, "seps": seps, "hidden": hidden}
+}
+
+-~> The buttons of the toolbar: [{"id", "x", "y", "w", "h", "icon", "label"}]. The
+-~> ones at y 16 are the open » menu's.
+function view_toolbar() {
+  view_toolbar_layout().buttons
 }
 
 -~> The x of the separator marks of the toolbar (between the groups of tools and before undo).
 function view_toolbar_seps() {
-  let out = []
-  let x = 3
-  for (let i = 0; i < len(view_tool_ids); i = i + 1) {
-    if (view_tool_ids[i] == "") {
-      push(out, x + 1)
-      x = x + 4
-    } else {
-      x = x + 15
-    }
-  }
-  push(out, x + 1)
-  out
+  view_toolbar_layout().seps
 }
 
 -~> The tab bar: the one open drawing, its close mark and the + for a new one.
@@ -359,7 +427,7 @@ function view_canvas_layout() {
   let gm = view_geom()
   let size = ed_canvas_size()
   let zoom = 1.0
-  let steps = [1.0, 0.75, 0.5, 0.25]
+  let steps = [4.0, 3.0, 2.0, 1.5, 1.0, 0.75, 0.5, 0.25]
   for (let i = 0; i < len(steps); i = i + 1) {
     zoom = steps[i]
     if (size.x * zoom <= gm.cw * 2 - 4 && size.y * zoom <= gm.ch * 2 - 4) {

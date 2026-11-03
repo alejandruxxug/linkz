@@ -10,7 +10,7 @@ let ed = {
   "file": "", "saved": "", "folded": {},
   "errors": [], "shapes": [], "canvas": {"size": (512, 512), "background": #ffffff},
   "stale": false, "pending": true, "stats": {"ms": 0, "steps": 0}, "printed": "",
-  "docs": null, "status": "", "refusal": null,
+  "docs": null, "docs_lang": "", "status": "", "refusal": null,
   "color": "#1d1d1f", "width": 4, "pen": "ink",
   "undo_labels": [], "redo_labels": [], "label": null, "gesture_label": null,
   "merge_col": -1, "merge_at": 0, "note": null, "runs": 0

@@ -49,3 +49,14 @@ ed_reset("brush([(10, 10), (50, 40), (90, 10)], [0.2, 0.9, 0.4], #000, pens.ink)
 ed_run()
 ed_remove_point(ed.shapes[0], ed.shapes[0].anchors[1].item)
 puts(ed_model().lines[0], ed_undo_text())
+
+-~> A canvas_pos is measured from the buffer the host last saw. While the pen
+-~> picker is open that buffer is the whole window, but the drawing's layout
+-~> already has the real one: both give the same drawing point.
+let fake_cl = {"crect": [322, 30, 190, 314], "offset": (40, 10), "zoom": 0.5}
+V.host_origin = (322, 30)
+puts(tools_draw_pt(fake_cl, (700 - 644, 300 - 60)))
+V.host_origin = (0, 0)
+puts(tools_draw_pt(fake_cl, (700, 300)))
+V.host_origin = null
+puts(tools_draw_pt(fake_cl, (56, 240)))

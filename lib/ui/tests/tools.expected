@@ -7,3 +7,6 @@ true
   circle((100, 100), 20, #fff)
 false true position comes from `y + 10` 2
 brush([(10, 10), (90, 10)], [0.2, 0.4], #000, pens.ink) remove point
+(32.0, 460.0)
+(32.0, 460.0)
+(32.0, 460.0)

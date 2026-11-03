@@ -107,11 +107,16 @@ function doc_rows(m, errors, folded) {
   let flat = []
   rows_walk(p.statements, 0, 0, starts, flat)
   let by_line = {}
+  let follow_line = {}
   if (errors != null) {
     for (let i = 0; i < len(errors); i = i + 1) {
       let k = errors[i].line
       if (by_line[k] == null) {
         by_line[k] = errors[i].message
+        if (errors[i].follow == true) {
+          by_line[k] = t("err.follow") + ": " + errors[i].message
+          follow_line[k] = true
+        }
       }
     }
   }
@@ -169,7 +174,7 @@ function doc_rows(m, errors, folded) {
     let flags = li.flags
     push(rows, {"line": n, "text": li.text, "depth": depth, "kind": row_kind(s, li), "callee": callee,
                 "name": row_name(s, li), "comment": li.comment, "hidden": list.index(flags, "hidden") >= 0,
-                "locked": list.index(flags, "locked") >= 0, "error": by_line[n], "layer": layer, "parent": parent,
+                "locked": list.index(flags, "locked") >= 0, "error": by_line[n], "follow": follow_line[n] == true, "layer": layer, "parent": parent,
                 "end_line": end_line, "foldable": foldable, "collapsed": collapsed, "visible": visible, "stmt": s})
   }
   rows

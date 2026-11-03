@@ -13,21 +13,28 @@ function view_paint_toolbar() {
   }
   let bs = view_toolbar()
   for (let i = 0; i < len(bs); i = i + 1) {
-    let b = bs[i]
-    let state = "normal"
-    if (b.group == "tool" && V.tool == b.id) {
-      state = "active"
-    } elif (V.hover == b.group + ":" + b.id) {
-      state = "hover"
+    if (bs[i].y < 16) {
+      view_paint_tool_button(bs[i])
     }
-    if (V.drag != null && V.drag.kind == "press" && V.drag.id == b.group + ":" + b.id) {
-      state = "active"
-    }
-    if ((b.id == "undo" && len(ed.undo) == 0) || (b.id == "redo" && len(ed.redo) == 0)) {
-      state = "disabled"
-    }
-    g_button(b.x, b.y, b.w, b.h, b.icon, b.label, state)
   }
+}
+
+function view_paint_tool_button(b) {
+  let state = "normal"
+  if (b.group == "tool" && V.tool == b.id) {
+    state = "active"
+  } elif (b.id == "more" && V.overflow) {
+    state = "active"
+  } elif (V.hover == b.group + ":" + b.id) {
+    state = "hover"
+  }
+  if (V.drag != null && V.drag.kind == "press" && V.drag.id == b.group + ":" + b.id) {
+    state = "active"
+  }
+  if ((b.id == "undo" && len(ed.undo) == 0) || (b.id == "redo" && len(ed.redo) == 0)) {
+    state = "disabled"
+  }
+  g_button(b.x, b.y, b.w, b.h, b.icon, b.label, state)
 }
 
 function view_paint_tabs() {
@@ -54,6 +61,23 @@ function view_paint_tabs() {
     pc = P.bright
   }
   g_text("+", tb.plus[0], tb.plus[1], pc)
+  -~> the open » menu covers the left of the tab row
+  let bs = view_toolbar()
+  let last = 0
+  for (let i = 0; i < len(bs); i = i + 1) {
+    if (bs[i].y >= 16) {
+      last = bs[i].x + bs[i].w + 3
+    }
+  }
+  if (last > 0) {
+    g_rect(0, 16, last, 14, P.coal)
+    g_rect(0, 29, last, 1, P.void)
+    for (let i = 0; i < len(bs); i = i + 1) {
+      if (bs[i].y >= 16) {
+        view_paint_tool_button(bs[i])
+      }
+    }
+  }
 }
 
 -~> == The layers panel ==
@@ -104,6 +128,7 @@ function view_paint_row(r, y, pinned) {
   let sel = view_selected(m, r.line)
   let hover = V.hover == "row:" + str(r.line) && !sel
   let err = r.error != null
+  let ec_err = row_error_color(r)
   let pw = V.pw
   if (sel) {
     g_rect(0, y, pw, 18, P.moss)
@@ -112,7 +137,7 @@ function view_paint_row(r, y, pinned) {
     g_rect(0, y, pw, 18, P.row)
   }
   if (err) {
-    g_rect(0, y, 2, 18, P.ember)
+    g_rect(0, y, 2, 18, ec_err)
   }
   if (V.flash > 0 && ed.refusal != null && ed.refusal.line == r.line) {
     g_rect(0, y, 2, 18, P.amber)
@@ -160,7 +185,7 @@ function view_paint_row(r, y, pinned) {
   }
   let icon = view_row_icon(r)
   if (err && icon != "") {
-    g_icon("error", x + 10, y + 5, P.ember)
+    g_icon("error", x + 10, y + 5, ec_err)
   } elif (icon != "") {
     let ic = P.text
     if (sel) {
@@ -200,11 +225,19 @@ function view_paint_row(r, y, pinned) {
         }
         let ew = math.min(n * 7, pw - 8 - ex)
         for (let i = 0; i < ew; i = i + 2) {
-          g_rect(ex + i, y + 15 + (i // 2) % 2, math.min(2, ew - i), 1, P.ember)
+          g_rect(ex + i, y + 15 + (i // 2) % 2, math.min(2, ew - i), 1, ec_err)
         }
       }
     }
   }
+}
+
+-~> Errors that may only be follow-ons of an earlier parse error are dimmer.
+function row_error_color(r) {
+  if (r.follow == true) {
+    return P.ember_dim
+  }
+  P.ember
 }
 
 function view_error_at(line) {
@@ -241,10 +274,11 @@ function view_paint_strip(it, y) {
 
 function view_paint_err(it, y) {
   let cx = view_code_x(it.row)
-  g_rect(0, y, 2, 16, P.ember)
-  g_rect(cx - 9, y + 2, 1, 12, P.ember)
+  let c = row_error_color(it.row)
+  g_rect(0, y, 2, 16, c)
+  g_rect(cx - 9, y + 2, 1, 12, c)
   let room = (V.pw - 8 - cx) // 7
-  g_text(text.slice(it.row.error, 0, room), cx, y + 1, P.ember)
+  g_text(text.slice(it.row.error, 0, room), cx, y + 1, c)
 }
 
 function view_paint_add(it, y) {
@@ -265,7 +299,10 @@ function view_paint_rows() {
   g_rect(0, 43, V.pw, 1, P.void)
   g_text(text.upper(t("panel.layers")), 6, 30, P.mute)
   let fname = view_file_name()
-  g_text(fname, V.pw - g_text_w(fname) - 6, 30, P.dim)
+  -~> the file name only when it fits next to the title
+  if (6 + g_text_w(text.upper(t("panel.layers"))) + 12 + g_text_w(fname) + 6 <= V.pw) {
+    g_text(fname, V.pw - g_text_w(fname) - 6, 30, P.dim)
+  }
   g_clip(0, gm.rows_y, V.pw, gm.lim - gm.rows_y)
   let vis = view_visible()
   for (let i = 0; i < len(vis); i = i + 1) {
@@ -398,10 +435,22 @@ function view_status_parts() {
   if (len(errs) > 0) {
     let line = errs[0].line
     let key = "state.error"
-    if (len(errs) > 1) {
+    let real = len(errs)
+    let more = 0
+    for (let i = 0; i < len(errs); i = i + 1) {
+      if (errs[i].follow == true) {
+        real = real - 1
+        more = more + 1
+      }
+    }
+    if (real > 1) {
       key = "state.errors"
     }
-    push(left, ["error", t(key, {"n": len(errs), "line": line}), "ember"])
+    let msg = t(key, {"n": real, "line": line})
+    if (more > 0) {
+      msg = msg + " · " + t("state.follow", {"n": more})
+    }
+    push(left, ["error", msg, "ember"])
   } elif (ed_dirty()) {
     push(left, ["dot", t("state.unsaved"), "amber"])
   } else {
@@ -425,14 +474,51 @@ function view_status_parts() {
   return [left, right]
 }
 
+-~> How wide the parts of the status bar are with their icons and dividers.
+function status_width(parts) {
+  let w = 0
+  for (let i = 0; i < len(parts); i = i + 1) {
+    w = w + g_text_w(parts[i][1]) + 13
+    if (parts[i][0] != "") {
+      w = w + 10
+    }
+  }
+  w
+}
+
+-~> Makes the left parts fit in `avail` pixels: the last one (hint, steps) gives
+-~> way first, with an ellipsis, then disappears; then the one before it.
+function status_fit(left, avail) {
+  let parts = []
+  for (let i = 0; i < len(left); i = i + 1) {
+    push(parts, [left[i][0], left[i][1], left[i][2]])
+  }
+  let k = len(parts) - 1
+  while (status_width(parts) > avail) {
+    let over = status_width(parts) - avail
+    let chars = len(parts[k][1]) - (over + 6) // 7
+    if (chars >= 3) {
+      parts[k][1] = home_fit(parts[k][1], chars)
+    } elif (k > 0) {
+      pop(parts)
+      k = k - 1
+    } else {
+      parts[0][1] = ""
+      break
+    }
+  }
+  parts
+}
+
 function view_paint_status() {
   let gm = view_geom()
   let y = gm.status_y
   g_rect(0, y, V.w, 16, P.panel)
   g_rect(0, y, V.w, 1, P.void)
   let parts = view_status_parts()
-  let left = parts[0]
   let right = parts[1]
+  -~> the readouts keep their place; the left side gets what is left
+  let left = status_fit(parts[0], V.w - 12 - status_width(right))
   let x = 6
   for (let i = 0; i < len(left); i = i + 1) {
     let p = left[i]

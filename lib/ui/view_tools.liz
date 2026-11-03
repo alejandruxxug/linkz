@@ -30,9 +30,16 @@ function tools_color(s) {
   rgb(v[0] * 16 + v[1], v[2] * 16 + v[3], v[4] * 16 + v[5])
 }
 
--~> A canvas-buffer point (full resolution) as a point of the drawing.
+-~> A canvas-buffer point (full resolution) as a point of the drawing. The host
+-~> measures canvas_pos from the buffer it last saw painted (V.host_origin, UI
+-~> pixels), which is not the layout's buffer while the pen picker is open (it
+-~> covers the whole window): re-base it first.
 function tools_draw_pt(cl, cp) {
-  (cp - cl.offset) / cl.zoom
+  let q = cp
+  if (V.host_origin != null) {
+    q = cp + ((V.host_origin.x - cl.crect[0]) * 2, (V.host_origin.y - cl.crect[1]) * 2)
+  }
+  (q - cl.offset) / cl.zoom
 }
 
 -~> Where the pointer is on the drawing for an event: its last sample, else its position.

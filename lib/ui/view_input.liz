@@ -38,6 +38,14 @@ function view_hover_at(x, y) {
     return ""
   }
   if (y < 30) {
+    if (V.overflow) {
+      let bs = view_toolbar()
+      for (let i = 0; i < len(bs); i = i + 1) {
+        if (bs[i].y >= 16 && view_in(x, y, bs[i].x, bs[i].y, bs[i].w, bs[i].h)) {
+          return bs[i].group + ":" + bs[i].id
+        }
+      }
+    }
     let tb = view_tabs()
     if (view_in(x, y, tb.close[0] - 2, 17, 12, 13)) {
       return "tab:close"
@@ -399,6 +407,10 @@ function view_press(id) {
   let parts = text.split(id, ":")
   let kind = parts[0]
   let what = parts[1]
+  if (V.overflow && what != "more") {
+    V.overflow = false
+    view_force_all()
+  }
   if (kind == "strip") {
     view_add(what)
   } elif (kind == "tool") {
@@ -412,6 +424,9 @@ function view_press(id) {
       view_save()
     } elif (what == "export") {
       view_export()
+    } elif (what == "more") {
+      V.overflow = !V.overflow
+      view_force_all()
     } elif (what == "lang") {
       view_cycle_language()
     } elif (what == "home") {
@@ -794,7 +809,8 @@ function view_move(e) {
     if (k == "scrub") {
       view_scrub(e)
     } elif (k == "split") {
-      V.pw = math.max(160, math.min(V.w - 120, p.x))
+      V.pw = math.max(math.min(160, V.w * 5 // 8), math.min(V.w - 120, p.x))
+      V.pw_user = true
       view_touch()
       view_force_all()
     } elif (k == "rows") {
@@ -963,6 +979,14 @@ function view_key(e) {
     }
     if (cmd && k == "s") {
       view_save()
+      return null
+    }
+    if (cmd && k == "a") {
+      -~> select all of the field's text: the next typing replaces it
+      V.focus.fresh = true
+      V.focus.caret = len(V.focus.text)
+      V.ver = V.ver + 1
+      app.needs_paint = true
       return null
     }
     if (cmd) {

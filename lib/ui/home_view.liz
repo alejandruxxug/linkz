@@ -29,7 +29,7 @@ let home = {
   "status": "",
   "cards": [],
   "lay": null,
-  "warm": false,
+  "warm": false, "scanned_at": 0,
   "needs_paint": true,
   "wants_hover": true
 }
@@ -48,6 +48,31 @@ let home_new_w = 80
 function home_scan() {
   home.files = home_list(home_dir())
   home.recent = home_recent_load()
+  home.scanned_at = time.ms()
+}
+
+-~> Files may be added or removed outside the app. There is no focus event, so
+-~> the first input after a couple of seconds looks at the folder again (coming
+-~> back to the window always moves the pointer). True when something changed.
+function home_rescan_if_old() {
+  if (time.ms() - home.scanned_at < 2000) {
+    return false
+  }
+  let before = str(home.files) + str(home.recent)
+  home_scan()
+  if (str(home.files) + str(home.recent) != before) {
+    home_clamp_scroll()
+    home_dirty()
+    return true
+  }
+  false
+}
+
+-~> The refresh action (Cmd+R): looks at the folder now.
+function home_refresh() {
+  home_scan()
+  home_clamp_scroll()
+  home_say(t("home.refreshed", {"n": len(home.files)}))
 }
 
 function home_enter(args) {
@@ -419,7 +444,11 @@ function home_paint_card(c, hover, menu_open) {
   let line2_y = c.y + c.th + 13
   if (c.big) {
     name = c.file.name
-    when = tf("home.edited", {"when": when})
+    -~> "edited 3 min ago" only when it fits whole; else the time alone, never cut
+    let full = tf("home.edited", {"when": when})
+    if (len(full) <= maxc || len(when) > maxc) {
+      when = full
+    }
     line2_y = c.y + c.th + 15
   }
   home_text(home_fit(name, maxc), c.x + 3, c.y + c.th + 2, name_color)
@@ -944,6 +973,9 @@ function home_event(e) {
   if (home.dialog != null) {
     return home_dialog_event(e)
   }
+  if (e.type == "move" || e.type == "wheel" || e.type == "key") {
+    home_rescan_if_old()
+  }
   if (e.type == "move") {
     let hit = home_hit(e.pos.x, e.pos.y)
     let was = str(home.hover)
@@ -1025,6 +1057,10 @@ function home_key(e) {
     home_new_drawing()
     return null
   }
+  if ((e.mods.cmd || e.mods.ctrl) && (k == "KeyR" || k == "R" || k == "r")) {
+    home_refresh()
+    return null
+  }
   if (e.mods.cmd && (k == "KeyF" || k == "F" || k == "f")) {
     home.focus = true
     home_dirty()
@@ -1035,7 +1071,7 @@ function home_key(e) {
     home_set_query(text.slice(home.query, 0, len(home.query) - 1))
     return null
   }
-  if ((k == "Enter" || k == "NumpadEnter") && home.focus && len(home.cards) > 0) {
+  if ((k == "Enter" || k == "Return" || k == "NumpadEnter") && home.focus && len(home.cards) > 0) {
     let first = home.cards[0]
     home_open(first.file.path)
   }

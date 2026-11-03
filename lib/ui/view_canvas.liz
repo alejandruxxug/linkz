@@ -307,6 +307,7 @@ function view_paint_canvas() {
   view_paint_canvas_ui(cl)
   let cr = cl.crect
   fb.canvas((cr[0], cr[1]), (cr[2], cr[3]))
+  V.host_origin = (cr[0], cr[1])
   g_canvas((cr[0], cr[1]))
   fb.unclip()
   fb.clear((0, 0), (cr[2] * 2, cr[3] * 2))

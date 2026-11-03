@@ -72,6 +72,8 @@ lang_register("es", {
 
   "state.saved": "guardado",
   "state.unsaved": "sin guardar",
+  "err.follow": "puede venir del error anterior",
+  "state.follow": "{n} más podrían venir de él",
   "state.error": "{n} error · línea {line}",
   "state.errors": "{n} errores · línea {line}",
   "stat.steps": "{n} pasos · {ms} ms",
@@ -105,6 +107,7 @@ lang_register("es", {
   "home.sort.name": "Nombre",
   "home.count": "{n} dibujos · {dir}",
   "home.count_one": "1 dibujo · {dir}",
+  "home.refreshed": "actualizado · {n} dibujos",
   "home.edited": "editado {when}",
   "home.empty_title": "Aún no hay dibujos",
   "home.empty_sub": "Cada dibujo es un archivo de lizard-script.",

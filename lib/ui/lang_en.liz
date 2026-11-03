@@ -72,6 +72,8 @@ lang_register("en", {
 
   "state.saved": "saved",
   "state.unsaved": "unsaved",
+  "err.follow": "may be caused by the error above",
+  "state.follow": "{n} more may follow from it",
   "state.error": "{n} error · line {line}",
   "state.errors": "{n} errors · line {line}",
   "stat.steps": "{n} steps · {ms} ms",
@@ -105,6 +107,7 @@ lang_register("en", {
   "home.sort.name": "Name",
   "home.count": "{n} drawings · {dir}",
   "home.count_one": "1 drawing · {dir}",
+  "home.refreshed": "refreshed · {n} drawings",
   "home.edited": "edited {when}",
   "home.empty_title": "No drawings yet",
   "home.empty_sub": "Every drawing is a lizard-script file you can read.",

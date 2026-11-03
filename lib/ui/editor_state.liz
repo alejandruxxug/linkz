@@ -5,12 +5,26 @@
 -~> == Running the drawing ==
 
 
+-~> A run that stopped at parse time lists every error the parser found, but the
+-~> parser's recovery makes the later ones unreliable: a bad row can leave a
+-~> valid one after it looking broken. The first error is real; each later one
+-~> gets follow = true. A runtime error is always alone, so it is never marked.
+function errors_mark_follow(errors) {
+  let out = []
+  for (let i = 0; i < len(errors); i = i + 1) {
+    let e = errors[i]
+    let later = i > 0 && text.find(e.message, "runtime error") != 0
+    push(out, {"line": e.line, "column": e.column, "message": e.message, "follow": later})
+  }
+  out
+}
+
 -~> Runs the drawing. A run with errors keeps the last good shapes (ed.stale
 -~> says they are old) and the errors go to their rows.
 function ed_run() {
   let r = src.run(doc_text(ed_model()))
   ed.runs = ed.runs + 1
-  ed.errors = r.errors
+  ed.errors = errors_mark_follow(r.errors)
   ed.printed = r.printed
   ed.stats = {"ms": r.ms, "steps": r.steps}
   if (len(r.errors) == 0) {
@@ -39,8 +53,10 @@ function ed_canvas_size() {
 }
 
 function ed_docs() {
-  if (ed.docs == null) {
-    ed.docs = src.library_docs()
+  -~> cached per language: a language switch gets the new docs on the next call
+  if (ed.docs == null || ed.docs_lang != lang_get()) {
+    ed.docs = src.library_docs(lang_get())
+    ed.docs_lang = lang_get()
   }
   ed.docs
 }

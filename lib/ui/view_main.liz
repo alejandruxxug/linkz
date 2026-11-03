@@ -20,10 +20,10 @@ function view_panel_key(name) {
     if (V.drag != null && V.drag.kind == "press") {
       press = V.drag.id
     }
-    return common + str(len(ed.undo) > 0) + str(len(ed.redo) > 0) + V.tool + "|" + view_hover_is(["tool", "bar"]) + "|" + str(V.picker) + "|" + str(view_has_home()) + "|" + press
+    return common + str(len(ed.undo) > 0) + str(len(ed.redo) > 0) + V.tool + "|" + view_hover_is(["tool", "bar"]) + "|" + str(V.picker) + "|" + str(view_has_home()) + "|" + press + "|" + str(V.overflow)
   }
   if (name == "tabs") {
-    return common + view_file_name() + "|" + str(ed_dirty()) + "|" + view_hover_is(["tab"])
+    return common + view_file_name() + "|" + str(ed_dirty()) + "|" + view_hover_is(["tab", "tool", "bar"]) + "|" + str(V.overflow)
   }
   if (name == "rows") {
     return common + str(V.ver) + "|" + str(V.top) + "|" + view_hover_is(["row", "eye", "lock", "fold", "callee", "add", "strip"]) + "|" + str(V.focus != null)
@@ -128,14 +128,50 @@ function view_paint() {
   }
 }
 
+-~> The code panel's width for a window: 320 up to 840 wide, then 38% of it up
+-~> to 560, so a big window gets a bigger code panel and a bigger drawing; a
+-~> small one gives the panel 5/8. Until the user drags the split it follows the
+-~> window; after that it only stays inside the limits.
+function view_auto_split(w) {
+  if (w < 480) {
+    return w * 5 // 8
+  }
+  math.min(560, math.max(320, w * 38 // 100))
+}
+
+function view_fit_split() {
+  let lo = math.min(160, V.w * 5 // 8)
+  if (V.pw_user) {
+    V.pw = math.max(lo, math.min(V.pw, V.w - 120))
+  } else {
+    V.pw = math.max(lo, math.min(view_auto_split(V.w), V.w - 120))
+  }
+}
+
 -~> == Events and start ==
+
+-~> A refusal belongs to the action that caused it: the next click or key (or
+-~> backdoor command) starts clean.
+function view_clear_refusal() {
+  if (ed.refusal != null) {
+    if (ed.status == ed.refusal.message) {
+      ed.status = ""
+    }
+    ed.refusal = null
+    V.flash = 0
+    app.needs_paint = true
+  }
+}
 
 function view_event(e) {
   let ty = e.type
+  if (ty == "down" || ty == "key") {
+    view_clear_refusal()
+  }
   if (ty == "resize") {
     V.w = e.size.x
     V.h = e.size.y
-    V.pw = math.max(160, math.min(V.pw, V.w - 120))
+    view_fit_split()
     view_touch()
     view_force_all()
   } elif (ty == "down") {
@@ -164,9 +200,7 @@ function view_enter(args) {
   let sz = fb.size()
   V.w = sz.x
   V.h = sz.y
-  if (V.w < 480) {
-    V.pw = V.w * 5 // 8
-  }
+  view_fit_split()
   if (args != null && args.path != null) {
     if (args.path != "" && fs.exists(args.path)) {
       ed_open(args.path)
@@ -277,11 +311,16 @@ function view_commands() {
     let name = names[i]
     let fn = own[name]
     cmds[name] = function(args) {
+      view_clear_refusal()
       view_commit_focus()
       let r = fn(args)
       if (name == "Open" || name == "SetCode") {
         V.top = 0
         V.folded_seen = null
+      }
+      -~> opening a file from the Home screen shows it
+      if (name == "Open" && r.ok == true && screen_state.current != "editor") {
+        show_screen("editor", null)
       }
       view_prepare()
       view_after()
@@ -298,6 +337,14 @@ function view_commands() {
     {"ok": view_redo(), "text": ed_redo_text(), "status": ed.note}
   }
   cmds["Tool"] = function(args) {
+    let name = ""
+    if (len(args) > 0) {
+      name = str(args[0])
+    }
+    if (name == "" || list.index(view_tool_ids, name) < 0) {
+      return {"ok": false, "error": "unknown tool: " + name, "tool": V.tool}
+    }
+    view_clear_refusal()
     view_commit_focus()
     view_prepare()
     view_press("tool:" + str(args[0]))
