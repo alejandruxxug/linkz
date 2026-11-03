@@ -19,3 +19,7 @@ nothing was drawn on the canvas
 true true true
 0 brush true
 there is no pen called quill
+-~> lzdraw 1
+-~> a note
+stroke([(40, 100), (140, 100), (140, 200)], #1d1d1f, 4)
+circle((1, 1), 2, #fff)

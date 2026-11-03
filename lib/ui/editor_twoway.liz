@@ -296,7 +296,7 @@ function twoway_remove_edit(arr, index) {
 -~> line number), or the top of the file when layer is null. Returns the model
 -~> with the caret on the new row.
 function twoway_new_row(m, code, layer) {
-  let at = 0
+  let at = twoway_after_header(m)
   let pad = 0
   if (layer != null) {
     at = layer
@@ -305,6 +305,17 @@ function twoway_new_row(m, code, layer) {
   let row = " " * pad + code
   let lines = list.slice(m.lines, 0, at) + [row] + list.slice(m.lines, at, len(m.lines))
   doc_with(m, lines, at + 1, len(row))
+}
+
+-~> Where a loose new row goes: right after the file's opening comment lines
+-~> (the `-~> lzdraw 1` header and its notes), so it is still the frontmost
+-~> row but the header stays first.
+function twoway_after_header(m) {
+  let at = 0
+  while (at < len(m.lines) && text.starts(text.trim(m.lines[at]), "-~>")) {
+    at += 1
+  }
+  at
 }
 
 -~> The canvas points of a list of move samples, each with its pressure and time.

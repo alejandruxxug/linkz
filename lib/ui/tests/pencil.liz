@@ -50,3 +50,6 @@ let drawn = brush_insert(m, slow, "pencil", "mouse", null, "#1d1d1f")
 let br = src.run(doc_text(drawn))
 puts(len(br.errors), br.shapes[0].kind, len(br.shapes[0].args[0]) == len(br.shapes[0].args[1]))
 puts(brush_insert(m, slow, "quill", "mouse", null, "#000").refused)
+-~> A file with a header: the loose stroke goes right below the opening comments.
+let mh = doc_new("-~> lzdraw 1\n-~> a note\ncircle((1, 1), 2, #fff)")
+puts(doc_text(pencil_insert(mh, samples, null, "#1d1d1f", 4)))
