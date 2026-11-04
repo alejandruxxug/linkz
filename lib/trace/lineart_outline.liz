@@ -1,0 +1,343 @@
+-~> lineart_outline: the outline of each fill region, between pixels rather
+-~> than along their edges. The region's mask is blurred a little and cut
+-~> at the 0.5 level by marching squares, so a staircase of pixels becomes a
+-~> smooth line with points anywhere, not only on pixel corners.
+-~>
+-~> Fills are drawn from the biggest region to the smallest, and a region's
+-~> shape also covers its smaller neighbours (they are drawn over it). So
+-~> the edge between two regions is drawn once, by the smaller one, with the
+-~> bigger one going on underneath: no seam can open between them.
+-~>
+-~> Hook for the later stages of Tracing v2 (corners at two scales, Bezier
+-~> fitting, snapping to rect/circle/ellipse): lineart_outline_points is
+-~> where an outline loop becomes the points that are written.
+
+use "trace"
+use "../draw/geometry"
+
+-~> The shapes of one region `id`: {"outers": [[(x, y)...]...], "holes":
+-~> [[...] for each outer]}, in picture pixels. `fill` is lineart_regions'
+-~> result, `order` lineart_order's. `detail` is the simplification
+-~> tolerance in pixels.
+function lineart_region_shapes(fill, order, id, w, h, detail) {
+  let m = lineart_region_mask(fill, order, id, w, h)
+  let v = lineart_blur(m.grid, m.w, m.h)
+  let loops = lineart_contours(v, m.w, m.h, m.x0, m.y0, 0.5)
+  let outers = []
+  let holes = []
+  let inner = []
+  for (let i = 0; i < len(loops); i += 1) {
+    let a = polygon_area2(loops[i])
+    if (math.abs(a) < 4.0) {
+      continue
+    }
+    if (a > 0) {
+      push(outers, loops[i])
+      push(holes, [])
+    } else {
+      push(inner, loops[i])
+    }
+  }
+  for (let i = 0; i < len(inner); i += 1) {
+    let best = -1
+    let least = 0.0
+    for (let k = 0; k < len(outers); k += 1) {
+      if (lineart_inside(inner[i][0], outers[k])) {
+        let a = polygon_area2(outers[k])
+        if (best < 0 || a < least) {
+          best = k
+          least = a
+        }
+      }
+    }
+    if (best >= 0) {
+      push(holes[best], lineart_outline_points(inner[i], detail))
+    }
+  }
+  for (let k = 0; k < len(outers); k += 1) {
+    outers[k] = lineart_outline_points(outers[k], detail)
+  }
+  {"outers": outers, "holes": holes}
+}
+
+-~> The points written for an outline loop: Ramer-Douglas-Peucker with
+-~> tolerance `detail`; path() then draws them as a smooth curve.
+-~> Corners, Bezier fitting and primitive snapping (Tracing v2 stages 10 to
+-~> 12) replace this.
+function lineart_outline_points(loop, detail) {
+  trace_ring_simplify(loop, detail)
+}
+
+-~> Whether the point p is inside the polygon `poly` (even-odd rule).
+function lineart_inside(p, poly) {
+  let n = len(poly)
+  let inside = false
+  let j = n - 1
+  for (let i = 0; i < n; i += 1) {
+    let a = poly[i]
+    let b = poly[j]
+    if ((a.y > p.y) != (b.y > p.y) && p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x) {
+      inside = !inside
+    }
+    j = i
+  }
+  inside
+}
+
+-~> The mask of region `id` on a grid round its box, with a margin of 2
+-~> empty cells: the region, its smaller neighbours (drawn over it later),
+-~> and any hole of those that holds only smaller regions (also drawn over
+-~> it). A hole with some background or a bigger region in it stays a
+-~> hole. Returns {"grid": 0 and 1, "w", "h", "x0", "y0"}: the cell (i, j)
+-~> is the pixel (x0 + i, y0 + j).
+function lineart_region_mask(fill, order, id, w, h) {
+  let w2 = w + 2
+  let label = fill.label
+  let rank = order.rank
+  let mine = rank[id]
+  let take = {}
+  take[id] = true
+  let b = list.copy(order.box[id])
+  let others = keys(order.near[id])
+  for (let i = 0; i < len(others); i += 1) {
+    let o = others[i]
+    if (rank[o] > mine) {
+      take[o] = true
+      let ob = order.box[o]
+      b = [math.min(b[0], ob[0]), math.min(b[1], ob[1]), math.max(b[2], ob[2]), math.max(b[3], ob[3])]
+    }
+  }
+  let x0 = b[0] - 2
+  let y0 = b[1] - 2
+  let gw = b[2] - b[0] + 5
+  let gh = b[3] - b[1] + 5
+  let grid = []
+  let lab = []
+  for (let j = 0; j < gh; j += 1) {
+    let y = y0 + j
+    for (let i = 0; i < gw; i += 1) {
+      let x = x0 + i
+      if (x < 0 || y < 0 || x >= w || y >= h) {
+        push(grid, 0)
+        push(lab, -1)
+        continue
+      }
+      let l = label[(y + 1) * w2 + x + 1]
+      push(lab, l)
+      if (take[l] !== null) {
+        push(grid, 1)
+      } else {
+        push(grid, 0)
+      }
+    }
+  }
+  lineart_fill_holes(grid, lab, gw, rank, mine)
+  {"grid": grid, "w": gw, "h": gh, "x0": x0, "y0": y0}
+}
+
+-~> Fills the holes of a mask that hold only regions ranked after `mine`
+-~> (changes grid). `lab` has the region of each cell (-1 off the picture).
+function lineart_fill_holes(grid, lab, gw, rank, mine) {
+  let side = [-1, 1, -gw, gw]
+  let todo = [0]
+  grid[0] = 2
+  let head = 0
+  while (head < len(todo)) {
+    let q = todo[head]
+    head += 1
+    let qx = q % gw
+    for (let s = 0; s < 4; s += 1) {
+      let r = q + side[s]
+      if (r < 0 || r >= len(grid) || (s == 0 && qx == 0) || (s == 1 && qx == gw - 1)) {
+        continue
+      }
+      if (grid[r] == 0) {
+        grid[r] = 2
+        push(todo, r)
+      }
+    }
+  }
+  for (let p = 0; p < len(grid); p += 1) {
+    if (grid[p] != 0) {
+      continue
+    }
+    let hole = [p]
+    grid[p] = 3
+    let later = true
+    let k = 0
+    while (k < len(hole)) {
+      let q = hole[k]
+      k += 1
+      let l = lab[q]
+      if (l < 0 || rank[l] <= mine) {
+        later = false
+      }
+      for (let s = 0; s < 4; s += 1) {
+        let r = q + side[s]
+        if (grid[r] == 0) {
+          grid[r] = 3
+          push(hole, r)
+        }
+      }
+    }
+    let to = 2
+    if (later) {
+      to = 1
+    }
+    for (let i = 0; i < len(hole); i += 1) {
+      grid[hole[i]] = to
+    }
+  }
+  for (let p = 0; p < len(grid); p += 1) {
+    if (grid[p] == 2) {
+      grid[p] = 0
+    }
+  }
+}
+
+-~> A 0/1 grid blurred by [1, 2, 1] / 4 across and down, as floats. The
+-~> cells off the grid count as 0.
+function lineart_blur(grid, gw, gh) {
+  let across = []
+  for (let j = 0; j < gh; j += 1) {
+    for (let i = 0; i < gw; i += 1) {
+      let p = j * gw + i
+      let v = 2.0 * grid[p]
+      if (i > 0) {
+        v += grid[p - 1]
+      }
+      if (i < gw - 1) {
+        v += grid[p + 1]
+      }
+      push(across, v)
+    }
+  }
+  let out = []
+  for (let j = 0; j < gh; j += 1) {
+    for (let i = 0; i < gw; i += 1) {
+      let p = j * gw + i
+      let v = 2.0 * across[p]
+      if (j > 0) {
+        v += across[p - gw]
+      }
+      if (j < gh - 1) {
+        v += across[p + gw]
+      }
+      push(out, v / 16.0)
+    }
+  }
+  out
+}
+
+-~> The closed lines where the values `v` (a gw by gh grid, the cell (i, j)
+-~> at the center of the pixel (x0 + i, y0 + j)) cross `level`, by marching
+-~> squares. Each line keeps the inside (>= level) on its right, so an
+-~> outer outline runs clockwise on the screen (positive polygon_area2) and
+-~> a hole the other way. A crossing is placed along its cell side where
+-~> the values pass the level (linear), and a cell whose corners alternate
+-~> joins them or not by the value at its center.
+function lineart_contours(v, gw, gh, x0, y0, level) {
+  let next = {}
+  let starts = []
+  for (let j = 0; j < gh - 1; j += 1) {
+    for (let i = 0; i < gw - 1; i += 1) {
+      let p = j * gw + i
+      let a = v[p]
+      let b = v[p + 1]
+      let c = v[p + gw + 1]
+      let d = v[p + gw]
+      let k = 0
+      if (a >= level) { k += 8 }
+      if (b >= level) { k += 4 }
+      if (c >= level) { k += 2 }
+      if (d >= level) { k += 1 }
+      if (k == 0 || k == 15) {
+        continue
+      }
+      let t = p * 2
+      let bt = (p + gw) * 2
+      let l = p * 2 + 1
+      let r = (p + 1) * 2 + 1
+      let joined = (a + b + c + d) / 4.0 >= level
+      if (k == 1) {
+        lineart_link(next, starts, l, bt)
+      } elif (k == 2) {
+        lineart_link(next, starts, bt, r)
+      } elif (k == 3) {
+        lineart_link(next, starts, l, r)
+      } elif (k == 4) {
+        lineart_link(next, starts, r, t)
+      } elif (k == 5) {
+        if (joined) {
+          lineart_link(next, starts, l, t)
+          lineart_link(next, starts, r, bt)
+        } else {
+          lineart_link(next, starts, l, bt)
+          lineart_link(next, starts, r, t)
+        }
+      } elif (k == 6) {
+        lineart_link(next, starts, bt, t)
+      } elif (k == 7) {
+        lineart_link(next, starts, l, t)
+      } elif (k == 8) {
+        lineart_link(next, starts, t, l)
+      } elif (k == 9) {
+        lineart_link(next, starts, t, bt)
+      } elif (k == 10) {
+        if (joined) {
+          lineart_link(next, starts, t, r)
+          lineart_link(next, starts, bt, l)
+        } else {
+          lineart_link(next, starts, t, l)
+          lineart_link(next, starts, bt, r)
+        }
+      } elif (k == 11) {
+        lineart_link(next, starts, t, r)
+      } elif (k == 12) {
+        lineart_link(next, starts, r, l)
+      } elif (k == 13) {
+        lineart_link(next, starts, r, bt)
+      } else {
+        lineart_link(next, starts, bt, l)
+      }
+    }
+  }
+  let done = {}
+  let loops = []
+  for (let s = 0; s < len(starts); s += 1) {
+    let e = starts[s]
+    if (done[e] !== null) {
+      continue
+    }
+    let pts = []
+    while (done[e] === null) {
+      done[e] = true
+      push(pts, lineart_crossing(v, gw, x0, y0, level, e))
+      e = next[e]
+    }
+    push(loops, pts)
+  }
+  loops
+}
+
+-~> Records a piece of contour from the cell side `from` to the side `to`
+-~> (side numbers: cell * 2 for the top side, cell * 2 + 1 for the left).
+function lineart_link(next, starts, from, to) {
+  next[from] = to
+  push(starts, from)
+}
+
+-~> Where the values cross `level` along the cell side `e` (see
+-~> lineart_link), in picture pixels.
+function lineart_crossing(v, gw, x0, y0, level, e) {
+  let p = e // 2
+  let i = p % gw
+  let j = p // gw
+  let a = v[p]
+  if (e % 2 == 0) {
+    let t = (level - a) / (v[p + 1] - a)
+    return (x0 + i + t + 0.5, y0 + j + 0.5)
+  }
+  let t = (level - a) / (v[p + gw] - a)
+  (x0 + i + 0.5, y0 + j + t + 0.5)
+}

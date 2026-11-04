@@ -1,0 +1,199 @@
+-~> lineart_palette: the flat colors of the fills under the lines. The colors
+-~> are grouped in CIE Lab, where a distance is about how different two
+-~> colors look, so a cel shadow and its base color stay apart while the
+-~> noise inside one flat area falls together. Each palette color gets a
+-~> name from its lightness and hue ("skin", "dark_blue", "light_gray"), so
+-~> the code reads `colors.dark_blue`, not `colors.c7`.
+
+use "trace"
+use "lineart_mask"
+
+-~> The Lab color [L, a, b] of an sRGB color given as three numbers 0 to 255
+-~> (D65 white). L is 0 (black) to 100 (white); a goes from green to red and
+-~> b from blue to yellow.
+function lineart_lab(r, g, b) {
+  let lr = lineart_linear(r / 255.0)
+  let lg = lineart_linear(g / 255.0)
+  let lb = lineart_linear(b / 255.0)
+  let fx = lineart_lab_f((0.4124 * lr + 0.3576 * lg + 0.1805 * lb) / 0.95047)
+  let fy = lineart_lab_f(0.2126 * lr + 0.7152 * lg + 0.0722 * lb)
+  let fz = lineart_lab_f((0.0193 * lr + 0.1192 * lg + 0.9505 * lb) / 1.08883)
+  [116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz)]
+}
+
+-~> An sRGB channel (0 to 1) as linear light.
+function lineart_linear(c) {
+  if (c <= 0.04045) {
+    return c / 12.92
+  }
+  ((c + 0.055) / 1.055) ** 2.4
+}
+
+-~> The cube-root curve of Lab, with its straight start near black.
+function lineart_lab_f(t) {
+  if (t > 0.008856) {
+    return t ** (1.0 / 3.0)
+  }
+  7.787 * t + 16.0 / 116.0
+}
+
+-~> Reduces the pixels at some padded positions to at most `n` colors, chosen
+-~> in Lab (median cut, then `rounds` k-means rounds, as trace_palette).
+-~> Pixels are first grouped by their top 5 bits per channel, so the palette
+-~> work is done on those groups. Returns {"colors": [COLOR...], "lab":
+-~> [[L, a, b]...], "index": [palette number for each position]}.
+function lineart_quantize(pixels, positions, w, n, rounds) {
+  let w2 = w + 2
+  let slot = []
+  for (let i = 0; i < 32768; i += 1) {
+    push(slot, -1)
+  }
+  let sums = []
+  let cell_of = []
+  for (let i = 0; i < len(positions); i += 1) {
+    let p = positions[i]
+    let c = pixels[(p // w2 - 1) * w + p % w2 - 1]
+    let key = (c.r // 8) * 1024 + (c.g // 8) * 32 + c.b // 8
+    let s = slot[key]
+    if (s < 0) {
+      s = len(sums)
+      slot[key] = s
+      push(sums, [0, 0, 0, 0])
+    }
+    let sum = sums[s]
+    sum[0] = sum[0] + 1
+    sum[1] = sum[1] + c.r
+    sum[2] = sum[2] + c.g
+    sum[3] = sum[3] + c.b
+    push(cell_of, s)
+  }
+  if (len(sums) == 0) {
+    return {"colors": [], "lab": [], "index": []}
+  }
+  let cells = []
+  for (let s = 0; s < len(sums); s += 1) {
+    let k = float(sums[s][0])
+    let lab = lineart_lab(sums[s][1] / k, sums[s][2] / k, sums[s][3] / k)
+    push(cells, [sums[s][0], lab[0], lab[1], lab[2]])
+  }
+  let made = trace_palette(cells, n, rounds)
+  let rgbs = []
+  for (let p = 0; p < len(made.palette); p += 1) {
+    push(rgbs, [0.0, 0.0, 0.0, 0])
+  }
+  for (let s = 0; s < len(sums); s += 1) {
+    let acc = rgbs[made.of_cell[s]]
+    acc[0] = acc[0] + sums[s][1]
+    acc[1] = acc[1] + sums[s][2]
+    acc[2] = acc[2] + sums[s][3]
+    acc[3] = acc[3] + sums[s][0]
+  }
+  let colors = []
+  for (let p = 0; p < len(rgbs); p += 1) {
+    push(colors, lineart_mean_color(rgbs[p], #ffffff))
+  }
+  let index = []
+  for (let i = 0; i < len(positions); i += 1) {
+    push(index, made.of_cell[cell_of[i]])
+  }
+  {"colors": colors, "lab": made.palette, "index": index}
+}
+
+-~> A name for a color from its Lab value: "white", "black", "gray" (with
+-~> "light_" or "dark_" before it), "skin" for the light warm tones of skin,
+-~> or a hue (red, pink, orange, brown, yellow, green, cyan, blue, purple)
+-~> with "light_" or "dark_" when it is far from the middle.
+function lineart_color_name(lab) {
+  let l = lab[0]
+  let chroma = math.sqrt(lab[1] * lab[1] + lab[2] * lab[2])
+  let hue = math.atan2(lab[2], lab[1]) * 180.0 / math.pi
+  if (hue < 0) {
+    hue += 360.0
+  }
+  if (chroma < 8) {
+    if (l > 92) {
+      return "white"
+    }
+    if (l < 18) {
+      return "black"
+    }
+    return lineart_shade(l) + "gray"
+  }
+  if (hue >= 40 && hue < 95 && l > 65 && chroma < 50) {
+    return "skin"
+  }
+  let name = "purple"
+  if (hue < 45 || hue >= 345) {
+    name = "red"
+    if (l > 70) {
+      name = "pink"
+    }
+  } elif (hue < 70) {
+    name = "orange"
+    if (l < 50) {
+      name = "brown"
+    }
+  } elif (hue < 105) {
+    name = "yellow"
+  } elif (hue < 170) {
+    name = "green"
+  } elif (hue < 230) {
+    name = "cyan"
+  } elif (hue < 290) {
+    name = "blue"
+  }
+  lineart_shade(l) + name
+}
+
+-~> "light_" for a light color, "dark_" for a dark one, "" in between.
+function lineart_shade(l) {
+  if (l > 75) {
+    return "light_"
+  }
+  if (l < 35) {
+    return "dark_"
+  }
+  ""
+}
+
+-~> Names for some Lab colors, none of them in `taken`. Colors that get the
+-~> same name are told apart by lightness: the lightest keeps it, the next
+-~> is name_shade, then name_shade_2 and so on (a cel color and its
+-~> shadow: "skin", "skin_shade").
+function lineart_color_names(labs, taken) {
+  let groups = {}
+  let bases = []
+  for (let i = 0; i < len(labs); i += 1) {
+    let base = lineart_color_name(labs[i])
+    if (groups[base] === null) {
+      groups[base] = []
+      push(bases, base)
+    }
+    push(groups[base], i)
+  }
+  let used = {}
+  for (let i = 0; i < len(taken); i += 1) {
+    used[taken[i]] = 1
+  }
+  let names = []
+  for (let i = 0; i < len(labs); i += 1) {
+    push(names, "")
+  }
+  for (let g = 0; g < len(bases); g += 1) {
+    let members = list.sort(groups[bases[g]], function(a, b) { labs[a][0] > labs[b][0] })
+    for (let k = 0; k < len(members); k += 1) {
+      let name = bases[g]
+      if (k == 1) {
+        name = name + "_shade"
+      } elif (k > 1) {
+        name = name + "_shade_" + str(k)
+      }
+      while (used[name] !== null) {
+        name = name + "_2"
+      }
+      used[name] = 1
+      names[members[k]] = name
+    }
+  }
+  names
+}

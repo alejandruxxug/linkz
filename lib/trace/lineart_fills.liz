@@ -1,0 +1,316 @@
+-~> lineart_fills: the flat colors under the lines, as regions that tile the
+-~> picture. The steps:
+-~>   1. lineart_solid    ink that is wide all round (a pupil, black hair,
+-~>                       dark trousers) is a solid area, not a line: it
+-~>                       leaves the ink mask and is filled like the colors
+-~>   2. lineart_regions  the pixels away from the ink are reduced to a few
+-~>                       colors (in Lab) and cut into connected regions;
+-~>                       specks smaller than min_area and slivers one or
+-~>                       two pixels wide are let go
+-~>   3. lineart_grow     every region grows into the ink and the specks
+-~>                       until it meets its neighbours, so neighbouring
+-~>                       fills meet halfway under the line that parts them
+-~>   4. lineart_order    the regions from the biggest to the smallest, which
+-~>                       of them touch, and the color of the background
+-~> The grids are padded, as in lineart_mask: (w + 2) by (h + 2), the pixel
+-~> (x, y) at (y + 1) * (w + 2) + x + 1.
+
+use "lineart_mask"
+use "lineart_palette"
+
+-~> The 8 neighbour steps of a padded grid of width w2.
+function lineart_steps8(w2) {
+  [1, -w2 + 1, -w2, -w2 - 1, -1, w2 - 1, w2, w2 + 1]
+}
+
+-~> The usual half-width of the lines: the median distance to the paper
+-~> along the middle of the ink (the ink pixels at least as far from the
+-~> paper as their four side neighbours), 1 when there is no ink.
+function lineart_line_half(m, dist, w) {
+  let w2 = w + 2
+  let ridge = []
+  for (let i = 0; i < len(m.ink); i += 1) {
+    let p = m.ink[i]
+    let d = dist[p]
+    if (d >= dist[p - 1] && d >= dist[p + 1] && d >= dist[p - w2] && d >= dist[p + w2]) {
+      push(ridge, d)
+    }
+  }
+  if (len(ridge) == 0) {
+    return 1.0
+  }
+  list.sort(ridge)[len(ridge) // 2]
+}
+
+-~> Takes the solid areas out of the ink: the ink pixels at least `depth`
+-~> from the paper are the cores, and every ink pixel inside the disc of a
+-~> core (its distance as the radius) is solid. A line thinner than `depth`
+-~> stays a line even where it touches a solid area. Changes m.mask and m.ink
+-~> (and m.ink_color, from the ink that is left). Returns how many pixels it
+-~> took. The ink color is then the mean of the darker half of the ink
+-~> left, since the solid areas often had their own color (navy, brown).
+function lineart_solid(m, pixels, dist, w, depth) {
+  let mask = m.mask
+  let w2 = w + 2
+  let src = []
+  for (let i = 0; i < len(mask); i += 1) {
+    push(src, -1)
+  }
+  let todo = []
+  for (let i = 0; i < len(m.ink); i += 1) {
+    let p = m.ink[i]
+    if (dist[p] >= depth) {
+      src[p] = p
+      push(todo, p)
+    }
+  }
+  if (len(todo) == 0) {
+    return 0
+  }
+  let steps = lineart_steps8(w2)
+  let head = 0
+  while (head < len(todo)) {
+    let q = todo[head]
+    head += 1
+    let c = src[q]
+    let cx = c % w2
+    let cy = c // w2
+    let reach = dist[c] + 0.5
+    reach = reach * reach
+    for (let s = 0; s < 8; s += 1) {
+      let r = q + steps[s]
+      if (mask[r] == 1 && src[r] < 0) {
+        let dx = r % w2 - cx
+        let dy = r // w2 - cy
+        if (dx * dx + dy * dy <= reach) {
+          src[r] = c
+          push(todo, r)
+        }
+      }
+    }
+  }
+  for (let i = 0; i < len(todo); i += 1) {
+    mask[todo[i]] = 0
+  }
+  let ink = []
+  for (let i = 0; i < len(m.ink); i += 1) {
+    if (mask[m.ink[i]] == 1) {
+      push(ink, m.ink[i])
+    }
+  }
+  m.ink = ink
+  m.ink_color = lineart_mean_color(lineart_color_sum(pixels, lineart_darker_half(pixels, ink, w), w), m.ink_color)
+  len(todo)
+}
+
+-~> The darker half of some padded positions (by brightness): the middle of
+-~> the lines, without their soft edges.
+function lineart_darker_half(pixels, positions, w) {
+  let w2 = w + 2
+  let luma = {}
+  for (let i = 0; i < len(positions); i += 1) {
+    let p = positions[i]
+    let c = pixels[(p // w2 - 1) * w + p % w2 - 1]
+    luma[p] = 0.299 * c.r + 0.587 * c.g + 0.114 * c.b
+  }
+  let sorted = list.sort(positions, function(a, b) { luma[a] < luma[b] })
+  list.slice(sorted, 0, (len(sorted) + 1) // 2)
+}
+
+-~> The fill regions of a picture whose ink is `mask` (padded, 1 is ink).
+-~> The pixels that are neither ink nor next to it are reduced to `colors`
+-~> colors and cut into regions (sides touching); regions under `min_area`
+-~> pixels or nowhere three pixels wide are let go, then the regions grow
+-~> over everything left.
+-~> Returns {"label": padded grid of region numbers (-2 on the border),
+-~> "regions": [{"color": palette number}...], "colors", "lab"}.
+function lineart_regions(pixels, mask, w, h, colors, min_area) {
+  let w2 = w + 2
+  let label = []
+  for (let i = 0; i < w2 * (h + 2); i += 1) {
+    push(label, -2)
+  }
+  let cand = []
+  for (let y = 0; y < h; y += 1) {
+    for (let x = 0; x < w; x += 1) {
+      let p = (y + 1) * w2 + x + 1
+      label[p] = -1
+      if (mask[p] == 0) {
+        let up = p - w2
+        let down = p + w2
+        if (mask[p - 1] + mask[p + 1] + mask[up - 1] + mask[up] + mask[up + 1] + mask[down - 1] + mask[down] +
+          mask[down + 1] == 0) {
+            push(cand, p)
+          }
+      }
+    }
+  }
+  let q = lineart_quantize(pixels, cand, w, colors, 2)
+  let col = []
+  for (let i = 0; i < len(label); i += 1) {
+    push(col, -1)
+  }
+  for (let i = 0; i < len(cand); i += 1) {
+    col[cand[i]] = q.index[i]
+  }
+  let regions = []
+  let side = [-1, 1, -w2, w2]
+  for (let i = 0; i < len(cand); i += 1) {
+    let p = cand[i]
+    if (label[p] != -1) {
+      continue
+    }
+    let c = col[p]
+    let id = len(regions)
+    let found = [p]
+    label[p] = id
+    let head = 0
+    while (head < len(found)) {
+      let a = found[head]
+      head += 1
+      for (let s = 0; s < 4; s += 1) {
+        let r = a + side[s]
+        if (label[r] == -1 && col[r] == c) {
+          label[r] = id
+          push(found, r)
+        }
+      }
+    }
+    if (len(found) < min_area || !lineart_has_inside(label, found, id, w)) {
+      for (let k = 0; k < len(found); k += 1) {
+        label[found[k]] = -3
+      }
+    } else {
+      push(regions, {"color": c})
+    }
+  }
+  lineart_grow(label, w, h)
+  {"label": label, "regions": regions, "colors": q.colors, "lab": q.lab}
+}
+
+-~> Whether some pixel of a region (`found`, numbered `id` in label) has the
+-~> region on all four sides: false for a sliver one or two pixels wide,
+-~> like the soft edge left along a line.
+function lineart_has_inside(label, found, id, w) {
+  let w2 = w + 2
+  for (let i = 0; i < len(found); i += 1) {
+    let p = found[i]
+    if (label[p - 1] == id && label[p + 1] == id && label[p - w2] == id && label[p + w2] == id) {
+      return true
+    }
+  }
+  false
+}
+
+-~> Grows the regions of `label` (numbers 0 and up) into the pixels with no
+-~> region (-1 and -3), all at the same pace (breadth first, sides
+-~> touching), so each such pixel goes to the region it is nearest to and
+-~> two regions meet halfway across the line between them. Changes label.
+function lineart_grow(label, w, h) {
+  let w2 = w + 2
+  let side = [-1, 1, -w2, w2]
+  let todo = []
+  for (let y = 1; y <= h; y += 1) {
+    for (let x = 1; x <= w; x += 1) {
+      let p = y * w2 + x
+      if (label[p] >= 0) {
+        for (let s = 0; s < 4; s += 1) {
+          let r = p + side[s]
+          if (label[r] == -1 || label[r] == -3) {
+            push(todo, p)
+            break
+          }
+        }
+      }
+    }
+  }
+  let head = 0
+  while (head < len(todo)) {
+    let q = todo[head]
+    head += 1
+    let id = label[q]
+    for (let s = 0; s < 4; s += 1) {
+      let r = q + side[s]
+      if (label[r] == -1 || label[r] == -3) {
+        label[r] = id
+        push(todo, r)
+      }
+    }
+  }
+}
+
+-~> What the outlines need to know about the regions: their area, box
+-~> [x0, y0, x1, y1] and neighbours (a hash of region numbers), the palette
+-~> color of the background (the one that covers most of the picture's
+-~> edge; its regions are not drawn, the canvas is that color), and `rank`:
+-~> each drawn region's place from the biggest (0) to the smallest, -1 for
+-~> the background. Returns {"area", "box", "near", "background", "rank",
+-~> "order": drawn region numbers, biggest first}.
+function lineart_order(fill, w, h) {
+  let w2 = w + 2
+  let label = fill.label
+  let n = len(fill.regions)
+  let area = []
+  let box = []
+  let near = []
+  for (let i = 0; i < n; i += 1) {
+    push(area, 0)
+    push(box, [w, h, -1, -1])
+    push(near, {})
+  }
+  let edge = []
+  for (let c = 0; c < len(fill.colors); c += 1) {
+    push(edge, 0)
+  }
+  for (let y = 0; y < h; y += 1) {
+    for (let x = 0; x < w; x += 1) {
+      let p = (y + 1) * w2 + x + 1
+      let a = label[p]
+      if (a < 0) {
+        continue
+      }
+      area[a] += 1
+      let b = box[a]
+      if (x < b[0]) { b[0] = x }
+      if (y < b[1]) { b[1] = y }
+      if (x > b[2]) { b[2] = x }
+      if (y > b[3]) { b[3] = y }
+      if (x == 0 || y == 0 || x == w - 1 || y == h - 1) {
+        edge[fill.regions[a].color] += 1
+      }
+      let r = label[p + 1]
+      if (r >= 0 && r != a) {
+        near[a][r] = true
+        near[r][a] = true
+      }
+      r = label[p + w2]
+      if (r >= 0 && r != a) {
+        near[a][r] = true
+        near[r][a] = true
+      }
+    }
+  }
+  let background = -1
+  let most = 0
+  for (let c = 0; c < len(edge); c += 1) {
+    if (edge[c] > most) {
+      most = edge[c]
+      background = c
+    }
+  }
+  let ids = []
+  for (let i = 0; i < n; i += 1) {
+    if (fill.regions[i].color != background && area[i] > 0) {
+      push(ids, i)
+    }
+  }
+  let order = list.sort(ids, function(a, b) { area[a] > area[b] || (area[a] == area[b] && a < b) })
+  let rank = []
+  for (let i = 0; i < n; i += 1) {
+    push(rank, -1)
+  }
+  for (let k = 0; k < len(order); k += 1) {
+    rank[order[k]] = k
+  }
+  {"area": area, "box": box, "near": near, "background": background, "rank": rank, "order": order}
+}

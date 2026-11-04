@@ -14,16 +14,26 @@
 -~>                        or blunt, simplified
 -~>   7. lineart_code      one brush() per stroke, pen widths from the
 -~>                        thinnest and thickest ink
+-~> and, for the fills (lineart_fills, lineart_outline), before the thinning:
+-~>   a. lineart_solid     ink wide all round (a pupil, dark trousers) leaves
+-~>                        the mask, to be a fill instead of a stroke
+-~>   b. lineart_regions   the colors away from the ink, reduced in Lab and
+-~>                        cut into regions grown under the lines
+-~>   c. lineart_region_shapes  a sub-pixel outline per region, written in
+-~>                        `layer fills`, before (so behind) `layer lines`
 -~> Later stages of Tracing v2 hook in here: an orientation field (steers
--~> lineart_turn), fills grown under the lines (a `layer fills` written
--~> after `layer lines`, so behind it), corners, Bezier fitting and snapping
--~> to primitives (on the stroke points before lineart_code).
+-~> lineart_turn), corners, Bezier fitting and snapping to primitives (on
+-~> the stroke points before lineart_code, and in lineart_outline_points
+-~> for the fills).
 
 use "../draw/svg"
 use "lineart_mask"
 use "lineart_skeleton"
 use "lineart_graph"
 use "lineart_strokes"
+use "lineart_fills"
+use "lineart_outline"
+use "lineart_palette"
 
 -~> The options of trace(path, {"mode": "lineart", ...}). Anything left out
 -~> takes the value shown.
@@ -36,6 +46,15 @@ use "lineart_strokes"
 -~>                   junction and still go on as the same stroke.
 -~>   radius          the half side, in pixels, of the neighbourhood a pixel is
 -~>                   compared with; 0 picks it from the picture's size.
+-~>   fills           false to trace only the lines, on the paper color.
+-~>   colors          the most fill colors (2 to 64), picked in Lab. Fewer
+-~>                   gives a simpler drawing, more keeps more cel shades.
+-~>   min_area        color regions smaller than this many pixels are given
+-~>                   to their neighbours; 0 picks it from the picture's size.
+-~>   solid           ink at least this far (px) from the paper all round is
+-~>                   a solid fill, not a stroke; 0 picks it from the size.
+-~>   detail          how far, in pixels, a fill outline may drift when it is
+-~>                   simplified.
 -~>   scale           multiplies every coordinate, to make a bigger drawing.
 -~>   max_side        the picture is shrunk until its longer side is at most
 -~>                   this many pixels.
@@ -45,6 +64,11 @@ let lineart_options = {
   "line_min": 6,
   "continuation": 35,
   "radius": 0,
+  "fills": true,
+  "colors": 16,
+  "min_area": 0,
+  "solid": 0,
+  "detail": 0.8,
   "scale": 1,
   "max_side": 1024
 }
@@ -62,6 +86,9 @@ function lineart_settings(options) {
   let out = hash.merge(lineart_options, options)
   if (!(out.line_threshold > 0 && out.line_threshold < 1)) {
     error("trace: line_threshold must be between 0 and 1")
+  }
+  if (out.colors < 2 || out.colors > 64) {
+    error("trace: colors must be from 2 to 64")
   }
   out
 }
@@ -82,6 +109,11 @@ function lineart_pixels(size, pixels, options, name) {
   let t1 = time.ms()
   let dist = lineart_distance(m.mask, m.ink, w)
   let t2 = time.ms()
+  let fills = lineart_trace_fills(pixels, m, dist, w, h, opt)
+  if (fills.solid > 0) {
+    dist = lineart_distance(m.mask, m.ink, w)
+  }
+  let t2f = time.ms()
   let thin = lineart_thin(m.mask, m.ink, w)
   let t3 = time.ms()
   let graph = lineart_graph(m.mask, thin.skeleton, dist, w)
@@ -109,7 +141,7 @@ function lineart_pixels(size, pixels, options, name) {
     }
   }
   let t5 = time.ms()
-  let made = lineart_code(name, w, h, m, strokes, opt.scale)
+  let made = lineart_code(name, w, h, m, strokes, fills, opt.scale)
   let t6 = time.ms()
   let junctions = 0
   for (let i = 0; i < len(graph.nodes); i += 1) {
@@ -122,6 +154,9 @@ function lineart_pixels(size, pixels, options, name) {
     "stats": {
       "mode": "lineart",
       "strokes": len(strokes),
+      "fills": made.fills,
+      "colors": len(made.names),
+      "solid": fills.solid,
       "points": made.points,
       "tips": made.tips,
       "junctions": junctions,
@@ -134,12 +169,56 @@ function lineart_pixels(size, pixels, options, name) {
       "stages": {
         "mask": t1 - t0,
         "distance": t2 - t1,
-        "thin": t3 - t2,
+        "fills": t2f - t2 - fills.outline_ms,
+        "outlines": fills.outline_ms,
+        "thin": t3 - t2f,
         "graph": t4 - t3,
         "strokes": t5 - t4,
         "code": t6 - t5
       }
     }
+  }
+}
+
+-~> The fills of a picture whose ink is `m` (lineart_mask's result, with
+-~> `dist` its distance transform): solid ink taken out of m first, then
+-~> the regions, and the shapes of each one to draw, biggest first.
+-~> Returns {"shapes": [{"color": palette number, "outers", "holes"}...],
+-~> "colors", "lab", "background" (palette number or -1), "solid": solid
+-~> pixels taken, "outline_ms"}.
+function lineart_trace_fills(pixels, m, dist, w, h, opt) {
+  let none = {"shapes": [], "colors": [], "lab": [], "background": -1, "solid": 0, "outline_ms": 0}
+  if (!opt.fills) {
+    return none
+  }
+  let depth = opt.solid
+  if (depth <= 0) {
+    depth = math.max(4.0, 4.0 * lineart_line_half(m, dist, w))
+  }
+  let min_area = opt.min_area
+  if (min_area <= 0) {
+    min_area = math.max(4, math.round(w * h / 40000.0))
+  }
+  let solid = lineart_solid(m, pixels, dist, w, depth)
+  let fill = lineart_regions(pixels, m.mask, w, h, opt.colors, min_area)
+  let order = lineart_order(fill, w, h)
+  let t0 = time.ms()
+  let shapes = []
+  for (let k = 0; k < len(order.order); k += 1) {
+    let id = order.order[k]
+    let s = lineart_region_shapes(fill, order, id, w, h, opt.detail)
+    if (len(s.outers) > 0) {
+      s.color = fill.regions[id].color
+      push(shapes, s)
+    }
+  }
+  {
+    "shapes": shapes,
+    "colors": fill.colors,
+    "lab": fill.lab,
+    "background": order.background,
+    "solid": solid,
+    "outline_ms": time.ms() - t0
   }
 }
 
@@ -177,21 +256,45 @@ function lineart_pen_range(strokes) {
   [math.floor(sorted[0] * 10) / 10.0, math.ceil(sorted[len(sorted) - 1] * 10) / 10.0]
 }
 
--~> The .lzdraw source: the palette (paper and ink), the pen, the canvas, and
--~> `layer lines` with one brush() per stroke. Returns {"code", "points",
--~> "tips": {spiky, blunt, joined}, "pen_min", "pen_max"}.
-function lineart_code(source_name, w, h, m, strokes, scale) {
+-~> The .lzdraw source: the palette (paper, ink and the fill colors by
+-~> name), the pen, the canvas, `layer lines` with one brush() per stroke,
+-~> then `layer fills` (lower, so behind the lines; left out when there is
+-~> none) with one path() per fill shape, the smallest first (in front).
+-~> The canvas is the background's color. Returns {"code",
+-~> "points", "tips": {spiky, blunt, joined}, "pen_min", "pen_max",
+-~> "fills", "names"}.
+function lineart_code(source_name, w, h, m, strokes, fills, scale) {
   let range = lineart_pen_range(strokes)
   let lo = range[0] * scale
   let hi = range[1] * scale
-  let lines = ["-~> lzdraw 1", "-~> Traced from " + source_name + " as line art: " + str(len(strokes)) + " strokes."]
-  push(lines, "let colors = {\"paper\": " + color_hex(m.paper) + ", \"ink\": " + color_hex(m.ink_color) + "}")
+  let used = lineart_used_colors(fills)
+  let labs = []
+  for (let i = 0; i < len(used); i += 1) {
+    push(labs, fills.lab[used[i]])
+  }
+  let names = lineart_color_names(labs, ["paper", "ink"])
+  let name_of = {}
+  for (let i = 0; i < len(used); i += 1) {
+    name_of[used[i]] = names[i]
+  }
+  let paper = m.paper
+  if (len(fills.shapes) > 0 && fills.background >= 0) {
+    paper = fills.colors[fills.background]
+  }
+  let lines = ["-~> lzdraw 1", "-~> Traced from " + source_name + " as line art: " + str(len(strokes)) + " strokes" +
+    lineart_fill_count(fills) + "."]
+  let palette = ["\"paper\": " + color_hex(paper), "\"ink\": " + color_hex(m.ink_color)]
+  for (let i = 0; i < len(used); i += 1) {
+    push(palette, "\"" + names[i] + "\": " + color_hex(fills.colors[used[i]]))
+  }
+  push(lines, "let colors = {" + text.join(palette, ", ") + "}")
   push(lines, "pens.traced = {\"name\": \"traced\", \"min\": " + lineart_num(lo) + ", \"max\": " + lineart_num(hi) +
     ", \"taper\": 0, \"opacity\": [1, 1], \"nib\": null, \"grain\": 0}")
   push(lines, "canvas = {\"size\": (" + svg_num(w * scale) + ", " + svg_num(h * scale) + "), \"background\": colors.paper}")
   push(lines, "")
-  push(lines, "layer lines")
   let points = 0
+  let count = 0
+  push(lines, "layer lines")
   let tips = {"spiky": 0, "blunt": 0, "joined": 0}
   for (let i = 0; i < len(strokes); i += 1) {
     let s = strokes[i]
@@ -212,5 +315,73 @@ function lineart_code(source_name, w, h, m, strokes, scale) {
     }
     push(lines, "  brush([" + text.join(pts, ", ") + "], [" + text.join(ps, ", ") + "], colors.ink, pens.traced)")
   }
-  {"code": text.join(lines, "\n") + "\n", "points": points, "tips": tips, "pen_min": lo, "pen_max": hi}
+  if (len(fills.shapes) > 0) {
+    push(lines, "layer fills")
+    for (let i = len(fills.shapes) - 1; i >= 0; i -= 1) {
+      let s = fills.shapes[i]
+      for (let k = 0; k < len(s.outers); k += 1) {
+        push(lines, "  " + lineart_fill_line(s.outers[k], s.holes[k], "colors." + name_of[s.color], scale))
+        points += len(s.outers[k])
+        count += 1
+      }
+    }
+  }
+  {
+    "code": text.join(lines, "\n") + "\n",
+    "points": points,
+    "tips": tips,
+    "pen_min": lo,
+    "pen_max": hi,
+    "fills": count,
+    "names": names
+  }
+}
+
+-~> ", N fills" for the header comment, or nothing without fills.
+function lineart_fill_count(fills) {
+  let n = 0
+  for (let i = 0; i < len(fills.shapes); i += 1) {
+    n += len(fills.shapes[i].outers)
+  }
+  if (n == 0) {
+    return ""
+  }
+  ", " + str(n) + " fills"
+}
+
+-~> The palette numbers the fill shapes use, from the most used.
+function lineart_used_colors(fills) {
+  let count = {}
+  let used = []
+  for (let i = 0; i < len(fills.shapes); i += 1) {
+    let c = fills.shapes[i].color
+    if (count[c] === null) {
+      count[c] = 0
+      push(used, c)
+    }
+    count[c] += len(fills.shapes[i].outers)
+  }
+  list.sort(used, function(a, b) { count[a] > count[b] || (count[a] == count[b] && a < b) })
+}
+
+-~> A list of points as source text, one decimal: [(1.5, 2), (3, 4.2)].
+function lineart_points_text(points, scale) {
+  let parts = []
+  for (let i = 0; i < len(points); i += 1) {
+    push(parts, "(" + lineart_num(points[i].x * scale) + ", " + lineart_num(points[i].y * scale) + ")")
+  }
+  "[" + text.join(parts, ", ") + "]"
+}
+
+-~> One path(...) call for a fill shape, with its holes when it has some.
+function lineart_fill_line(outer, holes, fill, scale) {
+  let call = "path(" + lineart_points_text(outer, scale) + ", " + fill
+  if (len(holes) > 0) {
+    let parts = []
+    for (let i = 0; i < len(holes); i += 1) {
+      push(parts, lineart_points_text(holes[i], scale))
+    }
+    call = call + ", true, true, [" + text.join(parts, ", ") + "]"
+  }
+  call + ")"
 }

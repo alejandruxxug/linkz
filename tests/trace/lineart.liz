@@ -2,9 +2,13 @@
 -~> antialiased segments [a, b, half-width at a, half-width at b], black on
 -~> white): how many strokes it finds, their tips and junctions, that its
 -~> code runs and draws one brush per stroke, and how close the strokes stay
--~> to the lines drawn. Then the photo mode by name, and the option checks.
+-~> to the lines drawn. Then the fills (cel(w, h, f) paints a picture from a
+-~> function of the pixel center): how many, their colors' names, that they
+-~> reach under the lines with no seam, that a solid dark area becomes a fill
+-~> and not strokes. Then the photo mode by name, and the option checks.
 
 use "../../lib/app/drawing"
+use "../../lib/app/paint"
 use "../../lib/trace/trace"
 
 -~> The distance from p to the segment a-b, and how far along it (0 to 1).
@@ -91,6 +95,128 @@ for (let i = 0; i < len(cases); i += 1) {
     brushes, "close", drift, "canvas", run.canvas.size)
 }
 
+-~> A picture from a function of the pixel center, 4 samples per pixel
+-~> (soft edges, like a drawn picture).
+function cel(w, h, f) {
+  let px = []
+  for (let y = 0; y < h; y += 1) {
+    for (let x = 0; x < w; x += 1) {
+      let s = [0, 0, 0]
+      for (let k = 0; k < 4; k += 1) {
+        let c = f((x + 0.25 + 0.5 * (k % 2), y + 0.25 + 0.5 * (k // 2)))
+        s = [s[0] + c.r, s[1] + c.g, s[2] + c.b]
+      }
+      push(px, rgb(math.round(s[0] / 4.0), math.round(s[1] / 4.0), math.round(s[2] / 4.0)))
+    }
+  }
+  {"size": (w, h), "pixels": px}
+}
+
+let disc = cel(60, 60, function(p) {
+  let d = math.dist(p, (30, 30))
+  if (d >= 17 && d <= 20) { #141414 } elif (d < 17) { #d23c32 } else { #fafaf5 }
+})
+let halves = cel(64, 40, function(p) {
+  let inside = p.x > 6 && p.x < 58 && p.y > 6 && p.y < 34
+  if (!inside) {
+    return #ffffff
+  }
+  if (p.x < 9 || p.x > 55 || p.y < 9 || p.y > 31 || math.abs(p.x - 32) < 1.5) {
+    return #101010
+  }
+  if (p.x < 32) { #3c64c8 } else { #f0d23c }
+})
+let pupil = cel(60, 40, function(p) {
+  if (math.dist(p, (18, 20)) < 9 || (p.x > 34 && p.x < 56 && math.abs(p.y - 20) < 1.2)) { #0a0a0a } else { #ffffff }
+})
+
+-~> [name, picture, options]
+let fill_cases = [
+  ["a red disc in a black ring", disc, {"mode": "lineart"}],
+  ["two colors parted by a line", halves, {"mode": "lineart"}],
+  ["a solid dark disc is a fill, the thin line a stroke", pupil, {"mode": "lineart"}],
+  ["fills false: lines only", disc, {"mode": "lineart", "fills": false}]
+]
+
+-~> How many pixels inside the box [x0, y0, x1, y1] are left the canvas color
+-~> by the fills alone (a seam shows the canvas).
+function bare(code, size, b) {
+  let rows = text.lines(code)
+  let kept = []
+  let skip = false
+  for (let i = 0; i < len(rows); i += 1) {
+    if (rows[i] == "layer lines") {
+      skip = true
+    } elif (rows[i] == "layer fills") {
+      skip = false
+    }
+    if (!skip) {
+      push(kept, rows[i])
+    }
+  }
+  let px = img.pixels(paint_run(text.join(kept, "\n") + "\nraster.paint(drawing, (0, 0))\n", size))
+  let n = 0
+  for (let y = b[1]; y <= b[3]; y += 1) {
+    for (let x = b[0]; x <= b[2]; x += 1) {
+      let c = px[y * size.x + x]
+      if (c.r + c.g + c.b > 700) {
+        n += 1
+      }
+    }
+  }
+  n
+}
+
+for (let i = 0; i < len(fill_cases); i += 1) {
+  let c = fill_cases[i]
+  let result = trace_pixels(c[1].size, c[1].pixels, c[2], "test")
+  let st = result.stats
+  let run = drawing_run(result.code)
+  let paths = []
+  for (let k = 0; k < len(run.shapes); k += 1) {
+    if (run.shapes[k].kind == "path") {
+      push(paths, run.shapes[k])
+    }
+  }
+  let palette = text.lines(result.code)[2]
+  let all = text.split(text.slice(palette, 14, len(palette) - 1), ", ")
+  let names = list.slice(all, 2, len(all))
+  let named = []
+  for (let k = 0; k < len(names); k += 1) {
+    push(named, text.replace(text.split(names[k], ":")[0], "\"", ""))
+  }
+  puts(c[0] + ":", "fills", st.fills, "strokes", st.strokes, "solid", st.solid > 0, "errors", run.errors, "paths", len(paths),
+    "colors", named)
+}
+
+-~> The disc's fill reaches the middle of the ring (radius 18.5), not just
+-~> its inner edge (17), and is a curve with points between pixel corners.
+let disc_code = trace_pixels(disc.size, disc.pixels, {"mode": "lineart"}, "disc").code
+let disc_fill = null
+let shapes = drawing_run(disc_code).shapes
+for (let k = 0; k < len(shapes); k += 1) {
+  if (shapes[k].kind == "path") {
+    disc_fill = shapes[k].args[0]
+  }
+}
+let reach = 0.0
+let off_grid = 0
+for (let k = 0; k < len(disc_fill); k += 1) {
+  reach += math.dist(disc_fill[k], (30, 30))
+  let fx = disc_fill[k].x * 2
+  let fy = disc_fill[k].y * 2
+  if (fx != math.round(fx) || fy != math.round(fy)) {
+    off_grid += 1
+  }
+}
+reach = reach / len(disc_fill)
+puts("the fill grows under the ring:", reach > 17.8 && reach < 19.2, "| off the pixel grid:", off_grid > len(disc_fill) / 2)
+let halves_code = trace_pixels(halves.size, halves.pixels, {"mode": "lineart"}, "halves").code
+puts("no seam between the halves:", bare(halves_code, halves.size, [8, 8, 55, 31]) == 0)
+puts("no seam under the ring:", bare(disc_code, disc.size, [14, 14, 46, 46]) == 0)
+let order = text.lines(halves_code)
+puts("layers: lines in front of fills:", list.index(order, "layer lines") < list.index(order, "layer fills"))
+
 let tapered = ink(80, 30, [[(8, 15), (72, 12), 3.5, 0.4]])
 let code = trace_pixels(tapered.size, tapered.pixels, {"mode": "lineart"}, "tapered").code
 let lines = text.lines(code)
@@ -106,7 +232,8 @@ for (let y = 0; y < 12; y += 1) {
 let plain = trace_pixels((12, 12), squares, {"colors": 2, "min_area": 0}, "sq").code
 puts("photo by name is the same:", trace_pixels((12, 12), squares, {"mode": "photo", "colors": 2, "min_area": 0}, "sq").code == plain)
 
-let bad = [{"mode": "lineart", "colors": 4}, {"mode": "lineart", "line_threshold": 1.5}, {"mode": "vector"}]
+let bad = [{"mode": "lineart", "refine": 4}, {"mode": "lineart", "line_threshold": 1.5}, {"mode": "lineart", "colors": 1},
+  {"mode": "vector"}]
 for (let i = 0; i < len(bad); i += 1) {
   try {
     trace_pixels((12, 12), squares, bad[i])

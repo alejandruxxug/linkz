@@ -6,8 +6,17 @@ a ring is one closed stroke: strokes 1 tips {"spiky": 0, "blunt": 0, "joined": 0
 continuation 0: only a dead-straight way goes on: strokes 3 tips {"spiky": 0, "blunt": 4, "joined": 2} junctions 1 errors [] brushes 3 close true canvas (60, 60)
 a speck under line_min is dropped: strokes 0 tips {"spiky": 0, "blunt": 0, "joined": 0} junctions 0 errors [] brushes 0 close - canvas (30, 30)
 scale doubles the canvas: strokes 1 tips {"spiky": 0, "blunt": 2, "joined": 0} junctions 0 errors [] brushes 1 close - canvas (80, 40)
+a red disc in a black ring: fills 1 strokes 1 solid false errors [] paths 1 colors ["red"]
+two colors parted by a line: fills 2 strokes 2 solid false errors [] paths 2 colors ["blue", "light_yellow"]
+a solid dark disc is a fill, the thin line a stroke: fills 1 strokes 1 solid true errors [] paths 1 colors ["black"]
+fills false: lines only: fills 0 strokes 1 solid false errors [] paths 0 colors []
+the fill grows under the ring: true | off the pixel grid: true
+no seam between the halves: true
+no seam under the ring: true
+layers: lines in front of fills: true
 header: -~> lzdraw 1 | let colors = {"paper":  | pens.traced = {"name": "traced" | layer lines
 photo by name is the same: true
-true trace: unknown option "colors" for line art (known: mode, line_threshold, line_min, continuation, radius, scale, max_side)
+true trace: unknown option "refine" for line art (known: mode, line_threshold, line_min, continuation, radius, fills, colors, min_area, solid, detail, scale, max_side)
 true trace: line_threshold must be between 0 and 1
+true trace: colors must be from 2 to 64
 true trace: mode must be "photo" or "lineart", not vector
