@@ -47,3 +47,8 @@ en
 4 12
 al:row:12 331,175 152x134 [|boat|1 object||true|left]
 true
+-- the card never covers the hovered layer's box on the canvas
+boat false false false
+line false false false
+sky true true false
+rect true true false

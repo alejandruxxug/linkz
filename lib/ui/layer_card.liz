@@ -15,6 +15,7 @@
 -~> the size it shows, so it is sharp on the canvas buffer too) and made
 -~> again only when the layer's shapes or the background look different.
 
+use "../draw/geometry"
 use "../draw/shapes"
 use "../gfx/raster"
 use "app"
@@ -102,9 +103,49 @@ function lc_anchor(id, line) {
   null
 }
 
+-~> The box the layer's shapes take on the canvas, in UI pixels:
+-~> [left, top, right, bottom], strokes included. Null when the layer is
+-~> hidden (it isn't on the canvas) or draws nothing.
+function lc_canvas_box(line, end, hidden) {
+  if (hidden) {
+    return null
+  }
+  let own = lt_shapes(line, end)
+  let cl = view_canvas_layout()
+  let box = null
+  for (let i = 0; i < len(own); i += 1) {
+    let b = path_bounds(own[i].path)
+    if (b == null) {
+      continue
+    }
+    let half = 0.0
+    if (own[i].stroke != null && (type(own[i].width) == "INTEGER" || type(own[i].width) == "FLOAT")) {
+      half = own[i].width / 2.0
+    }
+    let l = (cl.wx + (b.min.x - half) * cl.zoom) / 2.0
+    let t = (cl.wy + (b.min.y - half) * cl.zoom) / 2.0
+    let r = (cl.wx + (b.max.x + half) * cl.zoom) / 2.0
+    let d = (cl.wy + (b.max.y + half) * cl.zoom) / 2.0
+    if (box == null) {
+      box = [l, t, r, d]
+    } else {
+      box = [math.min(box[0], l), math.min(box[1], t), math.max(box[2], r), math.max(box[3], d)]
+    }
+  }
+  box
+}
+
+-~> Whether a card at (x, y) of height h (with its tail and shadow) covers box.
+function lc_covers(x, y, h, box) {
+  box != null && x - 5 < box[2] && x + lc_w + 7 > box[0] && y < box[3] && y + h + 2 > box[1]
+}
+
 -~> Where a card of height h goes for an anchor: [x, y]. It sits 6 above the
--~> row; near the bottom edge it flips up so it ends 6 under the row.
-function lc_place(a, h) {
+-~> row; near the bottom edge it flips up so it ends 6 under the row. When
+-~> that covers `box` (the hovered layer on the canvas) it slides along the
+-~> panel edge, down or up, to the nearest place that clears it; when none
+-~> does it goes to the other side of the box.
+function lc_place(a, h, box) {
   let r = a.rect
   let x = 0
   if (a.side == "right") {
@@ -112,11 +153,35 @@ function lc_place(a, h) {
   } else {
     x = r[0] - 7 - lc_w
   }
+  x = math.max(0, x)
   let y = r[1] - 6
   if (y + h + 2 > view_geom().status_y) {
     y = r[1] + r[3] + 6 - h
   }
-  [math.max(0, x), math.max(0, y)]
+  y = math.max(0, y)
+  if (!lc_covers(x, y, h, box)) {
+    return [x, y]
+  }
+  let top = 0
+  let low = view_geom().status_y - h - 2
+  let best = null
+  let tries = [box[3] + 6, box[1] - h - 8]
+  for (let i = 0; i < len(tries); i += 1) {
+    let c = tries[i]
+    if (c >= top && c <= low && !lc_covers(x, c, h, box) && (best == null || math.abs(c - y) < math.abs(best - y))) {
+      best = c
+    }
+  }
+  if (best != null) {
+    return [x, best]
+  }
+  let right = box[2] + 12
+  let left = box[0] - lc_w - 12
+  let other = right
+  if (a.side == "right" && left >= 0 || right > V.w - lc_w - 2) {
+    other = left
+  }
+  [math.max(0, math.min(other, V.w - lc_w - 2)), y]
 }
 
 -~> == What it says ==
@@ -215,7 +280,7 @@ function lc_tip(id, line) {
   if (badge != "") {
     h = 149
   }
-  let at = lc_place(a, h)
+  let at = lc_place(a, h, lc_canvas_box(line, row.end_line, row.hidden == true))
   let n = len(lt_shapes(line, row.end_line))
   let count = t("card.objects", {"n": n})
   if (n == 1) {

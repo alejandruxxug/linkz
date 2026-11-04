@@ -190,3 +190,15 @@ puts(len(n.la_visible()), n.la_visible()[0].row.line)
 rest(on_panel(n.la_visible()[0].row.line, 80))
 puts(n.V.hover, card_text())
 puts(n.V.tip.x + n.V.tip.w < n.la_rect()[0])
+
+puts("-- the card never covers the hovered layer's box on the canvas")
+function covers(tip, box) {
+  n.lc_covers(tip.x, tip.y, tip.h, box)
+}
+for (let i = 0; i < len(n.la_visible()); i += 1) {
+  let lr = n.la_visible()[i].row
+  let tip = n.lc_tip("al:row:" + str(lr.line), lr.line)
+  let box = n.lc_canvas_box(lr.line, lr.end_line, lr.hidden == true)
+  let plain = n.lc_place(n.lc_anchor("al:row:" + str(lr.line), lr.line), tip.h, null)
+  puts(lr.stmt.name, n.lc_covers(plain[0], plain[1], tip.h, box), tip.y != plain[1], covers(tip, box))
+}
