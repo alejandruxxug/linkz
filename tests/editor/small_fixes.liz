@@ -1,0 +1,17 @@
+-~> Small design-check fixes: the word suggested for a new color variable
+-~> (from its hue), and the properties header of a layer.
+
+use "../../lib/ui/color_hsv"
+use "../../lib/ui/color_names"
+use "../../lib/ui/view_layout"
+
+puts("-- a word for a color")
+let cases = [#ff0000, #3fa34d, #2d6a8f, #fff3c4, #808080, #ffffff, #050505, #9a5a1e, #8f2d6a]
+for (let i = 0; i < len(cases); i += 1) {
+  puts(color_word(hsv_of(cases[i])))
+}
+
+puts("-- the header of a layer reads like the other kinds")
+puts(view_props_title({"kind": "layer", "name": "shadows", "ident": "shadows"}, 9))
+puts(view_props_title({"kind": "layer", "name": null, "ident": "rays"}, 4))
+puts(view_props_title({"kind": "call", "callee": "rect"}, 3))

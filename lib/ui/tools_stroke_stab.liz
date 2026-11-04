@@ -7,6 +7,7 @@
 -~> string and circle are drawn over the canvas.
 
 use "editor_undo"
+use "home_data"
 use "i18n"
 use "pen_edit"
 use "stabilize"
@@ -98,8 +99,12 @@ function tools_stab_paint(cl) {
 function tools_stab_tip(cl, at) {
   let a = t("stab.tip")
   let b = t("stab.tip_catch")
-  let w = math.max(g_text_w(a), g_text_w(b)) + 14
   let cr = cl.crect
+  -~> in a narrow canvas the lines are cut to fit it
+  let room = (cr[2] - 18) // 7
+  a = home_fit(a, room)
+  b = home_fit(b, room)
+  let w = math.max(g_text_w(a), g_text_w(b)) + 14
   let x = math.max(cr[0] + 2, math.min(math.round(at.x - w / 2), cr[0] + cr[2] - w - 4))
   let y = math.round(at.y) - 57
   if (y < cr[1] + 2) {

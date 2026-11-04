@@ -18,6 +18,7 @@
 use "color_draw"
 use "color_harmony"
 use "color_hsv"
+use "color_names"
 use "color_picker"
 use "color_state"
 use "color_target"
@@ -208,7 +209,7 @@ function cp_harmony_base() {
   if (v != null) {
     return v
   }
-  "color"
+  color_word(CP.hsv)
 }
 
 -~> The names "+ add all" would write.
@@ -418,7 +419,7 @@ function cp_down(e) {
     CP.save = !CP.save
     if (CP.save) {
       cp_place()
-      CP.focus = {"field": "name", "text": colors_free_name(colors_find(ed_model()), "color"), "caret": 0, "fresh": true}
+      CP.focus = {"field": "name", "text": colors_free_name(colors_find(ed_model()), color_word(CP.hsv)), "caret": 0, "fresh": true}
       CP.focus.caret = len(CP.focus.text)
     } else {
       CP.focus = null
@@ -562,7 +563,7 @@ function cp_save_var() {
     name = colors_clean_name(fo.text)
   }
   if (name == "") {
-    name = colors_free_name(colors_find(ed_model()), "color")
+    name = colors_free_name(colors_find(ed_model()), color_word(CP.hsv))
   }
   CP.focus = null
   if (ct_save_as(CP.target, name)) {
@@ -994,7 +995,7 @@ function cp_draw_footer(lay) {
   g_rect(wx + 1, wy + 5, 4, 4, hsv_color(CP.hsv))
   let what = ct_writes(CP.target)
   if (CP.save && CP.focus != null && CP.focus.field == "name") {
-    what = colors_name + "." + colors_clean_name(CP.focus.text) + " = " + color_hex(hsv_color(CP.hsv))
+    what = colors_name + "." + colors_clean_name(CP.focus.text)
   }
   let room = (x + cp_w - 6 - (wx + 8)) // 7
   if (len(what) > room) {

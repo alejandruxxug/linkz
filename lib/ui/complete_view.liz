@@ -70,6 +70,8 @@ function cmp_list_layout(pos) {
   let m = ed_model()
   let n = len(cmp.items)
   let shown = math.min(n, cmp_max_visible)
+  -~> the list ends above the properties strip (below the code panel)
+  let limit = view_geom().props_y - 2
   let kinds = []
   let w = cmp_list_w
   for (let i = 0; i < n; i = i + 1) {
@@ -80,13 +82,20 @@ function cmp_list_layout(pos) {
   }
   w = math.min(w, cmp_list_max_w)
   let block = cmp_doc_block(cmp.items[cmp.sel].item)
-  let h = 1 + shown * cmp_item_h + 1 + cmp_block_h(block) + cmp_item_h + 1
+  let chrome = 1 + 1 + cmp_block_h(block) + cmp_item_h + 1
+  let h = chrome + shown * cmp_item_h
   let x = math.max(2, math.min(pos.start_x - 16, V.w - w - 4))
   let y = pos.y + cmp_row_h
   let above = false
-  if (y + h + 2 > V.h - 16) {
-    y = pos.y - h
-    above = true
+  if (y + h > limit) {
+    if (pos.y - h >= 0) {
+      y = pos.y - h
+      above = true
+    } else {
+      -~> neither side has room: fewer rows, below the row
+      shown = math.max(1, math.min(shown, (limit - y - chrome) // cmp_item_h))
+      h = chrome + shown * cmp_item_h
+    }
   }
   {"x": x, "y": math.max(0, y), "w": w, "h": h, "shown": shown, "above": above, "kinds": kinds, "block": block}
 }

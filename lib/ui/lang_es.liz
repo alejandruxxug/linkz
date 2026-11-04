@@ -477,7 +477,7 @@ lang_register("es", {
   "color.recent": "RECIENTES",
   "color.old": "era",
   "color.new": "ahora",
-  "color.ring_hint": "anillo: tono",
+  "color.ring_hint": "aro: tono",
   "color.triangle_hint": "triángulo: s · v",
   "color.dropper_hint": "clic en el dibujo",
   "color.harmony": "ARMONÍA",

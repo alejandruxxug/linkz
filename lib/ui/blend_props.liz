@@ -164,7 +164,11 @@ function blend_props_wrap(lay) {
   if (!st.readable) {
     shown = t("blend.code")
   }
-  let bw = math.max(82, bm_size(0)[0] - 20)
+  -~> as wide as the widest mode's name needs, so the `opacity` label fits too
+  let bw = 0
+  for (let i = 0; i < len(blend_menu_modes); i += 1) {
+    bw = math.max(bw, g_text_w(blend_label(blend_menu_modes[i])) + 20)
+  }
   push(lay.boxes, {"field": "blend", "sub": 0, "kind": "blend", "x": x, "y": y, "w": bw, "h": 16, "text": shown, "focus": blend_menu_open_from("props")})
   x = x + bw + 8
   let ptxt = str(blend_percent(st.opacity)) + "%"
@@ -175,7 +179,7 @@ function blend_props_wrap(lay) {
   let fw = math.max(36, g_text_w(ptxt) + 8)
   let olabel = text.lower(t("blend.opacity"))
   let end = V.pw - 6 - fw - 6
-  if (end - (x + g_text_w(olabel) + 4) >= 60) {
+  if (end - (x + g_text_w(olabel) + 4) >= 24) {
     push(lay.labels, {"x": x, "y": y + 1, "s": olabel})
     x = x + g_text_w(olabel) + 4
   } else {

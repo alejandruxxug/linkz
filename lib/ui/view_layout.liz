@@ -556,10 +556,24 @@ function view_to_drawing(cl, ux, uy) {
 
 -~> == The properties panel ==
 
+-~> " shadows": the layer's name (or its identifier) after the word `layer`.
+function view_layer_word(props) {
+  if (props.name != null && props.name != "") {
+    return " " + props.name
+  }
+  if (props.ident != null && props.ident != "") {
+    return " " + props.ident
+  }
+  ""
+}
+
 function view_props_title(props, line) {
   let head = text.upper(t("panel.properties"))
   if (props != null && props.kind == "call") {
     return head + " · " + props.callee + " · " + t("word.line") + " " + str(line)
+  }
+  if (props != null && props.kind == "layer") {
+    return head + " · " + text.lower(t("tool.layer")) + view_layer_word(props) + " · " + t("word.line") + " " + str(line)
   }
   if (props != null) {
     return head + " · " + t("tool.layer") + " · " + t("word.line") + " " + str(line)

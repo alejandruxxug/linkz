@@ -19,8 +19,10 @@ use "editor_undo"
 use "i18n"
 use "select_model"
 use "stabilize"
+use "stabilize_view"
 use "tool_select"
 use "tool_stabilizer"
+use "tools_stroke_stab"
 use "view_canvas"
 use "view_gfx"
 use "view_layout"
@@ -75,7 +77,7 @@ function lasso_down(e, cl) {
     base = pick_lines()
   }
   let p = tools_pointer(cl, e)
-  let g = {"owner": "lasso", "mode": "loop", "pts": [], "state": stabilize_new(), "cursor": p, "phase": 0, "base": base, "checked": 0}
+  let g = {"owner": "lasso", "mode": "loop", "pts": [], "state": stabilize_new(), "cursor": p, "phase": 0, "base": base, "checked": 0, "raw": []}
   lasso_add(g, p)
   V.gest = g
   sel_ui.hot = []
@@ -85,6 +87,10 @@ function lasso_down(e, cl) {
 -~> Takes a pointer sample through the stabilizer.
 function lasso_add(g, p) {
   g.cursor = p
+  let nr = len(g.raw)
+  if (nr == 0 || math.dist(g.raw[nr - 1], p) >= 1.5) {
+    push(g.raw, p)
+  }
   let laid = stabilize(g.state, {"pos": p}, lasso_steady())
   for (let i = 0; i < len(laid); i += 1) {
     let n = len(g.pts)
@@ -271,19 +277,17 @@ function lasso_paint(cl) {
   sel_line(last, first, 0, function(x, y, _n) { sel_dot(x, y, P.bevel) })
   let st = lasso_steady()
   if (st.mode == "string" && g.state.tip != null) {
-    let tip = view_to_window(cl, g.state.tip) / 2
-    let cur = view_to_window(cl, g.cursor) / 2
-    sel_line(tip, cur, 0, function(x, y, _n) { sel_dot(x, y, P.sky) })
-    let r = st.length * cl.zoom / 2
-    let steps = math.max(16, math.round(r * 2))
-    for (let i = 0; i < steps; i += 2) {
-      let a = math.tau * i / steps
-      sel_dot(math.round(cur.x + math.cos(a) * r), math.round(cur.y + math.sin(a) * r), P.sky)
+    -~> the same feedback as the brush: the raw cursor path, the string with
+    -~> its circle, the cursor square and the tooltip
+    let raw = []
+    for (let i = 0; i < len(g.raw); i += 1) {
+      push(raw, cl.offset + g.raw[i] * cl.zoom)
     }
-    let tx = math.round(tip.x)
-    let ty = math.round(tip.y)
-    g_rect(tx - 2, ty - 2, 5, 5, P.void)
-    g_rect(tx - 1, ty - 1, 3, 3, P.bright)
+    stab_paint_raw(raw)
+    let cursor = cl.offset + g.cursor * cl.zoom
+    stab_paint(cl.offset + g.state.tip * cl.zoom, cursor, st.length * cl.zoom)
+    stab_paint_cursor(cursor)
+    tools_stab_tip(cl, view_to_window(cl, g.cursor) / 2)
   }
 }
 
@@ -302,7 +306,12 @@ function lasso_overlay_win(cl) {
   let m = lasso_steady().length + 4
   let a = view_to_window(cl, lo - (m, m))
   let b = view_to_window(cl, hi + (m, m))
-  [a.x - 6, a.y - 6, b.x + 6, b.y + 6]
+  -~> room for the stabilizer's tooltip around the cursor
+  let tip = 0
+  if (lasso_steady().mode == "string") {
+    tip = 200
+  }
+  [a.x - 6 - tip, a.y - 6 - tip / 2, b.x + 6 + tip, b.y + 6 + tip / 2]
 }
 
 -~> A text that changes when the loop does (for the canvas panel's key).

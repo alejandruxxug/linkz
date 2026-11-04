@@ -1,0 +1,14 @@
+-- a word for a color
+red
+green
+sky
+cream
+gray
+white
+black
+brown
+pink
+-- the header of a layer reads like the other kinds
+PROPERTIES · layer shadows · line 9
+PROPERTIES · layer rays · line 4
+PROPERTIES · rect · line 3

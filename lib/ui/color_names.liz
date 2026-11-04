@@ -1,0 +1,49 @@
+-~> color_names: a plain word for a color, from its hue, saturation and
+-~> value, to suggest the name of a new variable (`cream`, `sky`, `moss`
+-~> rather than `color`). Pure functions. The word is lowercase letters only,
+-~> so it is a valid name; colors_free_name adds `_2` when it is taken.
+
+use "color_hsv"
+
+-~> The hue's word, by degrees: red, orange, yellow, lime, green, teal, sky,
+-~> blue, purple, pink.
+let cn_hues = [[15, "red"], [40, "orange"], [65, "yellow"], [95, "lime"], [160, "green"], [190, "teal"], [215, "sky"], [255, "blue"], [290, "purple"], [335, "pink"], [361, "red"]]
+
+-~> The word for an hsv {"h", "s", "v"}.
+function color_word(hsv) {
+  let s = hsv.s
+  let v = hsv.v
+  if (v < 0.18) {
+    return "black"
+  }
+  if (s < 0.12) {
+    if (v > 0.9) {
+      return "white"
+    }
+    if (v < 0.35) {
+      return "charcoal"
+    }
+    return "gray"
+  }
+  let h = hue_wrap(hsv.h)
+  let word = "red"
+  for (let i = 0; i < len(cn_hues); i += 1) {
+    if (h < cn_hues[i][0]) {
+      word = cn_hues[i][1]
+      break
+    }
+  }
+  if (s < 0.4 && v > 0.8) {
+    if (word == "orange" || word == "yellow") {
+      return "cream"
+    }
+    return "pale_" + word
+  }
+  if (v < 0.4) {
+    return "dark_" + word
+  }
+  if (word == "orange" && v < 0.7) {
+    return "brown"
+  }
+  word
+}

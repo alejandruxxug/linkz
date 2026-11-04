@@ -37,7 +37,7 @@ true
 true 5
 false
 -- a layer: its blend and opacity in the bar and in the panel's header
-["layer", "layer", "sun"] ["blend@144,32", "opslider@298,32", "opacity@417,32"]
+["layer", "layer", "sun"] ["blend@144,32", "opslider@281,32", "opacity@417,32"]
 true 4 4
   blend("multiply") MUL
   opacity(0.7) 1

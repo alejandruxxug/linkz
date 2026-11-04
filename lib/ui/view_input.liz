@@ -965,6 +965,7 @@ function view_move(e) {
     } elif (k == "press") {
       app.needs_paint = true
     } elif (k == "canvas") {
+      view_track_cursor(p)
       view_canvas_move(e)
     } elif (k == "fill_editor") {
       shape_move(e)
@@ -978,6 +979,20 @@ function view_move(e) {
     return null
   }
   view_update_hover(p)
+}
+
+-~> The pointer's place on the drawing follows it during a drag too (the
+-~> status bar's `x 338 y 140`), not the press point.
+function view_track_cursor(p) {
+  let cl = view_canvas_layout()
+  let pos = null
+  if (view_in(p.x, p.y, cl.frame[0] + 1, cl.frame[1] + 1, cl.frame[2] - 2, cl.frame[3] - 2)) {
+    pos = view_to_drawing(cl, p.x, p.y)
+  }
+  if (str(pos) != str(V.mouse_draw)) {
+    V.mouse_draw = pos
+    app.needs_paint = true
+  }
 }
 
 -~> Works out what the pointer is over without a button: hover marks, the anchor

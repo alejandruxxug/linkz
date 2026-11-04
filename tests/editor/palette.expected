@@ -26,7 +26,7 @@ let colors = {"sky": #f2a65a, "sea": #2d6a8f, "dusk": gradient([#3b2a6b, #e0607a
 -- the harmony icons have tooltips
 true complementary
 -- save as variable: the literal becomes colors.<name>
-true name color
+true name pink
   circle((360, 90), 34, colors.leaf) #8f2d6a add colors.leaf
 -- Esc closes; a click elsewhere too
 false
