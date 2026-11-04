@@ -150,6 +150,21 @@ function host_fb(ui, on_window = false) {
   fb.kept = function(name) {
     st.kept[name]
   }
+  -~> Whether the kept image has see-through pixels: looks at a grid of about
+  -~> 24 by 24 of them, so a picture with one stray transparent pixel can pass.
+  fb.has_alpha = function(name) {
+    let b = kept(name)
+    let size = img.size(b)
+    let step = math.max(1, math.min(size.x, size.y) // 24)
+    for (let y = 0; y < size.y; y += step) {
+      for (let x = 0; x < size.x; x += step) {
+        if (img.get(b, x, y).a < 255) {
+          return true
+        }
+      }
+    }
+    false
+  }
   -~> Keeps a PNG file under a name, like fb.keep, and gives its size.
   fb.load_png = function(path, name) {
     st.kept[name] = img.load(path)

@@ -16,6 +16,7 @@
 -~> Everything is drawn with the view_gfx pieces (g_*), so the same code draws
 -~> into the editor's two buffers (the interface and the canvas surface).
 
+use "../gfx/raster"
 use "home_thumbs"
 use "i18n"
 use "trace_model"
@@ -27,7 +28,7 @@ use "view_gfx"
 -~> "" or what went wrong}. hover: what the pointer is over. drag: "split" or
 -~> a slider's key while the button is down. ver: grows with every change
 -~> that shows.
-let T = {"d": null, "host": null, "size": (512, 360), "hover": "", "drag": null, "ver": 0, "engine": null, "dim": true, "lx": 0, "lw": 0}
+let T = {"d": null, "host": null, "size": (512, 360), "hover": "", "drag": null, "ver": 0, "engine": null, "dim": true, "lx": 0, "lw": 0, "surface": false}
 
 -~> The debounce after the last change, in ms.
 let tr_wait = 250
@@ -38,6 +39,13 @@ let tr_h = 270
 let tr_top = 34
 let tr_prev_w = 240
 let tr_prev_h = 180
+
+-~> The kept pictures are this many times the UI size (the screen's pixels).
+let tr_scale = 2
+
+-~> The squares of the checker that shows alpha, in UI pixels (as the color
+-~> popover's).
+let tr_checker = 3
 
 -~> == Opening and closing ==
 
@@ -70,6 +78,7 @@ function tr_open(size, host, dim = true) {
 }
 
 function tr_close() {
+  tr_drop_surface()
   T.d = null
   T.drag = null
   T.hover = ""
@@ -197,6 +206,8 @@ function tr_paint_chip(label, x, y) {
 }
 
 -~> A kept picture at (x, y) in UI pixels, `size` big, into the current buffer.
+-~> The pictures are kept at screen resolution (tr_scale times the UI size),
+-~> so the editor's canvas pass copies them one to one, and smooth.
 function tr_blit(name, x, y, size) {
   fb.blit(name, ((x - g.ox) * g.s, (y - g.oy) * g.s), (size.x * g.s, size.y * g.s))
 }
@@ -416,7 +427,34 @@ function tr_paint(size) {
   tr_tick()
   g_ui()
   tr_draw()
+  tr_paint_sharp()
   tr_after_paint()
+}
+
+-~> The home screen has no canvas surface, so its dialog would show at UI
+-~> resolution: the preview is blocky. Over the dialog's box a surface at the
+-~> screen's resolution draws the dialog again, and the pictures are smooth.
+function tr_paint_sharp() {
+  let b = tr_layout().box
+  fb.canvas((b.x, b.y), (b.w, b.h))
+  T.surface = true
+  g_canvas((b.x, b.y))
+  fb.unclip()
+  let dim = T.dim
+  T.dim = false
+  tr_draw()
+  T.dim = dim
+  g_dirty(b.x, b.y, b.w, b.h)
+  g_ui()
+}
+
+-~> Takes the home screen's surface away again (the dialog closed).
+function tr_drop_surface() {
+  if (T.surface) {
+    fb.canvas((0, 0), (0, 0))
+    fb.target("ui")
+    T.surface = false
+  }
 }
 
 -~> == The preview ==
@@ -463,6 +501,17 @@ function tr_fit(size) {
   (math.max(1, math.round(size.x * k)), math.max(1, math.round(size.y * k)))
 }
 
+-~> The checker over the whole offscreen buffer of `size` (buffer pixels).
+function tr_paint_checker(size) {
+  let n = tr_checker * tr_scale
+  fb.fill((0, 0), size, #d4dacd)
+  for (let j = 0; j * n < size.y; j += 1) {
+    for (let i = (j + 1) % 2; i * n < size.x; i += 2) {
+      fb.fill((i * n, j * n), (math.min(n, size.x - i * n), math.min(n, size.y - j * n)), #a0ab9b)
+    }
+  }
+}
+
 -~> Takes the typed path as the picture: loads it for the preview.
 function tr_apply_path() {
   let d = T.d
@@ -481,11 +530,15 @@ function tr_apply_path() {
   try {
     let size = fb.load_png(p, "trace:orig")
     let fit = tr_fit(size)
-    fb.offscreen(fit)
-    fb.blit("trace:orig", (0, 0), fit)
+    let alpha = fb.has_alpha("trace:orig")
+    fb.offscreen(fit * tr_scale)
+    if (alpha) {
+      tr_paint_checker(fit * tr_scale)
+    }
+    fb.blit("trace:orig", (0, 0), fit * tr_scale)
     fb.keep("trace:before")
     d.path = p
-    d.image = {"size": size, "fit": fit, "name": trace_base(p)}
+    d.image = {"size": size, "fit": fit, "name": trace_base(p), "alpha": alpha}
     d.focus = null
     tr_schedule(d)
   } catch (e) {
@@ -503,6 +556,22 @@ function tr_code(extra) {
   {"code": trace_filter(r.code, d.lines, d.fills), "raw": r.code, "stats": r.stats}
 }
 
+-~> The traced drawing without its paper, on the checker: the picture has
+-~> see-through pixels, so the trace keeps them (same ground as the original).
+function tr_paint_clear(r, size) {
+  let cs = (512, 512)
+  if (type(r.canvas) == "HASH" && type(r.canvas.size) == "POINT" && r.canvas.size.x > 0 && r.canvas.size.y > 0) {
+    cs = r.canvas.size
+  }
+  let k = size.x / float(cs.x)
+  tr_paint_checker(size)
+  let shapes = []
+  for (let i = 0; i < len(r.shapes); i += 1) {
+    push(shapes, home_scale_shape(r.shapes[i], k))
+  }
+  raster.paint(shapes, (0, 0))
+}
+
 -~> Paints the preview's "after" from traced code.
 function tr_render(code) {
   let d = T.d
@@ -510,9 +579,14 @@ function tr_render(code) {
   if (len(r.errors) > 0) {
     error(r.errors[0].message)
   }
-  fb.offscreen(d.image.fit)
+  let big = d.image.fit * tr_scale
+  fb.offscreen(big)
   try {
-    home_paint_run(r, d.image.fit)
+    if (d.image.alpha) {
+      tr_paint_clear(r, big)
+    } else {
+      home_paint_run(r, big)
+    }
   } catch (e) {
     fb.screen()
     error(e.message)
