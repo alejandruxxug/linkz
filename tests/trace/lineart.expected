@@ -1,0 +1,13 @@
+a tapered line, one spiky tip: strokes 1 tips {"spiky": 1, "blunt": 1, "joined": 0} junctions 0 errors [] brushes 1 close true canvas (80, 30)
+a line with a branch: the line goes straight on: strokes 2 tips {"spiky": 0, "blunt": 3, "joined": 1} junctions 1 errors [] brushes 2 close true canvas (60, 60)
+a symmetric Y: three strokes: strokes 3 tips {"spiky": 0, "blunt": 3, "joined": 3} junctions 1 errors [] brushes 3 close true canvas (60, 60)
+two strands crossing stay two strokes: strokes 2 tips {"spiky": 0, "blunt": 4, "joined": 0} junctions 1 errors [] brushes 2 close true canvas (60, 60)
+a ring is one closed stroke: strokes 1 tips {"spiky": 0, "blunt": 0, "joined": 0} junctions 0 errors [] brushes 1 close true canvas (60, 60)
+continuation 0: only a dead-straight way goes on: strokes 3 tips {"spiky": 0, "blunt": 4, "joined": 2} junctions 1 errors [] brushes 3 close true canvas (60, 60)
+a speck under line_min is dropped: strokes 0 tips {"spiky": 0, "blunt": 0, "joined": 0} junctions 0 errors [] brushes 0 close - canvas (30, 30)
+scale doubles the canvas: strokes 1 tips {"spiky": 0, "blunt": 2, "joined": 0} junctions 0 errors [] brushes 1 close - canvas (80, 40)
+header: -~> lzdraw 1 | let colors = {"paper":  | pens.traced = {"name": "traced" | layer lines
+photo by name is the same: true
+true trace: unknown option "colors" for line art (known: mode, line_threshold, line_min, continuation, radius, scale, max_side)
+true trace: line_threshold must be between 0 and 1
+true trace: mode must be "photo" or "lineart", not vector

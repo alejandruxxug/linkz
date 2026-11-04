@@ -9,11 +9,14 @@
 -~>   5. trace_code       write a .lzdraw: one layer per color, one path() per
 -~>                       region; path() does the smoothing (Bezier curves,
 -~>                       sharp corners kept)
+-~> That is the "photo" mode; {"mode": "lineart"} traces inked drawings into
+-~> brush() strokes instead (lineart.liz).
 -~> Needs the drawing libraries (simplify, polygon_area2, color_hex, svg_num)
 -~> and, for trace(), the host's img.load and time.ms.
 
 use "../draw/geometry"
 use "../draw/svg"
+use "lineart"
 
 -~> The options of trace(path, options). Anything left out takes the value shown.
 -~>   colors      how many colors the picture is reduced to (2 and up). More colors,
@@ -523,11 +526,31 @@ function trace_path_line(region, fill, scale, opt) {
   call + ")"
 }
 
+-~> The mode an options hash asks for: "photo", "lineart", or null when it
+-~> doesn't say (photo). Any other mode is an error.
+function trace_mode(options) {
+  if (type(options) != "HASH" || options.mode === null) {
+    return null
+  }
+  if (options.mode != "photo" && options.mode != "lineart") {
+    error("trace: mode must be \"photo\" or \"lineart\", not " + str(options.mode))
+  }
+  options.mode
+}
+
 -~> Traces pixels: `size` is (w, h) and `pixels` a flat list of colors, row by
 -~> row (what img.load gives). Returns {"code": the .lzdraw source, "stats":
 -~> {colors, regions, holes, points, ms, size, stages}}. `stages` has the
 -~> milliseconds of each step. `name` says where the picture came from.
 function trace_pixels(size, pixels, options = {}, name = "a picture") {
+  let mode = trace_mode(options)
+  if (mode == "lineart") {
+    return lineart_pixels(size, pixels, options, name)
+  }
+  if (mode == "photo") {
+    options = hash.copy(options)
+    hash.remove(options, "mode")
+  }
   let opt = trace_settings(options)
   let w = size.x
   let h = size.y
@@ -609,11 +632,15 @@ function trace_pixels(size, pixels, options = {}, name = "a picture") {
 -~> Traces a picture file (PNG or JPEG) into drawing code. Returns
 -~> {"code": the .lzdraw source, "stats": {colors, regions, holes, points,
 -~> ms, ...}}. Save the code as a .lzdraw and it is a drawing like any other.
--~> options: see trace_options, for example {"colors": 6, "detail": 2}
+-~> options: see trace_options, for example {"colors": 6, "detail": 2}, or
+-~> {"mode": "lineart"} and lineart_options for inked drawings
 -~> example: trace("photo.png", {"colors": 6})
 function trace(path, options = {}) {
   let t0 = time.ms()
   let max_side = trace_options.max_side
+  if (trace_mode(options) == "lineart") {
+    max_side = lineart_options.max_side
+  }
   if (type(options) == "HASH" && options.max_side !== null) {
     max_side = options.max_side
   }

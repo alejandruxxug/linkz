@@ -1,0 +1,359 @@
+-~> lineart_strokes: edges of the centerline graph joined into strokes. At a
+-~> junction a line goes on through the branch that turns least (good
+-~> continuation), when that turn is at most `continuation` degrees, so two
+-~> strands that cross stay two whole strokes. Each stroke then gets its
+-~> points (a smoothed, simplified centerline) and the ink's width at each.
+-~>
+-~> A stroke is {"points": [(x, y)...], "widths": [px...], "closed",
+-~> "tips": ["spiky" or "blunt" at the start, at the end]}, in picture
+-~> pixels.
+-~>
+-~> Hook for the orientation field (stage 4 of Tracing v2): lineart_turn is
+-~> where a junction scores a way through; a flow direction would be blended
+-~> into the branch directions there.
+
+use "../draw/geometry"
+use "lineart_graph"
+
+-~> The direction a branch leaves a node by, as a unit vector: from the
+-~> first pixel outside the node's blob to one `reach` pixels further.
+-~> `px` are the branch's pixels starting at the node. Returns {"edge",
+-~> "side" (0: the edge starts at the node, 1: it ends there), "dir"}.
+function lineart_branch(node, px, ei, side, w, reach) {
+  let w2 = w + 2
+  let n = len(px)
+  let near = node.half + 1
+  let i0 = 0
+  while (i0 < n - 1 && math.dist((px[i0] % w2, px[i0] // w2), node.center) < near) {
+    i0 += 1
+  }
+  let a = (px[i0] % w2, px[i0] // w2)
+  if (i0 >= n - 1) {
+    i0 = 0
+    a = node.center
+  }
+  let b = (px[math.min(n - 1, i0 + reach)] % w2, px[math.min(n - 1, i0 + reach)] // w2)
+  {"edge": ei, "side": side, "dir": lineart_unit(b - a)}
+}
+
+-~> The unit vector along v, (0, 0) when v has no length.
+function lineart_unit(v) {
+  let l = math.sqrt(float(v.x * v.x + v.y * v.y))
+  if (l == 0) {
+    return (0.0, 0.0)
+  }
+  v / l
+}
+
+-~> How many degrees a line turns going in by branch a and out by branch b
+-~> (0 is straight on).
+function lineart_turn(a, b) {
+  let c = -(a.dir.x * b.dir.x + a.dir.y * b.dir.y)
+  math.acos(math.max(-1.0, math.min(1.0, c))) * 180.0 / math.pi
+}
+
+-~> Pairs the branches at every junction: the straightest pair first, while
+-~> the turn is at most `continuation`; a junction left with two branches
+-~> always joins them. Returns the partner of each edge end, as a hash from
+-~> edge * 2 + side to the other edge * 2 + side.
+function lineart_pair(graph, w, continuation) {
+  let partner = {}
+  for (let id = 0; id < len(graph.nodes); id += 1) {
+    let node = graph.nodes[id]
+    if (node.kind != "junction") {
+      continue
+    }
+    let live = lineart_live_edges(graph, id)
+    let branches = []
+    let reach = math.max(4, math.round(node.half * 2 + 2))
+    for (let i = 0; i < len(live); i += 1) {
+      let e = graph.edges[live[i]]
+      if (e.a == id) {
+        push(branches, lineart_branch(node, e.pixels, live[i], 0, w, reach))
+      }
+      if (e.b == id) {
+        push(branches, lineart_branch(node, list.reverse(e.pixels), live[i], 1, w, reach))
+      }
+    }
+    let pairs = []
+    for (let i = 0; i < len(branches); i += 1) {
+      for (let j = i + 1; j < len(branches); j += 1) {
+        push(pairs, [lineart_turn(branches[i], branches[j]), i, j])
+      }
+    }
+    pairs = list.sort(pairs, function(x, y) { x[0] < y[0] })
+    let used = {}
+    for (let k = 0; k < len(pairs); k += 1) {
+      let p = pairs[k]
+      if (used[p[1]] || used[p[2]] || (p[0] > continuation && len(branches) > 2)) {
+        continue
+      }
+      used[p[1]] = true
+      used[p[2]] = true
+      let a = branches[p[1]].edge * 2 + branches[p[1]].side
+      let b = branches[p[2]].edge * 2 + branches[p[2]].side
+      partner[a] = b
+      partner[b] = a
+    }
+  }
+  partner
+}
+
+-~> The edges joined into chains through the paired junctions. Each chain is
+-~> {"pixels": padded positions in order, "closed", "joints": the indexes in
+-~> pixels where two edges meet (the pixels inside the junction's blob are
+-~> left out there, so the line bridges it instead of dipping towards the
+-~> junction's center), "ends": [node at the start, node at the
+-~> end] (-1 for none)}.
+function lineart_chains(graph, partner, w) {
+  let chains = []
+  let used = {}
+  for (let ei = 0; ei < len(graph.edges); ei += 1) {
+    let e0 = graph.edges[ei]
+    if (!e0.alive || used[ei]) {
+      continue
+    }
+    if (e0.a < 0) {
+      used[ei] = true
+      push(chains, {"pixels": e0.pixels, "closed": true, "joints": [], "ends": [-1, -1]})
+      continue
+    }
+    let start = ei * 2
+    let closed = false
+    let guard = 0
+    while (partner[start] !== null && guard <= len(graph.edges)) {
+      let other = partner[start]
+      let back = (other // 2) * 2 + 1 - other % 2
+      if (back == ei * 2 + 1) {
+        closed = true
+        break
+      }
+      start = back
+      guard += 1
+    }
+    if (closed) {
+      start = ei * 2
+    }
+    let pixels = []
+    let joints = []
+    let at = start
+    let first_node = lineart_end_node(graph, at)
+    let last_node = -1
+    while (true) {
+      let k = at // 2
+      used[k] = true
+      let px = graph.edges[k].pixels
+      if (at % 2 == 1) {
+        px = list.reverse(px)
+      }
+      if (len(pixels) > 0) {
+        let node = graph.nodes[lineart_end_node(graph, at)]
+        let near = node.half + 1
+        while (len(pixels) > 2 && lineart_near(pixels[len(pixels) - 1], node.center, near, w)) {
+          pop(pixels)
+        }
+        let skip = 1
+        while (skip < len(px) - 2 && lineart_near(px[skip], node.center, near, w)) {
+          skip += 1
+        }
+        push(joints, len(pixels) - 1)
+        px = list.slice(px, skip, len(px))
+      }
+      for (let i = 0; i < len(px); i += 1) {
+        push(pixels, px[i])
+      }
+      let out = (k * 2) + 1 - at % 2
+      last_node = lineart_end_node(graph, out)
+      let next = partner[out]
+      if (next === null || used[next // 2]) {
+        break
+      }
+      at = next
+    }
+    push(chains, {"pixels": pixels, "closed": closed, "joints": joints, "ends": [first_node, last_node]})
+  }
+  chains
+}
+
+-~> Whether the padded position p is closer than r to the point c.
+function lineart_near(p, c, r, w) {
+  let w2 = w + 2
+  math.dist((p % w2, p // w2), c) < r
+}
+
+-~> The node at an edge end (edge * 2 + side).
+function lineart_end_node(graph, end) {
+  let e = graph.edges[end // 2]
+  if (end % 2 == 0) {
+    return e.a
+  }
+  e.b
+}
+
+-~> Moving average of some values over up to `r` neighbours on each side. A
+-~> closed chain wraps round; an open one narrows the window near its ends
+-~> (to as many neighbours as there are on the shorter side), so the ends
+-~> stay where they are instead of being pulled in.
+function lineart_smooth(values, r, closed, zero) {
+  let n = len(values)
+  let out = []
+  for (let i = 0; i < n; i += 1) {
+    let k = r
+    if (!closed) {
+      k = math.min(r, math.min(i, n - 1 - i))
+    }
+    let sum = zero
+    for (let j = i - k; j <= i + k; j += 1) {
+      sum = sum + values[(j + n) % n]
+    }
+    push(out, sum / float(2 * k + 1))
+  }
+  out
+}
+
+-~> A chain of centerline pixels as a stroke: positions smoothed (pixel
+-~> centers, unpadded), widths from the distance transform (2d - 1.5, which
+-~> best matches the ink of the reference drawings: the mask takes in half
+-~> the soft edge of a line), blunt tips given their full width back, then
+-~> simplified to the points where the line or its width bends (tolerance
+-~> `tol` px, `wtol` px of width). `joined`
+-~> says, for the start and the end, whether it ends on another line (at a
+-~> junction).
+function lineart_stroke(chain, joined, dist, w, tol, wtol) {
+  let w2 = w + 2
+  let px = chain.pixels
+  let closed = chain.closed
+  if (closed && len(px) > 1 && px[0] == px[len(px) - 1]) {
+    px = list.slice(px, 0, len(px) - 1)
+  }
+  let pos = []
+  let raw = []
+  for (let i = 0; i < len(px); i += 1) {
+    push(pos, (px[i] % w2 - 0.5, px[i] // w2 - 0.5))
+    push(raw, math.max(1.0, 2.0 * dist[px[i]] - 1.5))
+  }
+  let n = len(pos)
+  if (n >= 5) {
+    pos = lineart_smooth(pos, 3, closed, (0.0, 0.0))
+  }
+  let widths = lineart_smooth(raw, 4, closed, 0.0)
+  let tips = ["blunt", "blunt"]
+  if (!closed && n >= 3) {
+    tips[0] = lineart_tip(widths, false, joined[0])
+    tips[1] = lineart_tip(widths, true, joined[1])
+  }
+  if (closed) {
+    push(pos, pos[0])
+    push(widths, widths[0])
+  }
+  let keep = lineart_simplify(pos, widths, tol, wtol)
+  let points = []
+  let ws = []
+  for (let i = 0; i < len(keep); i += 1) {
+    push(points, pos[keep[i]])
+    push(ws, widths[keep[i]])
+  }
+  {"points": points, "widths": ws, "closed": closed, "tips": tips, "length": lineart_length(points)}
+}
+
+-~> Whether one end of a stroke's width profile is a spiky tip (the width
+-~> falls off along the last stretch, like a tapered brush line) or blunt.
+-~> The thinning stops a blunt line about half its width before its end, so
+-~> the widths there read too small: a blunt end gets the width of the line
+-~> just behind it back (changes `widths`). An end on another line (`joined`)
+-~> gets it back too, since the junction's blob reads too wide; it is
+-~> "joined". `at_end` picks the end.
+function lineart_tip(widths, at_end, joined) {
+  let n = len(widths)
+  let body = list.sort(widths)[n // 2]
+  let back = math.min(n - 1, math.max(1, math.round(body)))
+  let i_back = back
+  let i_tip = 0
+  let step = 1
+  if (at_end) {
+    i_back = n - 1 - back
+    i_tip = n - 1
+    step = -1
+  }
+  let behind = widths[i_back]
+  if (!joined && behind < body * 0.75) {
+    return "spiky"
+  }
+  let i = i_tip
+  while (i != i_back) {
+    if (joined) {
+      widths[i] = behind
+    } else {
+      widths[i] = math.max(widths[i], behind)
+    }
+    i += step
+  }
+  if (joined) {
+    return "joined"
+  }
+  "blunt"
+}
+
+-~> The indexes of the points to keep: Ramer-Douglas-Peucker on the position
+-~> (tolerance `tol`) and on the width (`wtol`) at once, so a line keeps a
+-~> point where it bends or where its width changes.
+function lineart_simplify(pos, widths, tol, wtol) {
+  let n = len(pos)
+  if (n <= 2) {
+    let all = []
+    for (let i = 0; i < n; i += 1) {
+      push(all, i)
+    }
+    return all
+  }
+  let keep = []
+  for (let i = 0; i < n; i += 1) {
+    push(keep, false)
+  }
+  keep[0] = true
+  keep[n - 1] = true
+  let todo = [[0, n - 1]]
+  while (len(todo) > 0) {
+    let span = pop(todo)
+    let a = span[0]
+    let b = span[1]
+    let far = 1.0
+    let at = -1
+    for (let i = a + 1; i < b; i += 1) {
+      let t = (i - a) / float(b - a)
+      let dw = math.abs(widths[i] - (widths[a] + (widths[b] - widths[a]) * t)) / wtol
+      let dp = 0.0
+      if (pos[a] == pos[b]) {
+        dp = math.dist(pos[i], pos[a])
+      } else {
+        dp = point_line_distance(pos[i], pos[a], pos[b])
+      }
+      let d = math.max(dp / tol, dw)
+      if (d > far) {
+        far = d
+        at = i
+      }
+    }
+    if (at >= 0) {
+      keep[at] = true
+      push(todo, [a, at])
+      push(todo, [at, b])
+    }
+  }
+  let out = []
+  for (let i = 0; i < n; i += 1) {
+    if (keep[i]) {
+      push(out, i)
+    }
+  }
+  out
+}
+
+-~> The length of a polyline.
+function lineart_length(points) {
+  let sum = 0.0
+  for (let i = 1; i < len(points); i += 1) {
+    sum = sum + math.dist(points[i - 1], points[i])
+  }
+  sum
+}

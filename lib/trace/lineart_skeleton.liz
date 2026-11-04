@@ -1,0 +1,184 @@
+-~> lineart_skeleton: the centerlines of the ink mask and how wide the ink is
+-~> around them. The mask is thinned to lines one pixel wide (Zhang-Suen),
+-~> and a distance transform gives, for every ink pixel, how far it is from
+-~> the paper: at a centerline pixel that is half the line's width.
+-~> Both work only on the ink pixels (a list in raster order), not on the
+-~> whole picture. The grids are padded, as in lineart_mask.
+
+-~> The distance from every ink pixel to the center of the nearest paper
+-~> pixel (1 next to the paper), nearly Euclidean: every ink pixel keeps the
+-~> offset to its nearest paper pixel, and takes a neighbour's when that one
+-~> is nearer (vector propagation, one pass forward and one back over `ink`,
+-~> the ink positions in raster order). Paper is 0. A line w pixels wide has
+-~> about (w + 1) / 2 at its centerline.
+function lineart_distance(mask, ink, w) {
+  let w2 = w + 2
+  let ox = []
+  let oy = []
+  for (let i = 0; i < len(mask); i += 1) {
+    push(ox, 0)
+    push(oy, 0)
+  }
+  let far = 100000
+  for (let i = 0; i < len(ink); i += 1) {
+    ox[ink[i]] = far
+  }
+  let fwd = [[-1, -1, 0], [-w2 - 1, -1, -1], [-w2, 0, -1], [-w2 + 1, 1, -1]]
+  let back = [[1, 1, 0], [w2 + 1, 1, 1], [w2, 0, 1], [w2 - 1, -1, 1]]
+  lineart_propagate(ox, oy, mask, ink, fwd, 1)
+  lineart_propagate(ox, oy, mask, ink, back, -1)
+  let out = []
+  for (let i = 0; i < len(mask); i += 1) {
+    push(out, 0.0)
+  }
+  for (let i = 0; i < len(ink); i += 1) {
+    let p = ink[i]
+    out[p] = math.sqrt(float(ox[p] * ox[p] + oy[p] * oy[p]))
+  }
+  out
+}
+
+-~> One pass of lineart_distance over the ink, in order (`dir` 1) or back
+-~> (-1). Each of `steps` is [grid step, dx, dy] to a neighbour already seen.
+function lineart_propagate(ox, oy, mask, ink, steps, dir) {
+  let n = len(ink)
+  let i = 0
+  if (dir < 0) {
+    i = n - 1
+  }
+  while (i >= 0 && i < n) {
+    let p = ink[i]
+    let bx = ox[p]
+    let by = oy[p]
+    let best = bx * bx + by * by
+    for (let s = 0; s < 4; s += 1) {
+      let q = p + steps[s][0]
+      let cx = steps[s][1]
+      let cy = steps[s][2]
+      if (mask[q] == 1) {
+        if (ox[q] >= 100000) {
+          continue
+        }
+        cx = cx + ox[q]
+        cy = cy + oy[q]
+      }
+      let d = cx * cx + cy * cy
+      if (d < best) {
+        best = d
+        bx = cx
+        by = cy
+      }
+    }
+    ox[p] = bx
+    oy[p] = by
+    i += dir
+  }
+}
+
+-~> Thins the mask (changed in place) to centerlines one pixel wide that keep
+-~> its shape and connections: Zhang-Suen, two half steps per round, until a
+-~> round removes nothing; then the corners of staircases are taken out, so
+-~> a diagonal line is a chain of single pixels. Returns the centerline
+-~> positions in raster order and the number of rounds.
+function lineart_thin(mask, ink, w) {
+  let w2 = w + 2
+  let live = list.copy(ink)
+  let rounds = 0
+  while (true) {
+    rounds += 1
+    let removed = 0
+    for (let half = 0; half < 2; half += 1) {
+      let gone = []
+      for (let i = 0; i < len(live); i += 1) {
+        let p = live[i]
+        let n = mask[p - w2]
+        let ne = mask[p - w2 + 1]
+        let e = mask[p + 1]
+        let se = mask[p + w2 + 1]
+        let s = mask[p + w2]
+        let sw = mask[p + w2 - 1]
+        let wst = mask[p - 1]
+        let nw = mask[p - w2 - 1]
+        let b = n + ne + e + se + s + sw + wst + nw
+        if (b < 2 || b > 6) {
+          continue
+        }
+        let a = 0
+        if (n == 0 && ne == 1) { a += 1 }
+        if (ne == 0 && e == 1) { a += 1 }
+        if (e == 0 && se == 1) { a += 1 }
+        if (se == 0 && s == 1) { a += 1 }
+        if (s == 0 && sw == 1) { a += 1 }
+        if (sw == 0 && wst == 1) { a += 1 }
+        if (wst == 0 && nw == 1) { a += 1 }
+        if (nw == 0 && n == 1) { a += 1 }
+        if (a != 1) {
+          continue
+        }
+        if (half == 0) {
+          if (n * e * s == 0 && e * s * wst == 0) {
+            push(gone, p)
+          }
+        } elif (n * e * wst == 0 && n * s * wst == 0) {
+          push(gone, p)
+        }
+      }
+      for (let i = 0; i < len(gone); i += 1) {
+        mask[gone[i]] = 0
+      }
+      removed += len(gone)
+      if (len(gone) > 0) {
+        let still = []
+        for (let i = 0; i < len(live); i += 1) {
+          if (mask[live[i]] == 1) {
+            push(still, live[i])
+          }
+        }
+        live = still
+      }
+    }
+    if (removed == 0) {
+      break
+    }
+  }
+  lineart_unstair(mask, live, w)
+  let out = []
+  for (let i = 0; i < len(live); i += 1) {
+    if (mask[live[i]] == 1) {
+      push(out, live[i])
+    }
+  }
+  {"skeleton": out, "rounds": rounds}
+}
+
+-~> Removes, one at a time in raster order, every centerline pixel that sits
+-~> in the corner of a staircase: two of its side neighbours touch each other
+-~> and taking it out disconnects nothing (its 8-connectivity number is 1)
+-~> and leaves no end loose (it has 2 neighbours or more).
+function lineart_unstair(mask, live, w) {
+  let w2 = w + 2
+  for (let i = 0; i < len(live); i += 1) {
+    let p = live[i]
+    let e = mask[p + 1]
+    let ne = mask[p - w2 + 1]
+    let n = mask[p - w2]
+    let nw = mask[p - w2 - 1]
+    let wst = mask[p - 1]
+    let sw = mask[p + w2 - 1]
+    let s = mask[p + w2]
+    let se = mask[p + w2 + 1]
+    if (n + ne + e + se + s + sw + wst + nw < 2) {
+      continue
+    }
+    if (!((n == 1 && e == 1) || (e == 1 && s == 1) || (s == 1 && wst == 1) || (wst == 1 && n == 1))) {
+      continue
+    }
+    let c = (1 - e) - (1 - e) * (1 - ne) * (1 - n)
+    c = c + (1 - n) - (1 - n) * (1 - nw) * (1 - wst)
+    c = c + (1 - wst) - (1 - wst) * (1 - sw) * (1 - s)
+    c = c + (1 - s) - (1 - s) * (1 - se) * (1 - e)
+    if (c == 1) {
+      mask[p] = 0
+    }
+  }
+}

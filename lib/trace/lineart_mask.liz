@@ -1,0 +1,176 @@
+-~> lineart_mask: which pixels of a picture are ink. A pixel is ink when it is
+-~> clearly darker than the paper around it (the mean of the lighter pixels
+-~> of a square around it) or very dark on its own. Strong ink pixels seed the
+-~> mask and weak ones join only when they touch it (hysteresis), so faint
+-~> smudges far from a line stay out while the soft edge of a line stays in.
+-~>
+-~> The grids here are padded like trace_pad: (w + 2) by (h + 2), with a
+-~> border of 0 all round, so a neighbour read never needs a bounds test.
+-~> The pixel (x, y) is at (y + 1) * (w + 2) + x + 1.
+
+-~> The brightness (0 to 1) of every pixel, in the order of the pixels.
+function lineart_luma(pixels) {
+  let out = []
+  for (let i = 0; i < len(pixels); i += 1) {
+    let c = pixels[i]
+    push(out, (0.299 * c.r + 0.587 * c.g + 0.114 * c.b) / 255.0)
+  }
+  out
+}
+
+-~> The sum of some values (one per pixel) over the square of side 2r + 1
+-~> around every pixel, cut at the picture's edges, from a summed-area table:
+-~> two passes over the picture, whatever r is.
+function lineart_box_sums(values, w, h, r) {
+  let w1 = w + 1
+  let sums = []
+  for (let i = 0; i < w1; i += 1) {
+    push(sums, 0.0)
+  }
+  for (let y = 0; y < h; y += 1) {
+    push(sums, 0.0)
+    let row = 0.0
+    for (let x = 0; x < w; x += 1) {
+      row = row + values[y * w + x]
+      push(sums, sums[y * w1 + x + 1] + row)
+    }
+  }
+  let out = []
+  for (let y = 0; y < h; y += 1) {
+    let y0 = math.max(0, y - r)
+    let y1 = math.min(h, y + r + 1)
+    for (let x = 0; x < w; x += 1) {
+      let x0 = math.max(0, x - r)
+      let x1 = math.min(w, x + r + 1)
+      push(out, sums[y1 * w1 + x1] - sums[y0 * w1 + x1] - sums[y1 * w1 + x0] + sums[y0 * w1 + x0])
+    }
+  }
+  out
+}
+
+-~> The brightness of the paper around every pixel: the mean, over the square
+-~> of side 2r + 1, of the pixels that are at least as bright as the mean
+-~> around themselves (the lighter side of every edge). Comparing a pixel
+-~> with this rather than with the plain mean keeps a line next to a dark
+-~> area (an eye, a black ribbon) dark against its paper.
+function lineart_paper_level(luma, w, h, r) {
+  let sum = lineart_box_sums(luma, w, h, r)
+  let area = []
+  for (let y = 0; y < h; y += 1) {
+    let rows = math.min(h, y + r + 1) - math.max(0, y - r)
+    for (let x = 0; x < w; x += 1) {
+      push(area, rows * (math.min(w, x + r + 1) - math.max(0, x - r)))
+    }
+  }
+  let light = []
+  let count = []
+  for (let i = 0; i < len(luma); i += 1) {
+    if (luma[i] * area[i] >= sum[i]) {
+      push(light, luma[i])
+      push(count, 1.0)
+    } else {
+      push(light, 0.0)
+      push(count, 0.0)
+    }
+  }
+  let lsum = lineart_box_sums(light, w, h, r)
+  let lcount = lineart_box_sums(count, w, h, r)
+  let out = []
+  for (let i = 0; i < len(luma); i += 1) {
+    if (lcount[i] > 0) {
+      push(out, lsum[i] / lcount[i])
+    } else {
+      push(out, sum[i] / area[i])
+    }
+  }
+  out
+}
+
+-~> The ink mask of a picture. `threshold` (0 to 1) is how much darker than
+-~> its surroundings a pixel must be to seed a line (0.5: half as bright);
+-~> half of it lets a pixel join a line it touches. `radius` is the half side
+-~> of the neighbourhood, in pixels.
+-~> Returns {"mask": padded grid of 0 and 1, "ink": the list of padded
+-~> positions that are 1 (in raster order), "ink_color": the mean color of
+-~> the strong ink, "paper": the mean color of the rest}.
+function lineart_mask(pixels, w, h, threshold, radius) {
+  let luma = lineart_luma(pixels)
+  let mean = lineart_paper_level(luma, w, h, radius)
+  let w2 = w + 2
+  let state = []
+  for (let i = 0; i < w2 * (h + 2); i += 1) {
+    push(state, 0)
+  }
+  let weak = threshold * 0.5
+  let dark = (1.0 - threshold) * 0.4
+  let todo = []
+  for (let y = 0; y < h; y += 1) {
+    for (let x = 0; x < w; x += 1) {
+      let i = y * w + x
+      let m = mean[i]
+      let l = luma[i]
+      let gap = m - l
+      let rel = gap / math.max(m, 0.05)
+      if ((rel >= threshold && gap >= 0.1) || l < dark) {
+        let p = (y + 1) * w2 + x + 1
+        state[p] = 1
+        push(todo, p)
+      } elif (rel >= weak && gap >= 0.05) {
+        state[(y + 1) * w2 + x + 1] = 2
+      }
+    }
+  }
+  let ink_sum = lineart_color_sum(pixels, todo, w)
+  let steps = [-1, 1, -w2, w2, -w2 - 1, -w2 + 1, w2 - 1, w2 + 1]
+  while (len(todo) > 0) {
+    let q = pop(todo)
+    for (let s = 0; s < 8; s += 1) {
+      let r = q + steps[s]
+      if (state[r] == 2) {
+        state[r] = 1
+        push(todo, r)
+      }
+    }
+  }
+  let ink = []
+  let paper = [0.0, 0.0, 0.0, 0]
+  for (let y = 0; y < h; y += 1) {
+    for (let x = 0; x < w; x += 1) {
+      let p = (y + 1) * w2 + x + 1
+      if (state[p] == 1) {
+        push(ink, p)
+      } else {
+        state[p] = 0
+        let c = pixels[y * w + x]
+        paper[0] = paper[0] + c.r
+        paper[1] = paper[1] + c.g
+        paper[2] = paper[2] + c.b
+        paper[3] = paper[3] + 1
+      }
+    }
+  }
+  {"mask": state, "ink": ink, "ink_color": lineart_mean_color(ink_sum, #000000), "paper": lineart_mean_color(paper, #ffffff)}
+}
+
+-~> [r, g, b, count] summed over some padded positions.
+function lineart_color_sum(pixels, positions, w) {
+  let w2 = w + 2
+  let sum = [0.0, 0.0, 0.0, 0]
+  for (let i = 0; i < len(positions); i += 1) {
+    let p = positions[i]
+    let c = pixels[(p // w2 - 1) * w + p % w2 - 1]
+    sum[0] = sum[0] + c.r
+    sum[1] = sum[1] + c.g
+    sum[2] = sum[2] + c.b
+    sum[3] = sum[3] + 1
+  }
+  sum
+}
+
+-~> The color of a [r, g, b, count] sum, or `none` when it counts nothing.
+function lineart_mean_color(sum, none) {
+  if (sum[3] == 0) {
+    return none
+  }
+  rgb(math.round(sum[0] / sum[3]), math.round(sum[1] / sum[3]), math.round(sum[2] / sum[3]))
+}

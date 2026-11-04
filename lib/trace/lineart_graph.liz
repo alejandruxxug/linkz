@@ -1,0 +1,286 @@
+-~> lineart_graph: the centerlines as a graph. A centerline pixel with one
+-~> neighbour is an end, one with three or more is a junction (touching
+-~> junction pixels are one junction), and the runs of pixels between them
+-~> are edges. Short spurs (a little branch the thinning leaves at a bump)
+-~> are pruned, and two junctions joined by a very short edge (how two
+-~> lines crossing at a shallow angle thin) become one junction.
+-~>
+-~> A node is {"kind": "end", "junction" or "dot", "pixels", "center",
+-~> "half" (the widest half-width at it), "edges": [edge numbers]}.
+-~> An edge is {"a", "b" (node numbers, -1 for a ring with no node),
+-~> "pixels" (padded positions from a to b), "alive"}.
+
+-~> The 8 neighbour steps of a padded grid of width w2.
+function lineart_steps(w2) {
+  [1, -w2 + 1, -w2, -w2 - 1, -1, w2 - 1, w2, w2 + 1]
+}
+
+-~> The graph of the centerlines (`skel` is the thinned mask, `skeleton` its
+-~> pixels in raster order, `dist` the distance transform).
+-~> Returns {"nodes", "edges"}.
+function lineart_graph(skel, skeleton, dist, w) {
+  let w2 = w + 2
+  let steps = lineart_steps(w2)
+  let deg = {}
+  let node_of = {}
+  for (let i = 0; i < len(skeleton); i += 1) {
+    let p = skeleton[i]
+    let n = 0
+    for (let s = 0; s < 8; s += 1) {
+      n += skel[p + steps[s]]
+    }
+    deg[p] = n
+  }
+  let nodes = []
+  for (let i = 0; i < len(skeleton); i += 1) {
+    let p = skeleton[i]
+    let k = deg[p]
+    if (k == 2 || node_of[p] !== null) {
+      continue
+    }
+    let id = len(nodes)
+    let members = [p]
+    node_of[p] = id
+    let kind = "junction"
+    if (k == 1) {
+      kind = "end"
+    } elif (k == 0) {
+      kind = "dot"
+    } else {
+      let todo = [p]
+      while (len(todo) > 0) {
+        let q = pop(todo)
+        for (let s = 0; s < 8; s += 1) {
+          let r = q + steps[s]
+          if (skel[r] == 1 && deg[r] >= 3 && node_of[r] === null) {
+            node_of[r] = id
+            push(members, r)
+            push(todo, r)
+          }
+        }
+      }
+    }
+    push(nodes, lineart_node(kind, members, dist, w))
+  }
+
+  let edges = []
+  let seen = {}
+  for (let id = 0; id < len(nodes); id += 1) {
+    let members = nodes[id].pixels
+    for (let m = 0; m < len(members); m += 1) {
+      let q = members[m]
+      for (let s = 0; s < 8; s += 1) {
+        let r = q + steps[s]
+        if (skel[r] != 1 || node_of[r] === id) {
+          continue
+        }
+        let other = node_of[r]
+        if (other !== null) {
+          if (nodes[id].kind == "end" && (nodes[other].kind != "end" || id < other)) {
+            lineart_add_edge(nodes, edges, id, other, [q, r])
+          }
+          continue
+        }
+        if (seen[r]) {
+          continue
+        }
+        let chain = [q, r]
+        seen[r] = true
+        let prev = q
+        let cur = r
+        let end = -1
+        while (end < 0) {
+          let next = -1
+          for (let t = 0; t < 8; t += 1) {
+            let c = cur + steps[t]
+            if (skel[c] == 1 && c != prev) {
+              next = c
+            }
+          }
+          if (next < 0) {
+            end = id
+            break
+          }
+          push(chain, next)
+          if (node_of[next] !== null) {
+            end = node_of[next]
+          } else {
+            seen[next] = true
+            prev = cur
+            cur = next
+          }
+        }
+        lineart_add_edge(nodes, edges, id, end, chain)
+      }
+    }
+  }
+
+  for (let i = 0; i < len(skeleton); i += 1) {
+    let p = skeleton[i]
+    if (deg[p] != 2 || seen[p]) {
+      continue
+    }
+    let chain = [p]
+    seen[p] = true
+    let prev = -1
+    let cur = p
+    while (true) {
+      let next = -1
+      for (let t = 0; t < 8; t += 1) {
+        let c = cur + steps[t]
+        if (skel[c] == 1 && c != prev && !seen[c]) {
+          next = c
+        }
+      }
+      if (next < 0) {
+        break
+      }
+      seen[next] = true
+      push(chain, next)
+      prev = cur
+      cur = next
+    }
+    push(chain, p)
+    push(edges, {"a": -1, "b": -1, "pixels": chain, "alive": true})
+  }
+  {"nodes": nodes, "edges": edges}
+}
+
+-~> A node record for some centerline pixels.
+function lineart_node(kind, members, dist, w) {
+  let w2 = w + 2
+  let sx = 0.0
+  let sy = 0.0
+  let half = 0.0
+  for (let i = 0; i < len(members); i += 1) {
+    sx = sx + members[i] % w2
+    sy = sy + members[i] // w2
+    half = math.max(half, dist[members[i]])
+  }
+  let n = len(members)
+  {"kind": kind, "pixels": members, "center": (sx / n, sy / n), "half": half, "edges": [], "joined": false}
+}
+
+-~> Adds the edge from node a to node b along `pixels`.
+function lineart_add_edge(nodes, edges, a, b, pixels) {
+  let id = len(edges)
+  push(edges, {"a": a, "b": b, "pixels": pixels, "alive": true})
+  push(nodes[a].edges, id)
+  if (b != a) {
+    push(nodes[b].edges, id)
+  }
+}
+
+-~> The edges still alive at a node.
+function lineart_live_edges(graph, id) {
+  let out = []
+  let mine = graph.nodes[id].edges
+  for (let i = 0; i < len(mine); i += 1) {
+    if (graph.edges[mine[i]].alive) {
+      push(out, mine[i])
+    }
+  }
+  out
+}
+
+-~> Prunes the spurs: an edge from an end to a junction shorter than about
+-~> twice the junction's half-width (and at least `spur` pixels) is a bump of
+-~> the line, not a line of its own. Only junctions that keep two edges or
+-~> more lose a spur, so a short line ending at another is kept. Returns how
+-~> many it pruned.
+function lineart_prune(graph, spur) {
+  let pruned = 0
+  for (let id = 0; id < len(graph.nodes); id += 1) {
+    let node = graph.nodes[id]
+    if (node.kind != "junction") {
+      continue
+    }
+    let limit = math.max(spur, 2.0 * node.half + 1)
+    let live = lineart_live_edges(graph, id)
+    for (let i = 0; i < len(live); i += 1) {
+      let e = graph.edges[live[i]]
+      let other = e.a
+      if (other == id) {
+        other = e.b
+      }
+      if (other == id || graph.nodes[other].kind != "end" || len(e.pixels) >= limit) {
+        continue
+      }
+      if (len(lineart_live_edges(graph, id)) > 2) {
+        e.alive = false
+        graph.nodes[other].kind = "pruned"
+        pruned += 1
+      }
+    }
+  }
+  pruned
+}
+
+-~> The mean distance transform along an edge: the half-width of its ink.
+function lineart_edge_half(e, dist) {
+  let sum = 0.0
+  for (let i = 0; i < len(e.pixels); i += 1) {
+    sum = sum + dist[e.pixels[i]]
+  }
+  sum / len(e.pixels)
+}
+
+-~> Joins two junctions of three branches each that a very short edge links
+-~> (at most five times the ink's half-width along it, plus one pixel): two
+-~> lines crossing at a shallow angle thin into two such forks, and joined
+-~> they are one crossing of four branches. The edge goes, and the second
+-~> junction's pixels and edges move to the first. A junction is joined once
+-~> at most, so a blob's tangle of forks doesn't grow into one wide node.
+-~> Returns how many it joined.
+function lineart_merge_junctions(graph, dist, w) {
+  let joined = 0
+  for (let ei = 0; ei < len(graph.edges); ei += 1) {
+    let e = graph.edges[ei]
+    if (!e.alive || e.a < 0 || e.a == e.b) {
+      continue
+    }
+    let a = graph.nodes[e.a]
+    let b = graph.nodes[e.b]
+    if (a.kind != "junction" || b.kind != "junction" || a.joined || b.joined) {
+      continue
+    }
+    if (len(lineart_live_edges(graph, e.a)) != 3 || len(lineart_live_edges(graph, e.b)) != 3) {
+      continue
+    }
+    if (len(e.pixels) > 5 * lineart_edge_half(e, dist) + 1) {
+      continue
+    }
+    e.alive = false
+    let keep = e.a
+    let gone = e.b
+    for (let i = 0; i < len(b.pixels); i += 1) {
+      push(a.pixels, b.pixels[i])
+    }
+    for (let i = 0; i < len(b.edges); i += 1) {
+      let f = graph.edges[b.edges[i]]
+      if (f.a == gone) {
+        f.a = keep
+      }
+      if (f.b == gone) {
+        f.b = keep
+      }
+      if (list.index(a.edges, b.edges[i]) < 0) {
+        push(a.edges, b.edges[i])
+      }
+    }
+    let w2 = w + 2
+    let sx = 0.0
+    let sy = 0.0
+    for (let i = 0; i < len(a.pixels); i += 1) {
+      sx = sx + a.pixels[i] % w2
+      sy = sy + a.pixels[i] // w2
+    }
+    a.center = (sx / len(a.pixels), sy / len(a.pixels))
+    a.half = math.max(a.half, b.half)
+    a.joined = true
+    b.kind = "merged"
+    b.edges = []
+    joined += 1
+  }
+  joined
+}

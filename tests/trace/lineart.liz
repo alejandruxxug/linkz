@@ -1,0 +1,117 @@
+-~> The line-art tracer on stroke pictures made here (ink(w, h, parts) draws
+-~> antialiased segments [a, b, half-width at a, half-width at b], black on
+-~> white): how many strokes it finds, their tips and junctions, that its
+-~> code runs and draws one brush per stroke, and how close the strokes stay
+-~> to the lines drawn. Then the photo mode by name, and the option checks.
+
+use "../../lib/app/drawing"
+use "../../lib/trace/trace"
+
+-~> The distance from p to the segment a-b, and how far along it (0 to 1).
+function seg_dist(p, a, b) {
+  let ab = b - a
+  let t = ((p.x - a.x) * ab.x + (p.y - a.y) * ab.y) / float(ab.x * ab.x + ab.y * ab.y)
+  t = math.max(0.0, math.min(1.0, t))
+  [math.dist(p, a + ab * t), t]
+}
+
+function ink(w, h, parts) {
+  let px = []
+  for (let y = 0; y < h; y += 1) {
+    for (let x = 0; x < w; x += 1) {
+      let cover = 0.0
+      for (let k = 0; k < len(parts); k += 1) {
+        let s = parts[k]
+        let d = seg_dist((x + 0.5, y + 0.5), s[0], s[1])
+        let half = s[2] + (s[3] - s[2]) * d[1]
+        cover = math.max(cover, math.max(0.0, math.min(1.0, half - d[0] + 0.5)))
+      }
+      let v = math.round(250 - 230 * cover)
+      push(px, rgb(v, v, v))
+    }
+  }
+  {"size": (w, h), "pixels": px, "parts": parts}
+}
+
+-~> The farthest any stroke point is from the segments drawn.
+function worst_drift(shapes, parts) {
+  let worst = 0.0
+  for (let i = 0; i < len(shapes); i += 1) {
+    let pts = shapes[i].args[0]
+    for (let k = 0; k < len(pts); k += 1) {
+      let best = 1000.0
+      for (let j = 0; j < len(parts); j += 1) {
+        best = math.min(best, seg_dist(pts[k], parts[j][0], parts[j][1])[0])
+      }
+      worst = math.max(worst, best)
+    }
+  }
+  worst
+}
+
+let ring = []
+for (let i = 0; i < 24; i += 1) {
+  let a = i / 24.0 * math.tau
+  let b = (i + 1) / 24.0 * math.tau
+  push(ring, [(30 + 20 * math.cos(a), 30 + 20 * math.sin(a)), (30 + 20 * math.cos(b), 30 + 20 * math.sin(b)), 2.0, 2.0])
+}
+
+-~> [name, picture, options]
+let cases = [
+  ["a tapered line, one spiky tip", ink(80, 30, [[(8, 15), (72, 12), 3.5, 0.4]]), {"mode": "lineart"}],
+  ["a line with a branch: the line goes straight on", ink(60, 60, [[(30, 6), (30, 54), 2.0, 2.0], [(30, 30), (52, 8), 2.0, 2.0]]),
+    {"mode": "lineart"}],
+  ["a symmetric Y: three strokes", ink(60, 60, [[(30, 30), (30, 56), 2.0, 2.0], [(30, 30), (10, 8), 2.0, 2.0], [(30, 30), (50, 8), 2.0, 2.0]]),
+    {"mode": "lineart"}],
+  ["two strands crossing stay two strokes", ink(60, 60, [[(6, 8), (54, 52), 2.0, 2.0], [(6, 50), (54, 12), 2.0, 2.0]]),
+    {"mode": "lineart"}],
+  ["a ring is one closed stroke", ink(60, 60, ring), {"mode": "lineart"}],
+  ["continuation 0: only a dead-straight way goes on", ink(60, 60, [[(6, 8), (54, 52), 2.0, 2.0], [(6, 50), (54, 12), 2.0, 2.0]]),
+    {"mode": "lineart", "continuation": 0}],
+  ["a speck under line_min is dropped", ink(30, 30, [[(15, 15), (16, 15), 0.8, 0.8]]), {"mode": "lineart"}],
+  ["scale doubles the canvas", ink(40, 20, [[(5, 10), (35, 10), 2.0, 2.0]]), {"mode": "lineart", "scale": 2}]
+]
+
+for (let i = 0; i < len(cases); i += 1) {
+  let c = cases[i]
+  let result = trace_pixels(c[1].size, c[1].pixels, c[2], "test")
+  let st = result.stats
+  let run = drawing_run(result.code)
+  let brushes = 0
+  for (let k = 0; k < len(run.shapes); k += 1) {
+    if (run.shapes[k].kind == "brush") {
+      brushes += 1
+    }
+  }
+  let drift = "-"
+  if (len(run.shapes) > 0 && c[2].scale === null) {
+    drift = str(worst_drift(run.shapes, c[1].parts) < 1.5)
+  }
+  puts(c[0] + ":", "strokes", st.strokes, "tips", st.tips, "junctions", st.junctions, "errors", run.errors, "brushes",
+    brushes, "close", drift, "canvas", run.canvas.size)
+}
+
+let tapered = ink(80, 30, [[(8, 15), (72, 12), 3.5, 0.4]])
+let code = trace_pixels(tapered.size, tapered.pixels, {"mode": "lineart"}, "tapered").code
+let lines = text.lines(code)
+puts("header:", lines[0], "|", text.slice(lines[2], 0, 23), "|", text.slice(lines[3], 0, 31), "|", lines[6])
+
+let square = function(x, y) { if (x >= 4 && x < 8 && y >= 4 && y < 8) { #c82828 } else { #f0f0e6 } }
+let squares = []
+for (let y = 0; y < 12; y += 1) {
+  for (let x = 0; x < 12; x += 1) {
+    push(squares, square(x, y))
+  }
+}
+let plain = trace_pixels((12, 12), squares, {"colors": 2, "min_area": 0}, "sq").code
+puts("photo by name is the same:", trace_pixels((12, 12), squares, {"mode": "photo", "colors": 2, "min_area": 0}, "sq").code == plain)
+
+let bad = [{"mode": "lineart", "colors": 4}, {"mode": "lineart", "line_threshold": 1.5}, {"mode": "vector"}]
+for (let i = 0; i < len(bad); i += 1) {
+  try {
+    trace_pixels((12, 12), squares, bad[i])
+    puts("no error for", bad[i])
+  } catch (e) {
+    puts(text.starts(e.message, "trace:"), e.message)
+  }
+}

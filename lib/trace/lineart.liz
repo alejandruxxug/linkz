@@ -1,0 +1,216 @@
+-~> lineart: the "lineart" mode of trace, for inked drawings and cel art. The
+-~> ink becomes brush() strokes along its centerlines, their pressures
+-~> following the width of the ink, instead of filled outlines. The steps:
+-~>   1. lineart_mask      which pixels are ink (dark against their
+-~>                        neighbourhood, with hysteresis)
+-~>   2. lineart_distance  how far each ink pixel is from the paper: the
+-~>                        half-width of the line at its centerline
+-~>   3. lineart_thin      the centerlines, one pixel wide (Zhang-Suen)
+-~>   4. lineart_graph     ends, junctions and the edges between them; spurs
+-~>                        pruned, near junctions joined
+-~>   5. lineart_pair, lineart_chains  edges joined through junctions where
+-~>                        the line goes straight on
+-~>   6. lineart_stroke    points and widths along each chain, tips spiky
+-~>                        or blunt, simplified
+-~>   7. lineart_code      one brush() per stroke, pen widths from the
+-~>                        thinnest and thickest ink
+-~> Later stages of Tracing v2 hook in here: an orientation field (steers
+-~> lineart_turn), fills grown under the lines (a `layer fills` written
+-~> after `layer lines`, so behind it), corners, Bezier fitting and snapping
+-~> to primitives (on the stroke points before lineart_code).
+
+use "../draw/svg"
+use "lineart_mask"
+use "lineart_skeleton"
+use "lineart_graph"
+use "lineart_strokes"
+
+-~> The options of trace(path, {"mode": "lineart", ...}). Anything left out
+-~> takes the value shown.
+-~>   line_threshold  how much darker than its surroundings a pixel must be
+-~>                   to start a line, 0 to 1 (0.5: half as bright). Lower
+-~>                   finds fainter lines.
+-~>   line_min        strokes shorter than this many pixels (length plus
+-~>                   width) are dropped, so specks don't become strokes.
+-~>   continuation    the largest turn, in degrees, a line may make at a
+-~>                   junction and still go on as the same stroke.
+-~>   radius          the half side, in pixels, of the neighbourhood a pixel is
+-~>                   compared with; 0 picks it from the picture's size.
+-~>   scale           multiplies every coordinate, to make a bigger drawing.
+-~>   max_side        the picture is shrunk until its longer side is at most
+-~>                   this many pixels.
+let lineart_options = {
+  "mode": "lineart",
+  "line_threshold": 0.5,
+  "line_min": 6,
+  "continuation": 35,
+  "radius": 0,
+  "scale": 1,
+  "max_side": 1024
+}
+
+-~> The line-art options with the defaults filled in. An unknown name is an
+-~> error, so a typo doesn't pass silently.
+function lineart_settings(options) {
+  let names = keys(options)
+  for (let i = 0; i < len(names); i += 1) {
+    if (!hash.has(lineart_options, names[i])) {
+      error("trace: unknown option \"" + names[i] + "\" for line art (known: " +
+        text.join(keys(lineart_options), ", ") + ")")
+    }
+  }
+  let out = hash.merge(lineart_options, options)
+  if (!(out.line_threshold > 0 && out.line_threshold < 1)) {
+    error("trace: line_threshold must be between 0 and 1")
+  }
+  out
+}
+
+-~> Traces line art: `size` is (w, h) and `pixels` a flat list of colors, row
+-~> by row. Returns {"code", "stats": {mode, strokes, points, tips, junctions,
+-~> ink, ms, size, stages}}; `stages` has the milliseconds of each step.
+function lineart_pixels(size, pixels, options, name) {
+  let opt = lineart_settings(options)
+  let w = size.x
+  let h = size.y
+  let t0 = time.ms()
+  let radius = opt.radius
+  if (radius <= 0) {
+    radius = math.max(4, math.round(math.max(w, h) / 128.0))
+  }
+  let m = lineart_mask(pixels, w, h, opt.line_threshold, radius)
+  let t1 = time.ms()
+  let dist = lineart_distance(m.mask, m.ink, w)
+  let t2 = time.ms()
+  let thin = lineart_thin(m.mask, m.ink, w)
+  let t3 = time.ms()
+  let graph = lineart_graph(m.mask, thin.skeleton, dist, w)
+  let pruned = lineart_prune(graph, 3)
+  let joined = lineart_merge_junctions(graph, dist, w)
+  let t4 = time.ms()
+  let partner = lineart_pair(graph, w, opt.continuation)
+  let chains = lineart_chains(graph, partner, w)
+  let strokes = []
+  for (let i = 0; i < len(chains); i += 1) {
+    let c = chains[i]
+    let ends = [lineart_is_junction(graph, c.ends[0]), lineart_is_junction(graph, c.ends[1])]
+    let s = lineart_stroke(c, ends, dist, w, 1.0, 0.75)
+    if (s.length + lineart_widest(s.widths) >= opt.line_min) {
+      push(strokes, s)
+    }
+  }
+  for (let i = 0; i < len(graph.nodes); i += 1) {
+    let node = graph.nodes[i]
+    if (node.kind == "dot") {
+      let s = lineart_stroke({"pixels": node.pixels, "closed": false}, [false, false], dist, w, 1.0, 0.75)
+      if (1 + lineart_widest(s.widths) >= opt.line_min) {
+        push(strokes, s)
+      }
+    }
+  }
+  let t5 = time.ms()
+  let made = lineart_code(name, w, h, m, strokes, opt.scale)
+  let t6 = time.ms()
+  let junctions = 0
+  for (let i = 0; i < len(graph.nodes); i += 1) {
+    if (graph.nodes[i].kind == "junction") {
+      junctions += 1
+    }
+  }
+  {
+    "code": made.code,
+    "stats": {
+      "mode": "lineart",
+      "strokes": len(strokes),
+      "points": made.points,
+      "tips": made.tips,
+      "junctions": junctions,
+      "pruned": pruned,
+      "joined": joined,
+      "ink": len(m.ink),
+      "pen": [made.pen_min, made.pen_max],
+      "ms": t6 - t0,
+      "size": size,
+      "stages": {
+        "mask": t1 - t0,
+        "distance": t2 - t1,
+        "thin": t3 - t2,
+        "graph": t4 - t3,
+        "strokes": t5 - t4,
+        "code": t6 - t5
+      }
+    }
+  }
+}
+
+-~> Whether a node number is a junction (-1 is no node).
+function lineart_is_junction(graph, id) {
+  id >= 0 && graph.nodes[id].kind == "junction"
+}
+
+-~> The biggest of some widths.
+function lineart_widest(widths) {
+  let top = 0.0
+  for (let i = 0; i < len(widths); i += 1) {
+    top = math.max(top, widths[i])
+  }
+  top
+}
+
+-~> A number rounded to one decimal, as source text.
+function lineart_num(n) {
+  svg_num(math.round(n * 10) / 10.0)
+}
+
+-~> The pen's thinnest and thickest width: the extremes of the stroke widths.
+function lineart_pen_range(strokes) {
+  let all = []
+  for (let i = 0; i < len(strokes); i += 1) {
+    for (let k = 0; k < len(strokes[i].widths); k += 1) {
+      push(all, strokes[i].widths[k])
+    }
+  }
+  if (len(all) == 0) {
+    return [1.0, 1.0]
+  }
+  let sorted = list.sort(all)
+  [math.floor(sorted[0] * 10) / 10.0, math.ceil(sorted[len(sorted) - 1] * 10) / 10.0]
+}
+
+-~> The .lzdraw source: the palette (paper and ink), the pen, the canvas, and
+-~> `layer lines` with one brush() per stroke. Returns {"code", "points",
+-~> "tips": {spiky, blunt, joined}, "pen_min", "pen_max"}.
+function lineart_code(source_name, w, h, m, strokes, scale) {
+  let range = lineart_pen_range(strokes)
+  let lo = range[0] * scale
+  let hi = range[1] * scale
+  let lines = ["-~> lzdraw 1", "-~> Traced from " + source_name + " as line art: " + str(len(strokes)) + " strokes."]
+  push(lines, "let colors = {\"paper\": " + color_hex(m.paper) + ", \"ink\": " + color_hex(m.ink_color) + "}")
+  push(lines, "pens.traced = {\"name\": \"traced\", \"min\": " + lineart_num(lo) + ", \"max\": " + lineart_num(hi) +
+    ", \"taper\": 0, \"opacity\": [1, 1], \"nib\": null, \"grain\": 0}")
+  push(lines, "canvas = {\"size\": (" + svg_num(w * scale) + ", " + svg_num(h * scale) + "), \"background\": colors.paper}")
+  push(lines, "")
+  push(lines, "layer lines")
+  let points = 0
+  let tips = {"spiky": 0, "blunt": 0, "joined": 0}
+  for (let i = 0; i < len(strokes); i += 1) {
+    let s = strokes[i]
+    let pts = []
+    let ps = []
+    for (let k = 0; k < len(s.points); k += 1) {
+      push(pts, "(" + lineart_num(s.points[k].x * scale) + ", " + lineart_num(s.points[k].y * scale) + ")")
+      let p = 1.0
+      if (range[1] > range[0]) {
+        p = math.max(0.0, math.min(1.0, (s.widths[k] - range[0]) / (range[1] - range[0])))
+      }
+      push(ps, svg_num(p))
+    }
+    points += len(pts)
+    if (!s.closed) {
+      tips[s.tips[0]] += 1
+      tips[s.tips[1]] += 1
+    }
+    push(lines, "  brush([" + text.join(pts, ", ") + "], [" + text.join(ps, ", ") + "], colors.ink, pens.traced)")
+  }
+  {"code": text.join(lines, "\n") + "\n", "points": points, "tips": tips, "pen_min": lo, "pen_max": hi}
+}
