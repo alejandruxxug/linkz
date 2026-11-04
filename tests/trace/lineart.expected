@@ -40,3 +40,5 @@ band and trousers are not ink: true true true
 the band's outline is ink: true true
 a long stroke along each edge of the band: true true errors []
 the band is maroon, the trousers navy: true true
+blue lines are ink, the inside of the blue block is not: true true true true
+the blue lines become strokes: true errors []

@@ -10,6 +10,10 @@
 -~> band is ink and the band between its outlines is not. Gray pixels (black
 -~> ink) are judged as before.
 -~>
+-~> Colored line art (blue lines of luma 0.5 on white) is ink too: a colored
+-~> pixel also counts when its color is far from the local paper color (the
+-~> Lab distance, which sees hue and not only brightness) and it is thin.
+-~>
 -~> The grids here are padded like trace_pad: (w + 2) by (h + 2), with a
 -~> border of 0 all round, so a neighbour read never needs a bounds test.
 -~> The pixel (x, y) is at (y + 1) * (w + 2) + x + 1.
@@ -92,14 +96,15 @@ function lineart_paper_level(luma, w, h, r) {
   out
 }
 
--~> How much lighter than a pixel the lighter ones of the 3 by 3 pixels round
--~> it are, on average (0 when it is as light as its neighbours: the inside of
--~> a band). A thin line, colored or not, has lighter pixels on both sides.
-function lineart_lighter_gap(luma, w, h, x, y) {
-  let x0 = math.max(0, x - 1)
-  let x1 = math.min(w - 1, x + 1)
-  let y0 = math.max(0, y - 1)
-  let y1 = math.min(h - 1, y + 1)
+-~> How much lighter than a pixel the lighter ones of the square of side
+-~> 2r + 1 round it are, on average (0 when it is as light as its neighbours:
+-~> the inside of a band or of a flat area). A thin line, colored or not, has
+-~> lighter pixels on both sides, and r reaches past half its width.
+function lineart_lighter_gap(luma, w, h, x, y, r) {
+  let x0 = math.max(0, x - r)
+  let x1 = math.min(w - 1, x + r)
+  let y0 = math.max(0, y - r)
+  let y1 = math.min(h - 1, y + r)
   let sum = 0.0
   let count = 0
   for (let yy = y0; yy <= y1; yy += 1) {
@@ -124,6 +129,88 @@ function lineart_lighter_gap(luma, w, h, x, y) {
 -~> The least lighter_gap a colored pixel needs to be ink.
 let lineart_thin_gap = 0.06
 
+-~> The paper color around every pixel: the mean r, g and b, over the square
+-~> of side 2r + 1, of the pixels at least as bright as the mean there (as
+-~> lineart_paper_level does for brightness). Returns [reds, greens, blues].
+function lineart_paper_rgb(pixels, luma, w, h, r) {
+  let sum = lineart_box_sums(luma, w, h, r)
+  let reds = []
+  let greens = []
+  let blues = []
+  let count = []
+  for (let y = 0; y < h; y += 1) {
+    let rows = math.min(h, y + r + 1) - math.max(0, y - r)
+    for (let x = 0; x < w; x += 1) {
+      let i = y * w + x
+      let area = rows * (math.min(w, x + r + 1) - math.max(0, x - r))
+      if (luma[i] * area >= sum[i]) {
+        push(reds, pixels[i].r + 0.0)
+        push(greens, pixels[i].g + 0.0)
+        push(blues, pixels[i].b + 0.0)
+        push(count, 1.0)
+      } else {
+        push(reds, 0.0)
+        push(greens, 0.0)
+        push(blues, 0.0)
+        push(count, 0.0)
+      }
+    }
+  }
+  let rs = lineart_box_sums(reds, w, h, r)
+  let gs = lineart_box_sums(greens, w, h, r)
+  let bs = lineart_box_sums(blues, w, h, r)
+  let cs = lineart_box_sums(count, w, h, r)
+  let out = [[], [], []]
+  for (let i = 0; i < len(luma); i += 1) {
+    if (cs[i] > 0) {
+      push(out[0], rs[i] / cs[i])
+      push(out[1], gs[i] / cs[i])
+      push(out[2], bs[i] / cs[i])
+    } else {
+      push(out[0], 255.0)
+      push(out[1], 255.0)
+      push(out[2], 255.0)
+    }
+  }
+  out
+}
+
+-~> The cube root of t (0 to 1.1), by Newton steps.
+function lineart_cbrt(t) {
+  if (t <= 0.0) {
+    return 0.0
+  }
+  let x = 0.7
+  for (let k = 0; k < 6; k += 1) {
+    x = (2.0 * x + t / (x * x)) / 3.0
+  }
+  x
+}
+
+-~> One channel (0 to 255) as linear light (gamma 2, close to sRGB).
+function lineart_linear(v) {
+  let c = v / 255.0
+  c * c
+}
+
+-~> The Lab color [L, a, b] of an r, g, b color (D65 white).
+function lineart_lab(r, g, b) {
+  let lr = lineart_linear(r)
+  let lg = lineart_linear(g)
+  let lb = lineart_linear(b)
+  let fx = lineart_cbrt((0.4124 * lr + 0.3576 * lg + 0.1805 * lb) / 0.95047)
+  let fy = lineart_cbrt(0.2126 * lr + 0.7152 * lg + 0.0722 * lb)
+  let fz = lineart_cbrt((0.0193 * lr + 0.1192 * lg + 0.9505 * lb) / 1.08883)
+  [116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz)]
+}
+
+-~> The Lab distance between a color and the paper [reds, greens, blues] at i.
+function lineart_color_gap(c, paper, i) {
+  let a = lineart_lab(c.r, c.g, c.b)
+  let b = lineart_lab(paper[0][i], paper[1][i], paper[2][i])
+  math.sqrt((a[0] - b[0]) * (a[0] - b[0]) + (a[1] - b[1]) * (a[1] - b[1]) + (a[2] - b[2]) * (a[2] - b[2]))
+}
+
 -~> Whether a color is gray (black ink, dark gray): the spread of its
 -~> channels is under about a tenth. A dark red belt or navy trousers are not.
 function lineart_is_neutral(c) {
@@ -141,6 +228,7 @@ function lineart_is_neutral(c) {
 function lineart_mask(pixels, w, h, threshold, radius) {
   let luma = lineart_luma(pixels)
   let mean = lineart_paper_level(luma, w, h, radius)
+  let paper_rgb = lineart_paper_rgb(pixels, luma, w, h, radius)
   let w2 = w + 2
   let state = []
   for (let i = 0; i < w2 * (h + 2); i += 1) {
@@ -158,10 +246,20 @@ function lineart_mask(pixels, w, h, threshold, radius) {
       let rel = gap / math.max(m, 0.05)
       let neutral = lineart_is_neutral(pixels[i])
       let strong = (rel >= threshold && gap >= 0.1) || (l < dark && neutral)
-      if (!strong && !(rel >= weak && gap >= 0.05)) {
-        continue
-      }
-      if (!neutral && lineart_lighter_gap(luma, w, h, x, y) < lineart_thin_gap) {
+      let faint = rel >= weak && gap >= 0.05
+      if (!neutral && !((strong || faint) && lineart_lighter_gap(luma, w, h, x, y, 1) >= lineart_thin_gap)) {
+        -~> Not a dark thin pixel by brightness: maybe a colored line, which
+        -~> is as far from the paper in color as a line is, and as thin as
+        -~> one (a line wider than 3 pixels needs the wider look). It must
+        -~> still be clearly darker than the paper, so pale shading is not ink, and not a dark
+        -~> fill (navy, maroon), whose edge would pass for a thick line.
+        let far = lineart_color_gap(pixels[i], paper_rgb, i)
+        strong = far >= threshold * 90.0
+        faint = far >= threshold * 80.0
+        if (!faint || gap < 0.25 || l < 0.3 || lineart_lighter_gap(luma, w, h, x, y, radius) < lineart_thin_gap) {
+          continue
+        }
+      } elif (!strong && !faint) {
         continue
       }
       let p = (y + 1) * w2 + x + 1

@@ -466,3 +466,25 @@ let belt_px = img.pixels(paint_run(belt_code + "\nraster.paint(drawing, (0, 0))\
 let band_c = belt_px[25 * 80 + 40]
 let trouser_c = belt_px[11 * 80 + 40]
 puts("the band is maroon, the trousers navy:", band_c.r > 80 && band_c.b < 70, trouser_c.b > trouser_c.r + 20)
+
+-~> Colored line art: thin blue lines (luma about 0.5) on white are ink and
+-~> become strokes, though no pixel is dark enough on its own; a flat block of
+-~> the same blue is a fill, its inside is not ink.
+let blue = cel(90, 60, function(p) {
+  let line = (math.abs(p.y - 10) < 2 && p.x > 6 && p.x < 84) || (math.abs(p.x - 12) < 2 && p.y > 6 && p.y < 54)
+  let block = p.x > 40 && p.x < 80 && p.y > 22 && p.y < 54
+  if (line || block) { #3c8ce6 } else { #ffffff }
+})
+let blue_mask = lineart_mask(blue.pixels, 90, 60, 0.5, 4)
+function blue_ink(x, y) {
+  blue_mask.mask[(y + 1) * 92 + x + 1] == 1
+}
+puts("blue lines are ink, the inside of the blue block is not:", blue_ink(50, 10), blue_ink(12, 40), !blue_ink(60, 38), !blue_ink(45, 28))
+let blue_run = drawing_run(trace_pixels(blue.size, blue.pixels, {"mode": "lineart"}, "blue").code)
+let blue_strokes = 0
+for (let k = 0; k < len(blue_run.shapes); k += 1) {
+  if (blue_run.shapes[k].kind == "brush" || blue_run.shapes[k].kind == "line") {
+    blue_strokes += 1
+  }
+}
+puts("the blue lines become strokes:", blue_strokes >= 2, "errors", blue_run.errors)
