@@ -1,0 +1,176 @@
+-~> lineart_snap: simple shapes recognized (stage 12 of Tracing v2). A
+-~> closed outline whose every point stays within `snap` px of a circle, an
+-~> ellipse, a rectangle or a polygon of a few corners is written as that
+-~> shape (circle, ellipse, rect, polygon), and a stroke that is straight
+-~> and of one width as a line, so the code reads like it was written by
+-~> hand. ellipse() and rect() are upright, so a tilted ellipse stays a
+-~> path and a tilted rectangle becomes a polygon of its four corners.
+-~>
+-~> A primitive is {"kind": "circle", "center", "r"}, {"kind": "ellipse",
+-~> "center", "radii"}, {"kind": "rect", "pos", "size"}, {"kind":
+-~> "polygon", "points"} or {"kind": "line", "a", "b", "width"}.
+
+use "../draw/geometry"
+
+-~> The area, centroid and second central moments (xx, xy, yy, per unit
+-~> of area) of a polygon, from its outline. Returns {"area", "center",
+-~> "xx", "xy", "yy"} (area 0 for a flat one).
+function lineart_moments(pts) {
+  let n = len(pts)
+  let a = 0.0
+  let sx = 0.0
+  let sy = 0.0
+  let sxx = 0.0
+  let sxy = 0.0
+  let syy = 0.0
+  let o = pts[0]
+  for (let i = 0; i < n; i += 1) {
+    let p = pts[i] - o
+    let q = pts[(i + 1) % n] - o
+    let c = p.x * q.y - q.x * p.y
+    a += c
+    sx += (p.x + q.x) * c
+    sy += (p.y + q.y) * c
+    sxx += (p.x * p.x + p.x * q.x + q.x * q.x) * c
+    syy += (p.y * p.y + p.y * q.y + q.y * q.y) * c
+    sxy += (p.x * q.y + 2 * p.x * p.y + 2 * q.x * q.y + q.x * p.y) * c
+  }
+  a = a / 2.0
+  if (math.abs(a) < 0.000001) {
+    return {"area": 0.0, "center": o, "xx": 0.0, "xy": 0.0, "yy": 0.0}
+  }
+  let cx = sx / (6.0 * a)
+  let cy = sy / (6.0 * a)
+  {
+    "area": math.abs(a),
+    "center": (cx + o.x, cy + o.y),
+    "xx": sxx / (12.0 * a) - cx * cx,
+    "xy": sxy / (24.0 * a) - cx * cy,
+    "yy": syy / (12.0 * a) - cy * cy
+  }
+}
+
+-~> The primitive a closed outline snaps to, or null: the first of circle,
+-~> ellipse, rect and polygon whose farthest point from the outline is
+-~> under `snap` px. `loop` is the outline as traced (for the circle and
+-~> the ellipse), `pts` the same with its corners sharpened (for the rect
+-~> and the polygon). A rect must also fill 92% of its box and be over
+-~> 4 * snap px on each side, so a small round blob is not taken for one. `corners` are the outline's corner points, in order
+-~> (a polygon needs 3 to 8, each side straight within `snap`).
+function lineart_snap_loop(loop, pts, corners, snap) {
+  if (snap <= 0 || len(pts) < 6) {
+    return null
+  }
+  let m = lineart_moments(loop)
+  if (m.area < 4) {
+    return null
+  }
+  let c = m.center
+  let rx = 2.0 * math.sqrt(math.max(0.0, m.xx))
+  let ry = 2.0 * math.sqrt(math.max(0.0, m.yy))
+  let r = (rx + ry) / 2.0
+  if (lineart_circle_error(loop, c, r) <= snap) {
+    return {"kind": "circle", "center": c, "r": r}
+  }
+  if (lineart_ellipse_error(loop, c, rx, ry) <= snap) {
+    return {"kind": "ellipse", "center": c, "radii": (rx, ry)}
+  }
+  m = lineart_moments(pts)
+  let box = lineart_box(pts)
+  let bw = box[2] - box[0]
+  let bh = box[3] - box[1]
+  if (bw > 4 * snap && bh > 4 * snap && m.area >= 0.92 * bw * bh && lineart_box_error(pts, box) <= snap) {
+    return {"kind": "rect", "pos": (box[0], box[1]), "size": (box[2] - box[0], box[3] - box[1])}
+  }
+  if (len(corners) >= 3 && len(corners) <= 8 && lineart_polygon_error(pts, corners) <= snap) {
+    return {"kind": "polygon", "points": corners}
+  }
+  null
+}
+
+-~> The farthest any point is from the circle (c, r).
+function lineart_circle_error(pts, c, r) {
+  let worst = 0.0
+  for (let i = 0; i < len(pts); i += 1) {
+    worst = math.max(worst, math.abs(math.dist(pts[i], c) - r))
+  }
+  worst
+}
+
+-~> About how far the farthest point is from the upright ellipse (c, rx,
+-~> ry): the distance to it along the ray from the center.
+function lineart_ellipse_error(pts, c, rx, ry) {
+  if (rx < 0.5 || ry < 0.5) {
+    return 1000000.0
+  }
+  let worst = 0.0
+  for (let i = 0; i < len(pts); i += 1) {
+    let d = pts[i] - c
+    let l = math.sqrt(float(d.x * d.x + d.y * d.y))
+    let rho = math.sqrt((d.x / rx) * (d.x / rx) + (d.y / ry) * (d.y / ry))
+    if (rho > 0) {
+      worst = math.max(worst, math.abs(l - l / rho))
+    }
+  }
+  worst
+}
+
+-~> The box [x0, y0, x1, y1] round some points.
+function lineart_box(pts) {
+  let b = [pts[0].x, pts[0].y, pts[0].x, pts[0].y]
+  for (let i = 1; i < len(pts); i += 1) {
+    b = [math.min(b[0], pts[i].x), math.min(b[1], pts[i].y), math.max(b[2], pts[i].x), math.max(b[3], pts[i].y)]
+  }
+  b
+}
+
+-~> The farthest any point is from the sides of the box.
+function lineart_box_error(pts, b) {
+  let worst = 0.0
+  for (let i = 0; i < len(pts); i += 1) {
+    let p = pts[i]
+    let d = math.min(math.min(p.x - b[0], b[2] - p.x), math.min(p.y - b[1], b[3] - p.y))
+    worst = math.max(worst, d)
+  }
+  worst
+}
+
+-~> The farthest any point is from the polygon of `corners`.
+function lineart_polygon_error(pts, corners) {
+  let worst = 0.0
+  for (let i = 0; i < len(pts); i += 1) {
+    worst = math.max(worst, distance_to_polyline(corners, pts[i], true))
+  }
+  worst
+}
+
+-~> The line a stroke snaps to, or null: an open stroke whose points all lie
+-~> within half `snap` px of the segment between its ends (a line is thin,
+-~> so it must sit closer than an outline), whose widths vary by at most a
+-~> quarter of their mean (and half a pixel), and with no spiky tip.
+function lineart_snap_stroke(s, snap) {
+  if (snap <= 0 || s.closed || len(s.points) < 2 || s.tips[0] == "spiky" || s.tips[1] == "spiky") {
+    return null
+  }
+  let a = s.points[0]
+  let b = s.points[len(s.points) - 1]
+  if (math.dist(a, b) < 2 * snap) {
+    return null
+  }
+  let lo = s.widths[0]
+  let hi = s.widths[0]
+  let sum = 0.0
+  for (let i = 0; i < len(s.points); i += 1) {
+    if (point_line_distance(s.points[i], a, b) > snap / 2.0) {
+      return null
+    }
+    lo = math.min(lo, s.widths[i])
+    hi = math.max(hi, s.widths[i])
+    sum += s.widths[i]
+  }
+  let mean = sum / len(s.widths)
+  if (hi - lo > math.max(0.5, mean / 4.0)) {
+    return null
+  }
+  {"kind": "line", "a": a, "b": b, "width": mean}
+}

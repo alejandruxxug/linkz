@@ -37,11 +37,19 @@ function ink(w, h, parts) {
   {"size": (w, h), "pixels": px, "parts": parts}
 }
 
+-~> The points a stroke is drawn through: a brush's, or a line's two ends.
+function stroke_points(shape) {
+  if (shape.kind == "line") {
+    return [shape.args[0], shape.args[1]]
+  }
+  shape.args[0]
+}
+
 -~> The farthest any stroke point is from the segments drawn.
 function worst_drift(shapes, parts) {
   let worst = 0.0
   for (let i = 0; i < len(shapes); i += 1) {
-    let pts = shapes[i].args[0]
+    let pts = stroke_points(shapes[i])
     for (let k = 0; k < len(pts); k += 1) {
       let best = 1000.0
       for (let j = 0; j < len(parts); j += 1) {
@@ -82,9 +90,12 @@ for (let i = 0; i < len(cases); i += 1) {
   let st = result.stats
   let run = drawing_run(result.code)
   let brushes = 0
+  let lines = 0
   for (let k = 0; k < len(run.shapes); k += 1) {
     if (run.shapes[k].kind == "brush") {
       brushes += 1
+    } elif (run.shapes[k].kind == "line") {
+      lines += 1
     }
   }
   let drift = "-"
@@ -92,7 +103,7 @@ for (let i = 0; i < len(cases); i += 1) {
     drift = str(worst_drift(run.shapes, c[1].parts) < 1.5)
   }
   puts(c[0] + ":", "strokes", st.strokes, "tips", st.tips, "junctions", st.junctions, "errors", run.errors, "brushes",
-    brushes, "close", drift, "canvas", run.canvas.size)
+    brushes, "lines", lines, "close", drift, "canvas", run.canvas.size)
 }
 
 -~> A picture from a function of the pixel center, 4 samples per pixel
@@ -173,9 +184,13 @@ for (let i = 0; i < len(fill_cases); i += 1) {
   let st = result.stats
   let run = drawing_run(result.code)
   let paths = []
+  let prims = []
   for (let k = 0; k < len(run.shapes); k += 1) {
-    if (run.shapes[k].kind == "path") {
+    let kind = run.shapes[k].kind
+    if (kind == "path") {
       push(paths, run.shapes[k])
+    } elif (kind == "circle" || kind == "ellipse" || kind == "rect" || kind == "polygon") {
+      push(prims, kind)
     }
   }
   let palette = text.lines(result.code)[2]
@@ -186,12 +201,13 @@ for (let i = 0; i < len(fill_cases); i += 1) {
     push(named, text.replace(text.split(names[k], ":")[0], "\"", ""))
   }
   puts(c[0] + ":", "fills", st.fills, "strokes", st.strokes, "solid", st.solid > 0, "errors", run.errors, "paths", len(paths),
-    "colors", named)
+    "primitives", prims, "colors", named)
 }
 
 -~> The disc's fill reaches the middle of the ring (radius 18.5), not just
--~> its inner edge (17), and is a curve with points between pixel corners.
-let disc_code = trace_pixels(disc.size, disc.pixels, {"mode": "lineart"}, "disc").code
+-~> its inner edge (17), and (not snapped) is a curve with points between
+-~> pixel corners.
+let disc_code = trace_pixels(disc.size, disc.pixels, {"mode": "lineart", "snap": 0}, "disc").code
 let disc_fill = null
 let shapes = drawing_run(disc_code).shapes
 for (let k = 0; k < len(shapes); k += 1) {
@@ -233,7 +249,7 @@ let plain = trace_pixels((12, 12), squares, {"colors": 2, "min_area": 0}, "sq").
 puts("photo by name is the same:", trace_pixels((12, 12), squares, {"mode": "photo", "colors": 2, "min_area": 0}, "sq").code == plain)
 
 let bad = [{"mode": "lineart", "refine": 4}, {"mode": "lineart", "line_threshold": 1.5}, {"mode": "lineart", "colors": 1},
-  {"mode": "vector"}]
+  {"mode": "vector"}, {"mode": "lineart", "flow": 2}, {"mode": "lineart", "corner": 0}, {"mode": "lineart", "snap": -1}]
 for (let i = 0; i < len(bad); i += 1) {
   try {
     trace_pixels((12, 12), squares, bad[i])
@@ -242,3 +258,115 @@ for (let i = 0; i < len(bad); i += 1) {
     puts(text.starts(e.message, "trace:"), e.message)
   }
 }
+
+-~> Corners, curves and primitives (Tracing v2 stages 10 to 12). Flat light
+-~> shapes (too light to be ink) on white snap to the primitive that fits them; a tuft of three spikes
+-~> keeps a sharp point at each tip (within 2 px of it); a stroke with a sharp turn is cut there
+-~> into two pieces that meet at the corner; a gap of 2 px between two
+-~> line ends that face each other is bridged, a wider one is not.
+
+-~> The point p turned by `deg` degrees round c.
+function spin(p, c, deg) {
+  let a = deg * math.pi / 180.0
+  let d = p - c
+  (c.x + d.x * math.cos(a) - d.y * math.sin(a), c.y + d.x * math.sin(a) + d.y * math.cos(a))
+}
+
+-~> The top of a tuft of three spikes at x: curved sides (a square fall
+-~> off) that meet in a sharp point at each tip.
+function tuft_top(x) {
+  let rise = 0.0
+  let tips = [20, 40, 60]
+  for (let i = 0; i < 3; i += 1) {
+    let t = math.max(0.0, 1 - math.abs(x - tips[i]) / 14.0)
+    rise = math.max(rise, t * t)
+  }
+  50 - 42 * rise
+}
+
+let tuft = [(20, 8), (40, 8), (60, 8)]
+let shapes_7c = [
+  ["an ellipse", cel(80, 60, function(p) {
+    if (((p.x - 40) / 30.0) * ((p.x - 40) / 30.0) + ((p.y - 30) / 18.0) * ((p.y - 30) / 18.0) < 1) { #b4d2f0 } else { #ffffff }
+  })],
+  ["an upright rectangle", cel(80, 60, function(p) {
+    if (p.x > 12 && p.x < 66 && p.y > 15 && p.y < 44) { #b4e6b4 } else { #ffffff }
+  })],
+  ["a rotated rectangle", cel(80, 70, function(p) {
+    let q = spin(p, (40, 35), -25)
+    if (q.x > 14 && q.x < 66 && q.y > 22 && q.y < 48) { #f0b4b4 } else { #ffffff }
+  })],
+  ["a tuft of three spikes", cel(80, 60, function(p) {
+    if (p.x > 6 && p.x < 74 && p.y < 54 && p.y > tuft_top(p.x)) { #b4c8f0 } else { #ffffff }
+  })]
+]
+for (let i = 0; i < len(shapes_7c); i += 1) {
+  let c = shapes_7c[i]
+  let result = trace_pixels(c[1].size, c[1].pixels, {"mode": "lineart"}, "shape")
+  let run = drawing_run(result.code)
+  let kinds = []
+  let sharp = []
+  for (let k = 0; k < len(run.shapes); k += 1) {
+    let sh = run.shapes[k]
+    push(kinds, sh.kind)
+    if (sh.kind == "path") {
+      for (let t = 0; t < 3; t += 1) {
+        let near = 100.0
+        for (let q = 0; q < len(sh.args[0]); q += 1) {
+          near = math.min(near, math.dist(sh.args[0][q], tuft[t]))
+        }
+        push(sharp, near < 2.0)
+      }
+    } elif (sh.kind == "polygon") {
+      push(sharp, len(sh.args[0]))
+    }
+  }
+  puts(c[0] + ":", kinds, "primitives", result.stats.primitives, "errors", run.errors, "tips/corners", sharp)
+}
+
+let ellipse_shape = null
+let e_shapes = drawing_run(trace_pixels(shapes_7c[0][1].size, shapes_7c[0][1].pixels, {"mode": "lineart"}, "e").code).shapes
+for (let k = 0; k < len(e_shapes); k += 1) {
+  if (e_shapes[k].kind == "ellipse") {
+    ellipse_shape = e_shapes[k]
+  }
+}
+puts("the ellipse fits:", math.dist(ellipse_shape.args[0], (40, 30)) < 0.5, math.abs(ellipse_shape.args[1].x - 30) < 0.8,
+  math.abs(ellipse_shape.args[1].y - 18) < 0.8)
+let snap_off = trace_pixels(shapes_7c[0][1].size, shapes_7c[0][1].pixels, {"mode": "lineart", "snap": 0}, "e")
+puts("snap 0 keeps a path:", drawing_run(snap_off.code).shapes[0].kind, snap_off.stats.primitives)
+
+-~> [name, picture, the gap's segment when the stroke may cross it]
+let stroke_cases = [
+  ["a V: cut at its corner", ink(60, 60, [[(10, 8), (30, 50), 2.0, 2.0], [(30, 50), (50, 8), 2.0, 2.0]])],
+  ["a gap of 2 px is bridged", ink(70, 30, [[(6, 15), (27.5, 15), 1.5, 1.5], [(32.5, 15), (64, 15), 1.5, 1.5]])],
+  ["a gap of 4 px is not", ink(70, 30, [[(6, 15), (26.5, 15), 1.5, 1.5], [(33.5, 15), (64, 15), 1.5, 1.5]])],
+  ["a gap of 2 px on a curve is bridged", ink(70, 40, [[(6, 32), (18, 20), 1.5, 1.5], [(18, 20), (28.4, 15.3), 1.5, 1.5],
+    [(33.2, 14.2), (48, 15), 1.5, 1.5], [(48, 15), (64, 24), 1.5, 1.5]]), [[(28.4, 15.3), (33.2, 14.2), 1.5, 1.5]]],
+  ["two ends side by side are not bridged", ink(70, 30, [[(6, 12), (40, 12), 1.5, 1.5], [(30, 17.5), (64, 17.5), 1.5, 1.5]])]
+]
+for (let i = 0; i < len(stroke_cases); i += 1) {
+  let c = stroke_cases[i]
+  let result = trace_pixels(c[1].size, c[1].pixels, {"mode": "lineart"}, "stroke")
+  let run = drawing_run(result.code)
+  let kinds = []
+  for (let k = 0; k < len(run.shapes); k += 1) {
+    push(kinds, run.shapes[k].kind)
+  }
+  let parts = c[1].parts
+  if (len(c) > 2) {
+    parts = parts + c[2]
+  }
+  puts(c[0] + ":", "strokes", result.stats.strokes, "bridged", result.stats.bridged, kinds, "close",
+    worst_drift(run.shapes, parts) < 1.5, "errors", run.errors)
+}
+let vee = stroke_cases[0][1]
+let vee_shapes = drawing_run(trace_pixels(vee.size, vee.pixels, {"mode": "lineart"}, "v").code).shapes
+let apex = 100.0
+for (let k = 0; k < len(vee_shapes); k += 1) {
+  let pts = stroke_points(vee_shapes[k])
+  for (let q = 0; q < len(pts); q += 1) {
+    apex = math.min(apex, math.dist(pts[q], (30, 50)))
+  }
+}
+puts("the V's pieces meet near its apex:", apex < 2.5)

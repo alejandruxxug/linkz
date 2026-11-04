@@ -1,0 +1,468 @@
+-~> lineart_curves: outlines and centerlines as smooth curves with sharp
+-~> corners (stages 10 and 11 of Tracing v2).
+-~>   lineart_corners  a point is a corner when the line turns by more than
+-~>                    `corner` degrees over a longer stretch round it and
+-~>                    by most of that over a short one too (two scales),
+-~>                    so a step of the pixel grid is no corner and a wide
+-~>                    bend is none either
+-~>   lineart_sharpen  a corner the blur rounded is put back where its two
+-~>                    sides meet, within a few pixels; a spike (a narrow tip
+-~>                    pointing along the flow) may reach further
+-~>   lineart_fit      between corners, cubic Beziers by least squares
+-~>                    (Schneider), split where the error is over `detail` px
+-~>   lineart_curve_points  the points written for those curves
+-~>
+-~> path() and brush() take points, not Bezier pieces, so the fitted pieces
+-~> are sampled (lineart_curve_points) and the samples simplified again
+-~> between the corners, which all stay: the smooth curve the shape draws
+-~> through the points stays near the fit, with fewer points than the raw
+-~> outline needs, and a corner keeps a turn sharp enough to stay one. The
+-~> pieces themselves are kept in the results ("curves") for when the
+-~> shapes take them.
+-~>
+-~> A line is a list of points; a closed one does not repeat its first point.
+
+use "../draw/geometry"
+
+-~> The unit vector along v, (0, 0) when v has no length.
+function lineart_dir(v) {
+  let l = math.sqrt(float(v.x * v.x + v.y * v.y))
+  if (l == 0) {
+    return (0.0, 0.0)
+  }
+  v / l
+}
+
+-~> The index of the point `d` px of arc after the point i (before it when d
+-~> is negative). A closed line wraps round; -1 when an open line ends first
+-~> or a closed one is too short.
+function lineart_reach(pts, closed, i, d) {
+  let n = len(pts)
+  let step = 1
+  if (d < 0) {
+    step = -1
+  }
+  let want = math.abs(d)
+  let walked = 0.0
+  let j = i
+  let guard = 0
+  while (walked < want) {
+    let k = j + step
+    if (closed) {
+      k = (k + n) % n
+    } elif (k < 0 || k >= n) {
+      return -1
+    }
+    walked += math.dist(pts[j], pts[k])
+    j = k
+    guard += 1
+    if (guard >= n) {
+      return -1
+    }
+  }
+  j
+}
+
+-~> How many degrees the line turns at point i, seen from the points `s` px
+-~> of arc before and after it (0 near the ends of an open line).
+function lineart_turn_at(pts, closed, i, s) {
+  let a = lineart_reach(pts, closed, i, -s)
+  let b = lineart_reach(pts, closed, i, s)
+  if (a < 0 || b < 0) {
+    return 0.0
+  }
+  turn_angle(pts[a], pts[i], pts[b]) * 180.0 / math.pi
+}
+
+-~> The corners of a line: the points turning more than `corner` degrees
+-~> at the scale s2 and more than `ratio` * corner at the shorter scale s1
+-~> (px of arc; a ratio under 1 lets a corner the blur or a bevel spread
+-~> over a few pixels count), the sharpest first when two are closer than
+-~> 2 * s2 + 1 px of arc. Returns their indexes, in order.
+function lineart_corners(pts, closed, corner, s1, s2, ratio) {
+  let n = len(pts)
+  if (n < 5) {
+    return []
+  }
+  let arcs = [0.0]
+  for (let i = 1; i < n; i += 1) {
+    push(arcs, arcs[i - 1] + math.dist(pts[i - 1], pts[i]))
+  }
+  let total = arcs[n - 1]
+  if (closed) {
+    total = total + math.dist(pts[n - 1], pts[0])
+  }
+  let cand = []
+  for (let i = 0; i < n; i += 1) {
+    let a = lineart_turn_at(pts, closed, i, s1)
+    if (a > corner * ratio) {
+      let b = lineart_turn_at(pts, closed, i, s2)
+      if (b > corner) {
+        push(cand, [a + b, i])
+      }
+    }
+  }
+  cand = list.sort(cand, function(x, y) { x[0] > y[0] })
+  let sep = 2.0 * s2 + 1
+  let kept = []
+  for (let k = 0; k < len(cand); k += 1) {
+    let i = cand[k][1]
+    let free = true
+    for (let m = 0; m < len(kept); m += 1) {
+      let d = math.abs(arcs[i] - arcs[kept[m]])
+      if (closed) {
+        d = math.min(d, total - d)
+      }
+      if (d < sep) {
+        free = false
+        break
+      }
+    }
+    if (free) {
+      push(kept, i)
+    }
+  }
+  list.sort(kept)
+}
+
+-~> Where the line through a along da meets the line through b along db,
+-~> ahead of both (null when they are parallel or meet behind).
+function lineart_meet(a, da, b, db) {
+  let cross = da.x * db.y - da.y * db.x
+  if (math.abs(cross) < 0.000001) {
+    return null
+  }
+  let ab = b - a
+  let u = (ab.x * db.y - ab.y * db.x) / cross
+  let v = (ab.x * da.y - ab.y * da.x) / cross
+  if (u < 0 || v < 0) {
+    return null
+  }
+  a + da * u
+}
+
+-~> Puts the corners back where their sides meet: the sides are the lines
+-~> through the points `near` and `far` px of arc before and after a corner;
+-~> when they meet within `limit(p, axis)` px of it (axis: the unit vector
+-~> out of the tip), the points closer than `near` to the corner are dropped
+-~> and the corner moves to the meeting point. Returns {"points",
+-~> "corners": their indexes in the new points}.
+function lineart_sharpen(pts, closed, corners, near, far, limit) {
+  let n = len(pts)
+  let drop = {}
+  let moved = {}
+  for (let k = 0; k < len(corners); k += 1) {
+    let i = corners[k]
+    let a = lineart_reach(pts, closed, i, -near)
+    let a2 = lineart_reach(pts, closed, i, -far)
+    let b = lineart_reach(pts, closed, i, near)
+    let b2 = lineart_reach(pts, closed, i, far)
+    if (a < 0 || a2 < 0 || b < 0 || b2 < 0) {
+      continue
+    }
+    let x = lineart_meet(pts[a], pts[a] - pts[a2], pts[b], pts[b] - pts[b2])
+    if (x === null) {
+      continue
+    }
+    let axis = lineart_dir(lineart_dir(pts[a] - pts[a2]) + lineart_dir(pts[b] - pts[b2]))
+    if (math.dist(x, pts[i]) > limit(pts[i], axis)) {
+      continue
+    }
+    moved[i] = x
+    let j = a
+    while (true) {
+      j = (j + 1) % n
+      if (j == b) {
+        break
+      }
+      if (j != i) {
+        drop[j] = true
+      }
+    }
+  }
+  let out = []
+  let at = []
+  let is_corner = {}
+  for (let k = 0; k < len(corners); k += 1) {
+    is_corner[corners[k]] = true
+  }
+  for (let i = 0; i < n; i += 1) {
+    if (drop[i]) {
+      continue
+    }
+    if (is_corner[i]) {
+      push(at, len(out))
+    }
+    if (moved[i] !== null) {
+      push(out, moved[i])
+    } else {
+      push(out, pts[i])
+    }
+  }
+  {"points": out, "corners": at}
+}
+
+-~> The direction the line leaves point i by (`step` 1) or arrives from
+-~> (-1, pointing back), from the point about 2 px of arc away (or the last
+-~> one an open line has).
+function lineart_side_tangent(pts, closed, i, step) {
+  let j = lineart_reach(pts, closed, i, 2.0 * step)
+  if (j < 0) {
+    j = 0
+    if (step > 0) {
+      j = len(pts) - 1
+    }
+  }
+  lineart_dir(pts[j] - pts[i])
+}
+
+-~> The direction of a smooth line at point i: from the point about 2 px
+-~> before it to the one 2 px after.
+function lineart_mid_tangent(pts, closed, i) {
+  let a = lineart_reach(pts, closed, i, -2.0)
+  let b = lineart_reach(pts, closed, i, 2.0)
+  if (a < 0) {
+    a = 0
+  }
+  if (b < 0) {
+    b = len(pts) - 1
+  }
+  lineart_dir(pts[b] - pts[a])
+}
+
+-~> Fits a line with cubic Beziers through `knots` (indexes it must pass
+-~> through, the first 0 and the last n - 1; `sharp[k]` says whether knot
+-~> k is a corner or a smooth point), each piece within `tol` px of the
+-~> points. A closed line passes `knots` ending at n, the first point
+-~> again. Returns {"curves": [[p0, c1, c2, p3]...], "spans": for each
+-~> curve, the index range [a, b] of the points it fits}.
+function lineart_fit(pts, closed, knots, sharp, tol) {
+  let all = pts
+  let n = len(pts)
+  if (closed) {
+    all = list.copy(pts)
+    push(all, pts[0])
+  }
+  let out = []
+  let spans = []
+  let m = len(knots)
+  for (let k = 0; k < m - 1; k += 1) {
+    let a = knots[k]
+    let b = knots[k + 1]
+    let t1 = lineart_mid_tangent(pts, closed, a % n)
+    if (sharp[k]) {
+      t1 = lineart_side_tangent(all, false, a, 1)
+    }
+    let t2 = lineart_mid_tangent(pts, closed, b % n) * -1.0
+    if (sharp[k + 1]) {
+      t2 = lineart_side_tangent(all, false, b, -1)
+    }
+    if (!closed && !sharp[k] && a == 0) {
+      t1 = lineart_side_tangent(all, false, a, 1)
+    }
+    if (!closed && !sharp[k + 1] && b == n - 1) {
+      t2 = lineart_side_tangent(all, false, b, -1)
+    }
+    lineart_schneider(all, a, b, t1, t2, tol, out, spans)
+  }
+  {"curves": out, "spans": spans}
+}
+
+-~> Schneider's fit of the points a to b of `pts` with one cubic whose ends
+-~> leave along t1 and arrive along t2 (pointing back), split at the worst
+-~> point and fitted again while the error is over `tol` px (a fit within
+-~> four times `tol` first gets two Newton rounds on its parameters). Adds the
+-~> pieces [p0, c1, c2, p3] to `out` and their ranges [a, b] to `spans`.
+function lineart_schneider(pts, a, b, t1, t2, tol, out, spans) {
+  let p0 = pts[a]
+  let p3 = pts[b]
+  let seg = math.dist(p0, p3)
+  if (b - a < 2) {
+    push(out, [p0, p0 + t1 * (seg / 3.0), p3 + t2 * (seg / 3.0), p3])
+    push(spans, [a, b])
+    return null
+  }
+  let u = lineart_chord_params(pts, a, b)
+  let bez = lineart_bezier(pts, a, b, u, t1, t2)
+  let e = lineart_fit_error(pts, a, b, u, bez)
+  if (e[0] <= tol) {
+    push(out, bez)
+    push(spans, [a, b])
+    return null
+  }
+  if (e[0] <= tol * 4) {
+    for (let k = 0; k < 2; k += 1) {
+      u = lineart_reparam(pts, a, b, u, bez)
+      bez = lineart_bezier(pts, a, b, u, t1, t2)
+      e = lineart_fit_error(pts, a, b, u, bez)
+      if (e[0] <= tol) {
+        push(out, bez)
+        push(spans, [a, b])
+        return null
+      }
+    }
+  }
+  let s = e[1]
+  let tc = lineart_dir(pts[math.max(a, s - 2)] - pts[math.min(b, s + 2)])
+  if (tc.x == 0 && tc.y == 0) {
+    tc = lineart_dir(pts[a] - pts[b])
+  }
+  lineart_schneider(pts, a, s, t1, tc, tol, out, spans)
+  lineart_schneider(pts, s, b, tc * -1.0, t2, tol, out, spans)
+}
+
+-~> The chord-length parameter (0 to 1) of each point a to b.
+function lineart_chord_params(pts, a, b) {
+  let u = [0.0]
+  for (let i = a + 1; i <= b; i += 1) {
+    push(u, u[i - a - 1] + math.dist(pts[i - 1], pts[i]))
+  }
+  let total = u[b - a]
+  if (total == 0) {
+    total = 1.0
+  }
+  for (let i = 0; i < len(u); i += 1) {
+    u[i] = u[i] / total
+  }
+  u
+}
+
+-~> The least-squares cubic through the points a to b at parameters u, its
+-~> ends fixed and leaving along t1, arriving along t2; the handles fall
+-~> back to a third of the chord when the fit gives none.
+function lineart_bezier(pts, a, b, u, t1, t2) {
+  let p0 = pts[a]
+  let p3 = pts[b]
+  let c00 = 0.0
+  let c01 = 0.0
+  let c11 = 0.0
+  let x0 = 0.0
+  let x1 = 0.0
+  for (let i = a; i <= b; i += 1) {
+    let t = u[i - a]
+    let s = 1.0 - t
+    let b0 = s * s * s
+    let b1 = 3.0 * t * s * s
+    let b2 = 3.0 * t * t * s
+    let b3 = t * t * t
+    let ax = t1.x * b1
+    let ay = t1.y * b1
+    let bx = t2.x * b2
+    let by = t2.y * b2
+    c00 += ax * ax + ay * ay
+    c01 += ax * bx + ay * by
+    c11 += bx * bx + by * by
+    let tx = pts[i].x - (p0.x * (b0 + b1) + p3.x * (b2 + b3))
+    let ty = pts[i].y - (p0.y * (b0 + b1) + p3.y * (b2 + b3))
+    x0 += ax * tx + ay * ty
+    x1 += bx * tx + by * ty
+  }
+  let seg = math.dist(p0, p3)
+  let det = c00 * c11 - c01 * c01
+  let al = seg / 3.0
+  let ar = seg / 3.0
+  if (math.abs(det) > 0.000000001) {
+    let l = (c11 * x0 - c01 * x1) / det
+    let r = (c00 * x1 - c01 * x0) / det
+    if (l > seg * 0.000001 && r > seg * 0.000001 && l < seg * 2 && r < seg * 2) {
+      al = l
+      ar = r
+    }
+  }
+  [p0, p0 + t1 * al, p3 + t2 * ar, p3]
+}
+
+-~> The farthest point a to b is from the cubic at its parameter: [distance,
+-~> its index] (the middle point when none is inside).
+function lineart_fit_error(pts, a, b, u, bez) {
+  let worst = 0.0
+  let at = (a + b) // 2
+  let p0 = bez[0]
+  let p1 = bez[1]
+  let p2 = bez[2]
+  let p3 = bez[3]
+  for (let i = a + 1; i < b; i += 1) {
+    let t = u[i - a]
+    let s = 1.0 - t
+    let k0 = s * s * s
+    let k1 = 3.0 * t * s * s
+    let k2 = 3.0 * t * t * s
+    let k3 = t * t * t
+    let dx = k0 * p0.x + k1 * p1.x + k2 * p2.x + k3 * p3.x - pts[i].x
+    let dy = k0 * p0.y + k1 * p1.y + k2 * p2.y + k3 * p3.y - pts[i].y
+    let d = dx * dx + dy * dy
+    if (d > worst) {
+      worst = d
+      at = i
+    }
+  }
+  [math.sqrt(worst), at]
+}
+
+-~> The parameters moved one Newton step towards the nearest point of the
+-~> cubic to each point.
+function lineart_reparam(pts, a, b, u, bez) {
+  let out = []
+  let d1 = [(bez[1] - bez[0]) * 3.0, (bez[2] - bez[1]) * 3.0, (bez[3] - bez[2]) * 3.0]
+  let d2 = [(d1[1] - d1[0]) * 2.0, (d1[2] - d1[1]) * 2.0]
+  for (let i = a; i <= b; i += 1) {
+    let t = u[i - a]
+    let s = 1.0 - t
+    let q = bezier_point(bez[0], bez[1], bez[2], bez[3], t)
+    let q1 = d1[0] * (s * s) + d1[1] * (2.0 * s * t) + d1[2] * (t * t)
+    let q2 = d2[0] * s + d2[1] * t
+    let diff = q - pts[i]
+    let num = diff.x * q1.x + diff.y * q1.y
+    let den = q1.x * q1.x + q1.y * q1.y + diff.x * q2.x + diff.y * q2.y
+    if (den != 0) {
+      t = math.max(0.0, math.min(1.0, t - num / den))
+    }
+    push(out, t)
+  }
+  out
+}
+
+-~> How many pieces a cubic is sampled in: enough that its control polygon
+-~> turns at most 10 degrees from one sample to the next, and the samples
+-~> are at most 2 px apart along its chord.
+function lineart_samples(bez) {
+  let turn = 0.0
+  let legs = [bez[1] - bez[0], bez[2] - bez[1], bez[3] - bez[2]]
+  let prev = null
+  for (let i = 0; i < 3; i += 1) {
+    let v = legs[i]
+    if (v.x * v.x + v.y * v.y < 0.000001) {
+      continue
+    }
+    if (prev !== null) {
+      turn += math.abs(math.atan2(prev.x * v.y - prev.y * v.x, prev.x * v.x + prev.y * v.y))
+    }
+    prev = v
+  }
+  math.max(1, math.max(math.ceil(turn * 180.0 / math.pi / 10.0), math.ceil(math.dist(bez[0], bez[3]) / 2.0)))
+}
+
+-~> Points along some curves, close together (see lineart_samples): the
+-~> start of the first (left out on a closed line, where the end of the
+-~> last is the same point), then for each curve its inside samples and its
+-~> end. Returns {"points", "at": for each point, [curve number, t]}.
+function lineart_curve_points(curves, closed) {
+  let pts = []
+  let at = []
+  if (!closed) {
+    push(pts, curves[0][0])
+    push(at, [0, 0.0])
+  }
+  for (let c = 0; c < len(curves); c += 1) {
+    let bez = curves[c]
+    let k = lineart_samples(bez)
+    for (let j = 1; j < k; j += 1) {
+      let t = j / float(k)
+      push(pts, bezier_point(bez[0], bez[1], bez[2], bez[3], t))
+      push(at, [c, t])
+    }
+    push(pts, bez[3])
+    push(at, [c, 1.0])
+  }
+  {"points": pts, "at": at}
+}

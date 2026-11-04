@@ -8,18 +8,22 @@
 -~> the edge between two regions is drawn once, by the smaller one, with the
 -~> bigger one going on underneath: no seam can open between them.
 -~>
--~> Hook for the later stages of Tracing v2 (corners at two scales, Bezier
--~> fitting, snapping to rect/circle/ellipse): lineart_outline_points is
--~> where an outline loop becomes the points that are written.
+-~> lineart_outline_points then finds the corners of each outline (two
+-~> scales, sharpened, spikes drawn out along the flow), fits it with
+-~> Bezier curves (lineart_curves) and tries it as a circle, ellipse, rect
+-~> or polygon (lineart_snap).
 
 use "trace"
 use "../draw/geometry"
+use "lineart_curves"
+use "lineart_snap"
+use "lineart_flow"
 
 -~> The shapes of one region `id`: {"outers": [[(x, y)...]...], "holes":
--~> [[...] for each outer]}, in picture pixels. `fill` is lineart_regions'
--~> result, `order` lineart_order's. `detail` is the simplification
--~> tolerance in pixels.
-function lineart_region_shapes(fill, order, id, w, h, detail) {
+-~> [[...] for each outer], "prims": [the primitive of each outer, or
+-~> null]}, in picture pixels. `fill` is lineart_regions' result, `order`
+-~> lineart_order's. `curve` has the settings of lineart_outline_points.
+function lineart_region_shapes(fill, order, id, w, h, curve) {
   let m = lineart_region_mask(fill, order, id, w, h)
   let v = lineart_blur(m.grid, m.w, m.h)
   let loops = lineart_contours(v, m.w, m.h, m.x0, m.y0, 0.5)
@@ -51,21 +55,126 @@ function lineart_region_shapes(fill, order, id, w, h, detail) {
       }
     }
     if (best >= 0) {
-      push(holes[best], lineart_outline_points(inner[i], detail))
+      push(holes[best], lineart_outline_points(inner[i], curve).points)
     }
   }
+  let prims = []
   for (let k = 0; k < len(outers); k += 1) {
-    outers[k] = lineart_outline_points(outers[k], detail)
+    let o = lineart_outline_points(outers[k], curve)
+    outers[k] = o.points
+    if (len(holes[k]) == 0) {
+      push(prims, o.prim)
+    } else {
+      push(prims, null)
+    }
   }
-  {"outers": outers, "holes": holes}
+  {"outers": outers, "holes": holes, "prims": prims}
 }
 
--~> The points written for an outline loop: Ramer-Douglas-Peucker with
--~> tolerance `detail`; path() then draws them as a smooth curve.
--~> Corners, Bezier fitting and primitive snapping (Tracing v2 stages 10 to
--~> 12) replace this.
-function lineart_outline_points(loop, detail) {
-  trace_ring_simplify(loop, detail)
+-~> The points written for an outline loop, and the primitive it snaps to.
+-~> The corners are found at two scales, s1 = the lines' half-width + 1
+-~> (2 at least) and 2 * s1 px of arc: the fills meet under the lines, so
+-~> a corner is beveled over about a half-width. They are put back where
+-~> their sides (s2 to 3 * s2 px of arc away) meet, and the loop between them is fitted with
+-~> Bezier curves within `detail` px, written as points on the curves.
+-~> `curve` is {"detail", "corner" (degrees), "snap" (px, 0 for never),
+-~> "flow" (its weight), "luma", "w", "h", "r" (the field's half side),
+-~> "half" (the lines' usual half-width)}.
+-~> Returns {"points", "prim" (null when it snaps to none), "curves"}.
+function lineart_outline_points(loop, curve) {
+  let n = len(loop)
+  if (n < 8) {
+    return {"points": trace_ring_simplify(loop, curve.detail), "prim": null, "curves": []}
+  }
+  let s1 = math.max(2.0, curve.half + 1)
+  let s2 = 2.0 * s1
+  let corners = lineart_corners(loop, true, curve.corner, s1, s2, 0.6)
+  let sharp = lineart_sharpen(loop, true, corners, s2, 3.0 * s2, function(p, axis) { lineart_tip_reach(curve, p, axis) })
+  let pts = sharp.points
+  let at = sharp.corners
+  let corner_pts = []
+  for (let k = 0; k < len(at); k += 1) {
+    push(corner_pts, pts[at[k]])
+  }
+  let prim = lineart_snap_loop(loop, pts, corner_pts, curve.snap)
+  let m = len(pts)
+  let knots = [0, m // 2, m]
+  let flags = [false, false, false]
+  if (len(at) > 0) {
+    pts = list.slice(pts, at[0], m) + list.slice(pts, 0, at[0])
+    knots = []
+    flags = []
+    for (let k = 0; k < len(at); k += 1) {
+      push(knots, at[k] - at[0])
+      push(flags, true)
+    }
+    push(knots, m)
+    push(flags, true)
+  }
+  let fit = lineart_fit(pts, true, knots, flags, curve.detail)
+  let dense = lineart_curve_points(fit.curves, true)
+  let keep = []
+  for (let i = 0; i < len(dense.points); i += 1) {
+    let c = dense.at[i]
+    push(keep, len(at) > 0 && c[1] == 1.0 && list.index(knots, fit.spans[c[0]][1]) >= 0)
+  }
+  {"points": lineart_reduce(dense.points, keep, curve.detail / 2.0), "prim": prim, "curves": fit.curves}
+}
+
+-~> The points of a closed line, fewer: Ramer-Douglas-Peucker within `tol`
+-~> px between the points marked in `keep` (the corners), which all stay. A
+-~> line with none marked is cut at its farthest points instead
+-~> (trace_ring_simplify).
+function lineart_reduce(pts, keep, tol) {
+  let marks = []
+  for (let i = 0; i < len(pts); i += 1) {
+    if (keep[i]) {
+      push(marks, i)
+    }
+  }
+  if (len(marks) == 0) {
+    return trace_ring_simplify(pts, tol)
+  }
+  let n = len(pts)
+  let out = []
+  for (let k = 0; k < len(marks); k += 1) {
+    let a = marks[k]
+    let b = marks[(k + 1) % len(marks)]
+    let run = []
+    let i = a
+    push(run, pts[i])
+    while (true) {
+      i = (i + 1) % n
+      push(run, pts[i])
+      if (i == b) {
+        break
+      }
+    }
+    let kept = simplify(run, tol)
+    for (let j = 0; j < len(kept) - 1; j += 1) {
+      push(out, kept[j])
+    }
+  }
+  out
+}
+
+-~> How far a rounded corner may be drawn out to where its sides meet:
+-~> the lines' half-width + 1 px (2 at least: about the bevel the fills
+-~> make under a line), or 4 px more for a spike, a tip pointing along the
+-~> flow (within 25 degrees, where the flow's coherence is over 0.3),
+-~> scaled by the flow option.
+function lineart_tip_reach(curve, p, axis) {
+  let base = math.max(2.0, curve.half + 1)
+  if (curve.flow <= 0) {
+    return base
+  }
+  let x = math.max(0, math.min(curve.w - 1, math.floor(p.x)))
+  let y = math.max(0, math.min(curve.h - 1, math.floor(p.y)))
+  let f = lineart_flow_at(curve.luma, curve.w, curve.h, x, y, curve.r)
+  if (f.coherence > 0.3 && lineart_flow_off(axis, f) < 25) {
+    return base + 4.0 * math.min(1.0, curve.flow)
+  }
+  base
 }
 
 -~> Whether the point p is inside the polygon `poly` (even-odd rule).

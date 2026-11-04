@@ -45,7 +45,10 @@ function lineart_line_half(m, dist, w) {
 -~> Takes the solid areas out of the ink: the ink pixels at least `depth`
 -~> from the paper are the cores, and every ink pixel inside the disc of a
 -~> core (its distance as the radius) is solid. A line thinner than `depth`
--~> stays a line even where it touches a solid area. Changes m.mask and m.ink
+-~> stays a line even where it touches a solid area. When the core is
+-~> clearly lighter than the darkest ink (navy trousers, a dark hair shade
+-~> next to its black outline), the pixels nearer the ink's darkness than
+-~> the core's stay ink: the outline round the solid area is still a line. Changes m.mask and m.ink
 -~> (and m.ink_color, from the ink that is left). Returns how many pixels it
 -~> took. The ink color is then the mean of the darker half of the ink
 -~> left, since the solid areas often had their own color (navy, brown).
@@ -89,8 +92,15 @@ function lineart_solid(m, pixels, dist, w, depth) {
       }
     }
   }
+  let ink_luma = lineart_darkest_ink(pixels, m.ink, w)
+  let taken = 0
   for (let i = 0; i < len(todo); i += 1) {
-    mask[todo[i]] = 0
+    let p = todo[i]
+    let core = lineart_luma_of(lineart_pixel(pixels, src[p], w))
+    if (core - ink_luma < 0.1 || lineart_luma_of(lineart_pixel(pixels, p, w)) > (ink_luma + core) / 2) {
+      mask[p] = 0
+      taken += 1
+    }
   }
   let ink = []
   for (let i = 0; i < len(m.ink); i += 1) {
@@ -100,7 +110,31 @@ function lineart_solid(m, pixels, dist, w, depth) {
   }
   m.ink = ink
   m.ink_color = lineart_mean_color(lineart_color_sum(pixels, lineart_darker_half(pixels, ink, w), w), m.ink_color)
-  len(todo)
+  taken
+}
+
+-~> The brightness of the darkest ink: the darkest tenth of the ink pixels
+-~> (every 4th one looked at), where the black outlines are.
+function lineart_darkest_ink(pixels, ink, w) {
+  let values = []
+  for (let i = 0; i < len(ink); i += 4) {
+    push(values, lineart_luma_of(lineart_pixel(pixels, ink[i], w)))
+  }
+  if (len(values) == 0) {
+    return 0.0
+  }
+  list.sort(values)[len(values) // 10]
+}
+
+-~> The color of the pixel at a padded position.
+function lineart_pixel(pixels, p, w) {
+  let w2 = w + 2
+  pixels[(p // w2 - 1) * w + p % w2 - 1]
+}
+
+-~> The brightness of a color, 0 to 1.
+function lineart_luma_of(c) {
+  (0.299 * c.r + 0.587 * c.g + 0.114 * c.b) / 255.0
 }
 
 -~> The darker half of some padded positions (by brightness): the middle of

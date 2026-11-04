@@ -92,7 +92,8 @@ function lineart_paper_level(luma, w, h, r) {
 -~> of the neighbourhood, in pixels.
 -~> Returns {"mask": padded grid of 0 and 1, "ink": the list of padded
 -~> positions that are 1 (in raster order), "ink_color": the mean color of
--~> the strong ink, "paper": the mean color of the rest}.
+-~> the strong ink, "paper": the mean color of the rest, "luma": the
+-~> brightness of every pixel, 0 to 1, row by row}.
 function lineart_mask(pixels, w, h, threshold, radius) {
   let luma = lineart_luma(pixels)
   let mean = lineart_paper_level(luma, w, h, radius)
@@ -149,7 +150,13 @@ function lineart_mask(pixels, w, h, threshold, radius) {
       }
     }
   }
-  {"mask": state, "ink": ink, "ink_color": lineart_mean_color(ink_sum, #000000), "paper": lineart_mean_color(paper, #ffffff)}
+  {
+    "mask": state,
+    "ink": ink,
+    "ink_color": lineart_mean_color(ink_sum, #000000),
+    "paper": lineart_mean_color(paper, #ffffff),
+    "luma": luma
+  }
 }
 
 -~> [r, g, b, count] summed over some padded positions.

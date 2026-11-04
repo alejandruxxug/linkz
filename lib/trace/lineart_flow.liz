@@ -1,0 +1,199 @@
+-~> lineart_flow: the orientation field (stage 4 of Tracing v2): which way
+-~> the picture "flows" around a point, and how strongly. It is the structure
+-~> tensor of the brightness: the brightness gradients over a square round
+-~> the point, summed as gx * gx, gx * gy and gy * gy. Its main direction is
+-~> across the edges, so the flow (along the strands of hair, along the
+-~> lines) is square to it; its coherence, 0 to 1, is how much one direction
+-~> wins over the other (1 for parallel strands, near 0 for a blob or
+-~> a flat area).
+-~>
+-~> The field is read only where it is needed (at junctions, at the gaps
+-~> between line ends, at the tips of fills), so it costs a few hundred
+-~> pixels per question instead of passes over the whole picture.
+-~>
+-~> Two uses, both scaled by the `flow` option (0 turns them off):
+-~>   lineart_flow_turn  at a junction, a way through that runs along the
+-~>                      flow is preferred to one across it (lineart_pair)
+-~>   lineart_bridges    two line ends facing each other across a gap of up
+-~>                      to 2 px, along the flow, are joined into one stroke
+
+use "lineart_graph"
+use "lineart_strokes"
+
+-~> The flow at the pixel (x, y) from the brightness `luma` (w by h, row by
+-~> row), over the square of half side r. Returns {"dir": a unit vector
+-~> along the flow (its sign means nothing), "coherence": 0 to 1}.
+function lineart_flow_at(luma, w, h, x, y, r) {
+  let jxx = 0.0
+  let jxy = 0.0
+  let jyy = 0.0
+  let x0 = math.max(1, x - r)
+  let x1 = math.min(w - 2, x + r)
+  let y0 = math.max(1, y - r)
+  let y1 = math.min(h - 2, y + r)
+  for (let yy = y0; yy <= y1; yy += 1) {
+    let row = yy * w
+    for (let xx = x0; xx <= x1; xx += 1) {
+      let i = row + xx
+      let gx = luma[i + 1] - luma[i - 1]
+      let gy = luma[i + w] - luma[i - w]
+      jxx += gx * gx
+      jxy += gx * gy
+      jyy += gy * gy
+    }
+  }
+  let sum = jxx + jyy
+  if (sum <= 0.000001) {
+    return {"dir": (1.0, 0.0), "coherence": 0.0}
+  }
+  let half = (jxx - jyy) / 2.0
+  let d = math.sqrt(half * half + jxy * jxy)
+  let across = 0.5 * math.atan2(2.0 * jxy, jxx - jyy)
+  {"dir": (-math.sin(across), math.cos(across)), "coherence": 2.0 * d / sum}
+}
+
+-~> How far, in degrees (0 to 90), the direction v is from the flow's line.
+function lineart_flow_off(v, flow) {
+  let l = math.sqrt(float(v.x * v.x + v.y * v.y))
+  if (l == 0) {
+    return 0.0
+  }
+  let c = math.abs(v.x * flow.dir.x + v.y * flow.dir.y) / l
+  math.acos(math.min(1.0, c)) * 180.0 / math.pi
+}
+
+-~> The cost of going through a junction from branch a to branch b (see
+-~> lineart_branch): the turn, plus how far the way through runs off the
+-~> flow, weighted by the flow's coherence and `weight` (the flow option).
+-~> `flow` is the field at the junction, or null.
+function lineart_flow_turn(turn, a, b, flow, weight) {
+  if (flow === null || weight <= 0) {
+    return turn
+  }
+  turn + weight * flow.coherence * lineart_flow_off(b.dir - a.dir, flow)
+}
+
+-~> The flow at a node of the centerline graph (its center is in padded
+-~> positions, one more than the picture's), or null when `weight` is 0.
+function lineart_node_flow(luma, w, h, node, r, weight) {
+  if (weight <= 0) {
+    return null
+  }
+  lineart_flow_at(luma, w, h, math.round(node.center.x) - 1, math.round(node.center.y) - 1, r)
+}
+
+-~> The gaps to bridge: pairs of line ends (nodes of kind "end", each the
+-~> end of one edge) whose ink (where `dist`, the distance transform, is
+-~> over 0) stops at most 2 px apart (the centerline stops short of the
+-~> ink's end, so the gap is measured from where the ink ends ahead of each,
+-~> in quarter-pixel steps), each pointing at
+-~> the other within `continuation` degrees and, where the picture flows
+-~> one way (coherence over 0.3, with `weight` over 0), the gap running
+-~> along the flow too. The nearest pairs go first; an end is bridged once.
+-~> Returns [[edge end, edge end]...] (edge * 2 + side, as lineart_pair).
+function lineart_bridges(graph, dist, luma, w, h, r, continuation, weight) {
+  let ends = []
+  for (let id = 0; id < len(graph.nodes); id += 1) {
+    let node = graph.nodes[id]
+    if (node.kind != "end") {
+      continue
+    }
+    let live = lineart_live_edges(graph, id)
+    if (len(live) != 1) {
+      continue
+    }
+    let e = graph.edges[live[0]]
+    let side = 0
+    let px = e.pixels
+    if (e.a != id) {
+      side = 1
+      px = list.reverse(px)
+    }
+    if (len(px) < 3) {
+      continue
+    }
+    let reach = math.max(4, math.round(node.half * 2 + 2))
+    let b = lineart_branch(node, px, live[0], side, w, reach)
+    let out = b.dir * -1.0
+    push(ends, {
+      "node": id,
+      "key": live[0] * 2 + side,
+      "edge": live[0],
+      "at": node.center,
+      "half": node.half,
+      "out": out,
+      "ahead": lineart_ink_ahead(dist, w, node.center, out, 2.0 * node.half + 3)
+    })
+  }
+  let pairs = []
+  for (let i = 0; i < len(ends); i += 1) {
+    let a = ends[i]
+    for (let j = i + 1; j < len(ends); j += 1) {
+      let b = ends[j]
+      if (a.edge == b.edge) {
+        continue
+      }
+      let reach = 2.25 + a.ahead + b.ahead
+      let dx = b.at.x - a.at.x
+      let dy = b.at.y - a.at.y
+      if (math.abs(dx) > reach || math.abs(dy) > reach) {
+        continue
+      }
+      let d = math.sqrt(float(dx * dx + dy * dy))
+      if (d > reach || d == 0) {
+        continue
+      }
+      let gap = b.at - a.at
+      if (lineart_angle(a.out, gap) > continuation || lineart_angle(b.out, gap * -1.0) > continuation) {
+        continue
+      }
+      if (weight > 0) {
+        let mid = (a.at + b.at) / 2.0
+        let flow = lineart_flow_at(luma, w, h, math.round(mid.x) - 1, math.round(mid.y) - 1, r)
+        if (flow.coherence > 0.3 && lineart_flow_off(gap, flow) > continuation) {
+          continue
+        }
+      }
+      push(pairs, [d, a.key, b.key])
+    }
+  }
+  pairs = list.sort(pairs, function(x, y) { x[0] < y[0] })
+  let used = {}
+  let out = []
+  for (let k = 0; k < len(pairs); k += 1) {
+    let p = pairs[k]
+    if (used[p[1]] || used[p[2]]) {
+      continue
+    }
+    used[p[1]] = true
+    used[p[2]] = true
+    push(out, [p[1], p[2]])
+  }
+  out
+}
+
+-~> How far the ink (`dist` over 0) goes on from p (padded) along the unit
+-~> vector `dir`, in quarter-pixel steps, up to `most` px.
+function lineart_ink_ahead(dist, w, p, dir, most) {
+  let w2 = w + 2
+  let d = 0.0
+  while (d < most) {
+    let q = p + dir * (d + 0.25)
+    if (dist[math.round(q.y) * w2 + math.round(q.x)] <= 0) {
+      break
+    }
+    d += 0.25
+  }
+  d
+}
+
+-~> The angle in degrees between two directions (0 to 180).
+function lineart_angle(u, v) {
+  let lu = math.sqrt(float(u.x * u.x + u.y * u.y))
+  let lv = math.sqrt(float(v.x * v.x + v.y * v.y))
+  if (lu == 0 || lv == 0) {
+    return 0.0
+  }
+  let c = (u.x * v.x + u.y * v.y) / (lu * lv)
+  math.acos(math.max(-1.0, math.min(1.0, c))) * 180.0 / math.pi
+}

@@ -1,22 +1,37 @@
-a tapered line, one spiky tip: strokes 1 tips {"spiky": 1, "blunt": 1, "joined": 0} junctions 0 errors [] brushes 1 close true canvas (80, 30)
-a line with a branch: the line goes straight on: strokes 2 tips {"spiky": 0, "blunt": 3, "joined": 1} junctions 1 errors [] brushes 2 close true canvas (60, 60)
-a symmetric Y: three strokes: strokes 3 tips {"spiky": 0, "blunt": 3, "joined": 3} junctions 1 errors [] brushes 3 close true canvas (60, 60)
-two strands crossing stay two strokes: strokes 2 tips {"spiky": 0, "blunt": 4, "joined": 0} junctions 1 errors [] brushes 2 close true canvas (60, 60)
-a ring is one closed stroke: strokes 1 tips {"spiky": 0, "blunt": 0, "joined": 0} junctions 0 errors [] brushes 1 close true canvas (60, 60)
-continuation 0: only a dead-straight way goes on: strokes 3 tips {"spiky": 0, "blunt": 4, "joined": 2} junctions 1 errors [] brushes 3 close true canvas (60, 60)
-a speck under line_min is dropped: strokes 0 tips {"spiky": 0, "blunt": 0, "joined": 0} junctions 0 errors [] brushes 0 close - canvas (30, 30)
-scale doubles the canvas: strokes 1 tips {"spiky": 0, "blunt": 2, "joined": 0} junctions 0 errors [] brushes 1 close - canvas (80, 40)
-a red disc in a black ring: fills 1 strokes 1 solid false errors [] paths 1 colors ["red"]
-two colors parted by a line: fills 2 strokes 2 solid false errors [] paths 2 colors ["blue", "light_yellow"]
-a solid dark disc is a fill, the thin line a stroke: fills 1 strokes 1 solid true errors [] paths 1 colors ["black"]
-fills false: lines only: fills 0 strokes 1 solid false errors [] paths 0 colors []
+a tapered line, one spiky tip: strokes 1 tips {"spiky": 1, "blunt": 1, "joined": 0} junctions 0 errors [] brushes 1 lines 0 close true canvas (80, 30)
+a line with a branch: the line goes straight on: strokes 2 tips {"spiky": 0, "blunt": 3, "joined": 1} junctions 1 errors [] brushes 0 lines 2 close true canvas (60, 60)
+a symmetric Y: three strokes: strokes 3 tips {"spiky": 0, "blunt": 3, "joined": 3} junctions 1 errors [] brushes 2 lines 1 close true canvas (60, 60)
+two strands crossing stay two strokes: strokes 2 tips {"spiky": 0, "blunt": 4, "joined": 0} junctions 1 errors [] brushes 1 lines 1 close true canvas (60, 60)
+a ring is one closed stroke: strokes 1 tips {"spiky": 0, "blunt": 0, "joined": 0} junctions 0 errors [] brushes 1 lines 0 close true canvas (60, 60)
+continuation 0: only a dead-straight way goes on: strokes 3 tips {"spiky": 0, "blunt": 4, "joined": 2} junctions 1 errors [] brushes 2 lines 1 close true canvas (60, 60)
+a speck under line_min is dropped: strokes 0 tips {"spiky": 0, "blunt": 0, "joined": 0} junctions 0 errors [] brushes 0 lines 0 close - canvas (30, 30)
+scale doubles the canvas: strokes 1 tips {"spiky": 0, "blunt": 2, "joined": 0} junctions 0 errors [] brushes 0 lines 1 close - canvas (80, 40)
+a red disc in a black ring: fills 1 strokes 1 solid false errors [] paths 0 primitives ["circle"] colors ["red"]
+two colors parted by a line: fills 2 strokes 6 solid false errors [] paths 1 primitives ["rect"] colors ["blue", "light_yellow"]
+a solid dark disc is a fill, the thin line a stroke: fills 1 strokes 1 solid true errors [] paths 0 primitives ["circle"] colors ["black"]
+fills false: lines only: fills 0 strokes 1 solid false errors [] paths 0 primitives [] colors []
 the fill grows under the ring: true | off the pixel grid: true
 no seam between the halves: true
 no seam under the ring: true
 layers: lines in front of fills: true
 header: -~> lzdraw 1 | let colors = {"paper":  | pens.traced = {"name": "traced" | layer lines
 photo by name is the same: true
-true trace: unknown option "refine" for line art (known: mode, line_threshold, line_min, continuation, radius, fills, colors, min_area, solid, detail, scale, max_side)
+true trace: unknown option "refine" for line art (known: mode, line_threshold, line_min, continuation, flow, corner, snap, radius, fills, colors, min_area, solid, detail, scale, max_side)
 true trace: line_threshold must be between 0 and 1
 true trace: colors must be from 2 to 64
 true trace: mode must be "photo" or "lineart", not vector
+true trace: flow must be between 0 and 1
+true trace: corner must be between 0 and 180 degrees
+true trace: snap must be 0 or more pixels
+an ellipse: ["ellipse"] primitives 1 errors [] tips/corners []
+an upright rectangle: ["rect"] primitives 1 errors [] tips/corners []
+a rotated rectangle: ["polygon"] primitives 1 errors [] tips/corners [4]
+a tuft of three spikes: ["path"] primitives 0 errors [] tips/corners [true, true, true]
+the ellipse fits: true true true
+snap 0 keeps a path: path 0
+a V: cut at its corner: strokes 2 bridged 0 ["line", "line"] close true errors []
+a gap of 2 px is bridged: strokes 1 bridged 1 ["line"] close true errors []
+a gap of 4 px is not: strokes 2 bridged 0 ["line", "line"] close true errors []
+a gap of 2 px on a curve is bridged: strokes 1 bridged 1 ["brush"] close true errors []
+two ends side by side are not bridged: strokes 2 bridged 0 ["line", "line"] close true errors []
+the V's pieces meet near its apex: true

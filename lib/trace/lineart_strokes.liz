@@ -8,12 +8,13 @@
 -~> "tips": ["spiky" or "blunt" at the start, at the end]}, in picture
 -~> pixels.
 -~>
--~> Hook for the orientation field (stage 4 of Tracing v2): lineart_turn is
--~> where a junction scores a way through; a flow direction would be blended
--~> into the branch directions there.
+-~> The orientation field (lineart_flow) steers the choice at a junction
+-~> through the `cost` lineart_pair is given; lineart_add_bridges adds the bridges
+-~> across small gaps to the pairs.
 
 use "../draw/geometry"
 use "lineart_graph"
+use "lineart_curves"
 
 -~> The direction a branch leaves a node by, as a unit vector: from the
 -~> first pixel outside the node's blob to one `reach` pixels further.
@@ -52,11 +53,13 @@ function lineart_turn(a, b) {
   math.acos(math.max(-1.0, math.min(1.0, c))) * 180.0 / math.pi
 }
 
--~> Pairs the branches at every junction: the straightest pair first, while
+-~> Pairs the branches at every junction: the cheapest pair first, while
 -~> the turn is at most `continuation`; a junction left with two branches
--~> always joins them. Returns the partner of each edge end, as a hash from
--~> edge * 2 + side to the other edge * 2 + side.
-function lineart_pair(graph, w, continuation) {
+-~> always joins them. `cost(turn, a, b, node)` scores a way through (the
+-~> turn itself, or the turn and the flow there); null is the turn. Returns
+-~> the partner of each edge end, as a hash from edge * 2 + side to the
+-~> other edge * 2 + side.
+function lineart_pair(graph, w, continuation, cost = null) {
   let partner = {}
   for (let id = 0; id < len(graph.nodes); id += 1) {
     let node = graph.nodes[id]
@@ -78,14 +81,19 @@ function lineart_pair(graph, w, continuation) {
     let pairs = []
     for (let i = 0; i < len(branches); i += 1) {
       for (let j = i + 1; j < len(branches); j += 1) {
-        push(pairs, [lineart_turn(branches[i], branches[j]), i, j])
+        let turn = lineart_turn(branches[i], branches[j])
+        let score = turn
+        if (cost !== null) {
+          score = cost(turn, branches[i], branches[j], node)
+        }
+        push(pairs, [score, i, j, turn])
       }
     }
     pairs = list.sort(pairs, function(x, y) { x[0] < y[0] })
     let used = {}
     for (let k = 0; k < len(pairs); k += 1) {
       let p = pairs[k]
-      if (used[p[1]] || used[p[2]] || (p[0] > continuation && len(branches) > 2)) {
+      if (used[p[1]] || used[p[2]] || (p[3] > continuation && len(branches) > 2)) {
         continue
       }
       used[p[1]] = true
@@ -97,6 +105,15 @@ function lineart_pair(graph, w, continuation) {
     }
   }
   partner
+}
+
+-~> Adds the bridges (pairs of edge ends, see lineart_bridges) to the
+-~> partners, so a stroke goes on across each gap. Changes `partner`.
+function lineart_add_bridges(partner, bridges) {
+  for (let i = 0; i < len(bridges); i += 1) {
+    partner[bridges[i][0]] = bridges[i][1]
+    partner[bridges[i][1]] = bridges[i][0]
+  }
 }
 
 -~> The edges joined into chains through the paired junctions. Each chain is
@@ -216,9 +233,13 @@ function lineart_smooth(values, r, closed, zero) {
 -~> best matches the ink of the reference drawings: the mask takes in half
 -~> the soft edge of a line), blunt tips given their full width back, then
 -~> simplified to the points where the line or its width bends (tolerance
--~> `tol` px, `wtol` px of width). `joined`
--~> says, for the start and the end, whether it ends on another line (at a
--~> junction).
+-~> `tol` px, `wtol` px of width). The centerline is also fitted with
+-~> Bezier curves ("curves", see lineart_fit_stroke) for when brush() takes
+-~> them; until then the simplified points are written, since brush() draws
+-~> its own smooth curve through them, and on the reference drawings they
+-~> keep closer to the ink than points sampled off the fit.
+-~> `joined` says, for the start and the end, whether it ends on another
+-~> line (at a junction, or at a corner where the stroke was cut).
 function lineart_stroke(chain, joined, dist, w, tol, wtol) {
   let w2 = w + 2
   let px = chain.pixels
@@ -253,7 +274,123 @@ function lineart_stroke(chain, joined, dist, w, tol, wtol) {
     push(points, pos[keep[i]])
     push(ws, widths[keep[i]])
   }
-  {"points": points, "widths": ws, "closed": closed, "tips": tips, "length": lineart_length(points)}
+  {
+    "points": points,
+    "widths": ws,
+    "closed": closed,
+    "tips": tips,
+    "length": lineart_length(points),
+    "curves": lineart_fit_stroke(pos, widths, closed, tol, wtol)
+  }
+}
+
+-~> The Bezier curves of a stroke's smoothed centerline `pos` (a closed one
+-~> repeats its first point at the end): the knots are the points where
+-~> the width bends by more than `wtol` px, the curves between them fitted
+-~> within `tol` px. Returns [{"curve": [p0, c1, c2, p3], "widths": [the
+-~> width at p0, at p3]}...].
+function lineart_fit_stroke(pos, widths, closed, tol, wtol) {
+  let n = len(pos)
+  if (n < 2) {
+    return []
+  }
+  let knots = lineart_simplify(pos, widths, 1000000.0, wtol)
+  let flags = []
+  for (let i = 0; i < len(knots); i += 1) {
+    push(flags, false)
+  }
+  let fit = null
+  if (closed) {
+    fit = lineart_fit(list.slice(pos, 0, n - 1), true, knots, flags, tol)
+  } else {
+    fit = lineart_fit(pos, false, knots, flags, tol)
+  }
+  let out = []
+  for (let i = 0; i < len(fit.curves); i += 1) {
+    let span = fit.spans[i]
+    push(out, {"curve": fit.curves[i], "widths": [widths[span[0]], widths[math.min(n - 1, span[1])]]})
+  }
+  out
+}
+
+-~> A chain cut at its corners (points where the centerline turns more than
+-~> `corner` degrees at 3 and 6 px, see lineart_corners), so each piece is
+-~> one stroke and the corner stays sharp where the pieces meet. A closed
+-~> chain with corners opens at its first one. The thinning rounds a corner
+-~> off, so the pieces meet where the lines along their sides cross, when
+-~> that is within 2 * half + 2 px of the corner (`dist`: the distance
+-~> transform). Returns the pieces as chains, each with "cut": [whether its
+-~> start is a corner, whether its end is] and "tip": [the point it starts
+-~> or ends at there (picture pixels), or null].
+function lineart_split(chain, w, corner, dist) {
+  let w2 = w + 2
+  let px = chain.pixels
+  let closed = chain.closed
+  if (closed && len(px) > 1 && px[0] == px[len(px) - 1]) {
+    px = list.slice(px, 0, len(px) - 1)
+  }
+  let whole = [{"pixels": chain.pixels, "closed": closed, "ends": chain.ends, "cut": [false, false], "tip": [null, null]}]
+  if (len(px) < 12) {
+    return whole
+  }
+  let pos = []
+  for (let i = 0; i < len(px); i += 1) {
+    push(pos, (px[i] % w2 + 0.0, px[i] // w2 + 0.0))
+  }
+  let at = lineart_corners(pos, closed, corner, 3.0, 6.0, 1.0)
+  if (len(at) == 0) {
+    return whole
+  }
+  let meet = {}
+  for (let k = 0; k < len(at); k += 1) {
+    let i = at[k]
+    let limit = 2.0 * dist[px[i]] + 2
+    let sharp = lineart_sharpen(pos, closed, [i], 3.0, 12.0, function(_p, _axis) { limit })
+    let x = sharp.points[sharp.corners[0]]
+    meet[px[i]] = (x.x - 0.5, x.y - 0.5)
+  }
+  if (closed) {
+    px = list.slice(px, at[0], len(px)) + list.slice(px, 0, at[0] + 1)
+    let first = at[0]
+    let shifted = []
+    for (let k = 0; k < len(at); k += 1) {
+      push(shifted, at[k] - first)
+    }
+    push(shifted, len(px) - 1)
+    at = shifted
+  } else {
+    at = [0] + at + [len(px) - 1]
+  }
+  let pieces = []
+  for (let k = 0; k < len(at) - 1; k += 1) {
+    if (at[k + 1] - at[k] < 1) {
+      continue
+    }
+    let start = -1
+    let end = -1
+    if (!closed && k == 0) {
+      start = chain.ends[0]
+    }
+    if (!closed && k == len(at) - 2) {
+      end = chain.ends[1]
+    }
+    let cut = [closed || k > 0, closed || k < len(at) - 2]
+    let tip = [null, null]
+    if (cut[0]) {
+      tip[0] = meet[px[at[k]]]
+    }
+    if (cut[1]) {
+      tip[1] = meet[px[at[k + 1]]]
+    }
+    push(pieces, {
+      "pixels": list.slice(px, at[k], at[k + 1] + 1),
+      "closed": false,
+      "ends": [start, end],
+      "cut": cut,
+      "tip": tip
+    })
+  }
+  pieces
 }
 
 -~> Whether one end of a stroke's width profile is a spiky tip (the width

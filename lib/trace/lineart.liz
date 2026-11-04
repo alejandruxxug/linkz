@@ -9,28 +9,34 @@
 -~>   4. lineart_graph     ends, junctions and the edges between them; spurs
 -~>                        pruned, near junctions joined
 -~>   5. lineart_pair, lineart_chains  edges joined through junctions where
--~>                        the line goes straight on
--~>   6. lineart_stroke    points and widths along each chain, tips spiky
--~>                        or blunt, simplified
--~>   7. lineart_code      one brush() per stroke, pen widths from the
--~>                        thinnest and thickest ink
+-~>                        the line goes straight on and along the flow (the
+-~>                        orientation field, lineart_flow), and across gaps
+-~>                        of up to 2 px between line ends facing each other
+-~>   6. lineart_split, lineart_stroke  chains cut at their corners; points
+-~>                        and widths along each piece, tips spiky or blunt,
+-~>                        fitted with Bezier curves (lineart_curves); a
+-~>                        straight one of even width snaps to a line
+-~>   7. lineart_code      one brush() (or line()) per stroke, pen widths from
+-~>                        the thinnest and thickest ink
 -~> and, for the fills (lineart_fills, lineart_outline), before the thinning:
 -~>   a. lineart_solid     ink wide all round (a pupil, dark trousers) leaves
 -~>                        the mask, to be a fill instead of a stroke
 -~>   b. lineart_regions   the colors away from the ink, reduced in Lab and
 -~>                        cut into regions grown under the lines
--~>   c. lineart_region_shapes  a sub-pixel outline per region, written in
--~>                        `layer fills`, before (so behind) `layer lines`
--~> Later stages of Tracing v2 hook in here: an orientation field (steers
--~> lineart_turn), corners, Bezier fitting and snapping to primitives (on
--~> the stroke points before lineart_code, and in lineart_outline_points
--~> for the fills).
+-~>   c. lineart_region_shapes  a sub-pixel outline per region, its corners
+-~>                        sharpened (spikes drawn out along the flow), fitted
+-~>                        with Bezier curves, snapped to a circle, ellipse,
+-~>                        rect or polygon when one fits within `snap`;
+-~>                        written in `layer fills`, before (so behind)
+-~>                        `layer lines`
 
 use "../draw/svg"
 use "lineart_mask"
 use "lineart_skeleton"
 use "lineart_graph"
 use "lineart_strokes"
+use "lineart_flow"
+use "lineart_snap"
 use "lineart_fills"
 use "lineart_outline"
 use "lineart_palette"
@@ -44,6 +50,15 @@ use "lineart_palette"
 -~>                   width) are dropped, so specks don't become strokes.
 -~>   continuation    the largest turn, in degrees, a line may make at a
 -~>                   junction and still go on as the same stroke.
+-~>   flow            how much the direction the picture flows in (hair
+-~>                   strands, parallel lines) steers a stroke through a
+-~>                   junction and across a gap, and draws out spikes; 0 is
+-~>                   off, 1 is strong.
+-~>   corner          the turn, in degrees, from which a point of a line or
+-~>                   an outline is a sharp corner (seen at two scales).
+-~>   snap            how far, in pixels, an outline or a stroke may be from
+-~>                   a circle, ellipse, rect, polygon or line to be written
+-~>                   as one; 0 never snaps.
 -~>   radius          the half side, in pixels, of the neighbourhood a pixel is
 -~>                   compared with; 0 picks it from the picture's size.
 -~>   fills           false to trace only the lines, on the paper color.
@@ -53,8 +68,8 @@ use "lineart_palette"
 -~>                   to their neighbours; 0 picks it from the picture's size.
 -~>   solid           ink at least this far (px) from the paper all round is
 -~>                   a solid fill, not a stroke; 0 picks it from the size.
--~>   detail          how far, in pixels, a fill outline may drift when it is
--~>                   simplified.
+-~>   detail          how far, in pixels, a fill outline may drift from the
+-~>                   Bezier curves fitted to it.
 -~>   scale           multiplies every coordinate, to make a bigger drawing.
 -~>   max_side        the picture is shrunk until its longer side is at most
 -~>                   this many pixels.
@@ -63,6 +78,9 @@ let lineart_options = {
   "line_threshold": 0.5,
   "line_min": 6,
   "continuation": 35,
+  "flow": 0.6,
+  "corner": 55,
+  "snap": 1.5,
   "radius": 0,
   "fills": true,
   "colors": 16,
@@ -90,12 +108,22 @@ function lineart_settings(options) {
   if (out.colors < 2 || out.colors > 64) {
     error("trace: colors must be from 2 to 64")
   }
+  if (!(out.flow >= 0 && out.flow <= 1)) {
+    error("trace: flow must be between 0 and 1")
+  }
+  if (!(out.corner > 0 && out.corner < 180)) {
+    error("trace: corner must be between 0 and 180 degrees")
+  }
+  if (!(out.snap >= 0)) {
+    error("trace: snap must be 0 or more pixels")
+  }
   out
 }
 
 -~> Traces line art: `size` is (w, h) and `pixels` a flat list of colors, row
 -~> by row. Returns {"code", "stats": {mode, strokes, points, tips, junctions,
--~> ink, ms, size, stages}}; `stages` has the milliseconds of each step.
+-~> ink, primitives, bridged, ms, size, stages}}; `stages` has the
+-~> milliseconds of each step.
 function lineart_pixels(size, pixels, options, name) {
   let opt = lineart_settings(options)
   let w = size.x
@@ -109,7 +137,18 @@ function lineart_pixels(size, pixels, options, name) {
   let t1 = time.ms()
   let dist = lineart_distance(m.mask, m.ink, w)
   let t2 = time.ms()
-  let fills = lineart_trace_fills(pixels, m, dist, w, h, opt)
+  let curve = {
+    "detail": opt.detail,
+    "corner": opt.corner,
+    "snap": opt.snap,
+    "flow": opt.flow,
+    "luma": m.luma,
+    "w": w,
+    "h": h,
+    "r": radius,
+    "half": 1.0
+  }
+  let fills = lineart_trace_fills(pixels, m, dist, w, h, opt, curve)
   if (fills.solid > 0) {
     dist = lineart_distance(m.mask, m.ink, w)
   }
@@ -120,15 +159,32 @@ function lineart_pixels(size, pixels, options, name) {
   let pruned = lineart_prune(graph, 3)
   let joined = lineart_merge_junctions(graph, dist, w)
   let t4 = time.ms()
-  let partner = lineart_pair(graph, w, opt.continuation)
+  let luma = m.luma
+  let weight = opt.flow
+  let cost = function(turn, a, b, node) {
+    lineart_flow_turn(turn, a, b, lineart_node_flow(luma, w, h, node, radius, weight), weight)
+  }
+  let partner = lineart_pair(graph, w, opt.continuation, cost)
+  let bridges = lineart_bridges(graph, dist, luma, w, h, radius, opt.continuation, weight)
+  lineart_add_bridges(partner, bridges)
   let chains = lineart_chains(graph, partner, w)
   let strokes = []
   for (let i = 0; i < len(chains); i += 1) {
-    let c = chains[i]
-    let ends = [lineart_is_junction(graph, c.ends[0]), lineart_is_junction(graph, c.ends[1])]
-    let s = lineart_stroke(c, ends, dist, w, 1.0, 0.75)
-    if (s.length + lineart_widest(s.widths) >= opt.line_min) {
-      push(strokes, s)
+    let pieces = lineart_split(chains[i], w, opt.corner, dist)
+    for (let k = 0; k < len(pieces); k += 1) {
+      let c = pieces[k]
+      let ends = [lineart_is_junction(graph, c.ends[0]) || c.cut[0], lineart_is_junction(graph, c.ends[1]) || c.cut[1]]
+      let s = lineart_stroke(c, ends, dist, w, 1.0, 0.75)
+      if (c.tip[0] !== null) {
+        s.points[0] = c.tip[0]
+      }
+      if (c.tip[1] !== null) {
+        s.points[len(s.points) - 1] = c.tip[1]
+      }
+      if (s.length + lineart_widest(s.widths) >= opt.line_min) {
+        s.prim = lineart_snap_stroke(s, opt.snap)
+        push(strokes, s)
+      }
     }
   }
   for (let i = 0; i < len(graph.nodes); i += 1) {
@@ -136,6 +192,7 @@ function lineart_pixels(size, pixels, options, name) {
     if (node.kind == "dot") {
       let s = lineart_stroke({"pixels": node.pixels, "closed": false}, [false, false], dist, w, 1.0, 0.75)
       if (1 + lineart_widest(s.widths) >= opt.line_min) {
+        s.prim = null
         push(strokes, s)
       }
     }
@@ -158,6 +215,8 @@ function lineart_pixels(size, pixels, options, name) {
       "colors": len(made.names),
       "solid": fills.solid,
       "points": made.points,
+      "primitives": made.primitives,
+      "bridged": len(bridges),
       "tips": made.tips,
       "junctions": junctions,
       "pruned": pruned,
@@ -182,18 +241,22 @@ function lineart_pixels(size, pixels, options, name) {
 
 -~> The fills of a picture whose ink is `m` (lineart_mask's result, with
 -~> `dist` its distance transform): solid ink taken out of m first, then
--~> the regions, and the shapes of each one to draw, biggest first.
--~> Returns {"shapes": [{"color": palette number, "outers", "holes"}...],
+-~> the regions, and the shapes of each one to draw, biggest first
+-~> (`curve`: the settings of lineart_outline_points).
+-~> Returns {"shapes": [{"color": palette number, "outers", "holes",
+-~> "prims"}...],
 -~> "colors", "lab", "background" (palette number or -1), "solid": solid
 -~> pixels taken, "outline_ms"}.
-function lineart_trace_fills(pixels, m, dist, w, h, opt) {
+function lineart_trace_fills(pixels, m, dist, w, h, opt, curve) {
   let none = {"shapes": [], "colors": [], "lab": [], "background": -1, "solid": 0, "outline_ms": 0}
   if (!opt.fills) {
     return none
   }
+  let half = lineart_line_half(m, dist, w)
+  curve.half = half
   let depth = opt.solid
   if (depth <= 0) {
-    depth = math.max(4.0, 4.0 * lineart_line_half(m, dist, w))
+    depth = math.max(4.0, 4.0 * half)
   }
   let min_area = opt.min_area
   if (min_area <= 0) {
@@ -206,7 +269,7 @@ function lineart_trace_fills(pixels, m, dist, w, h, opt) {
   let shapes = []
   for (let k = 0; k < len(order.order); k += 1) {
     let id = order.order[k]
-    let s = lineart_region_shapes(fill, order, id, w, h, opt.detail)
+    let s = lineart_region_shapes(fill, order, id, w, h, curve)
     if (len(s.outers) > 0) {
       s.color = fill.regions[id].color
       push(shapes, s)
@@ -260,9 +323,10 @@ function lineart_pen_range(strokes) {
 -~> name), the pen, the canvas, `layer lines` with one brush() per stroke,
 -~> then `layer fills` (lower, so behind the lines; left out when there is
 -~> none) with one path() per fill shape, the smallest first (in front).
--~> The canvas is the background's color. Returns {"code",
+-~> A stroke or a fill shape that snapped to a primitive is written as
+-~> that call. The canvas is the background's color. Returns {"code",
 -~> "points", "tips": {spiky, blunt, joined}, "pen_min", "pen_max",
--~> "fills", "names"}.
+-~> "fills", "primitives", "names"}.
 function lineart_code(source_name, w, h, m, strokes, fills, scale) {
   let range = lineart_pen_range(strokes)
   let lo = range[0] * scale
@@ -294,6 +358,7 @@ function lineart_code(source_name, w, h, m, strokes, fills, scale) {
   push(lines, "")
   let points = 0
   let count = 0
+  let prims = 0
   push(lines, "layer lines")
   let tips = {"spiky": 0, "blunt": 0, "joined": 0}
   for (let i = 0; i < len(strokes); i += 1) {
@@ -308,20 +373,33 @@ function lineart_code(source_name, w, h, m, strokes, fills, scale) {
       }
       push(ps, svg_num(p))
     }
-    points += len(pts)
     if (!s.closed) {
       tips[s.tips[0]] += 1
       tips[s.tips[1]] += 1
     }
-    push(lines, "  brush([" + text.join(pts, ", ") + "], [" + text.join(ps, ", ") + "], colors.ink, pens.traced)")
+    if (s.prim !== null) {
+      push(lines, "  " + lineart_prim_line(s.prim, "colors.ink", scale))
+      points += 2
+      prims += 1
+    } else {
+      points += len(pts)
+      push(lines, "  brush([" + text.join(pts, ", ") + "], [" + text.join(ps, ", ") + "], colors.ink, pens.traced)")
+    }
   }
   if (len(fills.shapes) > 0) {
     push(lines, "layer fills")
     for (let i = len(fills.shapes) - 1; i >= 0; i -= 1) {
       let s = fills.shapes[i]
       for (let k = 0; k < len(s.outers); k += 1) {
-        push(lines, "  " + lineart_fill_line(s.outers[k], s.holes[k], "colors." + name_of[s.color], scale))
-        points += len(s.outers[k])
+        let fill = "colors." + name_of[s.color]
+        if (s.prims[k] !== null) {
+          push(lines, "  " + lineart_prim_line(s.prims[k], fill, scale))
+          points += lineart_prim_points(s.prims[k])
+          prims += 1
+        } else {
+          push(lines, "  " + lineart_fill_line(s.outers[k], s.holes[k], fill, scale))
+          points += len(s.outers[k])
+        }
         count += 1
       }
     }
@@ -333,8 +411,42 @@ function lineart_code(source_name, w, h, m, strokes, fills, scale) {
     "pen_min": lo,
     "pen_max": hi,
     "fills": count,
+    "primitives": prims,
     "names": names
   }
+}
+
+-~> A primitive (see lineart_snap) as a call: circle, ellipse, rect, polygon
+-~> filled with `paint`, or line drawn with it.
+function lineart_prim_line(p, paint, scale) {
+  if (p.kind == "circle") {
+    return "circle(" + lineart_point_text(p.center, scale) + ", " + lineart_num(p.r * scale) + ", " + paint + ")"
+  }
+  if (p.kind == "ellipse") {
+    return "ellipse(" + lineart_point_text(p.center, scale) + ", " + lineart_point_text(p.radii, scale) + ", " + paint + ")"
+  }
+  if (p.kind == "rect") {
+    return "rect(" + lineart_point_text(p.pos, scale) + ", " + lineart_point_text(p.size, scale) + ", " + paint + ")"
+  }
+  if (p.kind == "polygon") {
+    return "polygon(" + lineart_points_text(p.points, scale) + ", " + paint + ")"
+  }
+  "line(" + lineart_point_text(p.a, scale) + ", " + lineart_point_text(p.b, scale) + ", " + paint + ", " +
+    lineart_num(math.max(0.1, p.width * scale)) + ")"
+}
+
+-~> How many numbers-as-points a primitive is written with (a polygon its
+-~> corners, the others 2).
+function lineart_prim_points(p) {
+  if (p.kind == "polygon") {
+    return len(p.points)
+  }
+  2
+}
+
+-~> A point as source text, one decimal: (1.5, 2).
+function lineart_point_text(p, scale) {
+  "(" + lineart_num(p.x * scale) + ", " + lineart_num(p.y * scale) + ")"
 }
 
 -~> ", N fills" for the header comment, or nothing without fills.
