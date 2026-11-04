@@ -4,6 +4,12 @@
 -~> mask and weak ones join only when they touch it (hysteresis), so faint
 -~> smudges far from a line stay out while the soft edge of a line stays in.
 -~>
+-~> A dark colored area (a maroon belt, navy trousers) is a fill, not ink,
+-~> however dark it is or near the paper: a colored pixel is ink only where
+-~> it is darker than the pixels right next to it, so the outline round a
+-~> band is ink and the band between its outlines is not. Gray pixels (black
+-~> ink) are judged as before.
+-~>
 -~> The grids here are padded like trace_pad: (w + 2) by (h + 2), with a
 -~> border of 0 all round, so a neighbour read never needs a bounds test.
 -~> The pixel (x, y) is at (y + 1) * (w + 2) + x + 1.
@@ -86,6 +92,44 @@ function lineart_paper_level(luma, w, h, r) {
   out
 }
 
+-~> How much lighter than a pixel the lighter ones of the 3 by 3 pixels round
+-~> it are, on average (0 when it is as light as its neighbours: the inside of
+-~> a band). A thin line, colored or not, has lighter pixels on both sides.
+function lineart_lighter_gap(luma, w, h, x, y) {
+  let x0 = math.max(0, x - 1)
+  let x1 = math.min(w - 1, x + 1)
+  let y0 = math.max(0, y - 1)
+  let y1 = math.min(h - 1, y + 1)
+  let sum = 0.0
+  let count = 0
+  for (let yy = y0; yy <= y1; yy += 1) {
+    for (let xx = x0; xx <= x1; xx += 1) {
+      sum = sum + luma[yy * w + xx]
+      count += 1
+    }
+  }
+  let light = 0.0
+  let lighter = 0
+  for (let yy = y0; yy <= y1; yy += 1) {
+    for (let xx = x0; xx <= x1; xx += 1) {
+      if (luma[yy * w + xx] * count >= sum - 0.000001) {
+        light = light + luma[yy * w + xx]
+        lighter += 1
+      }
+    }
+  }
+  light / lighter - luma[y * w + x]
+}
+
+-~> The least lighter_gap a colored pixel needs to be ink.
+let lineart_thin_gap = 0.06
+
+-~> Whether a color is gray (black ink, dark gray): the spread of its
+-~> channels is under about a tenth. A dark red belt or navy trousers are not.
+function lineart_is_neutral(c) {
+  math.max(c.r, c.g, c.b) - math.min(c.r, c.g, c.b) < 26
+}
+
 -~> The ink mask of a picture. `threshold` (0 to 1) is how much darker than
 -~> its surroundings a pixel must be to seed a line (0.5: half as bright);
 -~> half of it lets a pixel join a line it touches. `radius` is the half side
@@ -112,12 +156,20 @@ function lineart_mask(pixels, w, h, threshold, radius) {
       let l = luma[i]
       let gap = m - l
       let rel = gap / math.max(m, 0.05)
-      if ((rel >= threshold && gap >= 0.1) || l < dark) {
-        let p = (y + 1) * w2 + x + 1
+      let neutral = lineart_is_neutral(pixels[i])
+      let strong = (rel >= threshold && gap >= 0.1) || (l < dark && neutral)
+      if (!strong && !(rel >= weak && gap >= 0.05)) {
+        continue
+      }
+      if (!neutral && lineart_lighter_gap(luma, w, h, x, y) < lineart_thin_gap) {
+        continue
+      }
+      let p = (y + 1) * w2 + x + 1
+      if (strong) {
         state[p] = 1
         push(todo, p)
-      } elif (rel >= weak && gap >= 0.05) {
-        state[(y + 1) * w2 + x + 1] = 2
+      } else {
+        state[p] = 2
       }
     }
   }

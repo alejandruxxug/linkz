@@ -11,6 +11,7 @@ use "../../lib/app/drawing"
 use "../../lib/app/paint"
 use "../../lib/draw/geometry"
 use "../../lib/trace/trace"
+use "../../lib/trace/lineart_mask"
 
 -~> The distance from p to the segment a-b, and how far along it (0 to 1).
 function seg_dist(p, a, b) {
@@ -419,3 +420,49 @@ for (let k = 0; k < len(curved); k += 1) {
   }
 }
 puts("curved fill:", text.find(disc_code, "[\"c\", (") >= 0, items_seen == 4, c_cmds == 3)
+
+-~> A thin colored band crossing a fill, outlined in ink (a belt on trousers).
+-~> The band and the trousers are both dark (below the absolute dark limit)
+-~> but colored, so they are fills: only the outline of the band and the edge
+-~> of the trousers are ink, the band keeps its own color between its two
+-~> outlines, and the outlines are strokes along both edges of the band.
+let belt = cel(80, 50, function(p) {
+  let inside = p.x > 8 && p.x < 72 && p.y > 4 && p.y < 46
+  if (!inside) {
+    return #fafaf5
+  }
+  let edge = p.x < 10 || p.x > 70 || p.y < 6 || p.y > 44
+  if (edge || math.abs(p.y - 18) < 1 || math.abs(p.y - 32) < 1) {
+    return #0a0a0a
+  }
+  if (p.y > 18 && p.y < 32) { #6e1428 } else { #1e2346 }
+})
+let belt_mask = lineart_mask(belt.pixels, 80, 50, 0.5, 4)
+function belt_ink(x, y) {
+  belt_mask.mask[(y + 1) * 82 + x + 1] == 1
+}
+puts("band and trousers are not ink:", !belt_ink(40, 25), !belt_ink(40, 11), !belt_ink(40, 40))
+puts("the band's outline is ink:", belt_ink(40, 18), belt_ink(40, 32))
+let belt_code = trace_pixels(belt.size, belt.pixels, {"mode": "lineart"}, "belt").code
+let belt_run = drawing_run(belt_code)
+let top_edge = 0
+let bottom_edge = 0
+for (let k = 0; k < len(belt_run.shapes); k += 1) {
+  if (belt_run.shapes[k].kind != "brush" && belt_run.shapes[k].kind != "line") {
+    continue
+  }
+  let pts = stroke_points(belt_run.shapes[k])
+  let first = pts[0]
+  let last = pts[len(pts) - 1]
+  if (math.abs(first.y - 18) < 2 && math.abs(last.y - 18) < 2 && math.abs(last.x - first.x) > 30) {
+    top_edge += 1
+  }
+  if (math.abs(first.y - 32) < 2 && math.abs(last.y - 32) < 2 && math.abs(last.x - first.x) > 30) {
+    bottom_edge += 1
+  }
+}
+puts("a long stroke along each edge of the band:", top_edge >= 1, bottom_edge >= 1, "errors", belt_run.errors)
+let belt_px = img.pixels(paint_run(belt_code + "\nraster.paint(drawing, (0, 0))\n", belt.size))
+let band_c = belt_px[25 * 80 + 40]
+let trouser_c = belt_px[11 * 80 + 40]
+puts("the band is maroon, the trousers navy:", band_c.r > 80 && band_c.b < 70, trouser_c.b > trouser_c.r + 20)

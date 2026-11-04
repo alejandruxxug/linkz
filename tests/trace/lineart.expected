@@ -36,3 +36,7 @@ a gap of 2 px on a curve is bridged: strokes 1 bridged 1 ["brush"] close true er
 two ends side by side are not bridged: strokes 2 bridged 0 ["line", "line"] close true errors []
 the V's pieces meet near its apex: true
 curved fill: true true true
+band and trousers are not ink: true true true
+the band's outline is ink: true true
+a long stroke along each edge of the band: true true errors []
+the band is maroon, the trousers navy: true true

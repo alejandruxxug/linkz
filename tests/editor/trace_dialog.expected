@@ -6,7 +6,7 @@ true x
 wait false (64, 48) (240, 180)
 run
 idle true true
-4 strokes, 2 fills, 1 primitives
+6 strokes, 2 fills, 4 primitives
 line_threshold colors detail snap flow
 -- a slider: a click on its track sets it, a drag moves it, a trace follows
 0.45 wait

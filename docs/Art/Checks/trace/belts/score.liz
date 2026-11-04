@@ -1,0 +1,128 @@
+use "../../../../../lib/app/drawing"
+use "../../../../../lib/app/paint"
+use "../../../../../lib/app/host"
+use "../../../../../lib/draw/geometry"
+use "../../../../../lib/app/host_img"
+use "../../../../../lib/app/libs"
+use "../../../../../lib/trace/trace"
+use "../../../../../lib/trace/lineart_mask"
+
+-~> The ink mask as it was before B062 (dark below 0.2 luma, no chroma rule),
+-~> frozen here so the ink IoU compares the same thing before and after.
+function ref_mask(pixels, w, h, threshold, radius) {
+  let luma = lineart_luma(pixels)
+  let mean = lineart_paper_level(luma, w, h, radius)
+  let w2 = w + 2
+  let state = []
+  for (let i = 0; i < w2 * (h + 2); i += 1) {
+    push(state, 0)
+  }
+  let weak = threshold * 0.5
+  let dark = (1.0 - threshold) * 0.4
+  let todo = []
+  for (let y = 0; y < h; y += 1) {
+    for (let x = 0; x < w; x += 1) {
+      let i = y * w + x
+      let gap = mean[i] - luma[i]
+      let rel = gap / math.max(mean[i], 0.05)
+      if ((rel >= threshold && gap >= 0.1) || luma[i] < dark) {
+        state[(y + 1) * w2 + x + 1] = 1
+        push(todo, (y + 1) * w2 + x + 1)
+      } elif (rel >= weak && gap >= 0.05) {
+        state[(y + 1) * w2 + x + 1] = 2
+      }
+    }
+  }
+  let steps = [-1, 1, -w2, w2, -w2 - 1, -w2 + 1, w2 - 1, w2 + 1]
+  while (len(todo) > 0) {
+    let q = pop(todo)
+    for (let s = 0; s < 8; s += 1) {
+      if (state[q + steps[s]] == 2) {
+        state[q + steps[s]] = 1
+        push(todo, q + steps[s])
+      }
+    }
+  }
+  state
+}
+
+drawing_steps = 200000000
+let args = os.args()
+let path = args[0]
+let out = args[1]
+let himg = host_img()
+let loaded = himg.load(path, 1024)
+let size = loaded.size
+let t = trace_pixels(size, loaded.pixels, {"mode": "lineart"}, path)
+let run = drawing_run(t.code)
+let bg = run.canvas.background
+let buf = paint_run(t.code + "\nraster.paint(drawing, (0, 0))\n", size)
+let px = img.pixels(buf)
+let flat = []
+let err = 0.0
+for (let i = 0; i < len(px); i += 1) {
+  let c = px[i]
+  let a = c.a / 255.0
+  let r = math.round(c.r * a + bg.r * (1 - a))
+  let g = math.round(c.g * a + bg.g * (1 - a))
+  let b = math.round(c.b * a + bg.b * (1 - a))
+  push(flat, rgb(r, g, b))
+  let o = loaded.pixels[i]
+  err = err + (math.abs(r - o.r) + math.abs(g - o.g) + math.abs(b - o.b)) / 3.0
+}
+let radius = math.max(4, math.round(math.max(size.x, size.y) / 128.0))
+let m1 = {"mask": ref_mask(loaded.pixels, size.x, size.y, 0.5, radius)}
+let m2 = {"mask": ref_mask(flat, size.x, size.y, 0.5, radius)}
+let both = 0
+let either = 0
+for (let i = 0; i < len(m1.mask); i += 1) {
+  let a = m1.mask[i] == 1
+  let b = m2.mask[i] == 1
+  if (a && b) { both += 1 }
+  if (a || b) { either += 1 }
+}
+puts(path, "err", math.round(err / len(px) * 100) / 100.0, "iou", math.round(both * 1000.0 / math.max(either, 1)) / 1000.0, "strokes", t.stats.strokes, "fills", t.stats.fills)
+img.save(buf, out)
+if (len(args) > 2) {
+  let box = text.split(args[2], ",")
+  let x0 = text.number(box[0])
+  let y0 = text.number(box[1])
+  let cw = text.number(box[2]) - x0
+  let ch = text.number(box[3]) - y0
+  let k = 2
+  let crop_err = 0.0
+  for (let y = 0; y < ch; y += 1) {
+    for (let x = 0; x < cw; x += 1) {
+      let a = loaded.pixels[(y0 + y) * size.x + x0 + x]
+      let b = flat[(y0 + y) * size.x + x0 + x]
+      crop_err = crop_err + (math.abs(a.r - b.r) + math.abs(a.g - b.g) + math.abs(a.b - b.b)) / 3.0
+    }
+  }
+  puts("crop err", math.round(crop_err / (cw * ch) * 100) / 100.0)
+  let sheet = img.new(cw * k * 4, ch * k, #ffffff)
+  let cur = lineart_mask(loaded.pixels, size.x, size.y, 0.5, radius)
+  let mask_px = []
+  for (let y = 0; y < size.y; y += 1) {
+    for (let x = 0; x < size.x; x += 1) {
+      if (cur.mask[(y + 1) * (size.x + 2) + x + 1] == 1) { push(mask_px, #000000) } else { push(mask_px, #ffffff) }
+    }
+  }
+  let diff_px = []
+  for (let i = 0; i < len(flat); i += 1) {
+    let a = loaded.pixels[i]
+    let b = flat[i]
+    let d = 255 - math.min(255, math.round((math.abs(a.r - b.r) + math.abs(a.g - b.g) + math.abs(a.b - b.b)) / 3.0 * 2))
+    push(diff_px, rgb(d, d, d))
+  }
+  let parts = [loaded.pixels, mask_px, flat, diff_px]
+  for (let p = 0; p < 4; p += 1) {
+    let crop = img.new(cw, ch, #ffffff)
+    for (let y = 0; y < ch; y += 1) {
+      for (let x = 0; x < cw; x += 1) {
+        img.set(crop, x, y, parts[p][(y0 + y) * size.x + x0 + x])
+      }
+    }
+    img.blit(sheet, crop, (p * cw * k, 0), {"scale": k, "filter": "nearest"})
+  }
+  img.save(sheet, args[3])
+}
