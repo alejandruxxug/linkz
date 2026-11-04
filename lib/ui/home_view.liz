@@ -23,6 +23,7 @@ use "home_gfx"
 use "home_thumbs"
 use "i18n"
 use "new_drawing_view"
+use "tutorial_home"
 
 -~> files: every drawing, newest first. recent: the paths opened last.
 -~> focus: the search field is being typed in. cards: the cards of the last
@@ -90,6 +91,7 @@ function home_enter(args) {
   fb.target("ui")
   home_scan()
   home.menu = null
+  tut_home_close()
   home.dialog = null
   nd_close()
   home.hover = null
@@ -841,6 +843,7 @@ function home_paint() {
   if (home.menu != null) {
     home_paint_menu()
   }
+  tut_home_paint(home_top_layout().settings, w)
   if (home.dialog != null) {
     home_paint_dialog()
   }
@@ -874,6 +877,9 @@ function home_hit(x, y) {
       return {"kind": "field"}
     }
     return {"kind": "dialog"}
+  }
+  if (tut_home_hit(home_top_layout().settings, home.size.x, x, y)) {
+    return {"kind": "tuthelp"}
   }
   if (home.menu != null) {
     let i = home_menu_hit(x, y)
@@ -1009,12 +1015,20 @@ function home_cycle_language() {
 function home_click(hit, e) {
   home.status = ""
   home.focus = hit != null && hit.kind == "search"
+  if (hit == null || (hit.kind != "settings" && hit.kind != "tuthelp")) {
+    tut_home_close()
+  }
   if (hit == null) {
     home_dirty()
     return null
   }
   if (hit.kind == "lang") {
     home_cycle_language()
+  } elif (hit.kind == "settings") {
+    tut_home_toggle()
+  } elif (hit.kind == "tuthelp") {
+    tut_home_run()
+    return null
   } elif (hit.kind == "sort") {
     home.sort = home_next_sort(home.sort)
     home_dirty()
@@ -1071,6 +1085,7 @@ function home_event(e) {
     let hit = home_hit(e.pos.x, e.pos.y)
     let was = str(home.hover)
     home.hover = hit
+    tut_home_hover(hit != null && hit.kind == "tuthelp")
     if (home.menu != null) {
       let i = -1
       if (hit != null && hit.kind == "menu") {
@@ -1134,6 +1149,7 @@ function home_event(e) {
 function home_key(e) {
   let k = e.key
   if (k == "Escape") {
+    tut_home_close()
     if (home.menu != null) {
       home.menu = null
     } elif (home.query != "") {

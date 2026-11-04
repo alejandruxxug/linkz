@@ -1,0 +1,87 @@
+-~> tutorial_home: the Home screen's ⚙ menu, whose item "Show tutorial
+-~> again" makes the first-run tutorial show from its first step and opens
+-~> a new drawing in the editor, where it starts. The menu looks like a
+-~> card's menu (home_view.liz), under the ⚙ at the right of the top bar;
+-~> home_view calls these, one line each.
+
+use "app_screens"
+use "home_gfx"
+use "i18n"
+use "tutorial"
+
+-~> open: the menu shows. hover: the pointer is on its item.
+let TUTH = {"open": false, "hover": false}
+
+-~> The menu's box under the ⚙ button `g` ({"x", "y", "w", "h"}), kept
+-~> inside a window w wide.
+function tut_home_rect(g, w) {
+  let mw = home_text_w(t("tut.home")) + 28
+  {"x": math.max(2, math.min(g.x + g.w - mw, w - mw - 6)), "y": g.y + g.h + 2, "w": mw, "h": 20}
+}
+
+-~> Its one item's row.
+function tut_home_item(m) {
+  {"x": m.x + 1, "y": m.y + 3, "w": m.w - 2, "h": 14}
+}
+
+function tut_home_open() {
+  TUTH.open
+}
+
+-~> Opens the menu, or closes it when it is open (the ⚙ was clicked).
+function tut_home_toggle() {
+  TUTH.open = !TUTH.open
+  TUTH.hover = false
+}
+
+function tut_home_close() {
+  TUTH.open = false
+  TUTH.hover = false
+}
+
+-~> Whether a point is on the item of the open menu (g: the ⚙ button, w: the window's width).
+function tut_home_hit(g, w, x, y) {
+  if (!TUTH.open) {
+    return false
+  }
+  let r = tut_home_item(tut_home_rect(g, w))
+  x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h
+}
+
+-~> The pointer moved: true when the item's hover changed.
+function tut_home_hover(on) {
+  if (!TUTH.open || on == TUTH.hover) {
+    return false
+  }
+  TUTH.hover = on
+  true
+}
+
+-~> The item: the tutorial shows again, on a new drawing.
+function tut_home_run() {
+  tut_home_close()
+  tut_again()
+  show_screen("editor", {"new": true})
+}
+
+-~> Paints the open menu.
+function tut_home_paint(g, w) {
+  if (!TUTH.open) {
+    return null
+  }
+  let m = tut_home_rect(g, w)
+  home_rect(m.x + 2, m.y + 2, m.w, m.h, "void")
+  home_outline(m.x, m.y, m.w, m.h, "void")
+  home_rect(m.x + 1, m.y + 1, m.w - 2, m.h - 2, "row")
+  home_rect(m.x + 1, m.y + 1, m.w - 2, 1, "bevel")
+  let r = tut_home_item(m)
+  let tc = "text"
+  let ic = "mute"
+  if (TUTH.hover) {
+    home_rect(r.x, r.y, r.w, r.h, "moss")
+    tc = "bright"
+    ic = "lizard"
+  }
+  home_icon("open", m.x + 6, r.y + 3, ic)
+  home_text(t("tut.home"), m.x + 18, r.y, tc)
+}

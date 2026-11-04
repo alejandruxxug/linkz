@@ -18,7 +18,7 @@ function open_with(code, machine) {
   fs.mkdir(dir)
   fs.write(path, code)
   let win = window.open(editor_size.x, editor_size.y, "Linkz", hash.merge(editor_options(), {"headless": true}))
-  let ed = editor_load(win, path, {}, machine, modules, {"clip": rig_clip})
+  let ed = editor_load(win, path, rig_settings, machine, modules, {"clip": rig_clip})
   let opened = {"win": win, "ed": ed, "names": ed.names, "path": path}
   rig_frame(opened)
   opened

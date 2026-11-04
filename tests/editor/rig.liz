@@ -12,14 +12,19 @@ let rig_modules = editor_modules + ["ui/view_layout", "ui/view_input", "ui/view_
 let rig_clip_text = {"text": ""}
 let rig_clip = {"get": function() { rig_clip_text.text }, "set": function(s) { rig_clip_text.text = s }}
 
+-~> The settings a rig's editor starts with: the first-run tutorial already
+-~> seen, so it doesn't cover the editor (tests/editor/tutorial.liz passes {}).
+let rig_settings = {"tutorial_done": true}
+
 -~> The editor on the text code (written to a file in dir), in a headless
--~> window of size: {"win", "ed", "names", "path"}. modules: what rig.names has.
-function rig_open(dir, code, size = editor_size, modules = rig_modules) {
+-~> window of size: {"win", "ed", "names", "path"}. modules: what rig.names
+-~> has; settings: the editor's settings.
+function rig_open(dir, code, size = editor_size, modules = rig_modules, settings = rig_settings) {
   let path = fs.join(dir, "drawing.lzdraw")
   fs.mkdir(dir)
   fs.write(path, code)
   let win = window.open(size.x, size.y, "Linkz", hash.merge(editor_options(), {"headless": true}))
-  let ed = editor_load(win, path, {}, {}, modules, {"clip": rig_clip})
+  let ed = editor_load(win, path, settings, {}, modules, {"clip": rig_clip})
   let rig = {"win": win, "ed": ed, "names": ed.names, "path": path}
   rig_frame(rig)
   rig

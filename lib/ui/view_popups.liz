@@ -25,6 +25,7 @@ use "view_input"
 use "view_layout"
 use "shape_popups"
 use "color_route"
+use "tutorial_view"
 
 let tip_delay = 400
 
@@ -426,7 +427,7 @@ function popup_list() {
   if (V.dialog == null) {
     out = out + cmp_popup_rects()
   }
-  out
+  out + tut_popup_rects()
 }
 
 -~> A text that changes when the shapes of the popups change (not their contents).
@@ -442,7 +443,7 @@ function popup_content_key() {
   if (V.dialog != null) {
     k = k + V.hover
   }
-  k + ed.pen + cmp_content_key() + shape_popup_key() + pen_route_popup_key() + color_popup_key()
+  k + ed.pen + cmp_content_key() + shape_popup_key() + pen_route_popup_key() + color_popup_key() + tut_popup_key()
 }
 
 -~> Draws every open popup over the panels, into both buffers.
@@ -471,6 +472,9 @@ function popup_paint() {
   } elif (cmp.layout != null) {
     push(both, "cmp")
   }
+  if (len(tut_popup_rects()) > 0) {
+    push(both, "tut")
+  }
   for (let pass = 0; pass < 2; pass = pass + 1) {
     if (pass == 0) {
       g_ui()
@@ -498,6 +502,8 @@ function popup_paint() {
         color_popup_draw()
       } elif (k == "pen") {
         pen_route_popup_draw()
+      } elif (k == "tut") {
+        tut_popup_draw()
       } else {
         dialog_draw(V.dialog)
       }

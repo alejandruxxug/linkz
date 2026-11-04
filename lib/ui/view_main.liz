@@ -23,6 +23,8 @@ use "tool_route"
 use "pen_library"
 use "pen_route"
 use "color_route"
+use "tutorial"
+use "tutorial_view"
 
 -~> == Painting ==
 
@@ -110,6 +112,7 @@ function view_paint() {
   view_tick()
   view_prepare()
   budget_editor_note()
+  tut_frame()
   V.cl = view_canvas_layout()
   V.anchor_tip = tip_anchor(V.cl)
   let now = popup_list()
@@ -127,6 +130,7 @@ function view_paint() {
   let panels = view_panel_rects()
   let names = view_panel_names()
   let painted = false
+  let parts = []
   for (let i = 0; i < len(names); i = i + 1) {
     let name = names[i]
     let key = view_panel_key(name)
@@ -143,12 +147,14 @@ function view_paint() {
       }
       if (r[2] > 0 && r[3] > 0) {
         g_dirty(r[0], r[1], r[2], r[3])
+        push(parts, [name, r, part != null])
       }
       V.keys[name] = key
       painted = true
     }
   }
   V.force = {}
+  tut_overlay(parts)
   let pk = popup_content_key()
   if (painted || pk != V.popup_content) {
     V.popup_content = pk
@@ -290,6 +296,7 @@ function view_enter(args) {
   pen_lib_load()
   view_touch()
   view_force_all()
+  tut_enter()
 }
 
 -~> == The backdoor ==
@@ -371,6 +378,7 @@ function view_debug_state() {
     "pen": ed.pen,
     "pen_window": pen_route_debug(),
     "artist": art_debug(),
+    "tutorial": tut_debug(),
     "paint_ms": V.painted_ms,
     "paints": V.paints
   }
@@ -494,6 +502,8 @@ function view_commands() {
   }
   -~> PenSettings [key | close]: opens the pen settings (see pen_route.liz)
   cmds["PenSettings"] = function(args) { pen_route_command(args) }
+  -~> Tutorial [start | next | back | skip | again | state] (see tutorial.liz)
+  cmds["Tutorial"] = function(args) { tut_command(args) }
   cmds
 }
 

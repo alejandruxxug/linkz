@@ -23,6 +23,7 @@ use "color_state"
 use "color_target"
 use "color_vars"
 use "editor_undo"
+use "home_data"
 use "i18n"
 use "icons_color"
 use "view_canvas"
@@ -870,8 +871,11 @@ function cp_draw_wheel(lay) {
   }
   g_rect(o.x + 1, o.y + 1, 32, 11, CP.old)
   g_rect(o.x + 33, o.y + 1, 32, 11, c)
-  g_text(t("color.old"), o.x, o.y + 14, P.dim)
-  g_text(t("color.new"), o.x + 33, o.y + 14, P.dim)
+  -~> the column is `room` wide to the popover's edge: the labels and the
+  -~> hint (on two lines when it needs them) never go past it
+  let room = cp_w - (o.x - CP.x) - 2
+  g_text(home_fit(t("color.old"), 32 // 7), o.x, o.y + 14, P.dim)
+  g_text(home_fit(t("color.new"), (room - 33) // 7), o.x + 33, o.y + 14, P.dim)
   let hint = t("color.ring_hint")
   if (V.hover == "cp:triangle" || (CP.drag != null && CP.drag.part == "triangle")) {
     hint = t("color.triangle_hint")
@@ -879,7 +883,10 @@ function cp_draw_wheel(lay) {
   if (CP.dropper) {
     hint = t("color.dropper_hint")
   }
-  g_text(hint, o.x, o.y + 28, P.dim)
+  let lines = home_wrap(hint, room // 7)
+  for (let i = 0; i < math.min(2, len(lines)); i = i + 1) {
+    g_text(lines[i], o.x, o.y + 28 + i * 13, P.dim)
+  }
 }
 
 -~> A field: its text (or the text being typed, with the caret).

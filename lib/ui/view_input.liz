@@ -30,6 +30,7 @@ use "view_tools"
 use "shape_popups"
 use "tool_route"
 use "color_route"
+use "tutorial_view"
 
 -~> == What is under the pointer ==
 
@@ -46,6 +47,10 @@ function view_hover_at(x, y) {
       }
     }
     return ""
+  }
+  let tut_id = tut_hover_at(x, y)
+  if (tut_id != null) {
+    return tut_id
   }
   let pen_id = pen_route_hover(x, y)
   if (pen_id != null) {
@@ -825,6 +830,9 @@ function view_down(e) {
   if (V.dialog != null) {
     V.drag = {"kind": "press", "id": id}
     app.needs_paint = true
+    return null
+  }
+  if (tut_down(id)) {
     return null
   }
   if (pen_route_down(e)) {

@@ -418,5 +418,22 @@ lang_register("en", {
   "param.from": "from",
   "param.to": "to",
   "param.text": "text",
-  "param.radii": "radii"
+  "param.radii": "radii",
+
+  "tut.next": "Next",
+  "tut.skip": "Skip",
+  "tut.back": "Back",
+  "tut.done": "Let's draw!",
+  "tut.1.title": "Make your first shape",
+  "tut.1.body": "Pick a shape tool up here, then click the canvas. Every shape is one line of code.",
+  "tut.1.body_artist": "Pick a shape tool on the left, then click the canvas. Every shape is one line of code.",
+  "tut.2.title": "Change its color",
+  "tut.2.body": "Click a color in the palette, or the fill swatch below. The code changes as you pick.",
+  "tut.2.body_artist": "Click a color in the palette, or the fill swatch above. The code changes as you pick.",
+  "tut.3.title": "Draw your first brush stroke",
+  "tut.3.body": "Pick the brush and drag on the canvas. Press harder for a thicker line.",
+  "tut.4.title": "Peek at the code you made",
+  "tut.4.body": "Every shape you made is a line here. Change the code and the drawing follows.",
+  "tut.4.body_artist": "Every shape you made is a line of this code. Change the code and the drawing follows.",
+  "tut.home": "Show tutorial again"
 })

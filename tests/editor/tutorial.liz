@@ -1,0 +1,275 @@
+-~> The first-run tutorial in a headless editor: it shows on the first
+-~> open, each step rings its live targets and waits for the real action
+-~> (a shape, a new color, a brush row) or Next; Back and Skip; Let's draw!
+-~> and Skip remember it in settings.liz; it resumes where it was; Home's
+-~> ⚙ menu shows it again. The spotlight dims what isn't a target, step 3
+-~> dots a stroke to trace, and the coach-mark stays in the window and
+-~> off the targets, in coder and artist mode, in English and Spanish.
+-~> Last, the color popover's right column fits its edge in Spanish.
+
+use "../../lib/app/editor"
+use "../../lib/app/settings"
+use "rig"
+
+let code = "-~> lzdraw 1
+let colors = {\"sky\": #f2a65a, \"sea\": #2d6a8f, \"sun\": #fff3c4}
+canvas = {\"size\": (480, 320), \"background\": #ffffff}
+"
+
+let modules = rig_modules + ["ui/view_panels", "ui/view_canvas", "ui/view_popups", "ui/i18n", "ui/mode_state", "ui/artist_route",
+  "ui/artist_layout", "ui/palette_view", "ui/color_state", "ui/color_popover", "ui/color_route", "ui/home_view", "ui/app_screens", "ui/tutorial",
+  "ui/tutorial_view", "ui/tutorial_home"]
+let dir = fs.join(fs.home(), "tutorial-test")
+let rig = rig_open(dir, code, editor_size, modules, {})
+let n = rig.names
+let cmds = rig.ed.app.debug_commands
+let none = {"shift": false, "alt": false, "cmd": false, "ctrl": false}
+
+function click(p) {
+  rig_frame(rig, [{"type": "down", "pos": p, "mods": none}, {"type": "up", "pos": p, "mods": none}])
+}
+
+function drag(points) {
+  rig_frame(rig, [{"type": "down", "pos": points[0], "mods": none}])
+  for (let i = 1; i < len(points); i += 1) {
+    rig_frame(rig, [{"type": "move", "pos": points[i], "mods": none}])
+  }
+  rig_frame(rig, [{"type": "up", "pos": points[len(points) - 1], "mods": none}])
+}
+
+function key(k) {
+  rig_frame(rig, [{"type": "key", "key": k, "mods": none}])
+}
+
+function mid(r) {
+  (r[0] + r[2] // 2, r[1] + r[3] // 2)
+}
+
+-~> The tutorial as one line: step, where the box is, its targets.
+function state() {
+  let s = n.tut_debug()
+  if (!s.on) {
+    return "off, done " + str(s.done)
+  }
+  "step " + str(s.step) + " box " + str(s.box) + " " + str(s.place) + " targets " + str(s.targets)
+}
+
+-~> A button of the coach-mark by its id, as [x, y, w, h].
+function button(id) {
+  let bs = n.TUT.lay.buttons
+  for (let i = 0; i < len(bs); i += 1) {
+    if (bs[i].id == id) {
+      return [bs[i].x, bs[i].y, bs[i].w, bs[i].h]
+    }
+  }
+  null
+}
+
+-~> The labels of the coach-mark's buttons, right to left.
+function labels() {
+  let out = []
+  let bs = n.TUT.lay.buttons
+  for (let i = 0; i < len(bs); i += 1) {
+    push(out, bs[i].label)
+  }
+  out
+}
+
+-~> The color of the screen at a UI point (its top-left window pixel).
+function pixel(p) {
+  let full = window.screenshot(rig.win, {"full": true})
+  str(img.get(full, math.round(p.x * 2), math.round(p.y * 2)))
+}
+
+function settings_text() {
+  let lines = text.split(fs.read(n.settings_path()), "\n")
+  let out = []
+  for (let i = 0; i < len(lines); i += 1) {
+    if (text.starts(lines[i], "let tutorial")) {
+      push(out, lines[i])
+    }
+  }
+  text.join(out, " · ")
+}
+
+-~> The swatch of the selected shape's fill field (a click opens the popover).
+function fill_swatch() {
+  let boxes = n.view_props_cached().boxes
+  for (let i = 0; i < len(boxes); i += 1) {
+    if (boxes[i].kind == "color") {
+      return (boxes[i].x + 8, boxes[i].y + 8)
+    }
+  }
+  null
+}
+
+-~> Whether the coach-mark is inside the window and off every target (on
+-~> step 3 it may cover the canvas, but not the stroke to trace).
+function placed_well() {
+  let lay = n.TUT.lay
+  let inside = lay.x >= 0 && lay.y >= 0 && lay.x + lay.w <= n.V.w && lay.y + lay.h <= n.V.h
+  if (n.tut_clear_of([lay.x, lay.y, lay.w, lay.h], lay.targets)) {
+    return inside
+  }
+  if (n.TUT.step != 3) {
+    return false
+  }
+  let ghost = n.tut_ghost_dots(n.view_canvas_layout())
+  for (let i = 0; i < len(ghost); i += 1) {
+    let d = ghost[i] * 0.5
+    if (n.view_in(d.x, d.y, lay.x, lay.y, lay.w, lay.h)) {
+      return false
+    }
+  }
+  inside
+}
+
+puts("-- the first open shows step 1: the tool strip, Skip and Next")
+puts(state())
+puts(n.TUT.lay.title, n.TUT.lay.body)
+puts(labels(), n.view_hover_at(mid(button("next")).x, mid(button("next")).y), n.view_hover_at(n.TUT.lay.x + 30, n.TUT.lay.y + 30))
+puts(placed_well())
+
+puts("-- the spotlight: the rest under 62% void, the target lit and ringed amber")
+let tools = n.TUT.lay.targets[0]
+puts(pixel((300, 352)), pixel((tools[0] + 1, tools[1] + 5)), pixel((tools[0] - 1, tools[1] + 5)), pixel((tools[0] + tools[2] + 4, 8)))
+
+puts("-- a click on the coach-mark stays there; the real action moves on")
+click((n.TUT.lay.x + 30, n.TUT.lay.y + 30))
+puts(n.TUT.step, len(n.ed.shapes))
+click(mid(n.view_hit_rect("tool:circle")))
+puts(state())
+puts(labels(), placed_well())
+
+puts("-- Back and Next")
+click(mid(button("back")))
+puts(n.TUT.step)
+click(mid(button("next")))
+puts(n.TUT.step, len(n.ed.shapes))
+
+puts("-- step 2: the coach-mark hides while the fill's popover is open; a new color moves on")
+click(fill_swatch())
+puts(n.color_popup_open(), n.TUT.lay.shown, n.tut_popup_rects())
+let cells = n.cp_layout().cells
+click((cells[0].x + 10, cells[0].y + 5))
+key("Escape")
+puts(n.color_popup_open(), n.ed_model().lines[n.ed_model().line - 1])
+puts(state())
+
+puts("-- step 3: the brush and the canvas, a dotted stroke to trace")
+let dots = n.tut_ghost_dots(n.V.cl)
+puts(len(dots) > 20, pixel(dots[len(dots) // 2] * 0.5), placed_well())
+click(mid(n.view_hit_rect("tool:brush")))
+key("Escape")
+let cl = n.view_canvas_layout()
+let p0 = n.view_to_window(cl, (80, 250)) * 0.5
+let stroke = [p0]
+for (let i = 1; i <= 12; i += 1) {
+  push(stroke, p0 + (i * 8, -(i % 3) * 4))
+}
+drag(stroke)
+puts(text.slice(text.trim(n.ed_model().lines[n.ed_model().line - 1]), 0, 6))
+puts(state())
+
+puts("-- step 4: the rows made, the lizard, Let's draw!")
+puts(labels(), n.TUT.lay.lizard != null, placed_well())
+puts(pixel(dots[len(dots) // 2] * 0.5) != "#4fc46a")
+click(mid(button("next")))
+puts(state(), settings_text())
+
+puts("-- it doesn't show again; Skip ends it too")
+n.view_enter(null)
+rig_frame(rig)
+puts(state())
+cmds.Tutorial(["start"])
+rig_frame(rig)
+click(mid(button("skip")))
+puts(state(), settings_text())
+
+puts("-- it resumes where it was: leaving the editor, and in a new start")
+cmds.Tutorial(["again"])
+puts(settings_text())
+n.view_enter(null)
+rig_frame(rig)
+cmds.Tutorial(["next"])
+cmds.Tutorial(["next"])
+rig_frame(rig)
+n.show_screen("home", null)
+n.show_screen("editor", null)
+rig_frame(rig)
+puts(n.TUT.step, settings_text())
+let again = rig_open(fs.join(dir, "again"), code, editor_size, modules, settings_load_file(n.settings_path()))
+puts(again.names.TUT.on, again.names.TUT.step)
+
+puts("-- Spanish: the words of the approved frame")
+cmds.Tutorial(["start"])
+cmds.Language(["es"])
+rig_frame(rig)
+puts(n.TUT.lay.title, n.TUT.lay.body, labels())
+cmds.Tutorial(["next"])
+rig_frame(rig)
+puts(labels(), n.TUT.lay.body)
+cmds.Tutorial(["next"])
+cmds.Tutorial(["next"])
+rig_frame(rig)
+puts(labels())
+cmds.Language(["en"])
+
+puts("-- artist mode: the tool column, the palette and fill, the brush, the code drawer")
+n.art_set_mode(true)
+cmds.Tutorial(["start"])
+rig_frame(rig)
+for (let s = 1; s <= 4; s += 1) {
+  puts(state(), placed_well())
+  if (s < 4) {
+    cmds.Tutorial(["next"])
+    rig_frame(rig)
+  }
+}
+puts(n.mode_drawer(), n.TUT.lay.body)
+click(mid(button("next")))
+puts(state(), n.mode_drawer())
+
+puts("-- the smallest window: the coach-mark moves to stay in it")
+cmds.Tutorial(["start"])
+rig_frame(rig, [{"type": "resize", "size": (320, 210)}])
+for (let s = 1; s <= 4; s += 1) {
+  let lay = n.TUT.lay
+  puts(n.TUT.step, lay.place, lay.x >= 0 && lay.y >= 0 && lay.x + lay.w <= n.V.w && lay.y + lay.h <= n.V.h)
+  cmds.Tutorial(["next"])
+  rig_frame(rig)
+}
+puts(state())
+n.art_set_mode(false)
+rig_frame(rig, [{"type": "resize", "size": editor_size}])
+
+puts("-- Home's ⚙ menu: Show tutorial again")
+n.show_screen("home", null)
+rig_frame(rig)
+let gear = n.home_top_layout().settings
+click(mid([gear.x, gear.y, gear.w, gear.h]))
+let item = n.tut_home_item(n.tut_home_rect(gear, n.home.size.x))
+puts(n.tut_home_open(), n.home_hit(item.x + 4, item.y + 4))
+click((item.x + 4, item.y + 4))
+puts(n.screen_state.current, state())
+puts(rig.ed.error)
+
+puts("-- the color popover's right column stays inside it in Spanish")
+cmds.Tutorial(["skip"])
+cmds.Language(["es"])
+cmds.SetCode(["canvas = {\"size\": (480, 320), \"background\": #ffffff}\ncircle((240, 160), 40, #3fa34d)\n"])
+cmds.SelectRow([2])
+rig_frame(rig)
+click(fill_swatch())
+puts(n.color_popup_open())
+let shot = window.screenshot(rig.win, {"full": true})
+let right = n.CP.x + n.cp_w
+let spilled = 0
+for (let x = right; x < right + 24; x += 1) {
+  for (let y = n.CP.y; y < n.CP.y + n.CP.h; y += 1) {
+    if (str(img.get(shot, x * 2, y * 2)) == "#5f685b") {
+      spilled += 1
+    }
+  }
+}
+puts(spilled)

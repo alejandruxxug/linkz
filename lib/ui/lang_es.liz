@@ -363,7 +363,7 @@ lang_register("es", {
   "color.variables": "VARIABLES",
   "color.no_vars": "ninguna aún",
   "color.recent": "RECIENTES",
-  "color.old": "antes",
+  "color.old": "era",
   "color.new": "ahora",
   "color.ring_hint": "anillo: tono",
   "color.triangle_hint": "triángulo: s · v",
@@ -418,5 +418,22 @@ lang_register("es", {
   "param.from": "desde",
   "param.to": "hasta",
   "param.text": "texto",
-  "param.radii": "radios"
+  "param.radii": "radios",
+
+  "tut.next": "Siguiente",
+  "tut.skip": "Saltar",
+  "tut.back": "Atrás",
+  "tut.done": "¡A dibujar!",
+  "tut.1.title": "Crea tu primera forma",
+  "tut.1.body": "Elige una forma aquí arriba y haz clic en el lienzo. Cada forma es una línea de código.",
+  "tut.1.body_artist": "Elige una forma a la izquierda y haz clic en el lienzo. Cada forma es una línea de código.",
+  "tut.2.title": "Cambia su color",
+  "tut.2.body": "Haz clic en un color de la paleta, o en la muestra de relleno de abajo. El código cambia al elegir.",
+  "tut.2.body_artist": "Haz clic en un color de la paleta, o en la muestra de relleno de arriba. El código cambia al elegir.",
+  "tut.3.title": "Dibuja tu primer trazo",
+  "tut.3.body": "Elige el pincel y arrastra sobre el lienzo. Presiona más fuerte para una línea más gruesa.",
+  "tut.4.title": "Mira el código que hiciste",
+  "tut.4.body": "Cada forma que hiciste es una línea aquí. Cambia el código y el dibujo lo sigue.",
+  "tut.4.body_artist": "Cada forma que hiciste es una línea de este código. Cambia el código y el dibujo lo sigue.",
+  "tut.home": "Ver el tutorial otra vez"
 })

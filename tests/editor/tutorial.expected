@@ -1,0 +1,57 @@
+-- the first open shows step 1: the tool strip, Skip and Next
+step 1 box [6, 27, 250, 95] below targets [[3, 1, 191, 14]]
+["Make your first shape"] ["Pick a shape tool up here, then", "click the canvas. Every shape is", "one line of code."]
+["Next", "Skip"] tut:next tut:box
+true
+-- the spotlight: the rest under 62% void, the target lit and ringed amber
+#111210 #434a40 #f2b33d #111210
+-- a click on the coach-mark stays there; the real action moves on
+1 0
+step 2 box [6, 220, 250, 95] above targets [[498, 30, 14, 314], [2, 324, 107, 18]]
+["Next", "Skip", "Back"] true
+-- Back and Next
+1
+2 1
+-- step 2: the coach-mark hides while the fill's popover is open; a new color moves on
+true false []
+false circle((240, 160), 40, colors.sky)
+step 3 box [27, 27, 250, 95] below targets [[131, 1, 14, 14], [280, 120, 194, 134]]
+-- step 3: the brush and the canvas, a dotted stroke to trace
+true #4fc46a true
+brush(
+step 4 box [70, 111, 250, 95] below targets [[0, 45, 255, 36]]
+-- step 4: the rows made, the lizard, Let's draw!
+["Let's draw!", "Back"] true true
+true
+off, done true let tutorial_step = 1 · let tutorial_done = true
+-- it doesn't show again; Skip ends it too
+off, done true
+off, done true let tutorial_step = 1 · let tutorial_done = true
+-- it resumes where it was: leaving the editor, and in a new start
+let tutorial_step = 1 · let tutorial_done = false
+3 let tutorial_step = 3 · let tutorial_done = false
+true 3
+-- Spanish: the words of the approved frame
+["Crea tu primera forma"] ["Elige una forma aquí arriba y", "haz clic en el lienzo. Cada", "forma es una línea de código."] ["Siguiente", "Saltar"]
+["Siguiente", "Saltar", "Atrás"] ["Haz clic en un color de la", "paleta, o en la muestra de", "relleno de abajo. El código", "cambia al elegir."]
+["¡A dibujar!", "Atrás"]
+-- artist mode: the tool column, the palette and fill, the brush, the code drawer
+step 1 box [26, 49, 250, 95] right targets [[3, 53, 14, 176]] true
+step 2 box [109, 60, 250, 95] below targets [[362, 50, 150, 95], [176, 32, 71, 16]] true
+step 3 box [26, 52, 250, 95] right targets [[3, 181, 14, 14], [63, 110, 254, 174]] true
+step 4 box [70, 143, 250, 95] above targets [[0, 247, 359, 36]] true
+true ["Every shape you made is a line", "of this code. Change the code", "and the drawing follows."]
+off, done true false
+-- the smallest window: the coach-mark moves to stay in it
+1 right true
+2 over true
+3 right true
+4 above true
+off, done true
+-- Home's ⚙ menu: Show tutorial again
+true {"kind": "tuthelp"}
+editor step 1 box [6, 27, 250, 95] below targets [[3, 1, 191, 14]]
+
+-- the color popover's right column stays inside it in Spanish
+true
+0

@@ -1,0 +1,522 @@
+-~> tutorial_view: how the tutorial looks (style guide "Spotlight" and
+-~> "Coach-mark", R002 10–14). Everything but the step's targets goes under
+-~> `void` at 62%, each target is ringed 1 px `amber`, and the coach-mark
+-~> (a tooltip box 250 wide with a 2 px `lizard` bar, the title, the body,
+-~> step dots, Back, Skip and a primary Next, and a 5-step tail toward the
+-~> target) sits beside the target, inside the window. Step 3 adds a
+-~> dotted stroke on the drawing to trace, step 4 the lizard celebrating.
+-~>
+-~> The panels are painted only when they change, so the dim goes over
+-~> exactly what was painted in a frame (tut_overlay, after the panels);
+-~> when the targets move every panel is painted again (tutorial.liz).
+-~> The coach-mark is a popup: it is drawn last, over everything, and
+-~> hides while another popup (a color popover, the pen picker) is open.
+
+use "app"
+use "color_route"
+use "editor_state"
+use "home_art"
+use "home_data"
+use "i18n"
+use "pen_route"
+use "shape_popups"
+use "tutorial"
+use "view_gfx"
+use "view_layout"
+
+let tut_w = 250
+let tut_dim = rgba(11, 12, 11, 158)
+
+-~> The dotted stroke of step 3, as fractions of the canvas.
+let tut_ghost = [(0.146, 0.78), (0.31, 0.63), (0.49, 0.7), (0.71, 0.52), (0.84, 0.62)]
+
+-~> The sparkles around the lizard: [dx, dy, color] from the lizard's corner.
+let tut_sparkles = [[-11, 0, "amber"], [-23, 12, "peach"], [99, -4, "lizard"], [111, 16, "sky"]]
+
+-~> == Where it goes ==
+
+-~> Whether the coach-mark shows now: not while a dialog or a popup has the
+-~> user's attention (the spotlight stays).
+function tut_box_shown() {
+  V.dialog == null && !V.picker && !color_popup_open() && !shape_popup_open() && !pen_route_popup_open()
+}
+
+-~> A rectangle grown by d on every side.
+function tut_grow(r, d) {
+  [r[0] - d, r[1] - d, r[2] + 2 * d, r[3] + 2 * d]
+}
+
+-~> Whether a box [x, y, w, h] stays off every target (with a margin).
+function tut_clear_of(b, targets) {
+  for (let i = 0; i < len(targets); i += 1) {
+    if (tut_meet(b, tut_grow(targets[i], 3)) != null) {
+      return false
+    }
+  }
+  true
+}
+
+-~> The box's x for a row at y, h high: near the anchor, inside the
+-~> window, and moved left of a target it would cover when it can be.
+function tut_place_x(x, y, w, h, targets) {
+  x = math.max(2, math.min(x, V.w - w - 4))
+  for (let i = 0; i < len(targets); i += 1) {
+    let t = tut_grow(targets[i], 3)
+    if (tut_meet([x, y, w, h], t) != null && t[0] - w >= 2) {
+      x = t[0] - w
+    }
+  }
+  x
+}
+
+-~> Where the box goes for an anchor [x, y, w, h] among the targets:
+-~> {"x", "y", "place"}, place being where the box is from the anchor:
+-~> right (an anchor in the tool column), below, above, or "over" when
+-~> there is no room around it that leaves the targets uncovered.
+function tut_place(a, w, h, step, targets) {
+  let gap = 12
+  let dx = -8
+  if (step == tut_last_step) {
+    gap = 30
+    dx = 70
+  }
+  if (a[0] + a[2] <= 24) {
+    -~> beside the column; at its top when that would cover a target (the
+    -~> canvas: what is drawn to trace is in its lower half)
+    let x = a[0] + a[2] + 9
+    let y = math.max(32, math.min(a[1] - 4, V.h - h - 18))
+    if (!tut_clear_of([x, y, w, h], targets)) {
+      y = 52
+    }
+    return {"x": x, "y": y, "place": "right"}
+  }
+  let tries = [["below", a[1] + a[3] + gap], ["above", a[1] - 9 - h]]
+  for (let i = 0; i < len(tries); i += 1) {
+    let y = tries[i][1]
+    if (y >= 18 && y + h + 2 <= V.h - 16) {
+      let x = tut_place_x(math.max(6, a[0] + dx), y, w, h, targets)
+      if (tut_clear_of([x, y, w, h], targets)) {
+        return {"x": x, "y": y, "place": tries[i][0]}
+      }
+    }
+  }
+  let y = math.max(18, V.h - 18 - h)
+  {"x": tut_place_x(math.max(6, a[0] + dx), y, w, h, targets), "y": y, "place": "over"}
+}
+
+-~> The buttons along the footer, right to left: Next (Let's draw! on the
+-~> last step), Skip (not on the last), Back (from the second, when it fits).
+function tut_buttons(x, y, w, step) {
+  let out = []
+  let label = t("tut.next")
+  if (step == tut_last_step) {
+    label = t("tut.done")
+  }
+  let nw = g_text_w(label) + 14
+  let nx = x + w - 9 - nw
+  push(out, {"id": "next", "x": nx, "y": y, "w": nw, "h": 15, "label": label})
+  let left = nx - 11
+  if (step < tut_last_step) {
+    let s = t("tut.skip")
+    let sx = left - g_text_w(s)
+    push(out, {"id": "skip", "x": sx - 2, "y": y, "w": g_text_w(s) + 4, "h": 15, "label": s})
+    left = sx - 11
+  }
+  if (step > 1) {
+    let s = t("tut.back")
+    let bx = left - g_text_w(s)
+    if (bx >= x + 36) {
+      push(out, {"id": "back", "x": bx - 2, "y": y, "w": g_text_w(s) + 4, "h": 15, "label": s})
+    }
+  }
+  out
+}
+
+-~> The tail's place: {"dir", "at"} (dir: the side of the box it leaves
+-~> from; at: its middle along that side), or null.
+function tut_tail(a, p, w, h) {
+  if (p.place == "below" || p.place == "above") {
+    let tx = math.max(p.x + 10, math.min(a[0] + a[2] // 2, p.x + w - 10))
+    if (p.place == "below") {
+      return {"dir": "up", "at": tx}
+    }
+    return {"dir": "down", "at": tx}
+  }
+  if (p.place == "right") {
+    return {"dir": "left", "at": math.max(p.y + 10, math.min(a[1] + math.min(a[3] // 2, 12), p.y + h - 10))}
+  }
+  null
+}
+
+-~> The step's whole layout: the targets and their holes in the dim, the
+-~> box, its words, buttons and tail, the lizard, and the rectangle it all
+-~> covers (for popup_list).
+function tut_layout() {
+  let step = TUT.step
+  let tg = tut_targets(step)
+  let words = tut_words(step)
+  let w = math.min(tut_w, V.w - 8)
+  let chars = math.max(8, (w - 26) // 7)
+  let title = home_wrap(words[0], chars)
+  let body = home_wrap(words[1], chars)
+  let body_y = 9 + len(title) * 14
+  let foot = body_y + len(body) * 14 + 10
+  let h = foot + 20
+  let a = tg.anchor
+  let p = tut_place(a, w, h, step, tg.rects)
+  let holes = []
+  for (let i = 0; i < len(tg.rects); i += 1) {
+    push(holes, tut_grow(tg.rects[i], 1))
+  }
+  let lay = {
+    "targets": tg.rects,
+    "holes": holes,
+    "anchor": a,
+    "x": p.x,
+    "y": p.y,
+    "w": w,
+    "h": h,
+    "place": p.place,
+    "title": title,
+    "body": body,
+    "body_y": body_y,
+    "foot": foot,
+    "tail": tut_tail(a, p, w, h),
+    "buttons": tut_buttons(p.x, p.y + foot, w, step),
+    "lizard": null,
+    "shown": tut_box_shown()
+  }
+  let cover = [[p.x, p.y, w + 2, h + 2], [p.x - 6, p.y - 6, w + 12, h + 12]]
+  if (step == tut_last_step) {
+    lay.lizard = [p.x + math.min(135, w - 100), p.y - 30]
+    push(cover, [lay.lizard[0] - 26, lay.lizard[1] - 8, 140, 42])
+  }
+  lay.rect = tut_union(cover)
+  lay
+}
+
+-~> == The coach-mark ==
+
+-~> The popups the tutorial adds: [kind, rect] (see popup_list).
+function tut_popup_rects() {
+  if (!TUT.on || TUT.lay == null || !TUT.lay.shown) {
+    return []
+  }
+  [["tutorial", TUT.lay.rect]]
+}
+
+-~> What the coach-mark shows, as a text: drawn again when it changes.
+function tut_popup_key() {
+  if (!TUT.on) {
+    return ""
+  }
+  let hover = ""
+  if (text.starts(V.hover, "tut:")) {
+    hover = V.hover
+  }
+  "tut" + str(TUT.step) + hover
+}
+
+-~> The hover id over the coach-mark (tut:next, tut:skip, tut:back, or
+-~> tut:box for the rest of it), or null.
+function tut_hover_at(x, y) {
+  let lay = TUT.lay
+  if (!TUT.on || lay == null || !lay.shown) {
+    return null
+  }
+  for (let i = 0; i < len(lay.buttons); i += 1) {
+    let b = lay.buttons[i]
+    if (view_in(x, y, b.x, b.y, b.w, b.h)) {
+      return "tut:" + b.id
+    }
+  }
+  if (view_in(x, y, lay.x, lay.y, lay.w, lay.h)) {
+    return "tut:box"
+  }
+  null
+}
+
+-~> A press on the coach-mark: true when it was there.
+function tut_down(id) {
+  if (!text.starts(id, "tut:")) {
+    return false
+  }
+  let what = text.split(id, ":")[1]
+  if (what == "next") {
+    tut_next()
+  } elif (what == "skip") {
+    tut_finish()
+  } elif (what == "back") {
+    tut_back()
+  }
+  app.needs_paint = true
+  true
+}
+
+-~> The tail: 5 steps of the box's `row` with `void` sides, leaving the box
+-~> from the side `dir`, its middle at `at`.
+function tut_draw_tail(lay) {
+  let tl = lay.tail
+  if (tl == null) {
+    return null
+  }
+  for (let k = 0; k < 5; k += 1) {
+    let hw = 4 - k
+    if (tl.dir == "up" || tl.dir == "down") {
+      let y = lay.y - 1 - k
+      if (tl.dir == "down") {
+        y = lay.y + lay.h + k
+      }
+      g_rect(tl.at - hw, y, 2 * hw + 1, 1, P.row)
+      g_rect(tl.at - hw, y, 1, 1, P.void)
+      g_rect(tl.at + hw, y, 1, 1, P.void)
+    } else {
+      let x = lay.x - 1 - k
+      g_rect(x, tl.at - hw, 1, 2 * hw + 1, P.row)
+      g_rect(x, tl.at - hw, 1, 1, P.void)
+      g_rect(x, tl.at + hw, 1, 1, P.void)
+    }
+  }
+  -~> the box's edge opens where the tail leaves it
+  if (tl.dir == "up") {
+    g_rect(tl.at - 3, lay.y, 7, 1, P.row)
+  } elif (tl.dir == "down") {
+    g_rect(tl.at - 3, lay.y + lay.h - 1, 7, 1, P.row)
+  } else {
+    g_rect(lay.x, tl.at - 3, 1, 7, P.row)
+  }
+}
+
+-~> The primary button: `moss` face, `lizard` bevel, `bright` label.
+function tut_draw_primary(b, hover) {
+  g_frame(b.x, b.y, b.w, b.h, P.void)
+  g_rect(b.x + 1, b.y + 1, b.w - 2, b.h - 2, P.moss)
+  let lo = P.void
+  if (hover) {
+    lo = P.lizard
+  }
+  g_bevel(b.x + 1, b.y + 1, b.w - 2, b.h - 2, P.lizard, lo)
+  g_text(b.label, b.x + 7, b.y + 1, P.bright)
+}
+
+-~> The lizard of step 4 (the home screen's, at twice its size) and its sparkles.
+function tut_draw_lizard(at) {
+  let runs = home_art.lizard.runs
+  for (let i = 0; i < len(runs); i += 1) {
+    let r = runs[i]
+    g_rect(at[0] + r[1] * 2, at[1] + r[0] * 2, (r[2] - r[1]) * 2, 2, r[3])
+  }
+  for (let i = 0; i < len(tut_sparkles); i += 1) {
+    let s = tut_sparkles[i]
+    let x = at[0] + s[0]
+    let y = at[1] + s[1]
+    let c = P[s[2]]
+    g_rect(x - 2, y, 5, 1, c)
+    g_rect(x, y - 3, 1, 7, c)
+  }
+}
+
+-~> Draws the coach-mark into the current buffer (popup_paint draws into both).
+function tut_popup_draw() {
+  let lay = TUT.lay
+  if (!TUT.on || lay == null || !lay.shown) {
+    return null
+  }
+  let x = lay.x
+  let y = lay.y
+  g_box(x, y, lay.w, lay.h)
+  tut_draw_tail(lay)
+  g_rect(x + 1, y + 1, 2, lay.h - 2, P.lizard)
+  for (let i = 0; i < len(lay.title); i += 1) {
+    g_text(lay.title[i], x + 8, y + 7 + i * 14, P.bright)
+  }
+  for (let i = 0; i < len(lay.body); i += 1) {
+    g_text(lay.body[i], x + 8, y + lay.body_y + i * 14, P.text)
+  }
+  for (let i = 0; i < tut_last_step; i += 1) {
+    let c = P.bevel
+    if (i + 1 == TUT.step) {
+      c = P.lizard
+    }
+    g_rect(x + 8 + i * 6, y + lay.foot + 5, 4, 4, c)
+  }
+  for (let i = 0; i < len(lay.buttons); i += 1) {
+    let b = lay.buttons[i]
+    let hover = V.hover == "tut:" + b.id
+    if (b.id == "next") {
+      tut_draw_primary(b, hover)
+    } else {
+      let c = P.mute
+      if (hover) {
+        c = P.bright
+      }
+      g_text(b.label, b.x + 2, b.y + 1, c)
+    }
+  }
+  if (lay.lizard != null) {
+    tut_draw_lizard(lay.lizard)
+  }
+}
+
+-~> == The spotlight ==
+
+-~> The parts of r outside the rectangle h.
+function tut_minus(r, h) {
+  let x0 = math.max(r[0], h[0])
+  let y0 = math.max(r[1], h[1])
+  let x1 = math.min(r[0] + r[2], h[0] + h[2])
+  let y1 = math.min(r[1] + r[3], h[1] + h[3])
+  if (x1 <= x0 || y1 <= y0) {
+    return [r]
+  }
+  let out = []
+  if (y0 > r[1]) {
+    push(out, [r[0], r[1], r[2], y0 - r[1]])
+  }
+  if (y1 < r[1] + r[3]) {
+    push(out, [r[0], y1, r[2], r[1] + r[3] - y1])
+  }
+  if (x0 > r[0]) {
+    push(out, [r[0], y0, x0 - r[0], y1 - y0])
+  }
+  if (x1 < r[0] + r[2]) {
+    push(out, [x1, y0, r[0] + r[2] - x1, y1 - y0])
+  }
+  out
+}
+
+-~> The parts of r outside every hole.
+function tut_outside(r, holes) {
+  let parts = [r]
+  for (let i = 0; i < len(holes); i += 1) {
+    let next = []
+    for (let k = 0; k < len(parts); k += 1) {
+      next = next + tut_minus(parts[k], holes[i])
+    }
+    parts = next
+  }
+  parts
+}
+
+-~> The common part of two rectangles, or null.
+function tut_meet(a, b) {
+  let x0 = math.max(a[0], b[0])
+  let y0 = math.max(a[1], b[1])
+  let x1 = math.min(a[0] + a[2], b[0] + b[2])
+  let y1 = math.min(a[1] + a[3], b[1] + b[3])
+  if (x1 <= x0 || y1 <= y0) {
+    return null
+  }
+  [x0, y0, x1 - x0, y1 - y0]
+}
+
+function tut_dim_all(parts) {
+  for (let i = 0; i < len(parts); i += 1) {
+    let p = parts[i]
+    g_rect(p[0], p[1], p[2], p[3], tut_dim)
+  }
+}
+
+-~> The drawing's place in UI pixels (whole ones, so it covers its last half pixel).
+function tut_drawing_rect(cl) {
+  [cl.wx // 2, cl.wy // 2, (cl.sw + 1) // 2, (cl.sh + 1) // 2]
+}
+
+-~> After the panels: dims what was painted this frame (`painted`, a list
+-~> of [panel, rect, part], part true when only that part of the canvas
+-~> was painted) except the targets, rings the targets, and on step 3
+-~> dots the stroke to trace. The drawing is dimmed in the canvas buffer
+-~> and left out of the UI buffer under it, so it is dimmed once even
+-~> where it is transparent.
+function tut_overlay(painted) {
+  let lay = TUT.lay
+  if (!TUT.on || lay == null || len(painted) == 0) {
+    return null
+  }
+  let cl = V.cl
+  let dr = tut_drawing_rect(cl)
+  let canvas = false
+  for (let i = 0; i < len(painted); i += 1) {
+    let name = painted[i][0]
+    let r = painted[i][1]
+    g_ui()
+    fb.unclip()
+    if (name == "canvas") {
+      canvas = true
+      if (!painted[i][2]) {
+        tut_dim_all(tut_outside(r, lay.holes + [dr]))
+      }
+      let on = tut_meet(r, dr)
+      if (on != null) {
+        let cr = cl.crect
+        g_canvas((cr[0], cr[1]))
+        fb.unclip()
+        tut_dim_all(tut_outside(on, lay.holes))
+      }
+    } else {
+      tut_dim_all(tut_outside(r, lay.holes))
+    }
+  }
+  g_ui()
+  fb.unclip()
+  for (let i = 0; i < len(lay.targets); i += 1) {
+    let rr = tut_grow(lay.targets[i], 1)
+    g_frame(rr[0], rr[1], rr[2], rr[3], P.amber)
+  }
+  if (TUT.step == 3 && canvas) {
+    tut_draw_ghost(cl)
+  }
+  g_ui()
+  fb.unclip()
+}
+
+-~> The stroke to trace as dots (window pixels), every 9 along a smooth
+-~> line through tut_ghost.
+function tut_ghost_dots(cl) {
+  let size = ed_canvas_size()
+  let pts = []
+  for (let i = 0; i < len(tut_ghost); i += 1) {
+    push(pts, view_to_window(cl, (tut_ghost[i].x * size.x, tut_ghost[i].y * size.y)))
+  }
+  let line = []
+  let n = len(pts)
+  for (let i = 0; i < n - 1; i += 1) {
+    let p0 = pts[math.max(0, i - 1)]
+    let p1 = pts[i]
+    let p2 = pts[i + 1]
+    let p3 = pts[math.min(n - 1, i + 2)]
+    for (let s = 0; s < 16; s += 1) {
+      let u = s / 16.0
+      let u2 = u * u
+      let u3 = u2 * u
+      let x = 0.5 * (2 * p1.x + (p2.x - p0.x) * u + (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * u2 + (3 * p1.x - p0.x - 3 * p2.x + p3.x) * u3)
+      let y = 0.5 * (2 * p1.y + (p2.y - p0.y) * u + (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * u2 + (3 * p1.y - p0.y - 3 * p2.y + p3.y) * u3)
+      push(line, (x, y))
+    }
+  }
+  push(line, pts[n - 1])
+  let dots = [line[0]]
+  let run = 0.0
+  for (let i = 1; i < len(line); i += 1) {
+    run = run + math.sqrt((line[i].x - line[i - 1].x) * (line[i].x - line[i - 1].x) + (line[i].y - line[i - 1].y) * (line[i].y - line[i - 1].y))
+    if (run >= 9) {
+      push(dots, line[i])
+      run = 0.0
+    }
+  }
+  dots
+}
+
+-~> Dots the stroke to trace on the drawing, `lizard`, 2 window pixels each.
+function tut_draw_ghost(cl) {
+  let cr = cl.crect
+  g_canvas((cr[0], cr[1]))
+  fb.clip(cl.offset, (cl.sw, cl.sh))
+  let dots = tut_ghost_dots(cl)
+  for (let i = 0; i < len(dots); i += 1) {
+    let d = dots[i]
+    fb.fill((math.round(d.x) - cr[0] * 2, math.round(d.y) - cr[1] * 2), (2, 2), P.lizard)
+  }
+  fb.unclip()
+  g_ui()
+}
