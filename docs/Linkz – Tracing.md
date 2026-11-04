@@ -6,6 +6,7 @@ Turns a picture (PNG or JPEG) into **editable lizard-script**: a `.lzdraw` with 
 
 ```bash
 linkz trace photo.png out.lzdraw [--colors 8] [--detail 1.5] [--min-area 8] [--max-side 256] [--scale 1] [--corner 55]
+linkz trace sketch.png out.lzdraw --mode lineart [--line-threshold 0.5] [--line-min 6] [--continuation 35] [--fills true|false] [--solid 0]
 linkz render out.lzdraw            # writes out.svg
 ```
 
@@ -88,6 +89,21 @@ Result: 216 regions, 1 727 points, 20.7 KB of code. At `max_side` 256 (8 colors)
 - Neighbouring regions are separate shapes, so a faint hairline can show along shared edges (anti-aliasing). The biggest color is a plain rectangle (`background`) to avoid the most visible seams.
 - Holes are not editable anchors in the editor (only the outer outline's points are anchors of a `path`).
 - One palette distance: plain RGB. No dithering, no edge detection, no stroke (centerline) tracing.
+
+## Line art mode
+
+`--mode lineart` (`{"mode": "lineart"}` from lizard) traces inked drawings (pen sketches, comics, logos made of lines) as brush strokes plus fills for the areas between them, instead of color regions. The default mode is `photo`, the tracer described above. The design and the algorithm are in `Linkz – Tracing v2.md`.
+
+| Flag | Option | Default | What it does |
+|---|---|---|---|
+| `--line-threshold x` | `line_threshold` | 0.5 | How much darker than its surroundings a pixel must be to start a line, 0 to 1. Lower finds fainter lines. |
+| `--line-min n` | `line_min` | 6 | Strokes shorter than this many pixels are dropped. |
+| `--continuation deg` | `continuation` | 35 | The largest turn a line may make at a junction and still go on as one stroke. |
+| `--radius n` | `radius` | 0 | Half side of the neighbourhood a pixel is compared with; 0 picks it from the picture size. |
+| `--fills true\|false` | `fills` | true | false traces only the lines. |
+| `--solid n` | `solid` | 0 | Ink this far (px) from the paper all round is a solid fill, not a stroke; 0 picks it from the size. |
+
+`--colors` (default 16 here), `--min-area`, `--detail` (0.8), `--scale` and `--max-side` (1024) also apply, with their line-art defaults. The line-art flags are an error in photo mode. The summary line then reads `N strokes, N fills, N tips, N junctions, N ms`, followed by the time of each stage (the `stages` of the stats).
 
 ## Next: line art
 

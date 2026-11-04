@@ -13,3 +13,15 @@ tool trace failed: the argument background must be true or false
 true the argument background must be true or false
 tool trace failed: the argument path is required and must be a string
 true the argument path is required and must be a string
+false 3 []
+lineart true 0
+tool trace failed: the argument mode must be "photo" or "lineart"
+true the argument mode must be "photo" or "lineart"
+tool trace failed: the argument fills must be true or false
+true the argument fills must be true or false
+tool trace failed: the argument line_threshold must be a number from 0.01 to 0.99
+true the argument line_threshold must be a number from 0.01 to 0.99
+tool trace failed: the argument radius must be a whole number from 0 to 100
+true the argument radius must be a whole number from 0 to 100
+tool trace failed: trace: unknown option "line_min" (known: colors, detail, min_area, corner, smooth, background, refine, scale, max_side)
+true trace: unknown option "line_min" (known: colors, detail, min_area, corner, smooth, background, refine, scale, max_side)

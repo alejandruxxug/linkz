@@ -1,11 +1,13 @@
 -~> trace_cmd: linkz trace in.png out.lzdraw [--colors 8] [--detail 1.5]
 -~> [--min-area 8] [--max-side 256] [--scale 1] [--corner 55] turns a picture
--~> into drawing code (lib/trace) and says what it made.
+-~> into drawing code (lib/trace) and says what it made. --mode lineart traces
+-~> inked drawings as strokes and fills (--line-threshold, --line-min,
+-~> --continuation, --radius, --fills, --solid).
 
 use "host_img"
 use "libs"
 
-let trace_usage = "usage: linkz trace in.png out.lzdraw [--colors 8] [--detail 1.5] [--min-area 8] [--max-side 256] [--scale 1] [--corner 55]"
+let trace_usage = "usage: linkz trace in.png out.lzdraw [--colors 8] [--detail 1.5] [--min-area 8] [--max-side 256] [--scale 1] [--corner 55] [--mode photo|lineart] [--line-threshold 0.5] [--line-min 6] [--continuation 35] [--radius 0] [--fills true|false] [--solid 0]"
 
 -~> The options the command takes, by flag, and the key of trace's options.
 let trace_flags = {
@@ -14,7 +16,12 @@ let trace_flags = {
   "min-area": "min_area",
   "max-side": "max_side",
   "scale": "scale",
-  "corner": "corner"
+  "corner": "corner",
+  "line-threshold": "line_threshold",
+  "line-min": "line_min",
+  "continuation": "continuation",
+  "radius": "radius",
+  "solid": "solid"
 }
 
 -~> A number as trace takes it: a whole number is an INTEGER.
@@ -36,10 +43,25 @@ function trace_args(args) {
     }
     let name = text.slice(args[i], 2, len(args[i]))
     let key = trace_flags[name]
-    if (key == null || i + 1 >= len(args)) {
+    let word = name == "mode" || name == "fills"
+    if ((key == null && !word) || i + 1 >= len(args)) {
       error("bad option " + args[i] + "\n" + trace_usage)
     }
     i += 1
+    if (name == "mode") {
+      if (args[i] != "photo" && args[i] != "lineart") {
+        error("--mode must be photo or lineart, got " + json.write(args[i]))
+      }
+      options.mode = args[i]
+      continue
+    }
+    if (name == "fills") {
+      if (args[i] != "true" && args[i] != "false") {
+        error("--fills must be true or false, got " + json.write(args[i]))
+      }
+      options.fills = args[i] == "true"
+      continue
+    }
     let n = text.number(args[i])
     if (n == null) {
       error("--" + name + " needs a number, got " + json.write(args[i]))
@@ -68,6 +90,16 @@ function trace_command(args) {
   let result = trace_file(a.files[0], a.options)
   fs.write(a.files[1], result.code)
   let st = result.stats
+  if (st.mode == "lineart") {
+    puts("wrote " + a.files[1] + ": " + trace_show(st.strokes) + " strokes, " + trace_show(st.fills) + " fills, " +
+      trace_show(st.tips) + " tips, " + trace_show(st.junctions) + " junctions, " + str(math.round(st.ms)) + " ms")
+    let s = st.stages
+    puts("  mask " + str(math.round(s.mask)) + ", distance " + str(math.round(s.distance)) + ", fills " +
+      str(math.round(s.fills)) + ", outlines " + str(math.round(s.outlines)) + ", thin " + str(math.round(s.thin)) +
+      ", graph " + str(math.round(s.graph)) + ", strokes " + str(math.round(s.strokes)) + ", code " +
+      str(math.round(s.code)) + " ms (load " + str(math.round(s.load)) + ")")
+    return null
+  }
   puts("wrote " + a.files[1] + ": " + trace_show(st.colors) + " colors, " + trace_show(st.regions) + " regions (" +
     trace_show(st.holes) + " holes), " + trace_show(st.points) + " points, " + str(math.round(st.ms)) + " ms")
   let s = st.stages

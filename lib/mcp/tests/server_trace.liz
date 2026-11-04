@@ -37,3 +37,36 @@ for (let i = 0; i < len(bad); i += 1) {
   let e = call(bad[i])
   puts(e.isError, text.replace(e.content[0].text, fs.home(), "$HOME"))
 }
+
+-~> Line art mode: a black ring on white comes back as strokes, the options
+-~> are passed through, and a bad mode or option is refused.
+fb.offscreen((64, 64))
+fb.fill((0, 0), (64, 64), #ffffff)
+for (let y = 8; y < 56; y += 1) {
+  let dy = y + 0.5 - 32
+  let o = math.sqrt(math.max(0, 484 - dy * dy))
+  let n = math.sqrt(math.max(0, 324 - dy * dy))
+  if (n == 0) {
+    fb.span(y, math.round(32 - o), math.round(32 + o), #000000)
+  } else {
+    fb.span(y, math.round(32 - o), math.round(32 - n), #000000)
+    fb.span(y, math.round(32 + n), math.round(32 + o), #000000)
+  }
+}
+fb.save_png(fs.home() + "/ring.png")
+let l = call({"path": fs.home() + "/ring.png", "mode": "lineart", "fills": false, "line_min": 4, "line_threshold": 0.5, "continuation": 40})
+puts(l.isError, len(l.content), src.run(l.content[0].text).errors)
+let ls = json.parse(l.content[1].text)
+puts(ls.mode, ls.strokes > 0, ls.fills)
+let lbad = [
+  {"mode": "ink"},
+  {"mode": "lineart", "fills": "no"},
+  {"mode": "lineart", "line_threshold": 2},
+  {"mode": "lineart", "radius": -1},
+  {"mode": "photo", "line_min": 4}
+]
+for (let i = 0; i < len(lbad); i += 1) {
+  lbad[i].path = fs.home() + "/ring.png"
+  let e = call(lbad[i])
+  puts(e.isError, text.replace(e.content[0].text, fs.home(), "$HOME"))
+}

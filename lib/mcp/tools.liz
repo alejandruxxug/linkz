@@ -559,25 +559,35 @@ function mcp_tool_trace(args) {
     return mcp_tool_error("there is no file " + path)
   }
   let options = {}
-  let ints = [["colors", 1, 64], ["max_side", 16, 1024], ["min_area", 0, 100000]]
+  if (args.mode !== null) {
+    if (args.mode != "photo" && args.mode != "lineart") {
+      error("the argument mode must be \"photo\" or \"lineart\"")
+    }
+    options.mode = args.mode
+  }
+  let ints = [["colors", 1, 64], ["max_side", 16, 1024], ["min_area", 0, 100000],
+    ["line_min", 0, 100000], ["radius", 0, 100], ["solid", 0, 100000]]
   for (let i = 0; i < len(ints); i += 1) {
     let v = mcp_opt_int(args, ints[i][0], ints[i][1], ints[i][2])
     if (v !== null) {
       options[ints[i][0]] = v
     }
   }
-  let nums = [["detail", 0.1, 10], ["corner", 1, 180]]
+  let nums = [["detail", 0.1, 10], ["corner", 1, 180], ["line_threshold", 0.01, 0.99], ["continuation", 0, 180]]
   for (let i = 0; i < len(nums); i += 1) {
     let v = mcp_opt_number(args, nums[i][0], nums[i][1], nums[i][2])
     if (v !== null) {
       options[nums[i][0]] = v
     }
   }
-  if (args.background !== null) {
-    if (type(args.background) != "BOOLEAN") {
-      error("the argument background must be true or false")
+  let bools = ["background", "fills"]
+  for (let i = 0; i < len(bools); i += 1) {
+    if (args[bools[i]] !== null) {
+      if (type(args[bools[i]]) != "BOOLEAN") {
+        error("the argument " + bools[i] + " must be true or false")
+      }
+      options[bools[i]] = args[bools[i]]
     }
-    options.background = args.background
   }
   mcp_result(linkz.with_steps(mcp_trace_step_limit, function() { mcp_trace_items(path, options) }))
 }
@@ -633,7 +643,7 @@ function mcp_tools() {
     },
     {
       "name": "trace",
-      "description": "Traces a picture file (.png, .jpg or .jpeg, inside the user's home or drawings folder) into drawing code. Returns three items: the generated .lzdraw code (text), the stats as JSON (text) and a PNG render of the traced drawing, so you can compare it with the original and trace again with other settings. Pass the code to run, render or save to keep working on it. Slow for big pictures: lower max_side.",
+      "description": "Traces a picture file (.png, .jpg or .jpeg, inside the user's home or drawings folder) into drawing code. Returns three items: the generated .lzdraw code (text), the stats as JSON (text) and a PNG render of the traced drawing, so you can compare it with the original and trace again with other settings. Mode \"lineart\" traces inked line art (pen drawings, sketches, comics) into strokes and fills instead of color regions. Pass the code to run, render or save to keep working on it. Slow for big pictures: lower max_side.",
       "inputSchema": mcp_schema({
         "path": {"type": "string", "description": "The image file: an absolute path inside the home folder, ~/..., or a path relative to the drawings folder."},
         "colors": {"type": "integer", "minimum": 1, "maximum": 64, "description": "How many colors the drawing may use. Default 8."},
@@ -641,7 +651,14 @@ function mcp_tools() {
         "max_side": {"type": "integer", "minimum": 16, "maximum": 1024, "description": "The picture is shrunk until its longer side is at most this many pixels. Default 256."},
         "min_area": {"type": "integer", "minimum": 0, "maximum": 100000, "description": "Regions smaller than this many pixels are merged into a neighbour. Default 8."},
         "corner": {"type": "number", "minimum": 1, "maximum": 180, "description": "The turn in degrees from which an outline point stays a sharp corner. Default 55."},
-        "background": {"type": "boolean", "description": "Write the biggest color as one rectangle behind everything. Default true."}
+        "background": {"type": "boolean", "description": "Write the biggest color as one rectangle behind everything. Default true (photo mode)."},
+        "mode": {"type": "string", "enum": ["photo", "lineart"], "description": "photo (default) traces color regions; lineart traces ink lines as strokes and the areas between them as fills."},
+        "line_threshold": {"type": "number", "minimum": 0.01, "maximum": 0.99, "description": "Lineart: how much darker than its surroundings a pixel must be to start a line, 0 to 1; lower finds fainter lines. Default 0.5."},
+        "line_min": {"type": "integer", "minimum": 0, "maximum": 100000, "description": "Lineart: strokes shorter than this many pixels (length plus width) are dropped. Default 6."},
+        "continuation": {"type": "number", "minimum": 0, "maximum": 180, "description": "Lineart: the largest turn in degrees a line may make at a junction and still go on as the same stroke. Default 35."},
+        "radius": {"type": "integer", "minimum": 0, "maximum": 100, "description": "Lineart: half side in pixels of the neighbourhood a pixel is compared with; 0 picks it from the picture size. Default 0."},
+        "fills": {"type": "boolean", "description": "Lineart: false to trace only the lines, on the paper color. Default true."},
+        "solid": {"type": "integer", "minimum": 0, "maximum": 100000, "description": "Lineart: ink at least this many pixels from the paper all round is a solid fill, not a stroke; 0 picks it from the size. Default 0."}
       }, ["path"])
     },
     {
