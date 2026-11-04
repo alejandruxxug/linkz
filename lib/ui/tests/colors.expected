@@ -1,0 +1,59 @@
+-- hsv
+128° 61% 64% a255 0° 100% 100% a255 0° 0% 50% a255 30° 63% 95% a102
+#ff0000 #00ff00 #40408080
+#ff0000 #ff00ff
+-- every color comes back the same
+5760 colors, 0 changed
+-- hex and alpha fields
+#3fa34d #33ffaa #3fa34d80 null null
+100% 50% 102 255 null
+#3fa34d66
+-- a grey keeps the picker's hue
+200° 0% 50% a255 200° 70% 0% a255 200° 70% 50% a255
+-- harmonies
+complementary [#3fa34d, #a33f95] 128 308
+split [#3fa34d, #7f3fa3, #a33f63] 128 278 338
+analogous [#3fa34d, #63a33f, #3fa37f] 128 98 158
+triadic [#3fa34d, #4d3fa3, #a34d3f] 128 248 8
+square [#3fa34d, #3f63a3, #a33f95, #a37f3f] 128 218 308 38
+mono [#3fa34d, #b0f4ba, #235a2a] 128 129 128
+complementary of #3fa34d is hue + 180: 180
+[#f2a65a80, #5af2a680, #a65af280]
+["sky_3", "sky_4"] ["color_2", "color_3", "color_4"]
+-- the wheel
+135 100 83 70 82 130
+30° 63% 95% a255 -> 63 95 triangle
+200° 0% 100% a255 -> 0 100 triangle
+75° 100% 100% a255 -> 100 100 triangle
+300° 30% 20% a255 -> 30 20 triangle
+123 ring 
+below the triangle: 0 100
+(34.0, 23.0) [0.25, 0.75] 0.5
+-- the variables
+null
+-~> lzdraw 1
+-~> a note
+
+let colors = {"sun": #fff3c4}
+
+canvas = {"size": (480, 320), "background": #f6d9a8}
+circle((360, 90), 34, #fff3c4)
+
+["sun", "dusk"] gradient([#3b2a6b, #e0607a], 90deg) 4 4
+{"refused": "there is a variable called sun already"} {"refused": "\"2x\" can't be a variable's name: letters, digits and _"}
+circle((360, 90), 34, colors.sun) [7] []
+let colors = {"sun": #ffeeaa80, "dusk": gradient([#3b2a6b, #e0607a], 90deg)}
+let colors = {"glow": #ffeeaa80, "dusk": gradient([#3b2a6b, #e0607a], 90deg)} | circle((360, 90), 34, colors.glow)
+{"refused": "there is a variable called dusk already"} {"refused": "there is no variable called nope"}
+1
+let colors = {"dusk": gradient([#3b2a6b, #e0607a], 90deg)} dusk
+let colors = {}
+glow_2 sky
+my_color_2 lives true false
+-- a hash on many lines
+["sky", "dusk"] gradient([#3b2a6b,
+    #e0607a], 90deg) 5
+let colors = {|  "sky": #f2a65a,  -~> the sky|  "dusk": gradient([#3b2a6b,|    #e0607a], 90deg),|  "sea": #2d6a8f|}
+let colors = {|  "sky": #f2a65a,  -~> the sky|  "sea": #2d6a8f|}|rect((0, 0), (10, 10), colors.sky)
+let colors = {|  "sky": #f2a65a  -~> the sky|}|rect((0, 0), (10, 10), colors.sky)
+rect((0, 0), (10, 10), colors.dawn) [2]

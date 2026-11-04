@@ -1,0 +1,137 @@
+-~> color_picker: the picker the sidebar and the popover share, as a value
+-~> {"mode", "wheel", "sq", "hue", "alpha"}: in "ring" mode a wheel
+-~> (color_wheel.liz) and maybe an alpha strip; in "square" mode the
+-~> saturation / value square, the hue strip and the alpha strip. The
+-~> rectangles are [x, y, w, h] in UI pixels (their insides, the frame
+-~> around). A drag on a part turns the point into a new hsv; the keys nudge
+-~> it. color_draw.liz draws the colors, this file the markers around them.
+
+use "color_draw"
+use "color_hsv"
+use "color_wheel"
+use "view_gfx"
+
+-~> A ring picker in a box of side d at (x, y): ring thickness `thick`, and
+-~> an alpha strip of height ah under it (none when ah is 0).
+function cpk_ring(x, y, d, thick, ah) {
+  let r = d / 2
+  let out = {"mode": "ring", "wheel": {"cx": x + r, "cy": y + r, "r": r, "w": thick}, "sq": null, "hue": null, "alpha": null, "h": d}
+  if (ah > 0) {
+    out.alpha = [x, y + d + 5, d, ah]
+    out.h = d + 5 + ah
+  }
+  out
+}
+
+-~> A square picker w wide: the square sh high, the hue and alpha strips
+-~> sth high, 5 apart.
+function cpk_square(x, y, w, sh, sth) {
+  {
+    "mode": "square",
+    "wheel": null,
+    "sq": [x, y, w, sh],
+    "hue": [x, y + sh + 5, w, sth],
+    "alpha": [x, y + sh + 5 + sth + 5, w, sth],
+    "h": sh + 10 + sth * 2
+  }
+}
+
+-~> The part of the picker at a point: "ring", "triangle", "square", "hue",
+-~> "alpha" or "".
+function cpk_part_at(pk, hsv, p) {
+  if (pk.wheel != null) {
+    let part = wheel_part_at(pk.wheel, hsv.h, p)
+    if (part != "") {
+      return part
+    }
+  }
+  let names = ["sq", "hue", "alpha"]
+  let ids = ["square", "hue", "alpha"]
+  for (let i = 0; i < 3; i = i + 1) {
+    let r = pk[names[i]]
+    if (r != null && p.x >= r[0] - 2 && p.x < r[0] + r[2] + 2 && p.y >= r[1] - 2 && p.y < r[1] + r[3] + 2) {
+      return ids[i]
+    }
+  }
+  ""
+}
+
+-~> The hsv a drag of `part` to p gives, from hsv.
+function cpk_drag(pk, part, p, hsv) {
+  let out = hash.copy(hsv)
+  if (part == "ring") {
+    out.h = wheel_angle(pk.wheel, p)
+  } elif (part == "triangle") {
+    let sv = wheel_sv_at(pk.wheel, hsv.h, p, hsv)
+    out.s = sv[0]
+    out.v = sv[1]
+  } elif (part == "square") {
+    let sv = square_sv_at(pk.sq, p)
+    out.s = sv[0]
+    out.v = sv[1]
+  } elif (part == "hue") {
+    out.h = hue_wrap(strip_t(pk.hue, p.x) * 359.999)
+  } elif (part == "alpha") {
+    out.a = math.round(strip_t(pk.alpha, p.x) * 255)
+  }
+  out
+}
+
+-~> The hsv after an arrow key: left / right turn the hue (1°, 10° with
+-~> shift), up / down change the value (1%, 10%), and with alt they change
+-~> the saturation instead. Null for another key.
+function cpk_key(hsv, k, mods) {
+  let big = mods != null && mods.shift == true
+  let alt = mods != null && mods.alt == true
+  let out = hash.copy(hsv)
+  let step = 0.01
+  let deg = 1
+  if (big) {
+    step = 0.1
+    deg = 10
+  }
+  if (k == "arrowleft") {
+    out.h = hue_wrap(hsv.h - deg)
+  } elif (k == "arrowright") {
+    out.h = hue_wrap(hsv.h + deg)
+  } elif (k == "arrowup" || k == "arrowdown") {
+    let d = step
+    if (k == "arrowdown") {
+      d = -step
+    }
+    if (alt) {
+      out.s = hsv_clamp(math.round((hsv.s + d) * 100) / 100.0)
+    } else {
+      out.v = hsv_clamp(math.round((hsv.v + d) * 100) / 100.0)
+    }
+  } else {
+    return null
+  }
+  out
+}
+
+-~> Draws the picker for hsv, with `marks`: [[hue, color], ...] harmony hues
+-~> marked on the ring.
+function cpk_draw(pk, hsv, marks = []) {
+  let c = hsv_color(hsv)
+  if (pk.wheel != null) {
+    let wh = pk.wheel
+    cd_ring(wh)
+    cd_triangle(wh, hsv.h)
+    for (let i = 0; i < len(marks); i = i + 1) {
+      cd_dot_marker(wheel_hue_point(wh, marks[i][0]), marks[i][1])
+    }
+    cd_ring_marker(wheel_hue_point(wh, hsv.h), P.bright)
+    cd_ring_marker(wheel_point(wh, hsv), P.bright)
+  }
+  if (pk.sq != null) {
+    cd_square(pk.sq, hsv.h)
+    cd_ring_marker(square_point(pk.sq, hsv), P.bright)
+    cd_hue_strip(pk.hue)
+    cd_strip_marker(pk.hue, hue_wrap(hsv.h) / 360.0)
+  }
+  if (pk.alpha != null) {
+    cd_alpha_strip(pk.alpha, c)
+    cd_strip_marker(pk.alpha, hsv.a / 255.0)
+  }
+}

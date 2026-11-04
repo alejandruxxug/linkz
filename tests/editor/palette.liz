@@ -1,0 +1,253 @@
+-~> The palette sidebar and the color popover in a headless editor: the rail
+-~> and the open sidebar, a row's swatch opening the popover, picking a
+-~> variable (a live reference), the wheel dragged (one undo step), hex and
+-~> alpha, the keyboard, harmonies and "+ add all", "Save as variable…",
+-~> the sidebar editing a variable, renaming and removing one, the fill
+-~> editor's stop color and its "Save as variable…".
+
+use "../../lib/app/editor"
+use "rig"
+
+let code = "-~> lzdraw 1
+-~> A sunset.
+
+let colors = {\"sky\": #f2a65a, \"sea\": #2d6a8f, \"dusk\": gradient([#3b2a6b, #e0607a], 0deg)}
+canvas = {\"size\": (480, 320), \"background\": #f6d9a8}
+layer sun
+  circle((360, 90), 34, #fff3c4)
+  circle((360, 90), 56, #f2a65a66)
+layer sky
+  rect((0, 200), (480, 120), colors.sea)
+  rect((0, 0), (480, 200), colors.sky)
+"
+
+let modules = rig_modules + ["ui/view_panels", "ui/view_canvas", "ui/palette_view", "ui/color_popover", "ui/color_state", "ui/color_route",
+  "ui/color_target", "ui/color_vars", "ui/color_hsv", "ui/color_wheel", "ui/fill_editor", "ui/shape_menu"]
+let rig = rig_open(fs.join(fs.home(), "palette-test"), code, editor_size, modules)
+let n = rig.names
+
+function line_of(k) {
+  n.ed_model().lines[k - 1]
+}
+
+function steps() {
+  len(n.ed.undo)
+}
+
+function key(k, mods = null) {
+  let e = {"type": "key", "key": k}
+  if (mods != null) {
+    e.mods = mods
+  }
+  rig_frame(rig, [e])
+}
+
+function typed(s) {
+  rig_frame(rig, [{"type": "type", "text": s}])
+}
+
+function click(p) {
+  rig_frame(rig, [{"type": "down", "pos": p}, {"type": "up", "pos": p}])
+}
+
+function drag(a, b) {
+  rig_frame(rig, [{"type": "down", "pos": a}])
+  rig_frame(rig, [{"type": "move", "pos": (a.x + (b.x - a.x) / 2, a.y + (b.y - a.y) / 2)}])
+  rig_frame(rig, [{"type": "move", "pos": b}])
+  rig_frame(rig, [{"type": "up", "pos": b}])
+}
+
+function mid(p) {
+  (p.x + p.w // 2, p.y + p.h // 2)
+}
+
+-~> The middle of a part of the popover / of the sidebar.
+function cp_at(id) {
+  mid(n.cp_part(n.cp_layout(), id))
+}
+
+function pal_at(id) {
+  mid(n.pal_part(n.pal_layout(), id))
+}
+
+-~> The UI point of the k-th swatch of the row on `line`.
+function swatch_of(line, k) {
+  let vis = n.view_visible()
+  for (let i = 0; i < len(vis); i += 1) {
+    if (vis[i].item.t == "row" && vis[i].item.line == line) {
+      let rr = n.view_row_render(vis[i].item.row)
+      return (rr[1] + rr[0].swatches[k][0] + 3, vis[i].y + 9)
+    }
+  }
+  null
+}
+
+puts("-- the layout: a rail under 550 UI pixels, the code panel at half the window")
+let gm = n.view_geom()
+puts(n.pal_is_open(512), gm.pw, gm.cx, gm.cw, n.pal_rect(), rig.ed.error)
+click((n.pal_rect()[0] + 6, n.pal_rect()[1] + 7))
+gm = n.view_geom()
+puts(n.pal_is_open(512), gm.cw, n.pal_rect(), n.pal_title(n.pal_target()))
+
+puts("-- a row's swatch opens the popover")
+click(swatch_of(7, 0))
+puts(n.CP.open, n.CP.target, n.ed_model().line, n.ct_writes(n.CP.target), rig.ed.error)
+puts(n.CP.tail != null, n.CP.x >= 0, n.CP.y >= 18, n.CP.y + n.CP.h <= n.view_geom().status_y)
+
+puts("-- picking a variable writes a live reference, one step")
+let before = steps()
+click(cp_at("var:0"))
+puts(line_of(7), steps() - before, n.ed_undo_text(), n.ct_read(n.CP.target))
+
+puts("-- the wheel: a drag on the ring is one step and writes a literal")
+before = steps()
+let wh = n.cp_layout().wheel.wheel
+drag(n.wheel_hue_point(wh, 0), n.wheel_hue_point(wh, 120))
+puts(line_of(7), steps() - before, math.round(n.CP.hsv.h))
+let tri = n.wheel_point(wh, {"h": n.CP.hsv.h, "s": 1.0, "v": 1.0})
+drag(n.wheel_point(wh, n.CP.hsv), tri)
+puts(line_of(7), steps() - before)
+
+puts("-- hex and alpha fields")
+click(cp_at("hex"))
+typed("3fa34d")
+key("Enter")
+puts(line_of(7))
+click(cp_at("alpha"))
+typed("40")
+key("Enter")
+puts(line_of(7), n.cp_field_text("alpha"))
+
+puts("-- old brings the color back")
+click(cp_at("old"))
+puts(line_of(7), n.ed_undo_text())
+
+puts("-- keys: on the wheel the arrows turn the hue and the value (quick ones join)")
+before = steps()
+key("ArrowRight", {"shift": true, "alt": false, "cmd": false, "ctrl": false})
+key("ArrowDown")
+puts(n.CP.zone, line_of(7), math.round(n.CP.hsv.h), math.round(n.CP.hsv.v * 100), steps() - before)
+puts("-- Tab to the variables: the arrows move the amber ring, Enter picks")
+key("Tab")
+key("ArrowRight")
+key("ArrowRight")
+key("ArrowLeft")
+key("Enter")
+puts(n.CP.zone, n.CP.kf, line_of(7))
+
+puts("-- harmonies: triadic, add all as variables (one step)")
+click(cp_at("hmode:3"))
+puts(n.CP.harmony, len(n.cp_harmony()), n.cp_harmony_names())
+before = steps()
+click(cp_at("addall"))
+puts(line_of(4))
+puts(steps() - before, n.ed_undo_text())
+click(cp_at("hsw:1"))
+puts(line_of(7))
+
+puts("-- the harmony icons have tooltips")
+let hp = cp_at("hmode:0")
+rig_frame(rig, [{"type": "move", "pos": hp}])
+puts(n.view_tippable(n.V.hover), n.color_tip(n.V.hover).lines[0][0].s)
+
+puts("-- save as variable: the literal becomes colors.<name>")
+click(cp_at("save"))
+puts(n.CP.save, n.CP.focus.field, n.CP.focus.text)
+typed("leaf")
+key("Enter")
+puts(line_of(7), n.colors_entry(n.colors_find(n.ed_model()), "leaf").text, n.ed_undo_text())
+
+puts("-- Esc closes; a click elsewhere too")
+key("Escape")
+puts(n.CP.open)
+click(swatch_of(8, 0))
+puts(n.CP.open, n.CP.target)
+click((n.CP.x + 30, n.CP.y + n.CP.h + 12))
+puts(n.CP.open)
+
+puts("-- the popover from the colors row edits the variable")
+click(swatch_of(4, 0))
+puts(n.CP.target, n.ct_writes(n.CP.target))
+click(cp_at("hex"))
+typed("#336699")
+key("Enter")
+puts(line_of(4))
+key("Escape")
+
+puts("-- undo takes back one step at a time")
+let t0 = n.ed_model().lines
+n.view_undo()
+puts(line_of(4))
+n.view_redo()
+puts(line_of(4) == t0[3])
+
+puts("-- the sidebar edits a selected variable")
+let lay = n.pal_layout()
+click(mid(n.pal_part(lay, "var:0")))
+puts(n.PAL.sel, n.pal_title(n.pal_target()), n.ct_uses("sky"))
+before = steps()
+let pk = n.pal_layout().picker
+drag(n.wheel_hue_point(pk.wheel, 30), n.wheel_hue_point(pk.wheel, 200))
+puts(steps() - before, line_of(4))
+click(pal_at("tab:linear"))
+puts(n.colors_entry(n.colors_find(n.ed_model()), "sky").text)
+click(pal_at("tab:solid"))
+puts(n.colors_entry(n.colors_find(n.ed_model()), "sky").text)
+
+puts("-- rename it: every colors.sky follows")
+click(pal_at("name"))
+typed("dawn")
+key("Enter")
+puts(n.PAL.sel, line_of(11), n.ed_undo_text())
+
+puts("-- remove: refused while used, the second click removes it")
+click(pal_at("trash"))
+puts(n.PAL.confirm, n.ed.status)
+click(pal_at("trash"))
+puts(n.PAL.sel, n.colors_names(n.colors_find(n.ed_model())), n.ed_undo_text())
+n.view_undo()
+puts(n.colors_names(n.colors_find(n.ed_model())))
+
+puts("-- + Variable adds the picker's color, its name ready to type")
+click(pal_at("add"))
+puts(n.PAL.sel, n.PAL.focus.field)
+typed("mist")
+key("Enter")
+puts(n.PAL.sel, n.colors_names(n.colors_find(n.ed_model())))
+
+puts("-- the shape menu's Fill swatches are the variables")
+n.sm_open(7, 100, 100)
+n.sm_open_sub()
+rig_frame(rig)
+let sub = n.sm_sub_box()
+puts(len(sub.swatches), sub.swatches[1].name)
+before = steps()
+click((sub.x + 6 + 12 + 5, sub.y + sub.h - 16 + 8))
+puts(line_of(7), steps() - before, n.SM.open)
+
+puts("-- the fill editor: its stop color opens the popover, the sidebar edits the stop")
+n.ed_set_caret(8, 0)
+n.fe_open(8, "fill")
+rig_frame(rig)
+n.fe_set_kind("linear")
+rig_frame(rig)
+n.PAL.sel = null
+puts(n.pal_title(n.pal_target()), line_of(8))
+let sw = n.color_stop_swatch()
+click((sw[0] + 5, sw[1] + 5))
+puts(n.CP.open, n.CP.target, n.ct_read(n.CP.target))
+click(cp_at("hex"))
+typed("123456")
+key("Enter")
+puts(line_of(8))
+key("Escape")
+key("Escape")
+
+puts("-- the fill editor's Save as variable")
+n.fe_open(8, "fill")
+rig_frame(rig)
+let fp = n.fe_part(n.fe_layout(), "savevar")
+before = steps()
+click(mid(fp))
+puts(line_of(8), steps() - before, n.PAL.sel, n.colors_entry(n.colors_find(n.ed_model()), "fill").text)
+puts(rig.ed.error)

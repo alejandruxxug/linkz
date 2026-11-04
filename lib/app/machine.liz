@@ -1,8 +1,9 @@
 -~> machine: what this computer can handle, measured once by calibrate()
 -~> (lib/gfx/calibrate.liz) and kept in ~/.linkz/machine.liz, plain lizard
 -~> data: `let machine = {...}`. It is measured again when the file is
--~> missing or unreadable, when it is from another version of Linkz, or when
--~> asked (linkz calibrate).
+-~> missing or unreadable, when it is from another version of Linkz or of
+-~> the formula, or when asked (linkz calibrate, "measure again" in the New
+-~> drawing dialog).
 
 use "drawing"
 use "engine"
@@ -11,6 +12,10 @@ use "host_linkz"
 use "libs"
 use "settings"
 use "version"
+
+-~> The formula of a kept measurement must be this one: calib_formula of
+-~> lib/gfx/calibrate.liz, which runs in a sandbox of its own.
+let machine_formula = 2
 
 function machine_path() {
   fs.join(host_config_dir(), "machine.liz")
@@ -39,11 +44,11 @@ function machine_run(expr) {
   r.value
 }
 
--~> The kept measurement, if it is from this version.
+-~> The kept measurement, if it is from this version and this formula.
 function machine_kept(path) {
   try {
     let m = settings_load_file(path).machine
-    if (type(m) == "HASH" && m.app_version == linkz_version) {
+    if (type(m) == "HASH" && m.app_version == linkz_version && m.formula == machine_formula) {
       return m
     }
   } catch (e) {
@@ -69,6 +74,11 @@ function machine_load() {
     return m
   }
   machine_keep(path, machine_run("machine_source(calibrate())"))
+}
+
+-~> Measures now, keeps it, and gives its machine hash.
+function machine_measure() {
+  machine_keep(machine_path(), machine_run("machine_source(calibrate())"))
 }
 
 -~> Measures now, keeps it, and gives it as JSON text.

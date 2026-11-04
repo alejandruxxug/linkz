@@ -1,0 +1,449 @@
+-~> color_target: where a picked color goes, and the color variables as the
+-~> editor sees them (their values and how many shapes use them). A target
+-~> is a hash:
+-~>   {"kind": "span", "line", "c1", "c2"}   a color literal (or a variable
+-~>        reference) in the code: a row's swatch, a properties field; writing
+-~>        replaces that text (columns from 1, the end just after it)
+-~>   {"kind": "var", "name"}    the variable colors.name
+-~>   {"kind": "stop"}           the selected stop of the open fill editor
+-~>   {"kind": "tool"}           the color new shapes and strokes get (ed.color)
+-~> Every write to the code is one undo step, or joins the gesture that is
+-~> going on (a drag on a picker): ct_write is called while dragging.
+
+use "../draw/gradient"
+use "color_hsv"
+use "color_state"
+use "color_vars"
+use "editor_doc"
+use "editor_state"
+use "editor_twoway"
+use "editor_undo"
+use "fill_editor"
+use "fill_model"
+use "i18n"
+
+-~> == The variables ==
+
+let ct_values = {}
+let ct_values_n = 0
+
+-~> The value of a variable's code text: a color, a gradient, or null when
+-~> it is code the editor can't work out alone. Kept by text.
+function ct_value_of_text(s) {
+  let hit = ct_values[s]
+  if (hit != null) {
+    return hit.v
+  }
+  let v = null
+  let r = src.run("rect((0, 0), (1, 1), " + text.replace(s, "\n", " ") + ")")
+  if (len(r.errors) == 0 && len(r.shapes) == 1) {
+    v = r.shapes[0].args[2]
+  }
+  ct_values_n = ct_values_n + 1
+  if (ct_values_n > 200) {
+    ct_values = {}
+    ct_values_n = 0
+  }
+  ct_values[s] = {"v": v}
+  v
+}
+
+-~> The drawing's variables: [{"name", "text", "value"}], in the file's order.
+-~> A variable that is another one (`colors.sun`) has that one's value.
+function ct_vars() {
+  let cv = colors_find(ed_model())
+  let out = []
+  if (cv == null) {
+    return out
+  }
+  let byname = {}
+  for (let i = 0; i < len(cv.entries); i = i + 1) {
+    byname[cv.entries[i].name] = cv.entries[i].text
+  }
+  for (let i = 0; i < len(cv.entries); i = i + 1) {
+    let e = cv.entries[i]
+    let s = e.text
+    for (let k = 0; k < 4 && text.starts(s, colors_name + ".") && byname[text.slice(s, len(colors_name) + 1, len(s))] != null; k = k + 1) {
+      s = byname[text.slice(s, len(colors_name) + 1, len(s))]
+    }
+    push(out, {"name": e.name, "text": e.text, "value": ct_value_of_text(s)})
+  }
+  out
+}
+
+-~> The variable called name ({"name", "text", "value"}), or null.
+function ct_var(name) {
+  let vs = ct_vars()
+  for (let i = 0; i < len(vs); i = i + 1) {
+    if (vs[i].name == name) {
+      return vs[i]
+    }
+  }
+  null
+}
+
+-~> A color that stands for a value: itself, a gradient's first stop.
+function ct_color_of(v) {
+  if (type(v) == "COLOR") {
+    return v
+  }
+  if (is_gradient(v)) {
+    return v.stops[0][1]
+  }
+  null
+}
+
+-~> The recent colors to show, at most n: the ones picked lately, then the
+-~> colors of the variables, then the solid colors the drawing's shapes have.
+function ct_recent(n) {
+  let out = []
+  for (let i = 0; i < len(color_recent) && len(out) < n; i = i + 1) {
+    push(out, color_recent[i])
+  }
+  let vs = ct_vars()
+  for (let i = 0; i < len(vs) && len(out) < n; i = i + 1) {
+    let c = ct_color_of(vs[i].value)
+    if (c != null && list.index(out, c) < 0) {
+      push(out, c)
+    }
+  }
+  let used = ct_shape_colors()
+  for (let i = 0; i < len(used) && len(out) < n; i = i + 1) {
+    if (list.index(out, used[i]) < 0) {
+      push(out, used[i])
+    }
+  }
+  out
+}
+
+let ct_used = {"ver": -1, "colors": []}
+
+-~> The first solid colors the drawing's shapes have (up to 14, from the
+-~> first 200 shapes), worked out once per run.
+function ct_shape_colors() {
+  if (ct_used.ver == ed.shapes_ver) {
+    return ct_used.colors
+  }
+  let out = []
+  let shapes = ed.shapes
+  for (let i = 0; i < len(shapes) && i < 200 && len(out) < color_recent_max; i = i + 1) {
+    let c = shapes[i].fill
+    if (type(c) != "COLOR") {
+      c = shapes[i].stroke
+    }
+    if (type(c) == "COLOR" && list.index(out, c) < 0) {
+      push(out, c)
+    }
+  }
+  ct_used.ver = ed.shapes_ver
+  ct_used.colors = out
+  out
+}
+
+let ct_uses_memo = {"key": "", "n": 0}
+
+-~> How many shapes of the last run use the variable (kept per text and run).
+function ct_uses(name) {
+  let key = name + "|" + str(ed_model().cache.id) + "|" + str(ed.shapes_ver)
+  if (ct_uses_memo.key == key) {
+    return ct_uses_memo.n
+  }
+  let lines = colors_uses(ed_model(), name)
+  let n = 0
+  for (let i = 0; i < len(lines); i = i + 1) {
+    n = n + len(ed_shapes_of(lines[i]))
+  }
+  ct_uses_memo.key = key
+  ct_uses_memo.n = n
+  n
+}
+
+-~> The variable a span target is, when it is a value in the colors hash, or null.
+function ct_span_var(tg) {
+  let cv = colors_find(ed_model())
+  if (cv == null || tg.line < cv.line || tg.line > cv.end_line) {
+    return null
+  }
+  for (let i = 0; i < len(cv.entries); i = i + 1) {
+    let sp = cv.entries[i].span
+    if (sp.l1 == tg.line && tg.c1 >= sp.c1 && tg.c1 < math.max(sp.c2, sp.c1 + 1)) {
+      return cv.entries[i].name
+    }
+  }
+  null
+}
+
+-~> == Reading ==
+
+-~> The text a span target holds now.
+function ct_span_text(tg) {
+  let lines = ed_model().lines
+  if (tg.line > len(lines)) {
+    return ""
+  }
+  text.slice(lines[tg.line - 1], tg.c1 - 1, tg.c2 - 1)
+}
+
+-~> The variable name a span holds (`colors.sun` gives "sun"), or null.
+function ct_span_ref(tg) {
+  let s = ct_span_text(tg)
+  if (text.starts(s, colors_name + ".")) {
+    return text.slice(s, len(colors_name) + 1, len(s))
+  }
+  null
+}
+
+-~> The color a target shows now, or null.
+function ct_read(tg) {
+  if (tg == null) {
+    return null
+  }
+  if (tg.kind == "tool") {
+    return color_parse(ed.color)
+  }
+  if (tg.kind == "stop") {
+    if (!FE.open || FE.f == null || FE.code || FE.f.kind == "solid") {
+      if (FE.open && FE.f != null && !FE.code) {
+        return FE.f.color
+      }
+      return null
+    }
+    return FE.f.stops[FE.sel].color
+  }
+  if (tg.kind == "var") {
+    let v = ct_var(tg.name)
+    if (v == null) {
+      return null
+    }
+    return ct_color_of(v.value)
+  }
+  let ref = ct_span_ref(tg)
+  if (ref != null) {
+    let v = ct_var(ref)
+    if (v != null) {
+      return ct_color_of(v.value)
+    }
+    return null
+  }
+  color_parse(ct_span_text(tg))
+}
+
+-~> Whether the target is still there to write to.
+function ct_alive(tg) {
+  if (tg == null) {
+    return false
+  }
+  if (tg.kind == "stop") {
+    return FE.open && FE.f != null && !FE.code
+  }
+  if (tg.kind == "var") {
+    return ct_var(tg.name) != null
+  }
+  if (tg.kind == "span") {
+    return tg.line <= len(ed_model().lines) && ct_read(tg) != null
+  }
+  true
+}
+
+-~> The code a target is written as, for the popover's "writes" line.
+function ct_writes(tg) {
+  if (tg.kind == "var") {
+    return colors_name + "." + tg.name
+  }
+  if (tg.kind == "span") {
+    return ct_span_text(tg)
+  }
+  if (tg.kind == "stop") {
+    return t("color.stop", {"n": FE.sel + 1})
+  }
+  "ed.color"
+}
+
+-~> == Writing ==
+
+-~> Writes text over a span target (one step, or part of the gesture) and
+-~> keeps the span on it. True when it was written. key: an edit key that
+-~> joins quick repeats into one step (the arrow keys), or null.
+function ct_write_span(tg, s, key = null) {
+  let m = ed_model()
+  if (ct_span_text(tg) == s) {
+    return true
+  }
+  ed_label("color")
+  let ok = ed_try_at(twoway_apply(m, [{"l1": tg.line, "c1": tg.c1, "l2": tg.line, "c2": tg.c2, "text": s}]), key, tg.line)
+  if (ok) {
+    tg.c2 = tg.c1 + len(s)
+  }
+  ok
+}
+
+-~> The code of a variable's value with its color (the edited stop of a
+-~> gradient) set to c.
+function ct_var_text_with(v, c, stop) {
+  if (is_gradient(v.value)) {
+    let f = fill_from_value(v.value)
+    let i = math.max(0, math.min(stop, len(f.stops) - 1))
+    return fill_literal(fill_set_stop(f, i, "color", c))
+  }
+  color_hex(c)
+}
+
+-~> Writes a color to a target. stop: which stop of a gradient variable;
+-~> key: see ct_write_span.
+function ct_write(tg, c, stop = 0, key = null) {
+  if (tg == null || c == null) {
+    return false
+  }
+  if (tg.kind == "tool") {
+    ed.color = color_hex(c)
+    return true
+  }
+  if (tg.kind == "stop") {
+    if (!ct_alive(tg)) {
+      return false
+    }
+    if (FE.f.kind == "solid") {
+      let out = fill_copy(FE.f)
+      out.color = c
+      fe_step(out)
+    } else {
+      fe_step(fill_set_stop(FE.f, FE.sel, "color", c))
+    }
+    return true
+  }
+  if (tg.kind == "var") {
+    let v = ct_var(tg.name)
+    if (v == null) {
+      return false
+    }
+    ed_label("color_var", {"name": tg.name})
+    return ed_try_at(colors_set(ed_model(), tg.name, ct_var_text_with(v, c, stop)), key, ed_model().line)
+  }
+  ct_write_span(tg, color_hex(c), key)
+}
+
+-~> Puts a variable in a target: a span gets the reference `colors.name`
+-~> (the shapes follow the variable from then on); the others get a copy of
+-~> its color.
+function ct_use_var(tg, name) {
+  let v = ct_var(name)
+  if (v == null) {
+    return false
+  }
+  if (tg.kind == "span") {
+    return ct_write_span(tg, colors_name + "." + name)
+  }
+  if (tg.kind == "var" && tg.name == name) {
+    return false
+  }
+  ct_write(tg, ct_color_of(v.value))
+}
+
+-~> == Changing the variables (one undo step each) ==
+
+-~> A new variable with the code `value`. True when it was added.
+function ct_add_var(name, value) {
+  ed_label("color_add", {"name": name})
+  ed_try(colors_add(ed_model(), name, value), null)
+}
+
+-~> A new variable with the target's color, and the target set to use it
+-~> (one step). True when it was done.
+function ct_save_as(tg, name) {
+  let c = ct_read(tg)
+  if (c == null) {
+    return false
+  }
+  let m = colors_add(ed_model(), name, color_hex(c))
+  if (is_refusal(m) || tg.kind != "span") {
+    ed_label("color_add", {"name": name})
+    return ed_try(m, null)
+  }
+  -~> a new hash, or a new line in it, may push the span's row down
+  let shift = len(m.lines) - len(ed_model().lines)
+  let at = colors_find(m).line
+  let was = colors_find(ed_model())
+  if (was != null) {
+    at = was.close.l
+  }
+  let line = tg.line
+  if (line >= at) {
+    line = line + shift
+  }
+  let m2 = twoway_apply(m, [{"l1": line, "c1": tg.c1, "l2": line, "c2": tg.c2, "text": colors_name + "." + name}])
+  ed_label("color_add", {"name": name})
+  let ok = ed_try(m2, null)
+  if (ok) {
+    tg.line = line
+    tg.c2 = tg.c1 + len(colors_name + "." + name)
+  }
+  ok
+}
+
+-~> A row's fill (or stroke color) saved as a new variable: the variable
+-~> gets the paint's code and the row uses `colors.name` (one step).
+function ct_save_paint(line, which, name) {
+  let m = ed_model()
+  let fld = fill_field(m, line, ed_docs(), which)
+  if (fld == null) {
+    return ed_try({"refused": t("refuse.no_paint")}, null)
+  }
+  let was = colors_find(m)
+  let m1 = colors_add(m, name, text.replace(fld.text, "\n", " "))
+  if (is_refusal(m1)) {
+    return ed_try(m1, null)
+  }
+  let at = colors_find(m1).line
+  if (was != null) {
+    at = was.close.l
+  }
+  let row = line
+  if (row >= at) {
+    row = row + len(m1.lines) - len(m.lines)
+  }
+  let fld1 = fill_field(m1, row, ed_docs(), which)
+  let m2 = twoway_apply(m1, [{"l1": fld1.line, "c1": fld1.start, "l2": fld1.end_line, "c2": fld1.end, "text": colors_name + "." + name}])
+  ed_label("color_add", {"name": name})
+  ed_try_at(doc_at(m2, row, m.col), null, row)
+}
+
+-~> A row's fill set to `colors.name` (one step), from the shape menu's swatches.
+function ct_fill_with_var(line, name) {
+  let m = ed_model()
+  let fld = fill_field(m, line, ed_docs(), "fill")
+  if (fld == null) {
+    return ed_try({"refused": t("refuse.no_paint")}, null)
+  }
+  ed_label("fill")
+  ed_try_at(twoway_apply(m, [{"l1": fld.line, "c1": fld.start, "l2": fld.end_line, "c2": fld.end, "text": colors_name + "." + name}]), null, line)
+}
+
+-~> Several new variables at once (the harmony's "+ add all"): one step.
+function ct_add_vars(names, colors) {
+  let m = ed_model()
+  for (let i = 0; i < len(names); i = i + 1) {
+    m = colors_add(m, names[i], color_hex(colors[i]))
+    if (is_refusal(m)) {
+      return ed_try(m, null)
+    }
+  }
+  ed_label("color_add_all", {"n": len(names)})
+  ed_try(m, null)
+}
+
+function ct_rename_var(old, name) {
+  ed_label("color_rename", {"name": name})
+  ed_try(colors_rename(ed_model(), old, name), null)
+}
+
+-~> Removes a variable; refused while shapes use it, unless force.
+function ct_remove_var(name, force) {
+  ed_label("color_remove", {"name": name})
+  ed_try(colors_remove(ed_model(), name, force), null)
+}
+
+-~> Writes a variable's whole value (a kind change: solid, linear, radial).
+function ct_set_var_text(name, value) {
+  ed_label("color_var", {"name": name})
+  ed_try(colors_set(ed_model(), name, value), null)
+}

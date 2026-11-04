@@ -1,0 +1,12 @@
+-~> The recommended object limit (lib/gfx/tests/recommend.liz) with fixed
+-~> machines, run the way `linkz paint` runs a graphics scene: the drawing and
+-~> graphics libraries around it.
+
+use "../../lib/app/drawing"
+use "../../lib/app/host"
+use "../../lib/app/libs"
+use "../harness"
+
+let file = fs.join(libs_dir(), "gfx", "tests", "recommend.liz")
+let r = drawing_exec(fs.read(file), host_globals(img.new(1, 1)), drawing_tracker(false), libs_draw + libs_gfx)
+harness_check(harness_name(file), harness_output(r), harness_expected(file))

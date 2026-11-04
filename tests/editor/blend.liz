@@ -1,0 +1,295 @@
+-~> Blend modes and opacity in a headless editor: a layer's `blend(...)` and
+-~> `opacity(...)` rows read and written (added, rewritten, taken away), the
+-~> badge of a layer row, the blend row of the properties panel (dropdown,
+-~> slider, % field), the shape menu's Blend submenu (a loose shape is wrapped
+-~> in a layer), and Cmd+D, Cmd+] and Cmd+[ with no menu open. Every change is
+-~> one undo step.
+
+use "../../lib/app/editor"
+use "rig"
+
+let code = "canvas = {\"size\": (480, 320), \"background\": #f6d9a8}
+let horizon = 200
+layer shadows
+  blend(\"multiply\")
+  opacity(0.8)
+  polygon([(0, 120), (150, 96), (200, 320), (0, 320)], #3b2a6b)
+layer sun
+  circle((360, 90), 34, #fff3c4)
+  circle((360, 90), 56, #f2a65a66)
+layer sky
+  rect((0, 0), (480, horizon), #f2a65a)
+circle((60, 60), 20, #ff8800)
+"
+
+let modules = rig_modules + ["ui/view_panels", "ui/view_canvas", "ui/editor_state", "ui/i18n", "ui/shape_menu",
+  "ui/shape_popups", "ui/layer_blend", "ui/blend_menu", "ui/blend_props"]
+let rig = rig_open(fs.join(fs.home(), "blend-test"), code, editor_size, modules)
+let n = rig.names
+
+function line_of(k) {
+  n.ed_model().lines[k - 1]
+}
+
+function steps() {
+  len(n.ed.undo)
+}
+
+function key(k, mods = null) {
+  let e = {"type": "key", "key": k}
+  if (mods != null) {
+    e.mods = mods
+  }
+  rig_frame(rig, [e])
+}
+
+function typed(s) {
+  rig_frame(rig, [{"type": "type", "text": s}])
+}
+
+function click(p) {
+  rig_frame(rig, [{"type": "down", "pos": p}, {"type": "up", "pos": p}])
+}
+
+function right_click(p) {
+  rig_frame(rig, [{"type": "down", "pos": p, "button": "right"}, {"type": "up", "pos": p, "button": "right"}])
+}
+
+-~> The UI point in the middle of the row on `line`.
+function on_row(line) {
+  let vis = n.view_visible()
+  for (let i = 0; i < len(vis); i += 1) {
+    if (vis[i].item.t == "row" && vis[i].item.line == line) {
+      return (n.view_code_x(vis[i].item.row) + 20, vis[i].y + 9)
+    }
+  }
+  null
+}
+
+-~> The y of the row on `line`.
+function row_y(line) {
+  let vis = n.view_visible()
+  for (let i = 0; i < len(vis); i += 1) {
+    if (vis[i].item.t == "row" && vis[i].item.line == line) {
+      return vis[i].y
+    }
+  }
+  null
+}
+
+-~> A box of the properties panel by its field.
+function box(field) {
+  let lay = n.view_props_cached()
+  for (let i = 0; i < len(lay.boxes); i += 1) {
+    if (lay.boxes[i].field == field) {
+      return lay.boxes[i]
+    }
+  }
+  null
+}
+
+function mid(b) {
+  (b.x + b.w // 2, b.y + b.h // 2)
+}
+
+-~> The text of the rows of the layer on `line`, up to the next layer.
+function layer_text(line) {
+  let out = [line_of(line)]
+  let k = line + 1
+  while (k <= len(n.ed_model().lines) && text.starts(line_of(k), " ")) {
+    push(out, text.trim(line_of(k)))
+    k += 1
+  }
+  text.join(out, " | ")
+}
+
+function style(line) {
+  let st = n.layer_style_of(n.ed_model(), line)
+  [st.mode, st.opacity, st.blend_line, st.opacity_line, st.readable, n.blend_badge_text(st)]
+}
+
+puts("-- reading a layer's blend and opacity")
+puts(style(3))
+puts(style(7))
+puts(n.layer_style_of(n.ed_model(), 8))
+puts(n.blend_opacity_code(0.8), n.blend_opacity_code(0.35), n.blend_opacity_code(0), n.blend_opacity_code(0.004))
+
+puts("-- writing them: rewritten, taken away, added, as the first rows")
+let m = n.ed_model()
+let m2 = n.set_layer_style(m, 3, "screen", 0.5)
+puts(text.join(list.slice(m2.lines, 2, 6), " | "))
+let m3 = n.set_layer_style(m, 3, "normal", 1)
+puts(text.join(list.slice(m3.lines, 2, 4), " | "), len(m3.lines) == len(m.lines) - 2)
+let m4 = n.set_layer_style(m3, 3, "darken", 0.25)
+puts(text.join(list.slice(m4.lines, 2, 6), " | "))
+let m5 = n.set_layer_style(m3, 3, "normal", 0.6)
+puts(text.join(list.slice(m5.lines, 2, 5), " | "))
+puts(n.set_layer_style(m, 8, "add", 1))
+puts(n.set_layer_style(m, 3, "burn", 1))
+
+puts("-- a blend written as code can't be edited from the panels")
+let mx = n.doc_with(m, list.slice(m.lines, 0, 3) + ["  blend(mode)"] + list.slice(m.lines, 4, len(m.lines)), 1, 0)
+puts(style(3)[4], n.layer_style_of(mx, 3).readable, n.blend_badge_text(n.layer_style_of(mx, 3)))
+puts(n.set_layer_style(mx, 3, "screen", 1))
+
+puts("-- the badge of a layer row")
+puts(n.blend_badge_box(n.view_rows()[2], 0)[2], n.blend_badge_box(n.view_rows()[6], 0))
+puts(n.view_hover_at(n.V.pw - 20, row_y(3) + 9), n.view_hover_at(n.V.pw - 20, row_y(7) + 9))
+click((n.V.pw - 20, row_y(3) + 9))
+puts(n.BM.open, n.BM.line, n.BM.mode, n.ed_model().line)
+key("ArrowDown")
+let before = steps()
+key("Enter")
+puts(n.BM.open, layer_text(3), steps() - before, n.ed_undo_text())
+n.view_undo()
+rig_frame(rig)
+puts(layer_text(3))
+
+puts("-- the properties panel: the blend dropdown")
+click(on_row(7))
+puts(n.ed_props().kind, box("blend").text, box("opacity").text, box("name") != null, box("opslider") != null)
+click(mid(box("blend")))
+puts(n.BM.open, n.BM.line, n.BM.mode, n.BM.y < box("blend").y)
+let rows = n.bm_rows(n.BM.y + 2)
+before = steps()
+click((n.BM.x + 30, rows[1] + 7))
+puts(n.BM.open, layer_text(7), steps() - before, n.ed_undo_text())
+puts(box("blend").text, n.blend_badge_text(n.blend_row_style(n.view_rows()[6])))
+click(mid(box("blend")))
+key("Escape")
+puts(n.BM.open)
+click(mid(box("blend")))
+click((5, 40))
+puts(n.BM.open)
+
+puts("-- the opacity slider: a drag is one undo step")
+let s = box("opslider")
+before = steps()
+rig_frame(rig, [{"type": "down", "pos": (s.x + s.w - 3, s.y + 8)}])
+rig_frame(rig, [{"type": "move", "pos": (s.x + s.w // 2, s.y + 8)}])
+rig_frame(rig, [{"type": "move", "pos": (s.x + 3 + (s.w - 6) * 3 // 10, s.y + 8)}])
+rig_frame(rig, [{"type": "up", "pos": (s.x + 3 + (s.w - 6) * 3 // 10, s.y + 8)}])
+puts(layer_text(7), steps() - before, n.ed_undo_text(), box("opacity").text)
+click((s.x + s.w + 2, s.y + 8))
+puts(layer_text(7))
+
+puts("-- the % field")
+click(mid(box("opacity")))
+puts(n.V.focus.field, n.V.focus.text)
+typed("45%")
+key("Enter")
+puts(layer_text(7), n.ed_undo_text())
+click(mid(box("opacity")))
+typed("100")
+key("Enter")
+puts(layer_text(7))
+click(mid(box("opacity")))
+typed("150")
+key("Enter")
+puts(layer_text(7), n.ed.refusal.message)
+click(mid(box("blend")))
+click((n.BM.x + 30, n.bm_rows(n.BM.y + 2)[0] + 7))
+puts(layer_text(7))
+
+puts("-- the shape menu: Blend on a shape blends its layer")
+right_click(on_row(8))
+let ids = []
+for (let i = 0; i < len(n.SM.items); i += 1) {
+  if (n.SM.items[i].id == "blend") {
+    puts(n.SM.items[i].on, n.SM.items[i].sub)
+  }
+}
+n.sm_open_sub("blend")
+rig_frame(rig)
+let sub = n.sm_sub_box()
+let modes = []
+for (let i = 0; i < len(sub.items); i += 1) {
+  let it = sub.items[i]
+  if (it.id == "-") {
+    push(modes, "|")
+  } elif (it.check) {
+    push(modes, "[" + it.keys + "]")
+  } else {
+    push(modes, it.keys)
+  }
+}
+puts(text.join(modes, " "), len(sub.swatches))
+before = steps()
+n.sm_choose("blend:lighten")
+rig_frame(rig)
+puts(layer_text(7), n.ed_model().line, line_of(n.ed_model().line), steps() - before)
+n.view_undo()
+rig_frame(rig)
+
+puts("-- a shape in no layer is wrapped in one")
+let last = len(n.ed_model().lines) - 1
+n.view_select_line(last)
+n.view_after()
+rig_frame(rig)
+right_click(on_row(last))
+puts(n.SM.open, n.SM.line, line_of(last))
+key("ArrowUp")
+key("ArrowUp")
+key("ArrowUp")
+key("ArrowRight")
+puts(n.SM.sub.of, n.SM.sub.items[n.SM.sub.hot].id)
+key("ArrowDown")
+key("ArrowDown")
+before = steps()
+key("Enter")
+puts(n.SM.open, layer_text(last), steps() - before, n.ed_model().line, n.ed.error)
+n.view_undo()
+rig_frame(rig)
+puts(line_of(last), len(n.ed_model().lines))
+n.view_select_line(2)
+n.view_after()
+rig_frame(rig)
+right_click(on_row(2))
+puts(n.SM.items[list.index(n.sm_ids(n.SM.items), "blend")].on)
+key("Escape")
+
+puts("-- Cmd+D, Cmd+] and Cmd+[ with no menu open")
+n.view_select_line(9)
+n.view_after()
+rig_frame(rig)
+click(on_row(9))
+let lines0 = len(n.ed_model().lines)
+key("d", {"cmd": true})
+puts(len(n.ed_model().lines) - lines0, line_of(9) == line_of(10), n.ed_model().line, n.ed_undo_text())
+n.view_undo()
+rig_frame(rig)
+click(on_row(9))
+key("[", {"cmd": true})
+puts(n.ed_model().line, text.trim(line_of(10)), n.ed_undo_text())
+key("]", {"cmd": true})
+puts(n.ed_model().line, text.trim(line_of(8)))
+key("]", {"cmd": true})
+puts(n.ed_model().line, text.trim(line_of(8)), text.trim(line_of(9)), n.ed_undo_text())
+n.view_undo()
+rig_frame(rig)
+puts(text.trim(line_of(8)), text.trim(line_of(9)))
+puts("while a field is edited, the shortcut ends the edit and still works")
+click(on_row(8))
+let shown = n.view_props_cached()
+click(mid(shown.boxes[0]))
+puts(n.V.focus != null)
+lines0 = len(n.ed_model().lines)
+key("d", {"cmd": true})
+puts(n.V.focus == null, len(n.ed_model().lines) - lines0)
+n.view_undo()
+rig_frame(rig)
+
+puts("-- the previews")
+for (let i = 0; i < len(n.blend_menu_modes); i += 1) {
+  puts(n.blend_menu_modes[i], n.bm_result(n.blend_menu_modes[i]))
+}
+
+puts("-- Spanish")
+n.set_language("es")
+click(on_row(3))
+puts(box("blend").text, n.view_props_cached().labels[3].s)
+click(mid(box("blend")))
+puts(n.blend_label(n.blend_menu_modes[n.BM.hot]), n.BM.w >= n.bm_size(0)[0])
+key("Escape")
+n.set_language("en")
+puts(rig.ed.error)

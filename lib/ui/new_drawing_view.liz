@@ -1,0 +1,536 @@
+-~> new_drawing_view: the New drawing dialog over the home screen (from
+-~> "+ New drawing" or Cmd+N): name, size presets, width and height, the
+-~> background, and "Recommended: up to ~N objects" measured on this machine,
+-~> with a tooltip and a "measure again" link. Create writes the drawing
+-~> (new_drawing_model.liz) and opens it. The layout follows the approved
+-~> frame (R002 15/16), in UI pixels, with one row more for the background.
+-~>
+-~> The home screen hands it every event while it is open (nd_event) and
+-~> paints it last (nd_paint); nd_open says how to create the file.
+
+use "budget_model"
+use "home_data"
+use "home_gfx"
+use "i18n"
+use "new_drawing_model"
+
+-~> d: the dialog's state (nd_new), null when closed. hover: what the pointer
+-~> is over. taken: the file names in the folder. create(name, text): makes
+-~> and opens the drawing, gives "" or what went wrong. again: a paint is
+-~> needed (the measurement waits for "measuring…" to show).
+let nd_view = {"d": null, "hover": null, "size": (512, 360), "taken": [], "create": null, "again": false}
+
+-~> The dialog's own icons (8x8, one color).
+home_icon_art["objects"] = "........|.##..##.|.##..##.|........|........|.##..##.|.##..##.|........"
+home_icon_art["info"] = "..####..|.#....#.|#..##..#|#......#|#..##..#|#..##..#|.#....#.|..####.."
+home_icon_art["close"] = "........|.#....#.|..#..#..|...##...|...##...|..#..#..|.#....#.|........"
+home_icons_init()
+
+-~> The geometry of the approved frame.
+let nd_w = 300
+let nd_h = 234
+let nd_top = 64
+let nd_pad = 12
+let nd_status_h = 16
+
+-~> == Opening and closing ==
+
+function nd_is_open() {
+  nd_view.d != null
+}
+
+-~> Opens the dialog for a folder whose files are `taken`, in a window of size.
+function nd_open(taken, size, create) {
+  nd_view.d = nd_new(taken)
+  nd_view.taken = taken
+  nd_view.size = size
+  nd_view.create = create
+  nd_view.hover = null
+  nd_view.again = false
+}
+
+function nd_close() {
+  nd_view.d = null
+  nd_view.hover = null
+  nd_view.again = false
+}
+
+-~> Whether the dialog needs another paint by itself (a measurement waiting).
+function nd_wants_paint() {
+  nd_view.again
+}
+
+-~> == Layout ==
+
+function nd_in(r, x, y) {
+  r != null && x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h
+}
+
+-~> The preset buttons from (x, y), wrapping inside width w: a list of
+-~> {"id", "label", "x", "y", "w", "h"}.
+function nd_preset_rects(x, y, w) {
+  let out = []
+  let ids = nd_preset_ids()
+  let bx = x
+  let by = y
+  for (let i = 0; i < len(ids); i = i + 1) {
+    let label = nd_preset_label(ids[i])
+    let bw = home_text_w(label) + 8
+    if (bx > x && bx + bw > x + w) {
+      bx = x
+      by = by + 18
+    }
+    push(out, {"id": ids[i], "label": label, "x": bx, "y": by, "w": bw, "h": 15})
+    bx = bx + bw + 3
+  }
+  out
+}
+
+-~> The recommendation's text: "Recommended: up to ~1,800 objects".
+function nd_recommended_text() {
+  let n = budget_recommended()
+  if (n <= 0) {
+    return t("new.unknown")
+  }
+  t("new.recommended", {"n": budget_thousands(n)})
+}
+
+-~> Where the measurement comes from: "measured on this Mac" or "set in Settings".
+function nd_source_text() {
+  if (budget_setting() != null) {
+    return t("new.from_settings")
+  }
+  t("new.measured", {"machine": budget_machine_name()})
+}
+
+-~> The "measure again" link's text, or "" when the host can't measure.
+function nd_again_text() {
+  if (linkz.measure == null || budget_setting() != null) {
+    return ""
+  }
+  if (nd_view.d != null && nd_view.d.measure != "") {
+    return t("new.measuring")
+  }
+  t("new.measure_again")
+}
+
+-~> Every part of the dialog, in UI pixels.
+function nd_layout() {
+  let size = nd_view.size
+  let x0 = math.max(2, (size.x - nd_w) // 2)
+  let y0 = nd_top
+  if (y0 + nd_h + 2 > size.y - nd_status_h) {
+    y0 = math.max(2, (size.y - nd_status_h - nd_h - 2) // 2)
+  }
+  let cx = x0 + nd_pad
+  let cw = nd_w - nd_pad * 2
+  let presets = nd_preset_rects(cx, y0 + 75, cw)
+  let py = presets[len(presets) - 1].y + 15
+  let wy = py + 4
+  let by = wy + 20
+  let swatches = []
+  let sx = cx + home_text_w(t("new.background")) + 8
+  for (let i = 0; i < len(nd_backgrounds); i = i + 1) {
+    push(swatches, {"color": nd_backgrounds[i], "x": sx + i * 15, "y": by + 2, "w": 12, "h": 12})
+  }
+  let rec = nd_recommended_text()
+  let src = nd_source_text() + " · "
+  let again = nd_again_text()
+  let create_w = home_text_w(t("new.create")) + 22
+  let cancel_w = home_text_w(t("home.cancel")) + 8
+  let bx = x0 + nd_w - nd_pad - create_w
+  {
+    "box": {"x": x0, "y": y0, "w": nd_w, "h": nd_h},
+    "close": {"x": x0 + nd_w - 15, "y": y0 + 1, "w": 13, "h": 13},
+    "cx": cx,
+    "cw": cw,
+    "name_label": y0 + 21,
+    "name": {"x": cx, "y": y0 + 35, "w": cw, "h": 18},
+    "size_label": y0 + 62,
+    "presets": presets,
+    "w": {"x": cx + 12, "y": wy, "w": 42, "h": 16},
+    "times": cx + 60,
+    "h": {"x": cx + 84, "y": wy, "w": 42, "h": 16},
+    "bg_y": by,
+    "swatches": swatches,
+    "bg": {"x": sx + len(nd_backgrounds) * 15 + 3, "y": by, "w": 57, "h": 16},
+    "rule": by + 26,
+    "rec_y": by + 33,
+    "rec": rec,
+    "info": {"x": cx + 11 + home_text_w(rec) + 3, "y": by + 35, "w": 9, "h": 9},
+    "src_y": by + 46,
+    "src": src,
+    "again": {"x": cx + 11 + home_text_w(src), "y": by + 46, "w": home_text_w(again), "h": 13},
+    "again_text": again,
+    "create": {"x": bx, "y": y0 + 210, "w": create_w, "h": 18},
+    "cancel": {"x": bx - 12 - cancel_w, "y": y0 + 210, "w": cancel_w, "h": 18}
+  }
+}
+
+-~> What is under the pointer: {"kind", ...}. Outside the dialog it is "dim"
+-~> (the dialog is modal: nothing behind it can be reached).
+function nd_hit(x, y) {
+  let g = nd_layout()
+  if (!nd_in(g.box, x, y)) {
+    return {"kind": "dim"}
+  }
+  let simple = ["close", "name", "w", "h", "bg", "info", "create", "cancel"]
+  for (let i = 0; i < len(simple); i = i + 1) {
+    if (nd_in(g[simple[i]], x, y)) {
+      return {"kind": simple[i]}
+    }
+  }
+  if (g.again_text != "" && nd_in(g.again, x, y)) {
+    return {"kind": "again"}
+  }
+  for (let i = 0; i < len(g.presets); i = i + 1) {
+    if (nd_in(g.presets[i], x, y)) {
+      return {"kind": "preset", "id": g.presets[i].id}
+    }
+  }
+  for (let i = 0; i < len(g.swatches); i = i + 1) {
+    if (nd_in(g.swatches[i], x, y)) {
+      return {"kind": "swatch", "color": g.swatches[i].color}
+    }
+  }
+  {"kind": "dialog"}
+}
+
+-~> == Painting ==
+
+-~> 62% `void` over everything behind the dialog.
+function nd_paint_dim() {
+  fb.fill((0, 0), nd_view.size, rgba(11, 12, 11, 158))
+}
+
+-~> The primary button: `moss` face, `lizard` light on the top and left,
+-~> `void` on the bottom and right, a `lizard` + and a `bright` label.
+function nd_paint_primary(r, label, hover) {
+  home_outline(r.x, r.y, r.w, r.h, "void")
+  home_rect(r.x + 1, r.y + 1, r.w - 2, r.h - 2, "moss")
+  let lo = "void"
+  if (hover) {
+    lo = "lizard"
+  }
+  home_bevel(r.x + 1, r.y + 1, r.w - 2, r.h - 2, "lizard", lo)
+  home_icon("plus", r.x + 5, r.y + (r.h - 8) // 2, "lizard")
+  home_text(label, r.x + 15, r.y + (r.h - 13) // 2, "bright")
+}
+
+function nd_hover_is(kind) {
+  nd_view.hover != null && nd_view.hover.kind == kind
+}
+
+function nd_state(hovered, pressed) {
+  if (pressed) {
+    return "pressed"
+  }
+  if (hovered) {
+    return "hover"
+  }
+  "normal"
+}
+
+-~> A field's frame, its text (from x + 4) and, when focused, the caret.
+function nd_paint_field(r, value, focused, color) {
+  home_field(r.x, r.y, r.w, r.h, focused)
+  let ty = r.y + (r.h - 13) // 2 + 1
+  let shown = home_fit(value, (r.w - 7) // 7)
+  home_text(shown, r.x + 4, ty, color)
+  if (focused) {
+    home_rect(r.x + 4 + home_text_w(shown), ty + 1, 1, 11, "amber")
+  }
+}
+
+-~> The name field: the name, the caret, then ".lzdraw" in `dim`. The
+-~> proposed name shows selected (typing replaces it).
+function nd_paint_name(r, d) {
+  let focused = d.focus == "name"
+  home_field(r.x, r.y, r.w, r.h, focused)
+  let shown = home_fit(d.name, (r.w - 9) // 7 - len(home_ext))
+  let tx = r.x + 4
+  let ty = r.y + 3
+  if (d.fresh && focused && shown != "") {
+    home_rect(tx - 1, ty, home_text_w(shown) + 1, 13, "moss")
+  }
+  home_text(shown, tx, ty, "text")
+  let end = tx + home_text_w(shown)
+  if (focused) {
+    home_rect(end, ty + 1, 1, 11, "amber")
+  }
+  home_text(home_ext, end + 1, ty, "dim")
+}
+
+-~> A label, with the dialog's error right-aligned on the same line when it
+-~> is about one of `fields`.
+function nd_paint_label(g, label, y, fields) {
+  let d = nd_view.d
+  home_text(label, g.cx, y, "mute")
+  if (d.error != "" && list.index(fields, d.error_at) >= 0) {
+    let room = (g.cw - home_text_w(label) - 8) // 7
+    let msg = home_fit(d.error, room)
+    home_text(msg, g.cx + g.cw - home_text_w(msg), y, "ember")
+  }
+}
+
+-~> The tooltip of the ⓘ: why the number, wrapped, above the icon.
+function nd_paint_tip(g) {
+  let lines = home_wrap(t("new.tip", {"machine": budget_machine_name(), "machine_s": budget_machine_name(true)}), 44)
+  let w = 0
+  for (let i = 0; i < len(lines); i = i + 1) {
+    w = math.max(w, home_text_w(lines[i]))
+  }
+  w = w + 12
+  let h = len(lines) * 15 + 6
+  let x = math.max(2, math.min(nd_view.size.x - w - 4, g.info.x - w // 3))
+  let y = g.info.y - h - 8
+  if (y < 2) {
+    y = g.info.y + g.info.h + 4
+  }
+  home_rect(x + 2, y + 2, w, h, "void")
+  home_outline(x, y, w, h, "void")
+  home_rect(x + 1, y + 1, w - 2, h - 2, "row")
+  home_rect(x + 1, y + 1, w - 2, 1, "bevel")
+  for (let i = 0; i < len(lines); i = i + 1) {
+    home_text(lines[i], x + 6, y + 4 + i * 15, "text")
+  }
+}
+
+-~> Paints the dialog (when open) over a window of size.
+function nd_paint(size) {
+  let d = nd_view.d
+  if (d == null) {
+    return null
+  }
+  nd_view.size = size
+  if (d.measure == "run") {
+    nd_measure_now()
+  }
+  let g = nd_layout()
+  let b = g.box
+  nd_paint_dim()
+  -~> the box: 2 px hard shadow, outline, header strip and its line, body
+  home_rect(b.x + 2, b.y + 2, b.w, b.h, "void")
+  home_outline(b.x, b.y, b.w, b.h, "void")
+  home_rect(b.x + 1, b.y + 1, b.w - 2, 13, "raised")
+  home_rect(b.x + 1, b.y + 14, b.w - 2, 1, "void")
+  home_rect(b.x + 1, b.y + 15, b.w - 2, b.h - 16, "panel")
+  home_text(t("new.title"), b.x + 4, b.y + 1, "mute")
+  let close_color = "mute"
+  if (nd_hover_is("close")) {
+    close_color = "bright"
+  }
+  home_icon("close", g.close.x + 3, g.close.y + 3, close_color)
+
+  nd_paint_label(g, t("new.name"), g.name_label, ["name"])
+  nd_paint_name(g.name, d)
+
+  nd_paint_label(g, t("new.size"), g.size_label, ["w", "h"])
+  for (let i = 0; i < len(g.presets); i = i + 1) {
+    let p = g.presets[i]
+    let hovered = nd_view.hover != null && nd_view.hover.kind == "preset" && nd_view.hover.id == p.id
+    home_button(p.x, p.y, p.w, p.h, null, p.label, nd_state(hovered, d.preset == p.id))
+  }
+  home_text("W", g.cx, g.w.y + 2, "mute")
+  nd_paint_field(g.w, d.w, d.focus == "w", "amber")
+  home_text("×", g.times, g.w.y + 2, "mute")
+  home_text("H", g.times + 12, g.w.y + 2, "mute")
+  nd_paint_field(g.h, d.h, d.focus == "h", "amber")
+
+  nd_paint_label(g, t("new.background"), g.bg_y + 2, ["bg"])
+  let chosen = nd_color(d)
+  for (let i = 0; i < len(g.swatches); i = i + 1) {
+    let s = g.swatches[i]
+    let edge = "void"
+    if (chosen == s.color) {
+      edge = "bright"
+    } elif (nd_view.hover != null && nd_view.hover.kind == "swatch" && nd_view.hover.color == s.color) {
+      edge = "mute"
+    }
+    home_outline(s.x, s.y, s.w, s.h, edge)
+    fb.fill((s.x + 1, s.y + 1), (s.w - 2, s.h - 2), nd_color_value(s.color))
+  }
+  nd_paint_field(g.bg, d.bg, d.focus == "bg", "text")
+
+  home_rect(g.cx, g.rule, g.cw, 1, "bevel")
+  home_icon("objects", g.cx, g.rec_y + 3, "lizard")
+  home_text(g.rec, g.cx + 11, g.rec_y, "text")
+  home_icon("info", g.info.x, g.info.y, "sky")
+  home_text(g.src, g.cx + 11, g.src_y, "mute")
+  if (g.again_text != "") {
+    let link = "sky"
+    if (nd_hover_is("again")) {
+      link = "bright"
+    }
+    home_text(g.again_text, g.again.x, g.src_y, link)
+    home_rect(g.again.x, g.src_y + 12, g.again.w, 1, link)
+  }
+  if (d.error != "" && d.error_at == "measure") {
+    home_text(home_fit(d.error, (g.cw - 11) // 7), g.cx + 11, g.src_y + 14, "ember")
+  }
+
+  home_button(g.cancel.x, g.cancel.y, g.cancel.w, g.cancel.h, null, t("home.cancel"), nd_state(nd_hover_is("cancel"), false))
+  nd_paint_primary(g.create, t("new.create"), nd_hover_is("create"))
+  if (nd_hover_is("info")) {
+    nd_paint_tip(g)
+  }
+  if (d.measure == "show") {
+    d.measure = "run"
+    nd_view.again = true
+  }
+  null
+}
+
+-~> A "#rrggbb" text as a color.
+function nd_color_value(hex) {
+  let digits = "0123456789abcdef"
+  let v = []
+  for (let i = 1; i < 7; i = i + 1) {
+    push(v, text.find(digits, text.lower(hex)[i]))
+  }
+  rgb(v[0] * 16 + v[1], v[2] * 16 + v[3], v[4] * 16 + v[5])
+}
+
+-~> == Measuring again ==
+
+-~> Asks for a measurement: the next paint shows "measuring…", the one after
+-~> it measures (it takes a moment and nothing paints meanwhile).
+function nd_measure() {
+  if (linkz.measure != null && nd_view.d.measure == "") {
+    nd_view.d.measure = "show"
+    nd_view.d.error = ""
+  }
+}
+
+function nd_measure_now() {
+  let d = nd_view.d
+  d.measure = ""
+  nd_view.again = false
+  try {
+    linkz.measure()
+  } catch (e) {
+    d.error = e.message
+    d.error_at = "measure"
+  }
+}
+
+-~> == Events ==
+
+-~> Create: checks the fields, then makes and opens the drawing.
+function nd_create() {
+  let d = nd_view.d
+  let r = nd_result(d, nd_view.taken)
+  if (r == null) {
+    return null
+  }
+  let err = nd_view.create(r.name, r.text)
+  if (err == "") {
+    nd_close()
+    return null
+  }
+  d.error = err
+  d.error_at = "name"
+  null
+}
+
+function nd_click(hit) {
+  let d = nd_view.d
+  let k = hit.kind
+  if (k == "close" || k == "cancel") {
+    nd_close()
+  } elif (k == "create") {
+    nd_create()
+  } elif (k == "name" || k == "w" || k == "h" || k == "bg") {
+    nd_focus(d, k)
+  } elif (k == "preset") {
+    nd_pick(d, hit.id)
+  } elif (k == "swatch") {
+    nd_set(d, "bg", hit.color)
+  } elif (k == "again") {
+    nd_measure()
+  }
+  null
+}
+
+function nd_is_key(k, letter) {
+  k == letter || k == text.upper(letter) || k == "Key" + text.upper(letter)
+}
+
+-~> One event while the dialog is open. True when it changed what shows.
+function nd_event(e) {
+  let d = nd_view.d
+  if (d == null) {
+    return false
+  }
+  if (e.type == "resize") {
+    nd_view.size = e.size
+    return true
+  }
+  if (e.type == "move") {
+    let hit = nd_hit(e.pos.x, e.pos.y)
+    let was = str(nd_view.hover)
+    nd_view.hover = hit
+    return str(hit) != was
+  }
+  if (e.type == "leave") {
+    nd_view.hover = null
+    return true
+  }
+  if (e.type == "down" && e.button == 0) {
+    nd_click(nd_hit(e.pos.x, e.pos.y))
+    return true
+  }
+  if (e.type == "key") {
+    let k = e.key
+    let cmd = e.mods != null && (e.mods.cmd || e.mods.ctrl)
+    if (k == "Escape") {
+      nd_close()
+    } elif (k == "Enter" || k == "Return" || k == "NumpadEnter") {
+      nd_create()
+    } elif (k == "Tab") {
+      nd_tab(d, e.mods != null && e.mods.shift)
+    } elif (k == "Backspace") {
+      nd_backspace(d)
+    } elif (cmd && nd_is_key(k, "a") && d.focus == "name") {
+      d.fresh = true
+    } else {
+      return false
+    }
+    return true
+  }
+  if (e.type == "text" && (e.mods == null || (!e.mods.cmd && !e.mods.ctrl))) {
+    nd_type(d, e.text)
+    return true
+  }
+  false
+}
+
+-~> == The backdoor ==
+
+function nd_debug_state() {
+  let d = nd_view.d
+  if (d == null) {
+    return {"open": false}
+  }
+  let g = nd_layout()
+  let presets = []
+  for (let i = 0; i < len(g.presets); i = i + 1) {
+    let p = g.presets[i]
+    push(presets, {"id": p.id, "label": p.label, "rect": [p.x, p.y, p.w, p.h]})
+  }
+  {
+    "open": true,
+    "name": d.name,
+    "preset": d.preset,
+    "size": [d.w, d.h],
+    "background": d.bg,
+    "focus": d.focus,
+    "error": d.error,
+    "recommended": budget_recommended(),
+    "box": [g.box.x, g.box.y, g.box.w, g.box.h],
+    "presets": presets,
+    "create": [g.create.x, g.create.y, g.create.w, g.create.h],
+    "info": [g.info.x, g.info.y, g.info.w, g.info.h],
+    "again": [g.again.x, g.again.y, g.again.w, g.again.h]
+  }
+}

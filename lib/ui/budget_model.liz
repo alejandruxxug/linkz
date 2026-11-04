@@ -1,0 +1,142 @@
+-~> budget_model: the object budget apart from how it looks. The machine's
+-~> recommended limit (measured once per machine and app version, see
+-~> lib/gfx/calibrate.liz), the one a setting may put instead, where a
+-~> drawing stands against its limit, and the note shown once when a drawing
+-~> was made on a faster machine. The file is never changed for it.
+-~> Words go through t() inside the functions only.
+
+use "../draw/shapes"
+use "i18n"
+
+-~> warned: the files the faster-machine note was shown for, this session.
+let budget = {"warned": {}}
+
+-~> The machine's measurement from the host (linkz.machine()), or {} when the
+-~> host has none or it can't be read.
+function budget_machine() {
+  if (linkz.machine == null) {
+    return {}
+  }
+  try {
+    let m = linkz.machine()
+    if (type(m) == "HASH") {
+      return m
+    }
+  } catch (e) {
+  }
+  {}
+}
+
+-~> settings.max_objects, when it is a whole number above 0, else null.
+function budget_setting() {
+  let v = settings.max_objects
+  if (type(v) == "INTEGER" && v > 0) {
+    return v
+  }
+  null
+}
+
+-~> The limit this machine recommends for a new drawing: the setting, else
+-~> the measured one, else 0 (not known).
+function budget_recommended() {
+  let s = budget_setting()
+  if (s != null) {
+    return s
+  }
+  let m = budget_machine()["max_objects"]
+  if (type(m) == "INTEGER" && m > 0) {
+    return m
+  }
+  0
+}
+
+-~> Where the shapes of a drawing with this canvas stand: object_budget()
+-~> (lib/draw/shapes.liz) with this machine's limit.
+function budget_now(cnv, shapes) {
+  let c = cnv
+  if (type(c) != "HASH") {
+    c = {}
+  }
+  let here = {}
+  let rec = budget_recommended()
+  if (rec > 0) {
+    here = {"max_objects": rec}
+  }
+  object_budget(c, here, shapes)
+}
+
+-~> A whole number with the language's thousands separator: 1,800 or 1.800.
+function budget_thousands(n) {
+  let s = str(n)
+  let sep = t("num.thousands")
+  let out = ""
+  for (let i = 0; i < len(s); i = i + 1) {
+    if (i > 0 && s[i - 1] != "-" && (len(s) - i) % 3 == 0) {
+      out = out + sep
+    }
+    out = out + s[i]
+  }
+  out
+}
+
+-~> "this Mac" on a Mac, else "this computer" (in the current language);
+-~> with possessive true, "this Mac's".
+function budget_machine_name(possessive = false) {
+  let key = "budget.pc"
+  try {
+    if (os.platform() == "macos") {
+      key = "budget.mac"
+    }
+  } catch (e) {
+  }
+  if (possessive) {
+    key = key + "_s"
+  }
+  t(key)
+}
+
+-~> The status bar's counter text: "objects 840 / 1,800", or "objects 840"
+-~> when no limit is known.
+function budget_counter_text(b) {
+  if (b.max > 0) {
+    return t("budget.counter", {"n": budget_thousands(b.count), "max": budget_thousands(b.max)})
+  }
+  t("budget.counter_open", {"n": budget_thousands(b.count)})
+}
+
+-~> The color name of a budget's state: mute, amber (80% or more) or ember (over).
+function budget_color(b) {
+  if (b.state == "over") {
+    return "ember"
+  }
+  if (b.state == "near") {
+    return "amber"
+  }
+  "mute"
+}
+
+-~> The note for a drawing made on a faster machine, the first time it is
+-~> seen for this file in this session; null otherwise (and for files
+-~> without a name).
+function budget_slower_note(file, b) {
+  if (!b.slower_machine || file == "" || budget.warned[file] == true) {
+    return null
+  }
+  budget.warned[file] = true
+  t("budget.slower", {
+    "max": budget_thousands(b.file_max),
+    "here": budget_thousands(budget_recommended()),
+    "machine": budget_machine_name()
+  })
+}
+
+-~> The status bar's part for a drawing: [icon, text, color name] (the icons
+-~> are drawn by budget_view.liz).
+function budget_status_part(cnv, shapes) {
+  let b = budget_now(cnv, shapes)
+  let icon = "objects"
+  if (b.state == "over") {
+    icon = "warn"
+  }
+  [icon, budget_counter_text(b), budget_color(b)]
+}

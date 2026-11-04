@@ -1,0 +1,68 @@
+-- reading a layer's blend and opacity
+["multiply", 0.8, 4, 5, true, "MUL 80%"]
+["normal", 1.0, 0, 0, true, ""]
+null
+0.8 0.35 0 0
+-- writing them: rewritten, taken away, added, as the first rows
+layer shadows |   blend("screen") |   opacity(0.5) |   polygon([(0, 120), (150, 96), (200, 320), (0, 320)], #3b2a6b)
+layer shadows |   polygon([(0, 120), (150, 96), (200, 320), (0, 320)], #3b2a6b) true
+layer shadows |   blend("darken") |   opacity(0.25) |   polygon([(0, 120), (150, 96), (200, 320), (0, 320)], #3b2a6b)
+layer shadows |   opacity(0.6) |   polygon([(0, 120), (150, 96), (200, 320), (0, 320)], #3b2a6b)
+{"refused": "only a layer or a shape has a blend"}
+{"refused": "burn is no blend mode"}
+-- a blend written as code can't be edited from the panels
+true false fx
+{"refused": "this layer's blend is code: edit it in its row"}
+-- the badge of a layer row
+MUL 80% null
+blendbadge:3 row:7
+true 3 multiply 3
+false layer shadows | blend("darken") | opacity(0.8) | polygon([(0, 120), (150, 96), (200, 320), (0, 320)], #3b2a6b) 1 change blend
+layer shadows | blend("multiply") | opacity(0.8) | polygon([(0, 120), (150, 96), (200, 320), (0, 320)], #3b2a6b)
+-- the properties panel: the blend dropdown
+layer Normal 100% true true
+true 7 normal true
+false layer sun | blend("multiply") | circle((360, 90), 34, #fff3c4) | circle((360, 90), 56, #f2a65a66) 1 change blend
+Multiply MUL
+false
+false
+-- the opacity slider: a drag is one undo step
+layer sun | blend("multiply") | opacity(0.3) | circle((360, 90), 34, #fff3c4) | circle((360, 90), 56, #f2a65a66) 1 change opacity 30%
+layer sun | blend("multiply") | opacity(0.3) | circle((360, 90), 34, #fff3c4) | circle((360, 90), 56, #f2a65a66)
+-- the % field
+opacity 30
+layer sun | blend("multiply") | opacity(0.45) | circle((360, 90), 34, #fff3c4) | circle((360, 90), 56, #f2a65a66) change opacity
+layer sun | blend("multiply") | circle((360, 90), 34, #fff3c4) | circle((360, 90), 56, #f2a65a66)
+layer sun | blend("multiply") | circle((360, 90), 34, #fff3c4) | circle((360, 90), 56, #f2a65a66) opacity is a percent from 0 to 100
+layer sun | circle((360, 90), 34, #fff3c4) | circle((360, 90), 56, #f2a65a66)
+-- the shape menu: Blend on a shape blends its layer
+true true
+[] | MUL DRK | SCR LGT ADD | OVR 0
+layer sun | blend("lighten") | circle((360, 90), 34, #fff3c4) | circle((360, 90), 56, #f2a65a66) 9   circle((360, 90), 34, #fff3c4) 1
+-- a shape in no layer is wrapped in one
+true 12 circle((60, 60), 20, #ff8800)
+blend blend:normal
+false layer layer1 | blend("darken") | circle((60, 60), 20, #ff8800) 1 14 null
+circle((60, 60), 20, #ff8800) 13
+false
+-- Cmd+D, Cmd+] and Cmd+[ with no menu open
+1 true 9 duplicate
+9 layer sky change blend
+8 circle((360, 90), 56, #f2a65a66)
+8 circle((360, 90), 56, #f2a65a66) circle((360, 90), 34, #fff3c4) change order
+circle((360, 90), 34, #fff3c4) circle((360, 90), 56, #f2a65a66)
+while a field is edited, the shortcut ends the edit and still works
+true
+true 1
+-- the previews
+normal #7b5cb8
+multiply #753c41
+darken #7b5c5a
+screen #f8c6d1
+lighten #f2a6b8
+add #ffffff
+overlay #f28d82
+-- Spanish
+Multiplicar fusión
+Multiplicar true
+

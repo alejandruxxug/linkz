@@ -6,6 +6,8 @@ use "../draw/gradient"
 use "../draw/pens"
 use "../gfx/raster"
 use "app"
+use "blend_props"
+use "budget_view"
 use "pen_library"
 use "pen_props"
 use "pen_route"
@@ -26,6 +28,7 @@ use "view_popups"
 use "view_tools"
 use "shape_popups"
 use "tool_route"
+use "color_route"
 
 -~> == What is under the pointer ==
 
@@ -47,6 +50,10 @@ function view_hover_at(x, y) {
   if (pen_id != null) {
     return pen_id
   }
+  let color_pop = color_popup_hover(x, y)
+  if (color_pop != null) {
+    return color_pop
+  }
   let shape_id = shape_hover_at(x, y)
   if (shape_id != null) {
     return shape_id
@@ -60,6 +67,10 @@ function view_hover_at(x, y) {
     if (view_in(x, y, r[0], r[1], r[2], r[3])) {
       return ""
     }
+  }
+  let color_id = color_hover_at(x, y)
+  if (color_id != null) {
+    return color_id
   }
   if (y < 16) {
     let bs = view_toolbar()
@@ -120,6 +131,10 @@ function view_hover_at(x, y) {
     }
     return ""
   }
+  let budget_id = budget_hover_at(x, y)
+  if (budget_id != null) {
+    return budget_id
+  }
   ""
 }
 
@@ -140,6 +155,10 @@ function view_hover_row(r, x) {
   }
   if (r.callee != "" && x >= cx && x < cx + 7 * len(r.callee)) {
     return "callee:" + line
+  }
+  let badge = blend_badge_hover(r, x)
+  if (badge != null) {
+    return badge
   }
   "row:" + line
 }
@@ -215,7 +234,8 @@ function view_hit_rect(id) {
 -~> Whether a hover id is something a tooltip can say more about.
 function view_tippable(id) {
   let k = text.split(id, ":")[0]
-  k == "tool" || k == "bar" || k == "strip" || k == "pen" || k == "callee" || k == "field" || k == "pengear"
+  k == "tool" || k == "bar" || k == "strip" || k == "pen" || k == "callee" || k == "field" || k == "pengear" ||
+    k == "status" || color_tippable(id)
 }
 
 -~> == Actions ==
@@ -554,6 +574,11 @@ function view_commit_focus() {
   if (props == null) {
     return null
   }
+  if (blend_props_commit(f)) {
+    view_prepare()
+    view_after()
+    return null
+  }
   if (props.kind == "layer") {
     ed_set_layer_name(f.line, f.text)
   } elif (f.kind == "point") {
@@ -667,7 +692,7 @@ function view_number_text(v, whole) {
 
 -~> The click on a box of the properties panel (a press: scrub or focus on release).
 function view_press_box(b, e) {
-  if (pen_props_press(b, e)) {
+  if (pen_props_press(b, e) || blend_props_press(b, e)) {
     return null
   }
   if (b.kind == "bool") {
@@ -797,6 +822,9 @@ function view_down(e) {
   if (pen_route_down(e)) {
     return null
   }
+  if (color_popup_down(e)) {
+    return null
+  }
   if (shape_down(e)) {
     return null
   }
@@ -823,6 +851,9 @@ function view_down(e) {
       id = view_hover_at(p.x, p.y)
     }
   }
+  if (color_down(e)) {
+    return null
+  }
   let kind = text.split(id, ":")[0]
   if (kind == "tool" || kind == "bar" || kind == "tab" || kind == "strip") {
     V.drag = {"kind": "press", "id": id}
@@ -835,6 +866,10 @@ function view_down(e) {
   }
   if (kind == "lasso") {
     route_props_press(id, e)
+    return null
+  }
+  if (kind == "blendbadge") {
+    blend_badge_press(id)
     return null
   }
   if (kind == "field") {
@@ -879,7 +914,7 @@ function view_move(e) {
     if (k == "scrub") {
       view_scrub(e)
     } elif (k == "split") {
-      V.pw = math.max(math.min(160, V.w * 5 // 8), math.min(V.w - 120, p.x))
+      V.pw = math.max(math.min(160, V.w * 5 // 8), math.min(V.w - 120 - color_reserved(), p.x))
       V.pw_user = true
       view_touch()
       view_force_all()
@@ -899,6 +934,10 @@ function view_move(e) {
       view_canvas_move(e)
     } elif (k == "fill_editor") {
       shape_move(e)
+    } elif (k == "blend_op") {
+      blend_props_drag(e)
+    } elif (k == "color") {
+      color_move(e)
     }
     return null
   }
@@ -975,6 +1014,10 @@ function view_up(e) {
     view_canvas_up(e)
   } elif (d.kind == "fill_editor") {
     shape_up(e)
+  } elif (d.kind == "blend_op") {
+    blend_props_up(e)
+  } elif (d.kind == "color") {
+    color_up(e)
   }
   V.ver = V.ver + 1
   app.needs_paint = true
@@ -1051,6 +1094,9 @@ function view_key(e) {
   if (pen_route_key(e)) {
     return null
   }
+  if (color_key(e)) {
+    return null
+  }
   if (shape_keydown(e)) {
     return null
   }
@@ -1092,6 +1138,14 @@ function view_key(e) {
     view_export()
     return null
   }
+  if (cmd && (k == "n" || k == "keyn") && view_has_home()) {
+    -~> the New drawing dialog lives on the home screen
+    view_confirm(function() { show_screen("home", {"new": true}) })
+    return null
+  }
+  if (shape_global_key(e)) {
+    return null
+  }
   if (cmp_intercept(k, mods)) {
     view_prepare()
     view_after()
@@ -1124,6 +1178,9 @@ function view_text(e) {
     return null
   }
   if (pen_route_text(e.text)) {
+    return null
+  }
+  if (color_text(e.text)) {
     return null
   }
   if (shape_text(e.text)) {

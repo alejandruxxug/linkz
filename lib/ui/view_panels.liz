@@ -2,6 +2,8 @@
 -~> tab bar, the layers panel (the code), the properties panel and the status
 -~> bar. Each one has its own function so that only what changed is painted.
 
+use "blend_props"
+use "budget_model"
 use "editor_doc"
 use "editor_undo"
 use "home_data"
@@ -131,6 +133,7 @@ function view_row_render(r) {
       maxw = maxw - (g_text_w(str(count)) + 8)
     }
   }
+  maxw = maxw - blend_badge_room(r)
   let cd = view_row_code(r)
   return [code_render(cd[0], maxw, sel), cx, count]
 }
@@ -219,6 +222,7 @@ function view_paint_row(r, y, pinned) {
     g_rect(bx, y + 4, cw + 4, 10, P.raised)
     g_text(str(count), bx + 2, y + 3, P.mute)
   }
+  blend_paint_badge(r, y, count, sel)
   route_paint_badge(r.line, y)
   if (r.line == m.line && V.focus == null && V.dialog == null) {
     let idx = math.max(0, math.min(m.col - cd[1], len(rendered.xs) - 1))
@@ -341,7 +345,7 @@ function view_paint_rows() {
 -~> == The properties panel ==
 
 function view_paint_box(b) {
-  if (pen_props_paint_box(b)) {
+  if (pen_props_paint_box(b) || blend_props_paint_box(b)) {
     return null
   }
   g_field(b.x, b.y, b.w, b.h, b.focus)
@@ -379,7 +383,7 @@ function view_paint_box(b) {
 }
 
 function view_hint(lay) {
-  if (lay.pen_strip == true) {
+  if (lay.pen_strip == true || lay.wrapped == true) {
     return ""
   }
   let m = ed_model()
@@ -428,19 +432,6 @@ function view_paint_props() {
 
 -~> == The status bar ==
 
-function view_thousands(n) {
-  let s = str(n)
-  let sep = t("num.thousands")
-  let out = ""
-  for (let i = 0; i < len(s); i = i + 1) {
-    if (i > 0 && (len(s) - i) % 3 == 0) {
-      out = out + sep
-    }
-    out = out + s[i]
-  }
-  out
-}
-
 -~> The parts of the status bar: [icon, text, color name].
 function view_status_parts() {
   let left = [["canvas", view_file_name(), "text"]]
@@ -461,11 +452,17 @@ function view_status_parts() {
   if (V.pen_note != "") {
     push(left, [V.tool, V.pen_note, "mute"])
   } elif (ed_note_active()) {
-    push(left, ["", ed.note.text, "lizard"])
+    -~> a note may have its own icon and color (the faster-machine warning)
+    let note = ["", ed.note.text, "lizard"]
+    if (ed.note.icon != null) {
+      note = [ed.note.icon, ed.note.text, ed.note.color]
+    }
+    push(left, note)
   } elif (ed.refusal != null) {
     push(left, ["", ed.refusal.message, "ember"])
   } else {
-    push(left, ["", t("stat.steps", {"n": view_thousands(ed.stats.steps), "ms": math.round(ed.stats.ms)}), "mute"])
+    -~> the object counter (budget_view.liz) took the place of "steps · ms"
+    push(left, budget_status_part(ed.canvas, ed.shapes))
     if (V.mouse_draw != null && route_status() == "") {
       push(right, ["", "x " + str(math.round(V.mouse_draw.x)) + " y " + str(math.round(V.mouse_draw.y)), "mute"])
     }

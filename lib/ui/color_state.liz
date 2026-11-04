@@ -1,0 +1,68 @@
+-~> color_state: what the palette sidebar and the color popover remember,
+-~> and how much room the sidebar takes. It uses nothing of the editor, so
+-~> the layout (view_layout.liz) can ask it for the sidebar's width.
+-~>
+-~> The sidebar is on the right of the canvas: 106 UI pixels wide when open
+-~> (inner 96 at +5), a 14 px rail when collapsed, each after a 2 px
+-~> splitter. Until the user opens or collapses it, it is a rail in a
+-~> window narrower than 1100 screen pixels (550 UI pixels) and open in a
+-~> wider one.
+
+-~> The sidebar. open: null (follow the window), true or false. sel: the
+-~> variable it edits, or null. mode: "ring" or "square". hsv: its picker's
+-~> color (color_hsv.liz). stop: the stop of a gradient variable it edits.
+-~> focus: the field being typed in, {"field", "text", "caret", "fresh"}.
+-~> confirm: the variable whose removal waits for a second click.
+let PAL = {
+  "open": null,
+  "sel": null,
+  "mode": "ring",
+  "hsv": null,
+  "stop": 0,
+  "focus": null,
+  "confirm": null,
+  "drag": null
+}
+
+-~> The colors picked lately, newest first (this session).
+let color_recent = []
+let color_recent_max = 14
+
+let pal_open_w = 106
+let pal_rail_w = 14
+
+-~> Whether the sidebar is open (not the rail) in a window w UI pixels wide.
+function pal_is_open(w) {
+  if (PAL.open != null) {
+    return PAL.open
+  }
+  w >= 550
+}
+
+-~> The width the sidebar takes from the canvas, its splitter with it.
+function pal_reserved(w) {
+  if (pal_is_open(w)) {
+    return pal_open_w + 2
+  }
+  pal_rail_w + 2
+}
+
+-~> The code panel's width beside the sidebar: at most half the window.
+function pal_split(pw, w) {
+  math.min(pw, w // 2)
+}
+
+-~> Puts a color first in the recent colors (once).
+function color_note_recent(c) {
+  if (c == null) {
+    return null
+  }
+  let i = list.index(color_recent, c)
+  if (i >= 0) {
+    list.remove(color_recent, i)
+  }
+  list.insert(color_recent, 0, c)
+  while (len(color_recent) > color_recent_max) {
+    pop(color_recent)
+  }
+}

@@ -1,0 +1,383 @@
+-~> color_route: where the palette sidebar and the color popover meet the
+-~> rest of the editor. view_input, view_main, view_popups and view_layout
+-~> call these, one line each, and know nothing else of the two. The
+-~> popover floats over everything (the fill editor too) and gets the
+-~> pointer and the keys first; the sidebar is a panel like the others.
+-~> A color is clicked open from a row's swatch, a properties color field's
+-~> swatch, or the fill editor's stop color.
+
+use "color_harmony"
+use "color_draw"
+use "color_popover"
+use "color_state"
+use "color_target"
+use "editor_props"
+use "editor_state"
+use "fill_editor"
+use "i18n"
+use "palette_view"
+use "view_code"
+use "view_gfx"
+use "view_input"
+use "view_layout"
+use "view_panels"
+use "view_popups"
+
+-~> == The layout ==
+
+-~> The width the sidebar takes from the canvas (its splitter with it).
+function color_reserved() {
+  pal_reserved(V.w)
+}
+
+-~> The code panel's width beside the sidebar.
+function color_split(pw) {
+  pal_split(pw, V.w)
+}
+
+-~> == The pointer ==
+
+-~> The hover id over the popover (or the fill editor's stop color, which
+-~> opens it), or null: asked before the fill editor and the menus.
+function color_popup_hover(x, y) {
+  let id = cp_hover_at(x, y)
+  if (id != null) {
+    return id
+  }
+  let p = color_stop_swatch()
+  if (p != null && view_in(x, y, p[0], p[1], p[2], p[3])) {
+    return "cpo:stop"
+  }
+  null
+}
+
+-~> The fill editor's stop (or solid) color swatch [x, y, w, h], or null.
+function color_stop_swatch() {
+  if (!FE.open || FE.code || FE.f == null) {
+    return null
+  }
+  let p = fe_part(fe_layout(), "hex")
+  if (p == null) {
+    return null
+  }
+  [p.x + 2, p.y + 2, 12, 12]
+}
+
+-~> The hover id over the sidebar, a row's color swatch or a properties
+-~> color field's swatch, or null: asked after the popups.
+function color_hover_at(x, y) {
+  let id = pal_hover_at(x, y)
+  if (id != null) {
+    return id
+  }
+  let gm = view_geom()
+  if (x < gm.pw && y >= gm.rows_y && y < gm.lim) {
+    let vis = view_visible()
+    for (let i = 0; i < len(vis); i = i + 1) {
+      let it = vis[i].item
+      if (it.t == "row" && y >= vis[i].y && y < vis[i].y + it.h) {
+        let k = color_row_swatch_at(it.row, x)
+        if (k >= 0) {
+          return "cpo:row:" + str(it.line) + ":" + str(k)
+        }
+      }
+    }
+  }
+  if (x < gm.pw && y >= gm.props_y && y < gm.status_y) {
+    let lay = view_props_cached()
+    for (let i = 0; i < len(lay.boxes); i = i + 1) {
+      let b = lay.boxes[i]
+      if (b.kind == "color" && view_in(x, y, b.x, b.y, 15, b.h)) {
+        return "cpo:field:" + b.field
+      }
+    }
+  }
+  null
+}
+
+-~> Which color swatch of a row is at x (0 up, in the order they show), or -1.
+function color_row_swatch_at(r, x) {
+  let rr = view_row_render(r)
+  let sw = rr[0].swatches
+  for (let k = 0; k < len(sw); k = k + 1) {
+    let sx = rr[1] + sw[k][0]
+    if (x >= sx - 1 && x < sx + 7) {
+      return k
+    }
+  }
+  -1
+}
+
+-~> The span (columns from 1, the end just after) of the k-th color literal
+-~> with a swatch in a row, or null.
+function color_row_literal(r, k) {
+  let cd = view_row_code(r)
+  let s = cd[0]
+  let toks = code_tokens(s)
+  let n = 0
+  for (let i = 0; i < len(toks); i = i + 1) {
+    if (toks[i][0] == "color" && g_hex_color(text.slice(s, toks[i][1], toks[i][2])) != null) {
+      if (n == k) {
+        return {"kind": "span", "line": r.line, "c1": cd[1] + toks[i][1] + 1, "c2": cd[1] + toks[i][2] + 1}
+      }
+      n = n + 1
+    }
+  }
+  null
+}
+
+-~> A span target becomes the variable when it is a value of the colors hash.
+function color_target_of(tg) {
+  let name = ct_span_var(tg)
+  if (name != null) {
+    return {"kind": "var", "name": name}
+  }
+  tg
+}
+
+-~> A press on the popover (or on the fill editor's stop color). True when
+-~> it took it; a press off the popover closes it and goes on.
+function color_popup_down(e) {
+  if (cp_down(e)) {
+    return true
+  }
+  let id = color_popup_hover(e.pos.x, e.pos.y)
+  if (id == "cpo:stop") {
+    let p = color_stop_swatch()
+    cp_open({"kind": "stop"}, p)
+    return true
+  }
+  false
+}
+
+-~> A press on the sidebar or on a swatch that opens the popover.
+function color_down(e) {
+  let id = color_hover_at(e.pos.x, e.pos.y)
+  if (id == null) {
+    pal_commit_focus()
+    return false
+  }
+  if (text.starts(id, "pal:")) {
+    return pal_down(e)
+  }
+  let parts = text.split(id, ":")
+  if (parts[1] == "row") {
+    let line = int(parts[2])
+    let r = view_rows()[line - 1]
+    let tg = color_row_literal(r, int(parts[3]))
+    if (tg == null) {
+      return false
+    }
+    ed_set_caret(line, tg.c1 - 1)
+    view_after()
+    let rr = view_row_render(r)
+    let vis = view_visible()
+    let y = 0
+    for (let i = 0; i < len(vis); i = i + 1) {
+      if (vis[i].item.t == "row" && vis[i].item.line == line) {
+        y = vis[i].y
+      }
+    }
+    cp_open(color_target_of(tg), [rr[1] + rr[0].swatches[int(parts[3])][0], y + 3, 7, 12])
+    return true
+  }
+  if (parts[1] == "field") {
+    let props = ed_props()
+    let f = props_field_named(props, parts[2])
+    if (f == null || f.missing) {
+      return false
+    }
+    let tg = color_target_of({"kind": "span", "line": f.line, "c1": f.start, "c2": f.end})
+    let r = view_hit_rect("field:" + parts[2] + ":0")
+    cp_open(tg, r)
+    return true
+  }
+  false
+}
+
+-~> A move or a release of a drag the sidebar or the popover started.
+function color_move(e) {
+  if (CP.drag != null) {
+    return cp_move(e)
+  }
+  pal_move(e)
+}
+
+function color_up(e) {
+  if (CP.drag != null) {
+    return cp_up(e)
+  }
+  pal_up(e)
+}
+
+-~> A key: true when the popover or a sidebar field used it.
+function color_key(e) {
+  if (cp_key(e)) {
+    return true
+  }
+  pal_key(e)
+}
+
+-~> Typed text: true when the popover or a sidebar field took it.
+function color_text(s) {
+  if (cp_text(s)) {
+    return true
+  }
+  pal_text(s)
+}
+
+-~> Whether the popover decides the tooltip: while it is open only its own
+-~> parts get one.
+function color_tip_owned(_hover) {
+  CP.open
+}
+
+-~> Whether a hover id gets a tooltip: the harmony modes do.
+function color_tippable(id) {
+  text.starts(id, "cp:hmode:")
+}
+
+-~> The tooltip of a harmony mode, or null.
+function color_tip(hover) {
+  if (!color_tippable(hover) || !CP.open) {
+    return null
+  }
+  let mode = harmony_modes[int(text.split(hover, ":")[2])]
+  let lines = [[tip_piece(t("harmony." + mode), 0, "bright")], [tip_piece(t("harmony_tip." + mode), 0, "mute")]]
+  let anchor = cp_part(cp_layout(), "hmode:" + text.split(hover, ":")[2])
+  let size = tip_size(lines)
+  let at = tip_place([anchor.x, anchor.y, anchor.w, anchor.h], size, 3)
+  {"lines": lines, "x": at[0], "y": at[1], "w": size[0], "h": size[1], "key": hover}
+}
+
+-~> == The properties panel beside the sidebar ==
+
+-~> The properties' fields wrapped for a narrow code panel (style guide R002
+-~> "Properties at 256"): from the first field that does not fit, the
+-~> fields go to a second row 20 below, and the hint goes.
+function color_props_wrap(lay) {
+  let names = {}
+  for (let i = 0; i < len(lay.boxes); i = i + 1) {
+    names[lay.boxes[i].field] = true
+  }
+  let starts = []
+  for (let i = 0; i < len(lay.labels); i = i + 1) {
+    if (names[lay.labels[i].s] == true) {
+      push(starts, lay.labels[i].x)
+    }
+  }
+  let right = 0
+  for (let i = 0; i < len(lay.boxes); i = i + 1) {
+    right = math.max(right, lay.boxes[i].x + lay.boxes[i].w)
+  }
+  if (right <= V.pw - 4 || len(starts) < 2) {
+    return lay
+  }
+  let cut = null
+  for (let k = 1; k < len(starts) && cut == null; k = k + 1) {
+    let next = 100000
+    if (k + 1 < len(starts)) {
+      next = starts[k + 1]
+    }
+    for (let i = 0; i < len(lay.boxes); i = i + 1) {
+      let b = lay.boxes[i]
+      if (b.x >= starts[k] && b.x < next && b.x + b.w > V.pw - 4) {
+        cut = starts[k]
+      }
+    }
+  }
+  if (cut == null) {
+    return lay
+  }
+  let dx = 6 - cut
+  for (let i = 0; i < len(lay.labels); i = i + 1) {
+    if (lay.labels[i].x >= cut) {
+      lay.labels[i].x = lay.labels[i].x + dx
+      lay.labels[i].y = lay.labels[i].y + 20
+    }
+  }
+  for (let i = 0; i < len(lay.boxes); i = i + 1) {
+    if (lay.boxes[i].x >= cut) {
+      lay.boxes[i].x = lay.boxes[i].x + dx
+      lay.boxes[i].y = lay.boxes[i].y + 20
+    }
+  }
+  lay.wrapped = true
+  lay
+}
+
+-~> == The shape menu's swatch row ==
+
+-~> The swatches of the Fill submenu: the drawing's variables ({"name",
+-~> "value"}, at most 8) when it has some, else `colors` (plain colors).
+function color_menu_swatches(colors) {
+  let vs = ct_vars()
+  if (len(vs) == 0) {
+    return colors
+  }
+  let out = []
+  for (let i = 0; i < len(vs) && i < 8; i = i + 1) {
+    push(out, {"name": vs[i].name, "value": vs[i].value})
+  }
+  out
+}
+
+-~> Draws a swatch of the row at (x, y): a 10x10 chip.
+function color_menu_swatch_draw(x, y, sw) {
+  if (type(sw) == "HASH") {
+    return cd_chip(x, y, 10, 10, sw.value)
+  }
+  g_rect(x, y, 10, 10, P.void)
+  g_rect(x + 1, y + 1, 8, 8, sw)
+}
+
+-~> A swatch chosen: a variable makes the fill `colors.name`; true when it
+-~> was one (a plain color is the menu's own).
+function color_menu_use(line, sw) {
+  if (type(sw) != "HASH") {
+    return false
+  }
+  ct_fill_with_var(line, sw.name)
+  view_prepare()
+  view_after()
+  true
+}
+
+-~> == The popover as a popup ==
+
+function color_popup_rects() {
+  cp_sync()
+  cp_popup_rects()
+}
+
+function color_popup_key() {
+  cp_content_key()
+}
+
+function color_popup_open() {
+  CP.open
+}
+
+-~> Draws the popover into the current buffer, and a tooltip of its own over it.
+function color_popup_draw() {
+  cp_draw()
+  if (V.tip != null && text.starts(V.tip.key, "cp:")) {
+    tip_draw(V.tip)
+  }
+}
+
+-~> == The sidebar as a panel ==
+
+function color_panel_rect() {
+  let gm = view_geom()
+  let x = gm.cx + gm.cw
+  [x, 30, V.w - x, gm.status_y - 30]
+}
+
+function color_panel_key() {
+  pal_panel_key()
+}
+
+function color_panel_paint() {
+  pal_paint()
+}

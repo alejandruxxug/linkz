@@ -1,9 +1,11 @@
 7 87 100 1200 99000 120000
-{"max_objects": 260, "ms_per_object": 0.3, "warm_ms_per_object": 0.25, "cold_ms_per_object": 1.0, "run_ms_per_object": 0.05, "bytes_per_object": 20000, "memory_cap": 40000, "speed_cap": 326, "limited_by": "speed"}
-{"max_objects": 1600, "ms_per_object": 0.01, "warm_ms_per_object": 0.01, "cold_ms_per_object": 0.5, "run_ms_per_object": 0.0, "bytes_per_object": 50000, "memory_cap": 2000, "speed_cap": 9900, "limited_by": "memory"}
-10
+{"max_objects": 3900, "repaint_ms_per_object": 0.004, "open_ms_per_object": 0.1835, "warm_ms_per_object": 0.069, "cold_ms_per_object": 0.382, "run_ms_per_object": 0.007, "bytes_per_object": 20000, "repaint_cap": 10875, "open_cap": 4931, "memory_cap": 40000, "limited_by": "open", "formula": 2}
+1700
+{"max_objects": 10, "repaint_ms_per_object": 0.039999999999999994, "open_ms_per_object": 0.1835, "warm_ms_per_object": 0.69, "cold_ms_per_object": 0.382, "run_ms_per_object": 0.007, "bytes_per_object": 20000, "repaint_cap": 0, "open_cap": 4931, "memory_cap": 40000, "limited_by": "repaint", "formula": 2}
+2000
+{"max_objects": 1600, "repaint_ms_per_object": 0.004, "open_ms_per_object": 0.1835, "warm_ms_per_object": 0.069, "cold_ms_per_object": 0.382, "run_ms_per_object": 0.007, "bytes_per_object": 50000, "repaint_cap": 10875, "open_cap": 4931, "memory_cap": 2000, "limited_by": "memory", "formula": 2}
 10
 true
-let machine = {"max_objects": 260, "ms_per_object": 0.3, "warm_ms_per_object": 0.25, "cold_ms_per_object": 1.0, "run_ms_per_object": 0.05, "bytes_per_object": 20000, "memory_cap": 40000, "speed_cap": 326, "limited_by": "speed", "measured_at": 5, "app_version": "1.0"}
+let machine = {"max_objects": 3900, "repaint_ms_per_object": 0.004, "open_ms_per_object": 0.1835, "warm_ms_per_object": 0.069, "cold_ms_per_object": 0.382, "run_ms_per_object": 0.007, "bytes_per_object": 20000, "repaint_cap": 10875, "open_cap": 4931, "memory_cap": 40000, "limited_by": "open", "formula": 2, "measured_at": 5, "app_version": "1.0"}
 
-{"max_objects": 260, "ms_per_object": 0.3, "warm_ms_per_object": 0.25, "cold_ms_per_object": 1.0, "run_ms_per_object": 0.05, "bytes_per_object": 20000, "memory_cap": 40000, "speed_cap": 326, "limited_by": "speed", "measured_at": 5, "app_version": "1.0"}
+{"max_objects": 3900, "repaint_ms_per_object": 0.004, "open_ms_per_object": 0.1835, "warm_ms_per_object": 0.069, "cold_ms_per_object": 0.382, "run_ms_per_object": 0.007, "bytes_per_object": 20000, "repaint_cap": 10875, "open_cap": 4931, "memory_cap": 40000, "limited_by": "open", "formula": 2, "measured_at": 5, "app_version": "1.0"}

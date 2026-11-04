@@ -6,6 +6,9 @@
 
 use "app"
 use "app_screens"
+use "blend_props"
+use "color_route"
+use "color_state"
 use "editor_state"
 use "editor_undo"
 use "i18n"
@@ -78,7 +81,7 @@ function view_geom() {
     "rows_y": 45,
     "cx": V.pw + 2,
     "cy": 30,
-    "cw": V.w - V.pw - 2,
+    "cw": V.w - V.pw - 2 - pal_reserved(V.w),
     "ch": h - 46
   }
 }
@@ -96,7 +99,8 @@ function view_panel_rects() {
     "rows": [0, 30, gm.pw, gm.props_y - 30],
     "props": [0, gm.props_y, gm.pw, gm.status_y - gm.props_y],
     "status": [0, gm.status_y, gm.w, 16],
-    "canvas": [gm.pw, 30, gm.w - gm.pw, gm.h - 46]
+    "canvas": [gm.pw, 30, gm.cx + gm.cw - gm.pw, gm.h - 46],
+    "palette": [gm.cx + gm.cw, 30, gm.w - gm.cx - gm.cw, gm.h - 46]
   }
 }
 
@@ -133,6 +137,9 @@ function view_row_icon(r) {
   let k = r.kind
   if (k == "layer") {
     return "layer"
+  }
+  if (r.callee == "blend" || r.callee == "opacity") {
+    return r.callee
   }
   if (k == "shape") {
     if (r.callee == "ellipse") {
@@ -501,7 +508,7 @@ function view_shown_fields(props) {
 function view_props_cached() {
   let key = str(V.ver) + "|" + str(V.focus) + "|" + str(V.picker) + "|" + lang_get() + "|" + str(V.pw) + "|" + str(V.h)
   if (V.pl == null || V.pl_key != key) {
-    V.pl = pen_props_wrap(view_props_layout_build())
+    V.pl = color_props_wrap(blend_props_wrap(pen_props_wrap(view_props_layout_build())))
     V.pl_key = key
   }
   V.pl

@@ -1,0 +1,145 @@
+-~> color_wheel: where colors sit on the pickers, and which color a point
+-~> is. Pure geometry in UI pixels (floats); color_picker.liz draws it.
+-~>
+-~> The wheel (Krita / Painter style) is a hue ring with a triangle inside.
+-~> Hue h is at the angle h, counter-clockwise from the right (red on the
+-~> right, green up and left, blue down and left). The triangle's corners
+-~> are the pure hue (at the hue's angle), black (120° on) and white (240°
+-~> on), so it turns with the hue. A point of the triangle is the mix
+-~>   s·v of the hue, (1 − s)·v of white, 1 − v of black
+-~> which is exactly the color of hsv (h, s, v).
+-~>
+-~> The square is the other picker: saturation left to right, value bottom
+-~> to top, with a hue strip under it.
+-~>
+-~> A wheel is {"cx", "cy", "r" (outer radius), "w" (ring thickness)}.
+
+use "color_hsv"
+
+-~> The point at an angle (degrees, counter-clockwise from the right) and a radius.
+function wheel_at_angle(wh, deg, r) {
+  let a = deg * math.pi / 180.0
+  (wh.cx + math.cos(a) * r, wh.cy - math.sin(a) * r)
+}
+
+-~> The angle (degrees, 0 up to 360) of a point seen from the middle.
+function wheel_angle(wh, p) {
+  hue_wrap(math.atan2(wh.cy - p.y, p.x - wh.cx) * 180 / math.pi)
+}
+
+-~> The radius of the circle the triangle's corners are on.
+function wheel_tri_r(wh) {
+  wh.r - wh.w - 2
+}
+
+-~> The triangle's corners for hue h: [hue, black, white].
+function wheel_corners(wh, h) {
+  let r = wheel_tri_r(wh)
+  [wheel_at_angle(wh, h, r), wheel_at_angle(wh, h + 120, r), wheel_at_angle(wh, h + 240, r)]
+}
+
+-~> The middle of the ring at hue h: where its marker goes.
+function wheel_hue_point(wh, h) {
+  wheel_at_angle(wh, h, wh.r - wh.w / 2.0)
+}
+
+-~> The point of the triangle of an hsv.
+function wheel_point(wh, hsv) {
+  let c = wheel_corners(wh, hsv.h)
+  let s = hsv_clamp(hsv.s)
+  let v = hsv_clamp(hsv.v)
+  let wh_hue = s * v
+  let wh_white = (1 - s) * v
+  let wh_black = 1 - v
+  (c[0].x * wh_hue + c[1].x * wh_black + c[2].x * wh_white, c[0].y * wh_hue + c[1].y * wh_black + c[2].y * wh_white)
+}
+
+-~> The weights [hue, black, white] of a point in the triangle (they add up
+-~> to 1; one is below 0 when the point is outside).
+function wheel_weights(c, p) {
+  let d = (c[1].y - c[2].y) * (c[0].x - c[2].x) + (c[2].x - c[1].x) * (c[0].y - c[2].y)
+  let a = ((c[1].y - c[2].y) * (p.x - c[2].x) + (c[2].x - c[1].x) * (p.y - c[2].y)) / d
+  let b = ((c[2].y - c[0].y) * (p.x - c[2].x) + (c[0].x - c[2].x) * (p.y - c[2].y)) / d
+  [a, b, 1 - a - b]
+}
+
+-~> The nearest point to p on the segment from a to b.
+function wheel_on_segment(a, b, p) {
+  let dx = b.x - a.x
+  let dy = b.y - a.y
+  let l2 = dx * dx + dy * dy
+  if (l2 == 0) {
+    return a
+  }
+  let t = math.max(0.0, math.min(1.0, ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2))
+  (a.x + dx * t, a.y + dy * t)
+}
+
+-~> Whether a point is inside the triangle of hue h.
+function wheel_in_triangle(wh, h, p) {
+  let w = wheel_weights(wheel_corners(wh, h), p)
+  w[0] >= 0 && w[1] >= 0 && w[2] >= 0
+}
+
+-~> The saturation and value [s, v] of a point (one outside the triangle
+-~> counts as the nearest point of its edge). `was` is the hsv shown now: a
+-~> point on the black corner keeps its saturation.
+function wheel_sv_at(wh, h, p, was) {
+  let c = wheel_corners(wh, h)
+  let q = p
+  if (!wheel_in_triangle(wh, h, p)) {
+    let best = null
+    let pairs = [[0, 1], [1, 2], [2, 0]]
+    for (let i = 0; i < 3; i = i + 1) {
+      let on = wheel_on_segment(c[pairs[i][0]], c[pairs[i][1]], p)
+      let d = (on.x - p.x) * (on.x - p.x) + (on.y - p.y) * (on.y - p.y)
+      if (best == null || d < best[0]) {
+        best = [d, on]
+      }
+    }
+    q = best[1]
+  }
+  let w = wheel_weights(c, q)
+  let hue_w = math.max(0.0, w[0])
+  let white_w = math.max(0.0, w[2])
+  let v = hsv_clamp(hue_w + white_w)
+  let s = 0.0
+  if (v > 0.0001) {
+    s = hsv_clamp(hue_w / v)
+  } elif (was != null) {
+    s = was.s
+  }
+  [s, v]
+}
+
+-~> Which part of the wheel a point is on: "ring", "triangle" or "".
+function wheel_part_at(wh, h, p) {
+  let dx = p.x - wh.cx
+  let dy = p.y - wh.cy
+  let d = math.sqrt(dx * dx + dy * dy)
+  if (d <= wh.r + 1 && d >= wh.r - wh.w - 1) {
+    return "ring"
+  }
+  if (wheel_in_triangle(wh, h, p)) {
+    return "triangle"
+  }
+  ""
+}
+
+-~> == The square ==
+
+-~> The point of an hsv on a square [x, y, w, h] (its inside).
+function square_point(sq, hsv) {
+  (sq[0] + hsv_clamp(hsv.s) * (sq[2] - 1), sq[1] + (1 - hsv_clamp(hsv.v)) * (sq[3] - 1))
+}
+
+-~> The saturation and value [s, v] of a point of the square.
+function square_sv_at(sq, p) {
+  [hsv_clamp((p.x - sq[0]) / float(sq[2] - 1)), hsv_clamp(1 - (p.y - sq[1]) / float(sq[3] - 1))]
+}
+
+-~> The place (0 to 1) of x along a strip [x, y, w, h]: the hue strip
+-~> (times 360) and the alpha strip.
+function strip_t(st, x) {
+  hsv_clamp((x - st[0]) / float(st[2] - 1))
+}

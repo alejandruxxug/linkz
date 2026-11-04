@@ -1,0 +1,106 @@
+-~> budget_view: the object counter in the editor's status bar, after
+-~> "saved": `objects N / MAX` in `mute`, `amber` from 80%, `ember` with a
+-~> warning icon over the limit (R002 17). Hovering it shows a tooltip that
+-~> explains the number. A drawing made on a faster machine (its
+-~> canvas.max_objects is above this machine's) gets a note once, when it
+-~> is opened; the file is not changed.
+-~>
+-~> The status bar paints the part (budget_status_part, budget_model.liz);
+-~> the editor asks budget_hover_at for the hover id "status:objects",
+-~> tip_for asks budget_tip_lines and budget_counter_rect, and view_tick
+-~> calls budget_editor_note.
+
+use "budget_model"
+use "editor_undo"
+use "i18n"
+use "icons"
+use "view_gfx"
+use "view_layout"
+use "view_panels"
+
+icon_art["objects"] = "........|.##..##.|.##..##.|........|........|.##..##.|.##..##.|........"
+icon_art["warn"] = "...##...|..#..#..|..#..#..|.#.##.#.|.#.##.#.|#......#|#..##..#|########"
+
+-~> How long the faster-machine note stays, in milliseconds.
+let budget_note_ms = 6000
+
+-~> The hover id of the counter.
+let budget_hover_id = "status:objects"
+
+-~> The counter's rectangle [x, y, w, h] in the status bar, as it is painted
+-~> (view_paint_status), or null when it isn't shown.
+function budget_counter_rect() {
+  let parts = view_status_parts()
+  let left = status_fit(parts[0], V.w - 12 - status_width(parts[1]))
+  let y = view_geom().status_y
+  let x = 6
+  for (let i = 0; i < len(left); i = i + 1) {
+    let p = left[i]
+    let w = g_text_w(p[1])
+    if (p[0] != "") {
+      w = w + 10
+    }
+    if ((p[0] == "objects" || p[0] == "warn") && p[1] != "") {
+      return [x, y, w, 16]
+    }
+    x = x + w + 13
+  }
+  null
+}
+
+-~> The counter's hover id when (x, y) is on it, else null.
+function budget_hover_at(x, y) {
+  if (y < view_geom().status_y) {
+    return null
+  }
+  let r = budget_counter_rect()
+  if (r != null && x >= r[0] && x < r[0] + r[2] && y >= r[1] && y < r[1] + r[3]) {
+    return budget_hover_id
+  }
+  null
+}
+
+function budget_piece(s, dx, c) {
+  {"s": s, "dx": dx, "c": c}
+}
+
+-~> The tooltip: "2,130 objects · recommended 1,800", then why, then where
+-~> the number comes from. A file made with a higher limit says so.
+function budget_tip_lines() {
+  let b = budget_now(ed.canvas, ed.shapes)
+  let machine = budget_machine_name()
+  let count = t("budget.tip_count", {"n": budget_thousands(b.count)})
+  let color = "bright"
+  if (b.state != "ok") {
+    color = budget_color(b)
+  }
+  let first = [budget_piece(count, 0, color)]
+  if (b.max > 0) {
+    push(first, budget_piece(t("budget.tip_max", {"max": budget_thousands(b.max)}), g_text_w(count), "mute"))
+  }
+  let lines = [first]
+  if (b.max <= 0) {
+    push(lines, [budget_piece(t("budget.tip_unknown"), 0, "text")])
+    return lines
+  }
+  push(lines, [budget_piece(t("budget.tip_slow", {"machine": machine}), 0, "text")])
+  if (b.slower_machine) {
+    let here = budget_thousands(budget_recommended())
+    push(lines, [budget_piece(t("budget.tip_file", {"here": here, "machine": machine}), 0, "amber")])
+  }
+  push(lines, [budget_piece(t("budget.tip_how"), 0, "mute")])
+  lines
+}
+
+-~> Once per file and session, after its program ran: the note when it was
+-~> made on a faster machine. Called on every tick of the editor.
+function budget_editor_note() {
+  if (ed.pending || ed.file == "") {
+    return null
+  }
+  let note = budget_slower_note(ed.file, budget_now(ed.canvas, ed.shapes))
+  if (note != null) {
+    ed.note = {"text": note, "at": ed_now(), "ms": budget_note_ms, "icon": "warn", "color": "amber"}
+  }
+  null
+}

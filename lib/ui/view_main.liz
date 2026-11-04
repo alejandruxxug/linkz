@@ -4,6 +4,7 @@
 
 use "app"
 use "app_screens"
+use "budget_view"
 use "editor_commands"
 use "editor_state"
 use "editor_undo"
@@ -19,6 +20,7 @@ use "shape_popups"
 use "tool_route"
 use "pen_library"
 use "pen_route"
+use "color_route"
 
 -~> == Painting ==
 
@@ -52,6 +54,9 @@ function view_panel_key(name) {
   if (name == "status") {
     return common + str(V.ver) + "|" + str(V.mouse_draw) + "|" + V.pen_note + "|" + V.tool + "|" + str(ed_note_active())
   }
+  if (name == "palette") {
+    return common + color_panel_key()
+  }
   view_canvas_key()
 }
 
@@ -68,6 +73,8 @@ function view_panel_paint(name, forced) {
     view_paint_props()
   } elif (name == "status") {
     view_paint_status()
+  } elif (name == "palette") {
+    color_panel_paint()
   } else {
     return view_paint_canvas(forced)
   }
@@ -95,6 +102,7 @@ function view_paint() {
   let t0 = time.ms()
   view_tick()
   view_prepare()
+  budget_editor_note()
   V.cl = view_canvas_layout()
   V.anchor_tip = tip_anchor(V.cl)
   let now = popup_list()
@@ -110,7 +118,7 @@ function view_paint() {
     V.popup_shape = shape_key
   }
   let panels = view_panel_rects()
-  let names = ["toolbar", "tabs", "rows", "props", "status", "canvas"]
+  let names = ["toolbar", "tabs", "rows", "props", "status", "canvas", "palette"]
   let painted = false
   for (let i = 0; i < len(names); i = i + 1) {
     let name = names[i]
@@ -168,9 +176,9 @@ function view_auto_split(w) {
 function view_fit_split() {
   let lo = math.min(160, V.w * 5 // 8)
   if (V.pw_user) {
-    V.pw = math.max(lo, math.min(V.pw, V.w - 120))
+    V.pw = math.max(lo, math.min(V.pw, V.w - 120 - color_reserved()))
   } else {
-    V.pw = math.max(lo, math.min(view_auto_split(V.w), V.w - 120))
+    V.pw = math.max(lo, math.min(color_split(view_auto_split(V.w)), V.w - 120 - color_reserved()))
   }
 }
 

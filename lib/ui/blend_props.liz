@@ -1,0 +1,299 @@
+-~> blend_props: a layer's blend mode and opacity where the layers panel and
+-~> the properties panel show them.
+-~>   the badge   a layer row that isn't Normal 100% says so in its count
+-~>               slot (`MUL 80%`); a click on it opens the blend dropdown.
+-~>               A Normal 100% layer shows a dim blend mark there while the
+-~>               row is pointed at or selected, to open the dropdown too.
+-~>   the panel   a selected layer gets a second row: `blend [Multiply ⌄]`,
+-~>               then the opacity slider (track 6, thumb 5x12) and its `%`
+-~>               field. A drag of the slider is one undo step.
+-~> view_panels, view_layout and view_input call these, one line each.
+
+use "blend_menu"
+use "doc_cache"
+use "editor_state"
+use "editor_undo"
+use "i18n"
+use "icons"
+use "layer_blend"
+use "view_canvas"
+use "view_gfx"
+use "view_input"
+use "view_layout"
+
+icon_art["opacity"] = "########|#...####|#...####|#...####|#...####|#...####|#...####|########"
+
+-~> The styles of the layers of the text now, by line, read once per text.
+let blend_rows_cache = {"id": null, "styles": {}}
+
+-~> The style of the layer row r (layer_style_of), or null for any other row.
+function blend_row_style(r) {
+  if (r.kind != "layer") {
+    return null
+  }
+  let m = ed_model()
+  if (blend_rows_cache.id != doc_id(m)) {
+    blend_rows_cache.id = doc_id(m)
+    blend_rows_cache.styles = {}
+  }
+  let k = str(r.line)
+  if (blend_rows_cache.styles[k] == null) {
+    blend_rows_cache.styles[k] = layer_style_of(m, r.line)
+  }
+  blend_rows_cache.styles[k]
+}
+
+-~> == The badge ==
+
+-~> The badge's box [x, y offset, w] on a layer row of a panel `pw` wide that
+-~> shows `count` (a fold's count, 0 for none), or null when it has none.
+function blend_badge_box(r, count) {
+  let s = blend_badge_text(blend_row_style(r))
+  if (s == "") {
+    return null
+  }
+  let end = V.pw - 6
+  if (count > 0) {
+    end = V.pw - g_text_w(str(count)) - 12
+  }
+  [end - g_text_w(s), g_text_w(s), s]
+}
+
+-~> How much room the code of a row leaves for the badge.
+function blend_badge_room(r) {
+  let b = blend_badge_box(r, 0)
+  if (b == null) {
+    return 0
+  }
+  b[1] + 8
+}
+
+-~> The box of the dim mark of a Normal 100% layer: [x, w].
+function blend_mark_box(count) {
+  let end = V.pw - 6
+  if (count > 0) {
+    end = V.pw - g_text_w(str(count)) - 12
+  }
+  [end - 9, 10]
+}
+
+-~> Paints the badge (or the dim mark) of a layer row at y.
+function blend_paint_badge(r, y, count, sel) {
+  if (r.kind != "layer") {
+    return null
+  }
+  let b = blend_badge_box(r, count)
+  let hot = V.hover == "blendbadge:" + str(r.line)
+  if (b != null) {
+    let c = P.mute
+    if (sel || hot) {
+      c = P.text
+    }
+    if (hot) {
+      c = P.bright
+    }
+    g_text(b[2], b[0], y + 3, c)
+    return null
+  }
+  if (sel || hot || V.hover == "row:" + str(r.line)) {
+    let mb = blend_mark_box(count)
+    let c = P.dim
+    if (hot) {
+      c = P.bright
+    }
+    g_icon("blend", mb[0], y + 5, c)
+  }
+}
+
+-~> The hover id of the badge of row r at x, or null.
+function blend_badge_hover(r, x) {
+  if (r.kind != "layer") {
+    return null
+  }
+  let count = 0
+  if (r.collapsed) {
+    count = view_hidden_count(view_rows(), r)
+  }
+  let b = blend_badge_box(r, count)
+  let span = blend_mark_box(count)
+  if (b != null) {
+    span = [b[0], b[1]]
+  }
+  if (x >= span[0] - 2 && x < span[0] + span[1] + 2) {
+    return "blendbadge:" + str(r.line)
+  }
+  null
+}
+
+-~> A press on a badge: selects the layer and opens the dropdown under it.
+function blend_badge_press(id) {
+  let line = int(text.split(id, ":")[1])
+  view_select_line(line)
+  view_prepare()
+  view_after()
+  let vis = view_visible()
+  for (let i = 0; i < len(vis); i += 1) {
+    let it = vis[i].item
+    if (it.t == "row" && it.line == line) {
+      blend_menu_open(line, [V.pw - 120, vis[i].y, 114, 18], true)
+      return null
+    }
+  }
+}
+
+-~> == The properties panel ==
+
+-~> Adds the blend row to a layout of the panel when it shows a layer (and the
+-~> brush or pencil inspector doesn't have that row).
+function blend_props_wrap(lay) {
+  let props = lay.props
+  if (props == null || props.kind != "layer" || lay.pen_strip == true) {
+    return lay
+  }
+  let st = layer_style_of(ed_model(), props.line)
+  if (st == null) {
+    return lay
+  }
+  let gm = view_geom()
+  let y = gm.props_y + 42
+  lay.hint = ""
+  let label = text.lower(t("blend.label"))
+  push(lay.labels, {"x": 6, "y": y + 1, "s": label})
+  let x = 6 + g_text_w(label) + 4
+  let shown = blend_label(st.mode)
+  if (!st.readable) {
+    shown = t("blend.code")
+  }
+  let bw = math.max(82, bm_size(0)[0] - 20)
+  push(lay.boxes, {"field": "blend", "sub": 0, "kind": "blend", "x": x, "y": y, "w": bw, "h": 16, "text": shown, "focus": BM.open})
+  x = x + bw + 8
+  let ptxt = str(blend_percent(st.opacity)) + "%"
+  let focused = V.focus != null && V.focus.field == "opacity"
+  if (focused) {
+    ptxt = V.focus.text
+  }
+  let fw = math.max(36, g_text_w(ptxt) + 8)
+  let olabel = text.lower(t("blend.opacity"))
+  let end = V.pw - 6 - fw - 6
+  if (end - (x + g_text_w(olabel) + 4) >= 60) {
+    push(lay.labels, {"x": x, "y": y + 1, "s": olabel})
+    x = x + g_text_w(olabel) + 4
+  } else {
+    push(lay.boxes, {"field": "opicon", "sub": 0, "kind": "opicon", "x": x, "y": y + 4, "w": 8, "h": 8, "text": "", "focus": false})
+    x = x + 12
+  }
+  let sw = math.max(24, math.min(160, end - x))
+  push(lay.boxes, {"field": "opslider", "sub": 0, "kind": "opslider", "x": x, "y": y, "w": sw, "h": 16, "text": str(st.opacity), "focus": false})
+  push(lay.boxes, {"field": "opacity", "sub": 0, "kind": "opfield", "x": x + sw + 6, "y": y, "w": fw, "h": 16, "text": ptxt, "focus": focused})
+  lay
+}
+
+-~> Paints a box of the blend row. True when it was one.
+function blend_props_paint_box(b) {
+  if (b.kind == "blend") {
+    g_field(b.x, b.y, b.w, b.h, b.focus)
+    g_text(b.text, b.x + 4, b.y + 2, P.text)
+    g_icon("chevron-down", b.x + b.w - 12, b.y + 4, P.mute)
+    return true
+  }
+  if (b.kind == "opicon") {
+    g_icon("opacity", b.x, b.y, P.mute)
+    return true
+  }
+  if (b.kind == "opslider") {
+    let v = float(b.text)
+    let ty = b.y + 5
+    g_frame(b.x, ty, b.w, 6, P.void)
+    g_rect(b.x + 1, ty + 1, b.w - 2, 4, P.coal)
+    let tx = blend_slider_x(b, v)
+    g_rect(b.x + 1, ty + 1, tx - b.x - 1, 4, P.lizard)
+    g_rect(tx - 3, b.y + 1, 7, 14, P.void)
+    g_rect(tx - 2, b.y + 2, 5, 12, P.bright)
+    return true
+  }
+  if (b.kind == "opfield") {
+    g_field(b.x, b.y, b.w, b.h, b.focus)
+    g_text(b.text, b.x + 4, b.y + 2, P.amber)
+    if (b.focus && V.focus != null) {
+      g_rect(b.x + 4 + V.focus.caret * 7, b.y + 2, 1, 12, P.amber)
+    }
+    return true
+  }
+  false
+}
+
+-~> The x of the thumb for an opacity v on the slider b.
+function blend_slider_x(b, v) {
+  b.x + 3 + math.round((b.w - 6) * v)
+}
+
+-~> The opacity at x on the slider b, 0 to 1 in whole percents.
+function blend_slider_value(b, x) {
+  let v = (x - b.x - 3) / float(math.max(1, b.w - 6))
+  math.round(math.max(0, math.min(1, v)) * 100) / 100.0
+}
+
+-~> A press on a box of the blend row. True when it was one.
+function blend_props_press(b, e) {
+  let props = ed_props()
+  if (props == null || props.kind != "layer") {
+    return false
+  }
+  if (b.kind == "blend") {
+    if (BM.open) {
+      blend_menu_close()
+    } else {
+      blend_menu_open(props.line, [b.x, b.y, b.w, b.h], false)
+    }
+    view_after()
+    return true
+  }
+  if (b.kind == "opicon") {
+    return true
+  }
+  if (b.kind == "opslider") {
+    let st = layer_style_of(ed_model(), props.line)
+    if (st == null || !st.readable) {
+      ed_try_at({"refused": t("refuse.blend_code")}, null, props.line)
+      view_after()
+      return true
+    }
+    ed_begin_gesture("opacity")
+    V.drag = {"kind": "blend_op", "line": props.line, "box": b}
+    blend_props_drag(e)
+    return true
+  }
+  if (b.kind == "opfield") {
+    view_focus_box({"field": b.field, "sub": b.sub, "kind": b.kind, "text": str(blend_percent(layer_style_of(ed_model(), props.line).opacity))})
+    return true
+  }
+  false
+}
+
+-~> A move of the slider's drag: the opacity under the pointer.
+function blend_props_drag(e) {
+  let d = V.drag
+  ed_set_opacity(d.line, blend_slider_value(d.box, e.pos.x))
+  view_prepare()
+  view_after()
+}
+
+-~> The end of the slider's drag: its one undo step.
+function blend_props_up(_e) {
+  ed_end_gesture()
+  view_after()
+}
+
+-~> Writes the edited % field. True when the focus was it.
+function blend_props_commit(f) {
+  if (f.field != "opacity" || f.kind != "opfield") {
+    return false
+  }
+  let v = text.number(text.trim(text.replace(f.text, "%", "")))
+  if (v == null || v < 0 || v > 100) {
+    ed_try_at({"refused": t("refuse.opacity_percent")}, null, f.line)
+  } else {
+    ed_set_opacity(f.line, v / 100.0)
+  }
+  true
+}

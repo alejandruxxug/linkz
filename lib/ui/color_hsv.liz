@@ -1,0 +1,140 @@
+-~> color_hsv: a color as hue, saturation and value, and back, for the color
+-~> pickers. Pure functions. An hsv is a hash {"h", "s", "v", "a"}: h in
+-~> degrees from 0 up to 360, s and v from 0 to 1 (floats), a the alpha from
+-~> 0 to 255. A color read as an hsv and turned back is the same color, so
+-~> the hex field and the wheel always agree.
+
+-~> The hsv of a color. A grey keeps hue 0; hsv_keep_hue keeps a picker's own.
+function hsv_of(c) {
+  let r = c.r / 255.0
+  let gr = c.g / 255.0
+  let b = c.b / 255.0
+  let hi = math.max(r, gr, b)
+  let lo = math.min(r, gr, b)
+  let d = hi - lo
+  let h = 0.0
+  if (d > 0) {
+    if (hi == r) {
+      h = 60.0 * ((gr - b) / d)
+    } elif (hi == gr) {
+      h = 60.0 * ((b - r) / d + 2)
+    } else {
+      h = 60.0 * ((r - gr) / d + 4)
+    }
+  }
+  if (h < 0) {
+    h = h + 360.0
+  }
+  let s = 0.0
+  if (hi > 0) {
+    s = d / hi
+  }
+  {"h": h, "s": s, "v": hi, "a": c.a}
+}
+
+-~> The color of an hsv, each channel rounded to the nearest whole value.
+function hsv_color(hsv) {
+  let h = hue_wrap(hsv.h) / 60.0
+  let s = hsv_clamp(hsv.s)
+  let v = hsv_clamp(hsv.v)
+  let i = math.floor(h)
+  let f = h - i
+  let p = v * (1 - s)
+  let q = v * (1 - s * f)
+  let u = v * (1 - s * (1 - f))
+  let rgb3 = [v, u, p]
+  if (i == 1) {
+    rgb3 = [q, v, p]
+  } elif (i == 2) {
+    rgb3 = [p, v, u]
+  } elif (i == 3) {
+    rgb3 = [p, q, v]
+  } elif (i == 4) {
+    rgb3 = [u, p, v]
+  } elif (i >= 5) {
+    rgb3 = [v, p, q]
+  }
+  let a = hsv.a
+  if (a == null) {
+    a = 255
+  }
+  rgba(math.round(rgb3[0] * 255), math.round(rgb3[1] * 255), math.round(rgb3[2] * 255), math.max(0, math.min(255, math.round(a))))
+}
+
+-~> The hsv of c, but with the hue (and the saturation of a black) of `was`
+-~> when c is the color `was` already shows: dragging to the grey edge of a
+-~> picker does not throw its hue away.
+function hsv_keep_hue(c, was) {
+  if (was != null && hsv_color(was) == c) {
+    return was
+  }
+  let out = hsv_of(c)
+  if (was != null && (out.s == 0 || out.v == 0)) {
+    out.h = was.h
+    if (out.v == 0) {
+      out.s = was.s
+    }
+  }
+  out
+}
+
+-~> A hue turned into 0 up to 360.
+function hue_wrap(h) {
+  let out = h - 360.0 * math.floor(h / 360.0)
+  if (out >= 360) {
+    out = 0.0
+  }
+  out
+}
+
+function hsv_clamp(x) {
+  math.max(0.0, math.min(1.0, float(x)))
+}
+
+-~> A color as it is written: #rrggbb, with the alpha only when it is not full.
+function color_hex(c) {
+  str(c)
+}
+
+-~> A color from a field's text: 3, 6 or 8 hex digits, with or without the #,
+-~> or null.
+function color_parse(s) {
+  let d = text.lower(text.replace(text.trim(s), "#", ""))
+  if (len(d) == 3) {
+    d = d[0] + d[0] + d[1] + d[1] + d[2] + d[2]
+  }
+  if (len(d) == 6) {
+    d = d + "ff"
+  }
+  if (len(d) != 8) {
+    return null
+  }
+  let v = []
+  for (let i = 0; i < 8; i = i + 1) {
+    let n = text.find("0123456789abcdef", d[i])
+    if (n < 0) {
+      return null
+    }
+    push(v, n)
+  }
+  rgba(v[0] * 16 + v[1], v[2] * 16 + v[3], v[4] * 16 + v[5], v[6] * 16 + v[7])
+}
+
+-~> The same color with another alpha (0 to 255).
+function color_with_alpha(c, a) {
+  rgba(c.r, c.g, c.b, math.max(0, math.min(255, math.round(a))))
+}
+
+-~> The alpha as a percent text, like "100%".
+function alpha_text(c) {
+  str(math.round(c.a * 100 / 255.0)) + "%"
+}
+
+-~> The alpha (0 to 255) of a percent text like "40%" or "40", or null.
+function alpha_parse(s) {
+  let n = text.number(text.replace(text.trim(s), "%", ""))
+  if (n == null) {
+    return null
+  }
+  math.max(0, math.min(255, math.round(n * 255 / 100.0)))
+}

@@ -4,6 +4,9 @@
 -~> loaded in a sandbox of their own, with the host's primitives (host.liz),
 -~> the settings and the machine's measurement around them; the loop hands
 -~> them every event and asks them to paint when they say they need it.
+-~> The editor's `linkz` has two more functions: machine() gives the
+-~> machine's measurement ({} when unknown) and measure() measures again,
+-~> keeps it in ~/.linkz/machine.liz and gives it.
 -~>
 -~> Nothing runs while the editor waits: the window is on_demand, and a
 -~> frame is asked for only while app.needs_paint is true.
@@ -12,6 +15,7 @@ use "drawing"
 use "events"
 use "host"
 use "libs"
+use "machine"
 
 -~> The window's buffer at scale 2 (a window of 1024 by 720), and the smallest
 -~> one: below it the toolbar and the panels no longer fit.
@@ -42,6 +46,14 @@ function editor_load(win, path, settings, machine, modules = editor_modules, sta
     "events_coalesced": 0
   }
   let around = hash.merge(hash.merge(host_globals(win, true), {"settings": settings, "machine": machine}), stand_ins)
+  let kept = {"machine": machine}
+  around.linkz = hash.merge(around.linkz, {
+    "machine": function() { kept.machine },
+    "measure": function() {
+      kept.machine = machine_measure()
+      kept.machine
+    }
+  })
   around.src.run = function(code) {
     let r = drawing_run(code)
     stats.run_ms = r.ms

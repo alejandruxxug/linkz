@@ -1,9 +1,10 @@
 -~> shape_menu: the menu a right-click (or a two-finger click, or Ctrl+click)
 -~> opens on a shape of the canvas or on its row: rename, duplicate, the paint
 -~> order, hide, lock, the fill (a submenu of kinds and the drawing's colors),
--~> the stroke color, blend (later), copy, show in code and remove. Every
--~> choice is a code edit and one undo step (editor_shape_ops.liz).
--~> The menu is keyboard driven too: Up and Down pick, Right opens the fill
+-~> the stroke color, blend (a submenu of the modes of the row's layer,
+-~> layer_blend.liz), copy, show in code and remove. Every choice is a code
+-~> edit and one undo step (editor_shape_ops.liz).
+-~> The menu is keyboard driven too: Up and Down pick, Right opens a
 -~> submenu, Left closes it, Enter chooses, Esc closes, and the shortcuts it
 -~> shows work while it is open.
 -~> Metrics (style guide, R002 "Context menu"): rows 14, header 13, icon at
@@ -11,6 +12,8 @@
 -~> step 12; it flips left and up at the window's edge.
 
 use "app"
+use "blend_menu"
+use "color_route"
 use "editor_doc"
 use "editor_shape_ops"
 use "editor_state"
@@ -19,6 +22,7 @@ use "fill_editor"
 use "fill_model"
 use "i18n"
 use "icons_shape"
+use "layer_blend"
 use "view_canvas"
 use "view_gfx"
 use "view_input"
@@ -44,9 +48,10 @@ let sm_sep_h = 4
 -~> == What it shows ==
 
 -~> One entry: {"id", "icon", "label", "keys" (the shortcut shown), "on"
--~> (enabled), "danger", "sub" (opens a submenu), "check"}; "-" is a separator.
+-~> (enabled), "danger", "sub" (opens a submenu), "check", "swatch" (a blend
+-~> mode whose preview stands for the icon, or null)}; "-" is a separator.
 function sm_item(id, icon, label, keys, on) {
-  {"id": id, "icon": icon, "label": label, "keys": keys, "on": on, "danger": false, "sub": false, "check": false}
+  {"id": id, "icon": icon, "label": label, "keys": keys, "on": on, "danger": false, "sub": false, "check": false, "swatch": null}
 }
 
 function sm_sep() {
@@ -79,7 +84,7 @@ function sm_items(line) {
   }
   let fill = sm_item("fill", "fill", t("menu.fill"), "", fill_field(m, line, ed_docs(), "fill") != null)
   fill.sub = true
-  let blend = sm_item("blend", "blend", t("menu.blend"), "", false)
+  let blend = sm_item("blend", "blend", t("menu.blend"), "", can_blend_row(m, line))
   blend.sub = true
   let remove = sm_item("remove", "trash", t("menu.remove"), t("menu.key_delete"), stmt)
   remove.danger = true
@@ -105,8 +110,11 @@ function sm_items(line) {
   ]
 }
 
--~> The entries of the fill submenu.
-function sm_sub_items(line) {
+-~> The entries of the submenu of the entry `of` ("fill" or "blend").
+function sm_sub_items(line, of = "fill") {
+  if (of == "blend") {
+    return sm_blend_items(line)
+  }
   let kind = sm_fill_kind(line)
   let out = [
     sm_item("solid", "solid", t("menu.fill_solid"), "", true),
@@ -117,6 +125,28 @@ function sm_sub_items(line) {
   ]
   for (let i = 0; i < 3; i = i + 1) {
     out[i].check = out[i].id == kind
+  }
+  out
+}
+
+-~> The entries of the blend submenu: the modes, in groups, with their
+-~> previews and three letters; the mode of the row's layer is checked.
+function sm_blend_items(line) {
+  let st = row_layer_style(ed_model(), line)
+  let now = "normal"
+  if (st != null) {
+    now = st.mode
+  }
+  let out = []
+  for (let i = 0; i < len(blend_menu_modes); i += 1) {
+    if (list.index(blend_menu_groups, i) >= 0) {
+      push(out, sm_sep())
+    }
+    let mode = blend_menu_modes[i]
+    let it = sm_item("blend:" + mode, "", blend_label(mode), blend_codes[mode], true)
+    it.swatch = mode
+    it.check = mode == now
+    push(out, it)
   }
   out
 }
@@ -203,13 +233,20 @@ function sm_rows(items, y0) {
 }
 
 -~> The submenu's box: {"x", "y", "w", "h", "items", "rows", "swatches"}, beside
--~> the Fill entry, on the side that has room.
+-~> its entry (Fill or Blend), on the side that has room.
 function sm_sub_box() {
   let s = SM.sub
   let items = s.items
-  let sw = sm_swatches()
+  let sw = []
+  if (s.of == "fill") {
+    sw = color_menu_swatches(sm_swatches())
+  }
   let size = sm_size(items, "", len(sw))
-  let at = list.index(sm_ids(SM.items), "fill")
+  if (s.of == "blend") {
+    -~> the three letters stay on even when the mode is checked
+    size[0] = size[0] + 14
+  }
+  let at = list.index(sm_ids(SM.items), s.of)
   let iy = SM.y + 16 + sm_rows(SM.items, 0)[at]
   let x = SM.x + SM.w - 2
   if (x + size[0] + 3 > V.w) {
@@ -246,30 +283,7 @@ function sm_popup_rects() {
     let b = sm_sub_box()
     push(out, ["shape_sub", [b.x, b.y, b.w + 2, b.h + 2]])
   }
-  let tip = sm_tip_box()
-  if (tip != null) {
-    push(out, ["shape_tip", [tip[0], tip[1], tip[2] + 2, tip[3] + 2]])
-  }
   out
-}
-
--~> The note of the disabled Blend entry while it is the one pointed at: [x, y, w, h].
-function sm_tip_box() {
-  if (SM.hot < 0 || SM.items[SM.hot].id != "blend") {
-    return null
-  }
-  let s = t("menu.blend_soon")
-  let w = g_text_w(s) + 14
-  let y = SM.y + 16 + sm_rows(SM.items, 0)[SM.hot]
-  let x = SM.x + SM.w + 2
-  if (x + w + 3 > V.w) {
-    x = SM.x - w - 2
-  }
-  if (x < 1) {
-    -~> no room on either side: above the menu
-    return [SM.x, math.max(17, SM.y - 24), w, 21]
-  }
-  [x, y, w, 21]
 }
 
 -~> What the menu shows, as a text: it is drawn again when this changes.
@@ -321,9 +335,13 @@ function sm_close() {
   }
 }
 
-function sm_open_sub() {
+-~> Opens the submenu of the entry `of` ("fill" or "blend").
+function sm_open_sub(of = "fill") {
+  if (SM.sub != null && SM.sub.of != of) {
+    SM.sub = null
+  }
   if (SM.sub == null) {
-    SM.sub = {"items": sm_sub_items(SM.line), "hot": -1}
+    SM.sub = {"of": of, "items": sm_sub_items(SM.line, of), "hot": -1}
     view_touch()
   }
 }
@@ -421,8 +439,8 @@ function sm_hover_at(x, y) {
     let it = SM.items[i]
     if (it.id != "-" && y >= rows[i] && y < rows[i] + sm_row_h) {
       SM.hot = i
-      if (it.id == "fill" && it.on) {
-        sm_open_sub()
+      if ((it.id == "fill" || it.id == "blend") && it.on) {
+        sm_open_sub(it.id)
       } elif (SM.sub != null) {
         SM.sub = null
         view_touch()
@@ -454,7 +472,14 @@ function sm_down(e) {
   } elif (parts[0] == "msub") {
     sm_choose(SM.sub.items[int(parts[1])].id)
   } elif (parts[0] == "msw") {
-    sm_paint_color(sm_sub_box().swatches[int(parts[1])])
+    let sw = sm_sub_box().swatches[int(parts[1])]
+    let line = SM.line
+    if (type(sw) == "HASH") {
+      sm_close()
+      color_menu_use(line, sw)
+    } else {
+      sm_paint_color(sw)
+    }
   }
   true
 }
@@ -510,7 +535,7 @@ function sm_key(e) {
       view_touch()
     } elif ((k == "enter" || k == "return" || k == " ") && s.hot >= 0) {
       sm_choose(s.items[s.hot].id)
-    } elif (k == "f") {
+    } elif (k == "f" && s.of == "fill") {
       sm_choose("edit")
     }
     return true
@@ -583,7 +608,7 @@ function sm_choose_at(i) {
     return null
   }
   if (it.sub) {
-    sm_open_sub()
+    sm_open_sub(it.id)
     return null
   }
   sm_choose(it.id)
@@ -620,6 +645,8 @@ function sm_choose(id) {
     fe_open(line, "fill")
   } elif (id == "stroke") {
     fe_open(line, "stroke")
+  } elif (text.starts(id, "blend:")) {
+    ed_set_blend(line, text.slice(id, 6, len(id)))
   }
   view_prepare()
   view_after()
@@ -698,11 +725,6 @@ function sm_draw() {
     let b = sm_sub_box()
     sm_draw_box(b.x, b.y, b.w, b.h, "", b.items, b.rows, SM.sub.hot, b.swatches)
   }
-  let tip = sm_tip_box()
-  if (tip != null) {
-    g_box(tip[0], tip[1], tip[2], tip[3])
-    g_text(t("menu.blend_soon"), tip[0] + 7, tip[1] + 4, P.text)
-  }
 }
 
 -~> One menu box: the header (when there is a title), the entries, the swatches.
@@ -725,8 +747,7 @@ function sm_draw_box(x, y, w, h, title, items, rows, hot, swatches) {
   if (len(swatches) > 0) {
     let sy = y + h - 16
     for (let i = 0; i < len(swatches); i = i + 1) {
-      g_rect(x + 6 + i * 12, sy + 3, 10, 10, P.void)
-      g_rect(x + 7 + i * 12, sy + 4, 8, 8, swatches[i])
+      color_menu_swatch_draw(x + 6 + i * 12, sy + 3, swatches[i])
     }
   }
 }
@@ -754,9 +775,19 @@ function sm_draw_item(x, y, w, it, hot) {
     ic = P.lizard
     kc = P.text
   }
-  g_icon(it.icon, x + 6, y + 3, ic)
+  if (it.swatch != null) {
+    blend_swatch_draw(it.swatch, x + 5, y + 2)
+  } else {
+    g_icon(it.icon, x + 6, y + 3, ic)
+  }
   g_text(it.label, x + 18, y, tc)
-  if (it.sub) {
+  if (it.swatch != null) {
+    -~> a blend mode: its three letters, and the check of the current one before them
+    g_text(it.keys, x + w - 6 - g_text_w(it.keys), y, kc)
+    if (it.check) {
+      g_icon("check", x + w - 6 - g_text_w("MUL") - 12, y + 3, P.lizard)
+    }
+  } elif (it.sub) {
     let cc = kc
     if (hot) {
       cc = P.bright

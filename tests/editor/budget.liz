@@ -1,0 +1,97 @@
+-~> The object budget in the editor's window: the status bar's counter
+-~> (`objects N / MAX`, amber from 80%, ember over), its tooltip, the note
+-~> shown once for a drawing made on a faster machine (the file stays as it
+-~> was), and Cmd+N: the New drawing dialog on the home screen, whose Create
+-~> writes the canvas with this machine's limit and opens it.
+
+use "../../lib/app/editor"
+use "rig"
+
+let dir = fs.join(fs.home(), "budget-test")
+let modules = rig_modules + ["ui/view_panels", "ui/view_popups", "ui/budget_view", "ui/budget_model", "ui/home_view", "ui/new_drawing_view"]
+let plain = {"shift": false, "alt": false, "cmd": false, "ctrl": false}
+let cmd = {"shift": false, "alt": false, "cmd": true, "ctrl": false}
+
+-~> The editor on code, with this machine's measurement.
+function open_with(code, machine) {
+  let path = fs.join(dir, "drawing.lzdraw")
+  fs.mkdir(dir)
+  fs.write(path, code)
+  let win = window.open(editor_size.x, editor_size.y, "Linkz", hash.merge(editor_options(), {"headless": true}))
+  let ed = editor_load(win, path, {}, machine, modules, {"clip": rig_clip})
+  let opened = {"win": win, "ed": ed, "names": ed.names, "path": path}
+  rig_frame(opened)
+  opened
+}
+
+-~> A drawing of n circles on a canvas made with a limit of max.
+function drawing(n, max) {
+  "canvas = {\"size\": (200, 100), \"background\": #ffffff, \"max_objects\": " + str(max) + "}\n" +
+    "for (let i = 0; i < " + str(n) + "; i += 1) {\n  circle((10 + i * 4, 50), 3, #3fa34d)\n}\n"
+}
+
+-~> A text with this machine's name ("this Mac", "this computer") as <machine>,
+-~> so the output is the same on every system.
+function plain(n, s) {
+  text.replace(s, n.budget_machine_name(), "<machine>")
+}
+
+-~> The status bar's last part on the left.
+function counter(n) {
+  let left = n.view_status_parts()[0]
+  left[len(left) - 1]
+}
+
+puts("-- the counter")
+let rig = open_with(drawing(7, 10), {})
+let n = rig.names
+puts(counter(n))
+rig.ed.app.debug_commands.SetCode([drawing(8, 10)])
+rig_frame(rig)
+puts(counter(n))
+rig.ed.app.debug_commands.SetCode([drawing(12, 10)])
+rig_frame(rig)
+puts(counter(n))
+puts(rig.ed.error)
+
+puts("-- its tooltip")
+let r = n.budget_counter_rect()
+let id = n.view_hover_at(r[0] + 2, r[1] + 8)
+puts(id, n.view_tippable(id), n.view_hover_at(r[0] + r[2] + 4, r[1] + 8))
+let tip = n.tip_for(id)
+for (let i = 0; i < len(tip.lines); i += 1) {
+  let words = []
+  for (let k = 0; k < len(tip.lines[i]); k += 1) {
+    push(words, plain(n, tip.lines[i][k].s) + " (" + tip.lines[i][k].c + ")")
+  }
+  puts(text.join(words, ""))
+}
+puts(tip.y + tip.h <= r[1], "(above the status bar)")
+
+puts("-- made on a faster machine")
+let slow = open_with(drawing(3, 4000), {"max_objects": 1800})
+let s = slow.names
+puts(s.ed_note_active(), plain(s, s.ed.note.text))
+puts(plain(s, str(counter(s))))
+puts(fs.read(slow.path) == drawing(3, 4000), "(the file is not changed)")
+s.ed.note = null
+rig_frame(slow)
+puts(counter(s))
+-~> opened again in the same session: no second note
+s.ed_open(slow.path)
+rig_frame(slow)
+puts(s.ed.note)
+
+puts("-- Cmd+N opens the New drawing dialog")
+rig_frame(slow, [{"type": "key", "key": "N", "mods": cmd}])
+let st = slow.ed.app.debug_state()
+puts(st.screen, st.home.new_dialog.open, st.home.new_dialog.name, st.home.new_dialog.recommended)
+rig_frame(slow, [{"type": "type", "text": "dune"}])
+let preset = st.home.new_dialog.presets[2]
+rig_frame(slow, [{"type": "down", "button": 0, "pos": (preset.rect[0] + 2, preset.rect[1] + 2), "mods": plain}])
+rig_frame(slow, [{"type": "key", "key": "Enter", "mods": plain}])
+st = slow.ed.app.debug_state()
+puts(st.screen, st.home.new_dialog.open, text.ends(s.ed.file, "/Documents/Linkz/dune.lzdraw"))
+puts(fs.read(s.ed.file))
+puts(counter(s))
+puts(slow.ed.error)

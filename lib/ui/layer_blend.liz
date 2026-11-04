@@ -1,0 +1,318 @@
+-~> layer_blend: a layer's blend mode and opacity, read from its code and
+-~> written back as code. They are the calls `blend("multiply")` and
+-~> `opacity(0.8)` inside the layer (lib/draw/blend.liz), as its first rows:
+-~>   layer shadows
+-~>     blend("multiply")
+-~>     opacity(0.8)
+-~>     polygon(...)
+-~> Normal and 100% are no row at all, so choosing them takes the row away.
+-~> The pure functions take a model and return a new one (or a refusal); the
+-~> ed_* ones apply them as one undo step each. A shape that is in no layer
+-~> is wrapped in a layer of its own first, so it gets one to blend.
+
+use "editor_create"
+use "editor_doc"
+use "editor_edit"
+use "editor_rows"
+use "editor_twoway"
+use "editor_undo"
+use "i18n"
+
+-~> The modes in the order the menus show them, split in groups: normal │
+-~> the darkening ones │ the lightening ones │ overlay.
+let blend_menu_modes = ["normal", "multiply", "darken", "screen", "lighten", "add", "overlay"]
+let blend_menu_groups = [1, 3, 6]
+
+-~> The three letters a mode shows on a layer row and in the menus.
+let blend_codes = {
+  "normal": "",
+  "multiply": "MUL",
+  "darken": "DRK",
+  "screen": "SCR",
+  "lighten": "LGT",
+  "add": "ADD",
+  "overlay": "OVR"
+}
+
+-~> The name of a mode in the interface's language.
+function blend_label(mode) {
+  t("blend." + mode)
+}
+
+-~> == Reading ==
+
+-~> What the code of the layer on `line` says: {"line", "mode", "opacity",
+-~> "blend_line", "opacity_line" (the rows that say it, 0 for none),
+-~> "readable" (false when one of them is written as code, not a literal),
+-~> "pad" (the indentation of its rows)}. Null when the row is no layer.
+-~> When a layer says it twice, the last row wins, as when it runs.
+function layer_style_of(m, line) {
+  let rows = doc_rows(m, null, null)
+  if (line < 1 || line > len(rows) || rows[line - 1].kind != "layer") {
+    return null
+  }
+  let r = rows[line - 1]
+  let out = {
+    "line": line,
+    "mode": "normal",
+    "opacity": 1.0,
+    "blend_line": 0,
+    "opacity_line": 0,
+    "readable": true,
+    "pad": leading_ws(m.lines[line - 1]) + 2
+  }
+  let first = true
+  let l = line + 1
+  while (l <= r.end_line) {
+    let c = rows[l - 1]
+    if (c.stmt == null || c.parent != line) {
+      l += 1
+      continue
+    }
+    if (first) {
+      out.pad = leading_ws(m.lines[l - 1])
+      first = false
+    }
+    if (c.callee == "blend") {
+      out.blend_line = l
+      layer_style_read_mode(out, row_stmt(c).args)
+    } elif (c.callee == "opacity") {
+      out.opacity_line = l
+      layer_style_read_opacity(out, row_stmt(c).args)
+    }
+    l = c.end_line + 1
+  }
+  out
+}
+
+function layer_style_read_mode(out, args) {
+  if (len(args) == 1 && args[0].kind == "string") {
+    let v = text.slice(args[0].text, 1, len(args[0].text) - 1)
+    if (list.index(blend_menu_modes, v) >= 0) {
+      out.mode = v
+      return null
+    }
+  }
+  out.readable = false
+}
+
+function layer_style_read_opacity(out, args) {
+  if (len(args) == 1) {
+    let v = text.number(text.trim(args[0].text))
+    if (v != null && v >= 0 && v <= 1) {
+      out.opacity = float(v)
+      return null
+    }
+  }
+  out.readable = false
+}
+
+-~> The badge of a layer row: "MUL 80%", "MUL", "80%", or "" for Normal 100%.
+function blend_badge_text(st) {
+  if (st == null) {
+    return ""
+  }
+  let parts = []
+  if (!st.readable) {
+    return "fx"
+  }
+  if (st.mode != "normal") {
+    push(parts, blend_codes[st.mode])
+  }
+  if (blend_percent(st.opacity) < 100) {
+    push(parts, str(blend_percent(st.opacity)) + "%")
+  }
+  text.join(parts, " ")
+}
+
+-~> An opacity as a whole percent.
+function blend_percent(v) {
+  math.round(v * 100)
+}
+
+-~> An opacity as the code writes it: 0.8, 0.35, 0.
+function blend_opacity_code(v) {
+  let n = math.max(0, math.min(100, math.round(v * 100)))
+  if (n == 0) {
+    return "0"
+  }
+  str(n / 100.0)
+}
+
+-~> == Writing ==
+
+-~> The layer on `line` set to `mode` and `opacity` (0 to 1): the rows that
+-~> say it are rewritten in place, added as the layer's first rows, or taken
+-~> away for Normal and 100%. The caret stays on its row. A refusal when the
+-~> layer's blend or opacity is written as code.
+function set_layer_style(m, line, mode, opacity) {
+  let st = layer_style_of(m, line)
+  if (st == null) {
+    return {"refused": t("refuse.blend_no_layer")}
+  }
+  if (!st.readable) {
+    return {"refused": t("refuse.blend_code")}
+  }
+  if (list.index(blend_menu_modes, mode) < 0) {
+    return {"refused": t("refuse.blend_mode", {"mode": str(mode)})}
+  }
+  -~> each step reads the rows again: the layer's own line never moves
+  let out = layer_style_blend_row(m, st, mode)
+  if (is_refusal(out)) {
+    return out
+  }
+  layer_style_opacity_row(out, st, blend_percent(opacity) < 100, opacity)
+}
+
+-~> The blend row of the layer written, added or taken away.
+function layer_style_blend_row(m, st, mode) {
+  let code = "blend(\"" + mode + "\")"
+  let at = layer_style_of(m, st.line)
+  if (at.blend_line > 0) {
+    if (mode == "normal") {
+      return blend_rows_remove(m, at.blend_line)
+    }
+    if (at.mode == mode) {
+      return m
+    }
+    return rewrite_arg(m, at.blend_line, 0, null, "\"" + mode + "\"")
+  }
+  if (mode == "normal") {
+    return m
+  }
+  blend_rows_insert(m, st.line + 1, " " * at.pad + code)
+}
+
+-~> The opacity row of the layer written, added (after its blend row when
+-~> that is the first one) or taken away.
+function layer_style_opacity_row(m, st, want, opacity) {
+  let code = "opacity(" + blend_opacity_code(opacity) + ")"
+  let at = layer_style_of(m, st.line)
+  if (at.opacity_line > 0) {
+    if (!want) {
+      return blend_rows_remove(m, at.opacity_line)
+    }
+    if (blend_percent(at.opacity) == blend_percent(opacity)) {
+      return m
+    }
+    return rewrite_arg(m, at.opacity_line, 0, null, blend_opacity_code(opacity))
+  }
+  if (!want) {
+    return m
+  }
+  let where = st.line + 1
+  if (at.blend_line == st.line + 1) {
+    where = st.line + 2
+  }
+  blend_rows_insert(m, where, " " * at.pad + code)
+}
+
+-~> A row added at `where`; the caret moves down with its row.
+function blend_rows_insert(m, where, s) {
+  let lines = list.slice(m.lines, 0, where - 1) + [s] + list.slice(m.lines, where - 1, len(m.lines))
+  let line = m.line
+  if (line >= where) {
+    line += 1
+  }
+  doc_with(m, lines, line, m.col)
+}
+
+-~> The statement on `line` taken away; the caret moves up with its row.
+function blend_rows_remove(m, line) {
+  let end = doc_row(m, line, null, null).end_line
+  let n = end - line + 1
+  let lines = list.slice(m.lines, 0, line - 1) + list.slice(m.lines, end, len(m.lines))
+  let caret = m.line
+  let col = m.col
+  if (caret > end) {
+    caret -= n
+  } elif (caret >= line) {
+    caret = line - 1
+    col = 0
+  }
+  doc_with(m, lines, caret, col)
+}
+
+-~> The layer a row blends with: its own line for a layer, the layer it is
+-~> in for anything else, 0 for none.
+function blend_layer_of(m, line) {
+  let r = doc_row(m, line, null, null)
+  if (r.kind == "layer") {
+    return line
+  }
+  r.layer
+}
+
+-~> Whether the Blend entry of the shape menu works on the row: a layer, or a
+-~> shape (in a layer or not).
+function can_blend_row(m, line) {
+  let r = doc_row(m, line, null, null)
+  r.kind == "layer" || (r.kind == "shape" && r.stmt != null)
+}
+
+-~> The statement on `line` (a shape in no layer) wrapped in a new layer of
+-~> its own, `layer layerN` on its line: [model, line of the layer].
+function wrap_in_layer(m, line) {
+  let end = doc_row(m, line, null, null).end_line
+  let pad = leading_ws(m.lines[line - 1])
+  let head = " " * pad + "layer " + create_unique(m, "layer")
+  let body = edit_reindent(list.slice(m.lines, line - 1, end), 2)
+  let lines = list.slice(m.lines, 0, line - 1) + [head] + body + list.slice(m.lines, end, len(m.lines))
+  let caret = m.line
+  let col = m.col
+  if (caret > end) {
+    caret += 1
+  } elif (caret >= line) {
+    caret += 1
+    col += 2
+  }
+  doc_with(m, lines, caret, col)
+}
+
+-~> The mode of the layer of the row on `line` set (its opacity kept). A shape
+-~> in no layer is wrapped in one first, in the same step.
+function set_row_blend(m, line, mode) {
+  let layer = blend_layer_of(m, line)
+  if (layer == 0) {
+    if (!can_blend_row(m, line)) {
+      return {"refused": t("refuse.blend_no_layer")}
+    }
+    if (mode == "normal") {
+      return m
+    }
+    m = wrap_in_layer(m, line)
+    layer = line
+  }
+  let st = layer_style_of(m, layer)
+  if (st == null) {
+    return {"refused": t("refuse.blend_no_layer")}
+  }
+  set_layer_style(m, layer, mode, st.opacity)
+}
+
+-~> The style of the layer of the row on `line`, or null when it is in none.
+function row_layer_style(m, line) {
+  let layer = blend_layer_of(m, line)
+  if (layer == 0) {
+    return null
+  }
+  layer_style_of(m, layer)
+}
+
+-~> == As undo steps ==
+
+-~> The blend mode of the row's layer (a shape's, or the layer itself).
+function ed_set_blend(line, mode) {
+  ed_try_as("blend", null, set_row_blend(ed_model(), line, mode))
+}
+
+-~> The opacity of the layer on `line`. Inside a gesture (a drag of the
+-~> slider) it joins the gesture's one step; else it is a step of its own.
+function ed_set_opacity(line, opacity) {
+  let st = layer_style_of(ed_model(), line)
+  if (st == null) {
+    return ed_try_at({"refused": t("refuse.blend_no_layer")}, null, line)
+  }
+  ed_label("opacity")
+  ed_try_at(set_layer_style(ed_model(), line, st.mode, opacity), null, line)
+}

@@ -1,36 +1,48 @@
 -~> shape_popups: where the shape menu and the fill editor meet the rest of the
 -~> editor. view_input, view_main and view_popups call these, one line each,
 -~> and know nothing else of the two: the menu goes over the fill editor, and
--~> while one of them is open it gets the pointer and the keys first.
+-~> while one of them is open it gets the pointer and the keys first. The
+-~> blend dropdown of a layer (blend_menu.liz) is one of them too, and the
+-~> shape menu's Cmd shortcuts work here with the menu closed.
 
+use "blend_menu"
+use "editor_shape_ops"
+use "editor_undo"
 use "fill_editor"
 use "shape_menu"
+use "view_input"
+use "view_layout"
 
 -~> Whether either is open.
 function shape_popup_open() {
-  SM.open || FE.open
+  SM.open || FE.open || BM.open
 }
 
 -~> The boxes they cover, as [kind, rect] (see popup_list).
 function shape_popup_rects() {
   fe_sync()
-  fe_popup_rects() + sm_popup_rects()
+  fe_popup_rects() + sm_popup_rects() + blend_menu_rects()
 }
 
 -~> What they show, as a text: they are drawn again when it changes.
 function shape_popup_key() {
   fe_sync()
-  fe_content_key() + "|" + sm_content_key()
+  fe_content_key() + "|" + sm_content_key() + "|" + blend_menu_key()
 }
 
 -~> Draws them into the current buffer (popup_paint draws into both).
 function shape_popup_draw() {
   fe_draw()
   sm_draw()
+  blend_menu_draw()
 }
 
 -~> The hover id at a UI point, or null when neither is there.
 function shape_hover_at(x, y) {
+  let bid = blend_menu_hover_at(x, y)
+  if (bid != null) {
+    return bid
+  }
   let id = sm_hover_at(x, y)
   if (id != null) {
     return id
@@ -40,6 +52,9 @@ function shape_hover_at(x, y) {
 
 -~> A left press: true when one of them took it.
 function shape_down(e) {
+  if (blend_menu_down(e)) {
+    return true
+  }
   if (sm_down(e)) {
     return true
   }
@@ -57,6 +72,9 @@ function shape_up(e) {
 
 -~> A key: true when one of them used it.
 function shape_keydown(e) {
+  if (blend_menu_key_down(e)) {
+    return true
+  }
   if (sm_key(e)) {
     return true
   }
@@ -74,5 +92,31 @@ function shape_text(s) {
 -~> A right-click, two-finger click or Ctrl+click: the shape menu.
 function shape_context(e) {
   fe_close()
+  blend_menu_close()
   sm_context(e)
+}
+
+-~> Cmd+D, Cmd+] and Cmd+[ anywhere in the editor: duplicate, bring forward
+-~> and send backward the statement of the caret's row, as the shape menu
+-~> does. They type nothing. True when the key was one of them.
+function shape_global_key(e) {
+  let mods = e.mods
+  if (mods == null || !(mods.cmd == true || mods.ctrl == true) || mods.alt == true) {
+    return false
+  }
+  let id = sm_shortcut(text.lower(e.key), true)
+  if (id == "") {
+    return false
+  }
+  let line = ed_model().line
+  if (view_rows()[line - 1].stmt != null) {
+    if (id == "duplicate") {
+      ed_shape_duplicate(line)
+    } else {
+      ed_shape_order(line, id)
+    }
+  }
+  view_prepare()
+  view_after()
+  true
 }

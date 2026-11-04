@@ -1,0 +1,314 @@
+-~> color_draw: the parts that show a user's colors (the style guide's
+-~> "color content" exception): chips of colors and gradients, the hue
+-~> ring and the triangle of the wheel, the square, the hue and alpha
+-~> strips, smooth at the resolution of the buffer they are drawn into.
+-~> Around them everything stays 8-bit: a 1 px void frame and pixel markers.
+-~> Positions are UI pixels, like view_gfx.
+
+use "../draw/gradient"
+use "color_hsv"
+use "color_wheel"
+use "fill_model"
+use "view_gfx"
+
+-~> The light and dark checker that shows alpha, squares of n UI pixels.
+function cd_checker(x, y, w, h, n) {
+  g_rect(x, y, w, h, #d4dacd)
+  for (let j = 0; j * n < h; j = j + 1) {
+    for (let i = 0; i * n < w; i = i + 1) {
+      if ((i + j) % 2 == 1) {
+        g_rect(x + i * n, y + j * n, math.min(n, w - i * n), math.min(n, h - j * n), #a0ab9b)
+      }
+    }
+  }
+}
+
+-~> A buffer x or y of a UI one.
+function cd_bx(x) {
+  (x - g.ox) * g.s
+}
+
+function cd_by(y) {
+  (y - g.oy) * g.s
+}
+
+-~> Fills the rectangle (UI pixels) with a gradient running left to right
+-~> across it: stops as lib/draw takes them.
+function cd_hgrad(x, y, w, h, stops) {
+  let x0 = cd_bx(x)
+  let x1 = cd_bx(x + w)
+  let gr = linear((x0, 0), (x1, 0), stops)
+  let rows = []
+  for (let yy = cd_by(y); yy < cd_by(y + h); yy = yy + 1) {
+    push(rows, [yy, x0, x1])
+  }
+  fb.spans_gradient(rows, (0, 0), gr)
+}
+
+-~> Whether a value has a color that is not opaque.
+function cd_has_alpha(v) {
+  if (type(v) == "COLOR") {
+    return v.a < 255
+  }
+  for (let i = 0; i < len(v.stops); i = i + 1) {
+    if (v.stops[i][1].a < 255) {
+      return true
+    }
+  }
+  false
+}
+
+-~> A chip: a color or a gradient in a 1 px void frame (w, h with the frame).
+-~> A linear gradient runs across, a radial one from the middle, a stepped
+-~> one in flat bands; alpha shows over the checker. Code it can't show is
+-~> a dim cross.
+function cd_chip(x, y, w, h, v) {
+  g_frame(x, y, w, h, P.void)
+  let ix = x + 1
+  let iy = y + 1
+  let iw = w - 2
+  let ih = h - 2
+  if (v == null || (type(v) != "COLOR" && !is_gradient(v))) {
+    g_rect(ix, iy, iw, ih, P.coal)
+    g_rect(ix + iw // 2, iy + 1, 1, ih - 2, P.dim)
+    return null
+  }
+  if (cd_has_alpha(v)) {
+    cd_checker(ix, iy, iw, ih, 2)
+  }
+  if (type(v) == "COLOR") {
+    g_rect(ix, iy, iw, ih, v)
+    return null
+  }
+  let f = fill_from_value(v)
+  if (f.steps >= 2) {
+    for (let i = 0; i < f.steps; i = i + 1) {
+      let x0 = ix + iw * i // f.steps
+      let x1 = ix + iw * (i + 1) // f.steps
+      g_rect(x0, iy, x1 - x0, ih, fill_color_at(f.stops, i / (f.steps - 1.0)))
+    }
+    return null
+  }
+  let stops = []
+  for (let i = 0; i < len(f.stops); i = i + 1) {
+    if (f.stops[i].hard && i > 0) {
+      push(stops, [f.stops[i].t, f.stops[i].color, "hard"])
+    } else {
+      push(stops, [f.stops[i].t, f.stops[i].color])
+    }
+  }
+  if (f.kind == "linear") {
+    return cd_hgrad(ix, iy, iw, ih, stops)
+  }
+  let rr = math.max(iw, ih) * 0.5 * g.s
+  let gr = radial((cd_bx(ix + iw / 2.0), cd_by(iy + ih / 2.0)), rr, stops)
+  let rows = []
+  for (let yy = cd_by(iy); yy < cd_by(iy + ih); yy = yy + 1) {
+    push(rows, [yy, cd_bx(ix), cd_bx(ix + iw)])
+  }
+  fb.spans_gradient(rows, (0, 0), gr)
+}
+
+-~> == The strips and the square ==
+
+-~> The hue strip: every hue left to right, in a void frame.
+function cd_hue_strip(st) {
+  g_frame(st[0] - 1, st[1] - 1, st[2] + 2, st[3] + 2, P.void)
+  let stops = []
+  for (let i = 0; i <= 6; i = i + 1) {
+    push(stops, [i / 6.0, hsv_color({"h": i * 60.0, "s": 1, "v": 1, "a": 255})])
+  }
+  cd_hgrad(st[0], st[1], st[2], st[3], stops)
+}
+
+-~> The alpha strip of a color: clear to opaque over the checker.
+function cd_alpha_strip(st, c) {
+  g_frame(st[0] - 1, st[1] - 1, st[2] + 2, st[3] + 2, P.void)
+  cd_checker(st[0], st[1], st[2], st[3], 3)
+  cd_hgrad(st[0], st[1], st[2], st[3], [[0.0, color_with_alpha(c, 0)], [1.0, color_with_alpha(c, 255)]])
+}
+
+-~> The saturation / value square of hue h: one row of the buffer at a time,
+-~> grey on the left to the hue on the right (exact: the color changes in a
+-~> straight line along a row).
+function cd_square(sq, h) {
+  g_frame(sq[0] - 1, sq[1] - 1, sq[2] + 2, sq[3] + 2, P.void)
+  let y0 = cd_by(sq[1])
+  let y1 = cd_by(sq[1] + sq[3])
+  let x0 = cd_bx(sq[0])
+  let x1 = cd_bx(sq[0] + sq[2])
+  for (let yy = y0; yy < y1; yy = yy + 1) {
+    let v = 1 - (yy - y0) / float(math.max(1, y1 - y0 - 1))
+    let a = hsv_color({"h": h, "s": 0, "v": v, "a": 255})
+    let b = hsv_color({"h": h, "s": 1, "v": v, "a": 255})
+    fb.spans_gradient([[yy, x0, x1]], (0, 0), linear((x0, 0), (x1, 0), [a, b]))
+  }
+}
+
+-~> A marker on a strip at x: a 3 wide bright bar in a void frame, over its height.
+function cd_strip_marker(st, t) {
+  let x = st[0] + math.round(t * (st[2] - 1))
+  g_frame(x - 2, st[1] - 2, 5, st[3] + 4, P.void)
+  g_rect(x - 1, st[1] - 1, 3, st[3] + 2, P.bright)
+}
+
+-~> A 5x5 ring marker (bright, void outside and in) centered on p.
+function cd_ring_marker(p, c) {
+  let x = math.round(p.x)
+  let y = math.round(p.y)
+  g_frame(x - 3, y - 3, 7, 7, P.void)
+  g_frame(x - 2, y - 2, 5, 5, c)
+  g_rect(x - 1, y - 1, 3, 3, P.void)
+}
+
+-~> A 5x5 marker filled with a color, in a void frame.
+function cd_dot_marker(p, c) {
+  let x = math.round(p.x)
+  let y = math.round(p.y)
+  g_frame(x - 3, y - 3, 7, 7, P.void)
+  g_rect(x - 2, y - 2, 5, 5, c)
+}
+
+-~> == The wheel ==
+
+-~> The spans of the ring (in buffer pixels of a d by d image): for each row,
+-~> one or two [x0, x1].
+function cd_ring_rows(d, thick) {
+  let r = d / 2.0
+  let ri = r - thick
+  let out = []
+  for (let y = 0; y < d; y = y + 1) {
+    let yc = y + 0.5 - r
+    if (math.abs(yc) < r) {
+      let xo = math.sqrt(r * r - yc * yc)
+      if (math.abs(yc) < ri) {
+        let xi = math.sqrt(ri * ri - yc * yc)
+        push(out, [y, [[r - xo, r - xi], [r + xi, r + xo]]])
+      } else {
+        push(out, [y, [[r - xo, r + xo]]])
+      }
+    }
+  }
+  out
+}
+
+-~> Draws the ring of every hue into a d by d image of the buffer's scale and
+-~> keeps it: a span of the ring changes hue along x, so it is a gradient
+-~> with a stop every 2 pixels.
+function cd_ring_make(name, d, thick) {
+  fb.offscreen((d, d))
+  let r = d / 2.0
+  let rows = cd_ring_rows(d, thick)
+  for (let i = 0; i < len(rows); i = i + 1) {
+    let y = rows[i][0]
+    let spans = rows[i][1]
+    for (let k = 0; k < len(spans); k = k + 1) {
+      let a = math.round(spans[k][0])
+      let b = math.round(spans[k][1])
+      if (b > a) {
+        let stops = []
+        for (let x = a; x <= b; x = x + 2) {
+          let h = hue_wrap(math.atan2(r - (y + 0.5), x + 0.5 - r) * 180 / math.pi)
+          push(stops, [(x - a) / float(math.max(1, b - a)), hsv_color({"h": h, "s": 1, "v": 1, "a": 255})])
+        }
+        if (len(stops) < 2) {
+          push(stops, [1.0, stops[0][1]])
+        }
+        fb.spans_gradient([[y, a, b]], (0, 0), linear((a, 0), (b, 0), stops))
+      }
+    }
+  }
+  fb.keep(name)
+}
+
+let cd_rings = {}
+
+-~> The hue ring of a wheel, from the kept image (made once per size and scale).
+function cd_ring(wh) {
+  let d = math.round(wh.r * 2) * g.s
+  let thick = math.round(wh.w) * g.s
+  let name = "color-ring-" + str(d) + "-" + str(thick)
+  if (cd_rings[name] == null) {
+    cd_ring_make(name, d, thick)
+    cd_rings[name] = true
+  }
+  fb.blit(name, (cd_bx(wh.cx - wh.r), cd_by(wh.cy - wh.r)))
+  let x = math.round(wh.cx)
+  let y = math.round(wh.cy)
+  cd_pixel_circle(x, y, math.round(wh.r), P.void)
+  cd_pixel_circle(x, y, math.round(wh.r - wh.w) - 1, P.void)
+}
+
+-~> The triangle of hue h: one gradient per row of the buffer, between where
+-~> the row crosses its edges (exact: its color changes in a straight line).
+function cd_triangle(wh, h) {
+  let c = wheel_corners(wh, h)
+  let cols = [hsv_color({"h": h, "s": 1, "v": 1, "a": 255}), #000000, #ffffff]
+  let pts = [(cd_bx(c[0].x), cd_by(c[0].y)), (cd_bx(c[1].x), cd_by(c[1].y)), (cd_bx(c[2].x), cd_by(c[2].y))]
+  let top = math.floor(math.min(pts[0].y, pts[1].y, pts[2].y))
+  let bottom = math.ceil(math.max(pts[0].y, pts[1].y, pts[2].y))
+  for (let yy = top; yy < bottom; yy = yy + 1) {
+    let yc = yy + 0.5
+    let xs = []
+    let pairs = [[0, 1], [1, 2], [2, 0]]
+    for (let k = 0; k < 3; k = k + 1) {
+      let a = pts[pairs[k][0]]
+      let b = pts[pairs[k][1]]
+      if ((a.y <= yc && b.y > yc) || (b.y <= yc && a.y > yc)) {
+        let t = (yc - a.y) / (b.y - a.y)
+        push(xs, a.x + (b.x - a.x) * t)
+      }
+    }
+    if (len(xs) == 2) {
+      let xa = math.min(xs[0], xs[1])
+      let xb = math.max(xs[0], xs[1])
+      let ca = cd_tri_color(pts, cols, (xa, yc))
+      let cb = cd_tri_color(pts, cols, (xb, yc))
+      let x0 = math.round(xa)
+      let x1 = math.round(xb)
+      if (x1 - x0 >= 2) {
+        fb.spans_gradient([[yy, x0, x1]], (0, 0), linear((xa, 0), (xb, 0), [ca, cb]))
+      } elif (x1 > x0) {
+        fb.span(yy, x0, x1, ca)
+      }
+    }
+  }
+}
+
+-~> The color of the triangle at a buffer point (its corners' colors mixed).
+function cd_tri_color(pts, cols, p) {
+  let w = wheel_weights(pts, p)
+  let r = 0.0
+  let gr = 0.0
+  let b = 0.0
+  for (let i = 0; i < 3; i = i + 1) {
+    let k = math.max(0.0, w[i])
+    r = r + cols[i].r * k
+    gr = gr + cols[i].g * k
+    b = b + cols[i].b * k
+  }
+  rgb(math.min(255, math.round(r)), math.min(255, math.round(gr)), math.min(255, math.round(b)))
+}
+
+-~> A 1 px circle of UI pixels (midpoint circle).
+function cd_pixel_circle(cx, cy, r, color) {
+  if (r <= 0) {
+    return null
+  }
+  let x = r
+  let y = 0
+  let d = 1 - r
+  while (x >= y) {
+    let pts = [[x, y], [y, x], [-x, y], [-y, x], [x, -y], [y, -x], [-x, -y], [-y, -x]]
+    for (let i = 0; i < 8; i = i + 1) {
+      g_rect(cx + pts[i][0], cy + pts[i][1], 1, 1, color)
+    }
+    y = y + 1
+    if (d < 0) {
+      d = d + 2 * y + 1
+    } else {
+      x = x - 1
+      d = d + 2 * (y - x) + 1
+    }
+  }
+}

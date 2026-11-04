@@ -1,5 +1,5 @@
 -~> recommend() and friendly_number() with fixed inputs.
--~> Run by TestRecommend; the output is compared with recommend.expected.
+-~> Run by tests/gfx/recommend.liz; the output is compared with recommend.expected.
 
 puts(friendly_number(7), friendly_number(87), friendly_number(100), friendly_number(1234), friendly_number(99999), friendly_number(123456))
 
@@ -13,18 +13,23 @@ function mach(free, warm, cold, run, bytes) {
   })
 }
 
--~> speed: (100 - 2 x 1.0) / (0.25 + 0.05) = 326, x 0.8 = 261, friendly 260
-puts(mach(8000000000, 0.25, 1.0, 0.05, 20000))
+-~> the reference machine: open is the lower cap, (1000 - 95) / 0.1835 = 4931,
+-~> x 0.8 = 3944, friendly 3900
+puts(mach(8000000000, 0.069, 0.382, 0.007, 20000))
+-~> twice as slow to open: (1000 / 2 - 95) / 0.1835 = 2207, x 0.8 = 1765, friendly 1700
+puts(mach(8000000000, 0.069, 0.764, 0.014, 20000).max_objects)
+-~> slow spans: the repaint is the lower cap, (50 / 10 - 6.5) / 0.004 < 0, the floor of 10
+puts(mach(8000000000, 0.69, 0.382, 0.007, 20000))
+-~> three times as slow to paint: (50 / 3 - 6.5) / 0.004 = 2541, x 0.8 = 2032, friendly 2000
+puts(mach(8000000000, 0.207, 0.382, 0.007, 20000).max_objects)
 -~> memory is the lower cap: 10% of 1 GB / 50000 = 2000, x 0.8 = 1600
-puts(mach(1000000000, 0.01, 0.5, 0.0, 50000))
--~> edits that cost more than the budget leave nothing: the floor of 10
-puts(mach(8000000000, 0.25, 60.0, 0.05, 20000).max_objects)
+puts(mach(1000000000, 0.069, 0.382, 0.007, 50000))
 -~> a very slow machine never goes under 10
 puts(mach(8000000000, 50.0, 90.0, 5.0, 20000).max_objects)
--~> the same cold cost but a cheaper repaint gives a higher number
-puts(mach(8000000000, 0.1, 1.0, 0.05, 20000).max_objects > mach(8000000000, 0.25, 1.0, 0.05, 20000).max_objects)
+-~> a faster machine gets a higher number
+puts(mach(8000000000, 0.03, 0.2, 0.004, 20000).max_objects > mach(8000000000, 0.069, 0.382, 0.007, 20000).max_objects)
 -~> the writers
-let m = mach(8000000000, 0.25, 1.0, 0.05, 20000)
+let m = mach(8000000000, 0.069, 0.382, 0.007, 20000)
 m.measured_at = 5
 m.app_version = "1.0"
 puts(machine_source(m))

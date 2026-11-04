@@ -1,6 +1,6 @@
 -- right-click on a row
 true 5 circle · line 5 5 
-rename duplicate (front) (forward) backward back hide lock fill (stroke) (blend) copy show remove
+rename duplicate (front) (forward) backward back hide lock fill (stroke) blend copy show remove
 false
 -- right-click on a shape of the canvas, Ctrl+click too
 true 5
@@ -16,7 +16,7 @@ true
   line((10, 300), (200, 300), #3b2a6b, 3) |   circle((60, 60), 20, warm)
 -- hide, lock and their keys
   circle((360, 90), 34, #fff3c4) -~> [hidden]
-rename duplicate (front) (forward) backward back hide lock fill (stroke) (blend) copy show remove
+rename duplicate (front) (forward) backward back hide lock fill (stroke) blend copy show remove
   circle((360, 90), 34, #fff3c4) -~> [locked]
   circle((360, 90), 34, #fff3c4)
 -- rename
@@ -58,7 +58,7 @@ false
 true true warm
   circle((60, 60), 20, #ff8800) false
 -- the stroke of a line
-rename duplicate front forward (backward) (back) hide lock (fill) stroke (blend) copy show remove
+rename duplicate front forward (backward) (back) hide lock (fill) stroke blend copy show remove
 true stroke solid
   line((10, 300), (200, 300), gradient([#3b2a6b, #b1aac4], 90deg), 3)
 -- Spanish

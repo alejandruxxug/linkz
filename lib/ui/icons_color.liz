@@ -1,0 +1,17 @@
+-~> icons_color: the 8x8 icons of the palette sidebar and the color popover,
+-~> from the approved R002 and R003 designs, added to icon_art: the
+-~> eyedropper, the rail's chevron, the ring and square pickers, and the six
+-~> harmonies (dots where the colors sit on the wheel).
+
+use "icons"
+
+icon_art["eyedropper"] = "......##|.....###|....###.|...###..|..#.#...|.#.#....|#.#.....|.#......"
+icon_art["chevron-left"] = ".....#..|....##..|...##...|..##....|...##...|....##..|.....#..|........"
+icon_art["picker-ring"] = "..####..|.#....#.|#..##..#|#.#..#.#|#.#..#.#|#..##..#|.#....#.|..####.."
+icon_art["picker-square"] = "########|#......#|#......#|#......#|#......#|#......#|#......#|########"
+icon_art["harmony-complementary"] = "........|...##...|...##...|........|........|...##...|...##...|........"
+icon_art["harmony-split"] = "........|...##...|...##...|........|........|.##..##.|.##..##.|........"
+icon_art["harmony-analogous"] = "........|.##..##.|.##..##.|...##...|...##...|........|........|........"
+icon_art["harmony-triadic"] = "........|...##...|...##...|........|........|##....##|##....##|........"
+icon_art["harmony-square"] = "...##...|...##...|........|##....##|##....##|........|...##...|...##..."
+icon_art["harmony-mono"] = "...##...|...##...|........|...##...|...##...|........|...##...|...##..."

@@ -23,6 +23,7 @@ use "editor_undo"
 use "fill_model"
 use "i18n"
 use "icons_shape"
+use "palette_view"
 use "view_code"
 use "view_gfx"
 use "view_input"
@@ -376,6 +377,7 @@ function fe_parts(lay) {
     push(out, {"id": "tab:" + tabs[i].id, "x": tabs[i].x, "y": lay.tabs_y, "w": tabs[i].w, "h": 14})
   }
   push(out, {"id": "hex", "x": x + 6, "y": lay.row1, "w": 71, "h": 16})
+  push(out, {"id": "savevar", "x": x + 6, "y": lay.save_y, "w": g_text_w(t("fill.save_var")) + 12, "h": 14})
   if (FE.f.kind == "solid") {
     return out
   }
@@ -662,6 +664,8 @@ function fe_down(e) {
     fe_nudge(what == "aplus")
   } elif (what == "inline") {
     fe_inline()
+  } elif (what == "savevar") {
+    pal_save_paint(FE.line, FE.which)
   }
   view_touch()
   true
@@ -1053,9 +1057,12 @@ function fe_draw_edit(lay) {
     g_text(t("fill.hint_add"), x + 6, lay.hint_y, P.mute)
     g_text(t("fill.hint_remove"), x + 6, lay.hint_y + 12, P.mute)
   }
-  -~> saving a fill as a variable comes with the palette's variables
-  g_icon("plus", x + 6, lay.save_y + 3, P.dim)
-  g_text(t("fill.save_var"), x + 16, lay.save_y, P.dim)
+  let sc = P.lizard
+  if (V.hover == "fe:savevar") {
+    sc = P.bright
+  }
+  g_icon("plus", x + 6, lay.save_y + 3, sc)
+  g_text(t("fill.save_var"), x + 16, lay.save_y, sc)
 }
 
 -~> A field: its text (or the text being typed, with the caret), a swatch for a color.

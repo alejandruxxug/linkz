@@ -15,12 +15,36 @@ use "raster"
 
 -~> The share of free memory the span caches may take.
 let calib_memory_share = 0.10
--~> The time one repaint plus a typical edit may take, in milliseconds.
-let calib_repaint_ms = 100.0
--~> An edit or drag re-rasterizes about this many shapes (cold cost each).
-let calib_edit_shapes = 2
--~> Stay under the caps by this much, since a real drawing is not the mix.
+-~> How long a full repaint (zoom, scroll, resize, a new window) may take, and
+-~> how long opening a drawing may take, in milliseconds. Edits no longer
+-~> count: with canvas tiles and patched runs an edit repaints and reruns only
+-~> what it touched, whatever the size of the drawing.
+let calib_repaint_ms = 50.0
+let calib_open_ms = 1000.0
+-~> Stay under the caps by this much, since a real drawing is not the fixture.
 let calib_headroom = 0.8
+-~> The version of recommend(): a kept machine file made by another one is
+-~> measured again (lib/app/machine.liz checks it).
+let calib_formula = 2
+
+-~> What the editor really costs, measured with the M10 benchmark
+-~> (tests/editor/editor_bench.liz, on the VM, 5 rounds) on the fixtures of
+-~> 2k and 10k shapes (docs/Batches/fixtures) on the reference machine (an
+-~> M-series MacBook, 2026-11-03), with the mix's costs on that same machine:
+-~>   full repaint   2k 14.5 ms, 10k 46.5 ms: 0.0040 ms per object + 6.5 ms
+-~>   open           2k 462 ms, 10k 1930 ms:  0.1835 ms per object + 95 ms
+-~>   the mix        warm 0.069, cold 0.382, run 0.007 ms per object
+-~> Another machine's editor costs are these, scaled by how its mix compares:
+-~> a full repaint draws kept spans (warm), opening runs the program and
+-~> rasterizes every shape (cold + run).
+let calib_ref = {
+  "warm": 0.069,
+  "cold_run": 0.389,
+  "repaint_each": 0.0040,
+  "repaint_fixed": 6.5,
+  "open_each": 0.1835,
+  "open_fixed": 95.0
+}
 -~> The benchmark stops starting new rounds after this many milliseconds.
 let calib_budget_ms = 180.0
 let calib_min_rounds = 3
@@ -136,25 +160,43 @@ function friendly_number(n) {
   (n // step) * step
 }
 
+-~> How many objects fit in budget_ms when each costs `each` and the whole
+-~> thing `fixed` more (both reference costs), on a machine `factor` times as
+-~> slow as the reference one.
+function calib_cap(budget_ms, fixed, each, factor) {
+  let f = math.max(factor, 0.001)
+  math.max(int((budget_ms / f - fixed) / each), 0)
+}
+
 -~> The recommended limit. m has the free memory in bytes ("free") and the
 -~> measured "warm_ms_per_object" (drawing kept spans), "cold_ms_per_object"
 -~> (rasterizing from scratch), "run_ms_per_object" (running the program) and
--~> "bytes_per_object". A repaint costs warm + run for every shape, and an edit
--~> also rasterizes a couple of shapes, so:
--~>   speed cap  = (repaint budget - edit shapes x cold) / (warm + run)
--~>   memory cap = free memory share / bytes per object
--~> The limit is the lower cap x headroom, rounded down to 2 digits.
+-~> "bytes_per_object". With the reference costs of calib_ref:
+-~>   repaint factor = warm / ref warm
+-~>   open factor    = (cold + run) / ref (cold + run)
+-~>   repaint cap    = (repaint budget / repaint factor - ref repaint fixed) / ref repaint each
+-~>   open cap       = (open budget / open factor - ref open fixed) / ref open each
+-~>   memory cap     = free memory share / bytes per object
+-~> The limit is the lowest cap x headroom, rounded down to 2 digits, at
+-~> least 10. On the reference machine: repaint cap 10875, open cap 4931,
+-~> so 3900.
 function recommend(m) {
   let warm = math.max(m.warm_ms_per_object, 0.0)
   let cold = math.max(m.cold_ms_per_object, 0.0)
   let run = math.max(m.run_ms_per_object, 0.0)
-  let each = math.max(warm + run, 0.001)
   let bytes = math.max(m.bytes_per_object, 1)
+  let repaint_factor = warm / calib_ref.warm
+  let open_factor = (cold + run) / calib_ref.cold_run
+  let repaint_cap = calib_cap(calib_repaint_ms, calib_ref.repaint_fixed, calib_ref.repaint_each, repaint_factor)
+  let open_cap = calib_cap(calib_open_ms, calib_ref.open_fixed, calib_ref.open_each, open_factor)
   let memory_cap = int(m.free * calib_memory_share / bytes)
-  let speed_cap = math.max(int((calib_repaint_ms - calib_edit_shapes * cold) / each), 0)
-  let limited_by = "speed"
-  let cap = speed_cap
-  if (memory_cap < speed_cap) {
+  let limited_by = "repaint"
+  let cap = repaint_cap
+  if (open_cap < cap) {
+    limited_by = "open"
+    cap = open_cap
+  }
+  if (memory_cap < cap) {
     limited_by = "memory"
     cap = memory_cap
   }
@@ -164,14 +206,17 @@ function recommend(m) {
   }
   {
     "max_objects": max,
-    "ms_per_object": each,
+    "repaint_ms_per_object": calib_ref.repaint_each * repaint_factor,
+    "open_ms_per_object": calib_ref.open_each * open_factor,
     "warm_ms_per_object": warm,
     "cold_ms_per_object": cold,
     "run_ms_per_object": run,
     "bytes_per_object": bytes,
+    "repaint_cap": repaint_cap,
+    "open_cap": open_cap,
     "memory_cap": memory_cap,
-    "speed_cap": speed_cap,
-    "limited_by": limited_by
+    "limited_by": limited_by,
+    "formula": calib_formula
   }
 }
 
@@ -213,15 +258,17 @@ function calibrate() {
   m
 }
 
-let calib_keys = ["max_objects", "ms_per_object", "warm_ms_per_object", "cold_ms_per_object", "run_ms_per_object", "bytes_per_object", "memory_cap", "speed_cap", "limited_by", "measured_at", "app_version"]
+let calib_keys = ["max_objects", "repaint_ms_per_object", "open_ms_per_object", "warm_ms_per_object",
+  "cold_ms_per_object", "run_ms_per_object", "bytes_per_object", "repaint_cap", "open_cap", "memory_cap",
+  "limited_by", "formula", "measured_at", "app_version"]
 
--~> Three decimals, so the file stays short.
+-~> Four decimals, so the file stays short and a repaint cost still shows.
 function calib_value(v) {
   if (type(v) == "STRING") {
     return "\"" + v + "\""
   }
   if (type(v) == "FLOAT") {
-    return str(math.round(v * 1000) / 1000.0)
+    return str(math.round(v * 10000) / 10000.0)
   }
   str(v)
 }

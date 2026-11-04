@@ -1,0 +1,64 @@
+-- the layout: a rail under 550 UI pixels, the code panel at half the window
+false 256 258 238 [498, 30, 14, 314] 
+true 146 [406, 30, 106, 314] COLOR
+-- a row's swatch opens the popover
+true {"kind": "span", "line": 7, "c1": 25, "c2": 32} 7 #fff3c4 
+true true true true
+-- picking a variable writes a live reference, one step
+  circle((360, 90), 34, colors.sky) 1 change color #f2a65a
+-- the wheel: a drag on the ring is one step and writes a literal
+  circle((360, 90), 34, #5af25b) 1 120
+  circle((360, 90), 34, #00ff01) 2
+-- hex and alpha fields
+  circle((360, 90), 34, #3fa34d)
+  circle((360, 90), 34, #3fa34d66) 40%
+-- old brings the color back
+  circle((360, 90), 34, #fff3c4) change color
+-- keys: on the wheel the arrows turn the hue and the value (quick ones join)
+wheel   circle((360, 90), 34, #fcfac2) 58 99 1
+-- Tab to the variables: the arrows move the amber ring, Enter picks
+vars 1   circle((360, 90), 34, colors.sea)
+-- harmonies: triadic, add all as variables (one step)
+triadic 3 ["sea_2", "sea_3"]
+let colors = {"sky": #f2a65a, "sea": #2d6a8f, "dusk": gradient([#3b2a6b, #e0607a], 0deg), "sea_2": #8f2d6a, "sea_3": #6a8f2d}
+1 add 2 colors
+  circle((360, 90), 34, #8f2d6a)
+-- the harmony icons have tooltips
+true complementary
+-- save as variable: the literal becomes colors.<name>
+true name color
+  circle((360, 90), 34, colors.leaf) #8f2d6a add colors.leaf
+-- Esc closes; a click elsewhere too
+false
+true {"kind": "span", "line": 8, "c1": 25, "c2": 34}
+false
+-- the popover from the colors row edits the variable
+{"kind": "var", "name": "sky"} colors.sky
+let colors = {"sky": #336699, "sea": #2d6a8f, "dusk": gradient([#3b2a6b, #e0607a], 0deg), "sea_2": #8f2d6a, "sea_3": #6a8f2d, "leaf": #8f2d6a}
+-- undo takes back one step at a time
+let colors = {"sky": #f2a65a, "sea": #2d6a8f, "dusk": gradient([#3b2a6b, #e0607a], 0deg), "sea_2": #8f2d6a, "sea_3": #6a8f2d, "leaf": #8f2d6a}
+true
+-- the sidebar edits a selected variable
+sky colors.sky 1
+1 let colors = {"sky": #337999, "sea": #2d6a8f, "dusk": gradient([#3b2a6b, #e0607a], 0deg), "sea_2": #8f2d6a, "sea_3": #6a8f2d, "leaf": #8f2d6a}
+gradient([#337999, #adc9d6], 90deg)
+#337999
+-- rename it: every colors.sky follows
+dawn   rect((0, 0), (480, 200), colors.dawn) rename to colors.dawn
+-- remove: refused while used, the second click removes it
+dawn dawn is in use (1): click the trash again to remove it
+null ["sea", "dusk", "sea_2", "sea_3", "leaf"] remove colors.dawn
+["dawn", "sea", "dusk", "sea_2", "sea_3", "leaf"]
+-- + Variable adds the picker's color, its name ready to type
+color name
+mist ["dawn", "sea", "dusk", "sea_2", "sea_3", "leaf", "mist"]
+-- the shape menu's Fill swatches are the variables
+7 sea
+  circle((360, 90), 34, colors.sea) 1 false
+-- the fill editor: its stop color opens the popover, the sidebar edits the stop
+STOP 2   circle((360, 90), 56, gradient([#f2a65a66, #fadbbdc2], 90deg))
+true {"kind": "stop"} #fadbbdc2
+  circle((360, 90), 56, gradient([#f2a65a66, #123456c2], 90deg))
+-- the fill editor's Save as variable
+  circle((360, 90), 56, colors.fill) 1 fill gradient([#f2a65a66, #123456c2], 90deg)
+

@@ -1,0 +1,195 @@
+-~> The New drawing dialog and the object budget, without painting: the
+-~> presets, the fields, what Create writes, the recommended limit (measured,
+-~> or from the settings), the status bar's counter in its three states and
+-~> the faster-machine note, in English and Spanish.
+use "../budget_model"
+use "../i18n"
+use "../lang_en"
+use "../lang_es"
+use "../new_drawing_model"
+use "../new_drawing_view"
+lang_use("en")
+
+-~> == The recommended limit ==
+puts(budget_recommended())
+let measured = {"max_objects": 1800}
+linkz.machine = function() { measured }
+puts(budget_recommended(), budget_thousands(1800), budget_thousands(1234567), budget_thousands(42))
+settings.max_objects = 2500
+puts(budget_recommended(), budget_setting())
+settings.max_objects = "lots"
+puts(budget_recommended(), budget_setting())
+reset_settings()
+linkz.machine = function() { error("no file") }
+puts(budget_recommended())
+linkz.machine = function() { measured }
+
+-~> == Presets and fields ==
+let d = nd_new(["Untitled.lzdraw"])
+puts(d.name, d.fresh, d.preset, d.w, d.h, d.bg, d.focus)
+let labels = []
+let ids = nd_preset_ids()
+for (let i = 0; i < len(ids); i = i + 1) {
+  push(labels, nd_preset_label(ids[i]))
+}
+puts(text.join(labels, " | "))
+nd_pick(d, "a4")
+puts(d.preset, d.w, d.h)
+nd_pick(d, "custom")
+puts(d.preset, d.w, d.h, d.focus, d.fresh)
+-~> typing a size picks the preset it matches, or custom
+nd_backspace(d)
+nd_backspace(d)
+nd_backspace(d)
+nd_backspace(d)
+nd_type(d, "1x9a2")
+puts(d.w, d.preset)
+nd_focus(d, "w")
+nd_backspace(d)
+nd_backspace(d)
+nd_backspace(d)
+nd_type(d, "1080")
+nd_focus(d, "h")
+nd_backspace(d)
+nd_backspace(d)
+nd_backspace(d)
+nd_backspace(d)
+nd_type(d, "1080")
+puts(d.w, d.h, d.preset)
+nd_type(d, "99999")
+puts(d.h, "(at most 5 digits)")
+
+-~> the proposed name is replaced by the first letter typed
+let e = nd_new([])
+nd_type(e, "sun/set:2")
+puts(e.name, e.fresh)
+let e2 = nd_new([])
+nd_backspace(e2)
+puts("[" + e2.name + "]")
+
+-~> the background keeps its #, takes hex digits only
+nd_focus(e, "bg")
+for (let i = 0; i < 7; i = i + 1) {
+  nd_backspace(e)
+}
+nd_type(e, "12zz34ab9")
+puts(e.bg, nd_color(e))
+nd_set(e, "bg", "#ABC")
+puts(nd_color(e))
+
+-~> Tab goes name, w, h, bg and around
+let f = nd_new([])
+let order = [f.focus]
+for (let i = 0; i < 4; i = i + 1) {
+  nd_tab(f)
+  push(order, f.focus)
+}
+nd_tab(f, true)
+push(order, f.focus)
+puts(text.join(order, " "))
+
+-~> == What Create writes ==
+puts(nd_text((512, 512), "#ffffff", 1800))
+puts(nd_text((1920, 1080), "#000000", 0))
+let g = nd_new(["sunset.lzdraw"])
+nd_set(g, "name", "sunset")
+puts(nd_result(g, ["sunset.lzdraw"]), g.error, g.error_at)
+nd_set(g, "name", "  ")
+puts(nd_result(g, []), g.error)
+nd_set(g, "name", "sunset-2.lzdraw")
+nd_set(g, "w", "0")
+puts(nd_result(g, []), g.error, g.focus)
+nd_set(g, "w", "640")
+nd_set(g, "bg", "#12")
+puts(nd_result(g, []), g.error)
+nd_set(g, "bg", "#F4F1E8")
+let made = nd_result(g, [])
+puts(made.name)
+puts(made.text)
+puts(src.run(made.text).errors, src.run(made.text).canvas)
+
+-~> == The dialog's events (no painting) ==
+let created = []
+let answer = {"err": ""}
+function fake_create(name, body) {
+  push(created, [name, body])
+  answer.err
+}
+nd_open(["Untitled.lzdraw"], (512, 360), fake_create)
+puts(nd_is_open(), nd_view.d.name)
+let lay = nd_layout()
+puts(lay.box, lay.create.y, lay.cancel.x + lay.cancel.w < lay.create.x)
+function at(r) {
+  (r.x + 1, r.y + 1)
+}
+function click(r) {
+  nd_event({"type": "down", "button": 0, "pos": at(r)})
+}
+nd_event({"type": "text", "text": "dune", "mods": {"cmd": false, "ctrl": false}})
+click(lay.presets[2])
+puts(nd_view.d.name, nd_view.d.preset, nd_view.d.w, nd_view.d.h)
+nd_event({"type": "move", "pos": at(lay.info)})
+puts(nd_view.hover)
+puts(nd_hit(0, 0), nd_hit(lay.box.x + 150, lay.box.y + 5))
+click(lay.swatches[2])
+puts(nd_view.d.bg)
+nd_event({"type": "key", "key": "Enter", "mods": {"cmd": false, "ctrl": false, "shift": false}})
+puts(len(created), created[0][0], nd_is_open())
+puts(created[0][1])
+
+-~> a failed create keeps the dialog open with the reason
+nd_open([], (512, 360), fake_create)
+answer.err = "disk full"
+nd_event({"type": "key", "key": "Enter", "mods": {"cmd": false, "ctrl": false, "shift": false}})
+puts(nd_is_open(), nd_view.d.error, nd_view.d.error_at)
+nd_event({"type": "key", "key": "Escape", "mods": {"cmd": false, "ctrl": false, "shift": false}})
+puts(nd_is_open())
+
+-~> a small window moves the dialog up, never off the top
+nd_open([], (320, 210), fake_create)
+puts(nd_layout().box)
+nd_close()
+
+-~> measure again: the next paint shows "measuring…", the one after measures
+let measures = []
+linkz.measure = function() {
+  push(measures, 1)
+  measured = {"max_objects": 2100}
+  measured
+}
+nd_open([], (512, 360), fake_create)
+puts(nd_again_text())
+click(nd_layout().again)
+puts(nd_view.d.measure, nd_again_text(), len(measures))
+nd_measure_now()
+puts(nd_view.d.measure, len(measures), nd_recommended_text())
+nd_close()
+
+-~> == The status bar's counter ==
+function shapes(n) {
+  let out = []
+  for (let i = 0; i < n; i = i + 1) {
+    push(out, i)
+  }
+  out
+}
+measured = {"max_objects": 1800}
+let plain = {"size": (512, 512), "background": #ffffff}
+puts(budget_status_part(plain, shapes(840)))
+puts(budget_status_part(plain, shapes(1520)))
+puts(budget_status_part(plain, shapes(2130)))
+lang_use("es")
+puts(budget_status_part(plain, shapes(2130)))
+puts(nd_recommended_text(), "·", nd_source_text())
+lang_use("en")
+linkz.machine = function() { {} }
+puts(budget_status_part(plain, shapes(3)), nd_recommended_text())
+linkz.machine = function() { measured }
+
+-~> a drawing made with a higher limit than this machine's warns once per file
+let faster = {"size": (512, 512), "background": #ffffff, "max_objects": 3900}
+puts(budget_slower_note("/a.lzdraw", budget_now(faster, shapes(10))))
+puts(budget_slower_note("/a.lzdraw", budget_now(faster, shapes(10))))
+puts(budget_slower_note("", budget_now(faster, shapes(10))))
+puts(budget_slower_note("/b.lzdraw", budget_now(plain, shapes(10))))
+puts(budget_status_part(faster, shapes(3500)))

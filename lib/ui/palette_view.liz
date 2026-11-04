@@ -1,0 +1,773 @@
+-~> palette_view: the palette sidebar on the right of the canvas. Its header
+-~> says what it edits: the selected variable (`colors.sky`), the fill
+-~> editor's stop (`STOP 2`), or the color new shapes get (`COLOR`). Under
+-~> it: kind tabs for a variable (solid, linear, radial), the picker (ring
+-~> and triangle by default, the square with the toggle in the header), hex
+-~> and alpha, RECENT, the VARIABLES grid (click to edit one; "in N shapes",
+-~> its name to rename, the trash to remove it) and "+ Variable".
+-~> Collapsed it is a 14 px rail of the variables and the recent colors.
+-~> Metrics (style guide R002 "Coder layout with palette", "Palette
+-~> sidebar"): 106 wide (inner 96 at +5), header 13, tabs 3 × 32, square
+-~> 96×52 (44 with tabs), strips 96×6, hex 57×16, recent 10×10 step 12,
+-~> variables 3 × 32 (chip 29×12 + name, cell 27), button 96×16.
+
+use "../draw/gradient"
+use "color_draw"
+use "color_hsv"
+use "color_picker"
+use "color_state"
+use "color_target"
+use "color_vars"
+use "editor_undo"
+use "fill_editor"
+use "fill_model"
+use "i18n"
+use "icons_color"
+use "icons_shape"
+use "view_gfx"
+use "view_input"
+use "view_layout"
+
+-~> == What it edits ==
+
+-~> The target of the sidebar (color_target.liz).
+function pal_target() {
+  if (PAL.sel != null && ct_var(PAL.sel) != null) {
+    return {"kind": "var", "name": PAL.sel}
+  }
+  PAL.sel = null
+  if (FE.open && FE.f != null && !FE.code) {
+    return {"kind": "stop"}
+  }
+  {"kind": "tool"}
+}
+
+-~> The header's title.
+function pal_title(tg) {
+  if (tg.kind == "var") {
+    return colors_name + "." + tg.name
+  }
+  if (tg.kind == "stop") {
+    if (FE.f.kind == "solid") {
+      return text.upper(t("fill.title"))
+    }
+    return text.upper(t("color.stop", {"n": FE.sel + 1}))
+  }
+  text.upper(t("color.title"))
+}
+
+-~> Reads the target's color into the picker when it changed elsewhere.
+function pal_sync() {
+  if (PAL.drag != null) {
+    return null
+  }
+  let c = ct_read(pal_target())
+  if (c == null) {
+    c = #000000
+  }
+  if (PAL.hsv == null || c != hsv_color(PAL.hsv)) {
+    PAL.hsv = hsv_keep_hue(c, PAL.hsv)
+  }
+}
+
+-~> The selected variable, or null.
+function pal_sel_var() {
+  if (PAL.sel == null) {
+    return null
+  }
+  ct_var(PAL.sel)
+}
+
+-~> == Where its parts are ==
+
+-~> The sidebar's box [x, y, w, h], its 2 px splitter not counted.
+function pal_rect() {
+  let gm = view_geom()
+  let x = gm.cx + gm.cw + 2
+  [x, 30, V.w - x, gm.status_y - 30]
+}
+
+-~> Where everything sits (open): {"x", "y", "tabs_y", "picker", "bar",
+-~> "hex_y", "recent_y", "vars_y", "cells", "more", "uses_y", "add_y"}. The
+-~> grid shows the rows that fit, scrolled so the selected variable is in them.
+function pal_layout() {
+  let r = pal_rect()
+  let x = r[0] + 5
+  let y = r[1] + 15
+  let lay = {"x": x, "tabs_y": null, "bar": null, "cells": [], "more": 0}
+  let v = pal_sel_var()
+  if (v != null) {
+    lay.tabs_y = y + 2
+    y = y + 19
+  }
+  if (PAL.mode == "square") {
+    let sh = 52
+    if (v != null) {
+      sh = 44
+    }
+    lay.picker = cpk_square(x, y + 2, 96, sh, 6)
+  } else {
+    let d = 68
+    if (v != null) {
+      d = 60
+    }
+    lay.picker = cpk_ring(x + (96 - d) // 2, y + 2, d, 6, 6)
+  }
+  y = y + 2 + lay.picker.h + 5
+  if (v != null && is_gradient(v.value)) {
+    lay.bar = [x, y, 96, 8]
+    y = y + 19
+  }
+  lay.hex_y = y
+  lay.recent_y = y + 19
+  lay.vars_y = lay.recent_y + 27
+  let bottom = r[1] + r[3] - 20
+  let tail = 0
+  if (v != null) {
+    tail = 15
+  }
+  let vs = ct_vars()
+  let cy = lay.vars_y + 14
+  let fit = math.max(1, (bottom - tail - cy) // 27)
+  let first = 0
+  let at = list.index(colors_names(colors_find(ed_model())), PAL.sel)
+  if (at >= 0 && at // 3 >= fit) {
+    first = at // 3 - fit + 1
+  }
+  for (let i = first * 3; i < len(vs) && i < (first + fit) * 3; i = i + 1) {
+    push(lay.cells, {"x": x + (i % 3) * 32, "y": cy + (i // 3 - first) * 27, "i": i})
+  }
+  lay.more = len(vs) - len(lay.cells)
+  let rows = (len(lay.cells) + 2) // 3
+  lay.uses_y = cy + rows * 27 + 1
+  lay.add_y = bottom
+  lay
+}
+
+-~> The buttons, fields and cells as [{"id", "x", "y", "w", "h"}].
+function pal_parts(lay) {
+  let r = pal_rect()
+  let x = lay.x
+  let out = [{"id": "collapse", "x": r[0] + r[2] - 14, "y": r[1] + 1, "w": 12, "h": 12}]
+  push(out, {"id": "mode", "x": r[0] + r[2] - 28, "y": r[1] + 1, "w": 12, "h": 12})
+  if (lay.tabs_y != null) {
+    let kinds = ["solid", "linear", "radial"]
+    for (let i = 0; i < 3; i = i + 1) {
+      push(out, {"id": "tab:" + kinds[i], "x": x + i * 32, "y": lay.tabs_y, "w": 33, "h": 14})
+    }
+  }
+  if (lay.bar != null) {
+    let f = fill_from_value(pal_sel_var().value)
+    for (let i = 0; i < len(f.stops); i = i + 1) {
+      push(out, {"id": "stop:" + str(i), "x": lay.bar[0] + math.floor((lay.bar[2] - 3) * f.stops[i].t) - 3, "y": lay.bar[1] + 8, "w": 9, "h": 10})
+    }
+  }
+  push(out, {"id": "hex", "x": x, "y": lay.hex_y, "w": 57, "h": 16})
+  push(out, {"id": "alpha", "x": x + 59, "y": lay.hex_y, "w": 37, "h": 16})
+  let rc = pal_recent()
+  for (let i = 0; i < len(rc); i = i + 1) {
+    push(out, {"id": "recent:" + str(i), "x": x + i * 12, "y": lay.recent_y + 14, "w": 11, "h": 11})
+  }
+  push(out, {"id": "plus", "x": x + 86, "y": lay.vars_y + 1, "w": 10, "h": 11})
+  for (let i = 0; i < len(lay.cells); i = i + 1) {
+    let c = lay.cells[i]
+    push(out, {"id": "var:" + str(c.i), "x": c.x, "y": c.y, "w": 31, "h": 26})
+  }
+  if (pal_sel_var() != null) {
+    push(out, {"id": "name", "x": r[0] + 2, "y": r[1], "w": r[2] - 31, "h": 13})
+    push(out, {"id": "trash", "x": x + 84, "y": lay.uses_y, "w": 12, "h": 12})
+  }
+  push(out, {"id": "add", "x": x, "y": lay.add_y, "w": 96, "h": 16})
+  out
+}
+
+function pal_part(lay, id) {
+  let ps = pal_parts(lay)
+  for (let i = 0; i < len(ps); i = i + 1) {
+    if (ps[i].id == id) {
+      return ps[i]
+    }
+  }
+  null
+}
+
+-~> The recent colors the sidebar shows (8), see ct_recent.
+function pal_recent() {
+  ct_recent(8)
+}
+
+-~> The rail's parts: the chevron, a chip per variable, a recent swatch each.
+function pal_rail_parts() {
+  let r = pal_rect()
+  let x = r[0] + 2
+  let out = [{"id": "expand", "x": r[0] + 1, "y": r[1] + 2, "w": 12, "h": 12}]
+  let y = r[1] + 18
+  let vs = ct_vars()
+  let bottom = r[1] + r[3] - 2
+  for (let i = 0; i < len(vs) && y + 12 <= bottom; i = i + 1) {
+    push(out, {"id": "rvar:" + str(i), "x": x, "y": y, "w": 10, "h": 10})
+    y = y + 12
+  }
+  y = y + 5
+  let rc = pal_recent()
+  for (let i = 0; i < len(rc) && y + 12 <= bottom; i = i + 1) {
+    push(out, {"id": "rrecent:" + str(i), "x": x, "y": y, "w": 10, "h": 10})
+    y = y + 12
+  }
+  out
+}
+
+-~> == The panel ==
+
+-~> What the panel shows, as a text: it is painted again when it changes.
+function pal_panel_key() {
+  pal_sync()
+  let h = ""
+  if (text.starts(V.hover, "pal:")) {
+    h = V.hover
+  }
+  let f = ""
+  if (PAL.focus != null) {
+    f = PAL.focus.field + PAL.focus.text + str(PAL.focus.caret)
+  }
+  let fe = ""
+  if (FE.open) {
+    fe = str(FE.sel) + str(FE.text)
+  }
+  let vars = ""
+  let cv = colors_find(ed_model())
+  if (cv != null) {
+    vars = str(cv.line) + str(colors_names(cv))
+    for (let i = 0; i < len(cv.entries); i = i + 1) {
+      vars = vars + cv.entries[i].text
+    }
+  }
+  let uses = ""
+  if (PAL.sel != null) {
+    uses = str(ed.shapes_ver)
+  }
+  str(pal_is_open(V.w)) + PAL.mode + str(PAL.sel) + str(PAL.stop) + str(PAL.hsv) + "|" + str(PAL.confirm) + h + f + fe + "|" + ed.color + "|" +
+    str(color_recent) + "|" + vars + "|" + uses + "|" + str(ct_shape_colors()) + "|" + str(V.h) + "|" + lang_get()
+}
+
+-~> Paints the sidebar (open or the rail) and its splitter.
+function pal_paint() {
+  let r = pal_rect()
+  g_rect(r[0] - 2, 30, 1, r[3], P.void)
+  g_rect(r[0] - 1, 30, 1, r[3], P.bevel)
+  g_rect(r[0], r[1], r[2], r[3], P.panel)
+  if (!pal_is_open(V.w)) {
+    return pal_paint_rail(r)
+  }
+  let tg = pal_target()
+  let lay = pal_layout()
+  g_rect(r[0], r[1], r[2], 13, P.raised)
+  g_rect(r[0], r[1] + 13, r[2], 1, P.void)
+  let title = pal_title(tg)
+  if (g_text_w(title) > r[2] - 34) {
+    title = text.slice(title, 0, (r[2] - 34) // 7 - 1) + "…"
+  }
+  let tcol = P.mute
+  if (V.hover == "pal:name") {
+    tcol = P.bright
+  }
+  g_text(title, r[0] + 5, r[1], tcol)
+  let cc = P.mute
+  if (V.hover == "pal:collapse") {
+    cc = P.bright
+  }
+  g_icon("chevron-right", r[0] + r[2] - 12, r[1] + 3, cc)
+  let mc = P.mute
+  if (V.hover == "pal:mode") {
+    mc = P.bright
+  }
+  let other = "picker-square"
+  if (PAL.mode == "square") {
+    other = "picker-ring"
+  }
+  g_icon(other, r[0] + r[2] - 26, r[1] + 3, mc)
+  let v = pal_sel_var()
+  if (lay.tabs_y != null) {
+    let kinds = ["solid", "linear", "radial"]
+    let icons = {"solid": "solid", "linear": "gradient", "radial": "radial"}
+    let kind = "solid"
+    if (is_gradient(v.value)) {
+      kind = v.value.kind
+    }
+    for (let i = 0; i < 3; i = i + 1) {
+      let p = pal_part(lay, "tab:" + kinds[i])
+      let st = pal_state("tab:" + kinds[i])
+      if (kinds[i] == kind) {
+        st = "active"
+      }
+      g_button(p.x, p.y, p.w, p.h, icons[kinds[i]], "", st)
+    }
+  }
+  cpk_draw(lay.picker, PAL.hsv)
+  if (lay.bar != null) {
+    pal_paint_bar(lay, v)
+  }
+  pal_paint_field(pal_part(lay, "hex"), "text")
+  pal_paint_field(pal_part(lay, "alpha"), "amber")
+  g_text(t("color.recent"), lay.x, lay.recent_y, P.mute)
+  let rc = pal_recent()
+  for (let i = 0; i < len(rc); i = i + 1) {
+    let p = pal_part(lay, "recent:" + str(i))
+    cd_chip(p.x, p.y, 10, 10, rc[i])
+    if (V.hover == "pal:recent:" + str(i)) {
+      g_frame(p.x - 1, p.y - 1, 12, 12, P.bright)
+    }
+  }
+  g_text(t("color.variables"), lay.x, lay.vars_y, P.mute)
+  let pc = P.lizard
+  if (V.hover == "pal:plus") {
+    pc = P.bright
+  }
+  g_icon("plus", lay.x + 88, lay.vars_y + 3, pc)
+  pal_paint_vars(lay)
+  if (v != null) {
+    let n = ct_uses(v.name)
+    let msg = t("color.in_shapes", {"n": n})
+    if (n == 1) {
+      msg = t("color.in_shape")
+    }
+    let mcol = P.lizard
+    if (PAL.confirm == v.name) {
+      msg = t("color.confirm_remove")
+      mcol = P.ember
+    }
+    g_text(msg, lay.x, lay.uses_y - 1, mcol)
+    let tr = pal_part(lay, "trash")
+    let tc = P.mute
+    if (V.hover == "pal:trash" || PAL.confirm == v.name) {
+      tc = P.ember
+    }
+    g_icon("trash", tr.x + 2, tr.y + 2, tc)
+    if (PAL.focus != null && PAL.focus.field == "name") {
+      pal_paint_field(pal_part(lay, "name"), "text")
+    }
+  }
+  let ab = pal_part(lay, "add")
+  g_button(ab.x, ab.y, ab.w, ab.h, "plus", t("color.add_var"), pal_state("add"))
+}
+
+function pal_state(id) {
+  if (V.hover == "pal:" + id) {
+    return "hover"
+  }
+  "normal"
+}
+
+-~> The VARIABLES grid: a chip and a name per variable, the selected cell moss.
+function pal_paint_vars(lay) {
+  let vs = ct_vars()
+  for (let i = 0; i < len(lay.cells); i = i + 1) {
+    let c = lay.cells[i]
+    let v = vs[c.i]
+    let sel = v.name == PAL.sel
+    if (sel) {
+      g_rect(c.x - 1, c.y - 1, 32, 27, P.moss)
+    } elif (V.hover == "pal:var:" + str(c.i)) {
+      g_rect(c.x - 1, c.y - 1, 32, 27, P.row)
+    }
+    cd_chip(c.x, c.y, 29, 12, v.value)
+    let name = v.name
+    if (len(name) > 4) {
+      name = text.slice(name, 0, 3) + "…"
+    }
+    let tc = P.text
+    if (sel) {
+      tc = P.bright
+    }
+    g_text(name, c.x, c.y + 12, tc)
+  }
+  if (lay.more > 0) {
+    g_text("+" + str(lay.more), lay.x + 64, lay.vars_y, P.mute)
+  }
+}
+
+-~> A gradient variable's bar with its stops; the picker edits the selected one.
+function pal_paint_bar(lay, v) {
+  let b = lay.bar
+  cd_chip(b[0], b[1], b[2], b[3], v.value)
+  let f = fill_from_value(v.value)
+  for (let i = 0; i < len(f.stops); i = i + 1) {
+    let look = "normal"
+    if (i == PAL.stop) {
+      look = "selected"
+    }
+    fe_draw_stop(b[0] + 1 + math.floor((b[2] - 3) * f.stops[i].t), b[1] + b[3] + 1, f.stops[i], look)
+  }
+}
+
+-~> A field: its text (or the text being typed, with the caret).
+function pal_paint_field(p, color) {
+  let focused = PAL.focus != null && PAL.focus.field == p.id
+  g_field(p.x, p.y, p.w, p.h, focused)
+  let s = pal_field_text(p.id)
+  let room = (p.w - 6) // 7
+  let from = 0
+  if (focused) {
+    from = math.max(0, PAL.focus.caret - room)
+  }
+  let ty = p.y + (p.h - 13) // 2
+  g_text(text.slice(s, from, math.min(len(s), from + room)), p.x + 3, ty, P[color])
+  if (focused) {
+    g_rect(p.x + 3 + (PAL.focus.caret - from) * 7, ty + 1, 1, 11, P.amber)
+  }
+}
+
+-~> The rail: the chevron that opens the sidebar, the variables, a bevel
+-~> mark, the recent colors.
+function pal_paint_rail(_r) {
+  let ps = pal_rail_parts()
+  let vs = ct_vars()
+  let rc = pal_recent()
+  let mark = false
+  for (let i = 0; i < len(ps); i = i + 1) {
+    let p = ps[i]
+    let parts = text.split(p.id, ":")
+    if (p.id == "expand") {
+      let c = P.mute
+      if (V.hover == "pal:expand") {
+        c = P.bright
+      }
+      g_icon("chevron-left", p.x + 2, p.y + 2, c)
+    } elif (parts[0] == "rvar") {
+      cd_chip(p.x, p.y, 10, 10, vs[int(parts[1])].value)
+    } else {
+      if (!mark) {
+        g_rect(p.x + 2, p.y - 4, 6, 1, P.bevel)
+        mark = true
+      }
+      cd_chip(p.x, p.y, 10, 10, rc[int(parts[1])])
+    }
+    if (V.hover == "pal:" + p.id && p.id != "expand") {
+      g_frame(p.x - 1, p.y - 1, 12, 12, P.bright)
+    }
+  }
+}
+
+-~> == The pointer ==
+
+-~> The hover id at a UI point on the sidebar: pal:<part>, pal:<picker
+-~> part>, pal:box; null off it.
+function pal_hover_at(x, y) {
+  let r = pal_rect()
+  if (!view_in(x, y, r[0], r[1], r[2], r[3])) {
+    return null
+  }
+  if (!pal_is_open(V.w)) {
+    let ps = pal_rail_parts()
+    for (let i = 0; i < len(ps); i = i + 1) {
+      if (view_in(x, y, ps[i].x - 1, ps[i].y - 1, ps[i].w + 2, ps[i].h + 2)) {
+        return "pal:" + ps[i].id
+      }
+    }
+    return "pal:box"
+  }
+  pal_sync()
+  let lay = pal_layout()
+  let ps = pal_parts(lay)
+  for (let i = 0; i < len(ps); i = i + 1) {
+    if (view_in(x, y, ps[i].x, ps[i].y, ps[i].w, ps[i].h)) {
+      return "pal:" + ps[i].id
+    }
+  }
+  let part = cpk_part_at(lay.picker, PAL.hsv, (x, y))
+  if (part != "") {
+    return "pal:" + part
+  }
+  "pal:box"
+}
+
+-~> Opens (true) or collapses (false) the sidebar: the canvas changes size.
+function pal_set_open(on) {
+  PAL.open = on
+  PAL.focus = null
+  V.pw = math.max(math.min(160, V.w * 5 // 8), math.min(V.pw, V.w - 120 - pal_reserved(V.w)))
+  view_touch()
+  view_force_all()
+}
+
+-~> A press on the sidebar. True when it was there.
+function pal_down(e) {
+  let id = pal_hover_at(e.pos.x, e.pos.y)
+  if (id == null) {
+    pal_commit_focus()
+    return false
+  }
+  let parts = text.split(id, ":")
+  let what = parts[1]
+  if (PAL.focus != null && PAL.focus.field != what) {
+    pal_commit_focus()
+  }
+  if (what != "trash") {
+    PAL.confirm = null
+  }
+  let tg = pal_target()
+  if (what == "expand") {
+    pal_set_open(true)
+  } elif (what == "collapse") {
+    pal_set_open(false)
+  } elif (what == "mode") {
+    if (PAL.mode == "ring") {
+      PAL.mode = "square"
+    } else {
+      PAL.mode = "ring"
+    }
+  } elif (what == "rvar") {
+    PAL.sel = ct_vars()[int(parts[2])].name
+    PAL.stop = 0
+    pal_set_open(true)
+  } elif (what == "rrecent" || what == "recent") {
+    pal_set(pal_recent()[int(parts[2])], null)
+    color_note_recent(hsv_color(PAL.hsv))
+  } elif (what == "ring" || what == "triangle" || what == "square" || what == "hue" || what == "alpha") {
+    if (tg.kind != "tool") {
+      ed_begin_gesture("color")
+    }
+    PAL.drag = {"part": what}
+    V.drag = {"kind": "color"}
+    pal_drag_to(e.pos)
+  } elif (what == "tab") {
+    pal_set_kind(parts[2])
+  } elif (what == "stop") {
+    PAL.stop = int(parts[2])
+  } elif (what == "hex" || what == "alpha" || what == "name") {
+    pal_focus(what)
+  } elif (what == "var") {
+    let name = ct_vars()[int(parts[2])].name
+    if (PAL.sel == name) {
+      PAL.sel = null
+    } else {
+      PAL.sel = name
+      PAL.stop = 0
+    }
+  } elif (what == "plus" || what == "add") {
+    pal_add_var()
+  } elif (what == "trash") {
+    pal_remove_var()
+  }
+  view_prepare()
+  view_after()
+  true
+}
+
+function pal_drag_to(p) {
+  let lay = pal_layout()
+  let hsv = cpk_drag(lay.picker, PAL.drag.part, p, PAL.hsv)
+  pal_set(hsv_color(hsv), hsv)
+}
+
+function pal_move(e) {
+  if (PAL.drag == null) {
+    return null
+  }
+  pal_drag_to(e.pos)
+  view_touch()
+}
+
+-~> The release of a picker drag: one undo step.
+function pal_up(_e) {
+  if (PAL.drag == null) {
+    return null
+  }
+  PAL.drag = null
+  if (pal_target().kind != "tool") {
+    ed_end_gesture()
+  }
+  color_note_recent(hsv_color(PAL.hsv))
+  view_prepare()
+  view_after()
+}
+
+-~> == Changes ==
+
+-~> Shows a color and writes it to what the sidebar edits.
+function pal_set(c, hsv, key = null) {
+  if (c == null) {
+    return null
+  }
+  if (hsv == null) {
+    hsv = hsv_keep_hue(c, PAL.hsv)
+  }
+  PAL.hsv = hsv
+  ct_write(pal_target(), c, PAL.stop, key)
+  view_prepare()
+  view_after()
+}
+
+-~> A selected variable as a solid color, a linear or a radial gradient.
+function pal_set_kind(kind) {
+  let v = pal_sel_var()
+  if (v == null || v.value == null) {
+    return null
+  }
+  let f = fill_from_value(v.value)
+  if (f == null || f.kind == kind) {
+    return null
+  }
+  let out = fill_as_kind(f, kind)
+  if (out.pinned != null) {
+    out.pinned = null
+  }
+  ct_set_var_text(v.name, fill_literal(out))
+  PAL.stop = 0
+}
+
+-~> "+ Variable": a new variable with the picker's color, selected, its
+-~> name ready to type.
+function pal_add_var() {
+  let name = colors_free_name(colors_find(ed_model()), "color")
+  if (ct_add_var(name, color_hex(hsv_color(PAL.hsv)))) {
+    PAL.sel = name
+    PAL.stop = 0
+    PAL.focus = {"field": "name", "text": name, "caret": len(name), "fresh": true}
+  }
+}
+
+-~> The fill editor's "+ Save as variable…": the paint becomes a variable
+-~> (one step), selected in the sidebar with its name ready to type.
+function pal_save_paint(line, which) {
+  let name = colors_free_name(colors_find(ed_model()), "fill")
+  let was = len(ed_model().lines)
+  if (ct_save_paint(line, which, name)) {
+    if (FE.open && FE.line == line) {
+      FE.line = line + len(ed_model().lines) - was
+    }
+    PAL.sel = name
+    PAL.stop = 0
+    PAL.open = true
+    PAL.focus = {"field": "name", "text": name, "caret": len(name), "fresh": true}
+    V.pw = math.max(math.min(160, V.w * 5 // 8), math.min(V.pw, V.w - 120 - pal_reserved(V.w)))
+    view_force_all()
+  }
+  view_prepare()
+  view_after()
+}
+
+-~> The trash: removes the selected variable. While shapes use it, the first
+-~> click asks and the second removes it.
+function pal_remove_var() {
+  let v = pal_sel_var()
+  if (v == null) {
+    return null
+  }
+  let force = PAL.confirm == v.name
+  if (!force && len(colors_uses(ed_model(), v.name)) > 0) {
+    PAL.confirm = v.name
+    ed_refuse(t("refuse.var_used", {"name": v.name, "n": ct_uses(v.name)}))
+    return null
+  }
+  PAL.confirm = null
+  if (ct_remove_var(v.name, true)) {
+    PAL.sel = null
+  }
+}
+
+-~> == The fields ==
+
+function pal_field_text(id) {
+  if (PAL.focus != null && PAL.focus.field == id) {
+    return PAL.focus.text
+  }
+  let c = hsv_color(PAL.hsv)
+  if (id == "hex") {
+    return color_hex(color_with_alpha(c, 255))
+  }
+  if (id == "alpha") {
+    return alpha_text(c)
+  }
+  if (id == "name" && PAL.sel != null) {
+    return PAL.sel
+  }
+  ""
+}
+
+function pal_focus(field) {
+  let s = pal_field_text(field)
+  PAL.focus = {"field": field, "text": s, "caret": len(s), "fresh": true}
+}
+
+-~> Writes what a field holds (one undo step) and leaves it.
+function pal_commit_focus() {
+  let fo = PAL.focus
+  if (fo == null) {
+    return null
+  }
+  PAL.focus = null
+  let c = hsv_color(PAL.hsv)
+  if (fo.field == "hex") {
+    let n = color_parse(fo.text)
+    if (n != null) {
+      if (len(text.replace(text.trim(fo.text), "#", "")) != 8) {
+        n = color_with_alpha(n, c.a)
+      }
+      pal_set(n, null)
+      color_note_recent(n)
+    }
+  } elif (fo.field == "alpha") {
+    let a = alpha_parse(fo.text)
+    if (a != null) {
+      let hsv = hash.copy(PAL.hsv)
+      hsv.a = a
+      pal_set(hsv_color(hsv), hsv)
+    }
+  } elif (fo.field == "name" && PAL.sel != null) {
+    let name = colors_clean_name(fo.text)
+    if (name != "" && name != PAL.sel && ct_rename_var(PAL.sel, name)) {
+      PAL.sel = name
+    }
+  }
+  view_prepare()
+  view_after()
+}
+
+-~> A key while a sidebar field is focused. True when it used it.
+function pal_key(e) {
+  let fo = PAL.focus
+  if (fo == null) {
+    return false
+  }
+  let k = text.lower(e.key)
+  if (k == "enter" || k == "return" || k == "tab") {
+    pal_commit_focus()
+  } elif (k == "escape") {
+    PAL.focus = null
+  } elif (k == "backspace") {
+    if (fo.fresh) {
+      fo.text = ""
+      fo.caret = 0
+    } elif (fo.caret > 0) {
+      fo.text = text.slice(fo.text, 0, fo.caret - 1) + text.slice(fo.text, fo.caret, len(fo.text))
+      fo.caret = fo.caret - 1
+    }
+  } elif (k == "arrowleft") {
+    fo.caret = math.max(0, fo.caret - 1)
+  } elif (k == "arrowright") {
+    fo.caret = math.min(len(fo.text), fo.caret + 1)
+  } else {
+    return true
+  }
+  fo.fresh = false
+  view_touch()
+  true
+}
+
+-~> Text typed into the focused field.
+function pal_text(s) {
+  let fo = PAL.focus
+  if (fo == null) {
+    return false
+  }
+  if (fo.fresh) {
+    fo.text = ""
+    fo.caret = 0
+    fo.fresh = false
+  }
+  fo.text = text.slice(fo.text, 0, fo.caret) + s + text.slice(fo.text, fo.caret, len(fo.text))
+  fo.caret = fo.caret + len(s)
+  view_touch()
+  true
+}

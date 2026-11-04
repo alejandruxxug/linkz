@@ -1,0 +1,241 @@
+-~> new_drawing_model: the New drawing dialog apart from how it looks: the
+-~> size presets, the fields being typed in (name, width, height, background),
+-~> what is wrong with them, and the text of the file Create writes:
+-~>   canvas = {"size": (w, h), "background": #rrggbb, "max_objects": N}
+-~> where N is the limit recommended on this machine (budget_model.liz).
+-~> Words go through t() inside the functions only.
+
+use "budget_model"
+use "home_data"
+use "i18n"
+
+-~> The size presets, in the order of their buttons. A4 is 210 x 297 mm at
+-~> 150 dpi; phone is a 6.1" phone's screen. A label is a language key, or
+-~> the size itself when it has none.
+let nd_presets = [
+  {"id": "square", "size": (512, 512), "key": null},
+  {"id": "post", "size": (1080, 1080), "key": null},
+  {"id": "hd", "size": (1920, 1080), "key": null},
+  {"id": "a4", "size": (1240, 1754), "key": "new.a4"},
+  {"id": "phone", "size": (1170, 2532), "key": "new.phone"}
+]
+
+-~> The background swatches, then any color typed as #rrggbb.
+let nd_backgrounds = ["#ffffff", "#f4f1e8", "#000000"]
+
+-~> The largest side a canvas may have, and the longest name.
+let nd_max_side = 10000
+let nd_max_name = 60
+
+-~> The fields, in the order Tab goes through them.
+let nd_fields = ["name", "w", "h", "bg"]
+
+-~> A new dialog's state. taken: the file names already in the folder.
+-~> fresh: the name is the one proposed, all selected: typing replaces it.
+function nd_new(taken) {
+  {
+    "name": home_free_name(t("new.untitled"), taken),
+    "fresh": true,
+    "preset": "square",
+    "w": "512",
+    "h": "512",
+    "bg": nd_backgrounds[0],
+    "focus": "name",
+    "error": "",
+    "error_at": "",
+    "measure": ""
+  }
+}
+
+-~> The label of a preset button ("custom" is the last one).
+function nd_preset_label(id) {
+  if (id == "custom") {
+    return t("new.custom")
+  }
+  for (let i = 0; i < len(nd_presets); i = i + 1) {
+    let p = nd_presets[i]
+    if (p.id == id) {
+      if (p.key != null) {
+        return t(p.key)
+      }
+      return str(p.size.x) + "×" + str(p.size.y)
+    }
+  }
+  id
+}
+
+-~> The ids of the preset buttons, custom last.
+function nd_preset_ids() {
+  let out = []
+  for (let i = 0; i < len(nd_presets); i = i + 1) {
+    push(out, nd_presets[i].id)
+  }
+  push(out, "custom")
+  out
+}
+
+-~> Picks a preset: its size goes into the fields. Custom keeps them and
+-~> moves the focus to the width.
+function nd_pick(d, id) {
+  d.preset = id
+  d.error = ""
+  if (id == "custom") {
+    return nd_focus(d, "w")
+  }
+  for (let i = 0; i < len(nd_presets); i = i + 1) {
+    if (nd_presets[i].id == id) {
+      d.w = str(nd_presets[i].size.x)
+      d.h = str(nd_presets[i].size.y)
+    }
+  }
+  d
+}
+
+-~> The preset whose size is w by h, or "custom".
+function nd_preset_of(w, h) {
+  for (let i = 0; i < len(nd_presets); i = i + 1) {
+    let s = nd_presets[i].size
+    if (str(s.x) == w && str(s.y) == h) {
+      return nd_presets[i].id
+    }
+  }
+  "custom"
+}
+
+-~> Whether ch may go in a field: digits for the sizes, hex digits for the
+-~> background (after its #), anything printable but / and : in the name.
+function nd_allowed(field, value, ch) {
+  if (field == "w" || field == "h") {
+    return len(value) < 5 && text.find("0123456789", ch) >= 0
+  }
+  if (field == "bg") {
+    return len(value) < 7 && text.find("0123456789abcdefABCDEF", ch) >= 0
+  }
+  len(value) < nd_max_name && ch != "/" && ch != ":"
+}
+
+-~> Puts text into the focused field (what it may hold of it). The size fields
+-~> pick the preset they now match, or custom.
+function nd_type(d, s) {
+  let f = d.focus
+  let v = d[f]
+  if (f == "name" && d.fresh) {
+    v = ""
+  }
+  for (let i = 0; i < len(s); i = i + 1) {
+    if (nd_allowed(f, v, s[i])) {
+      v = v + s[i]
+    }
+  }
+  nd_set(d, f, v)
+}
+
+-~> Takes the last character of the focused field (the background keeps its #).
+function nd_backspace(d) {
+  let f = d.focus
+  let v = d[f]
+  if (f == "name" && d.fresh) {
+    return nd_set(d, f, "")
+  }
+  if (len(v) == 0 || (f == "bg" && len(v) <= 1)) {
+    return d
+  }
+  nd_set(d, f, text.slice(v, 0, len(v) - 1))
+}
+
+function nd_set(d, field, value) {
+  d[field] = value
+  d.error = ""
+  if (field == "name") {
+    d.fresh = false
+  }
+  if (field == "w" || field == "h") {
+    d.preset = nd_preset_of(d.w, d.h)
+  }
+  d
+}
+
+-~> Moves the focus to the next field (or the one before, with back).
+function nd_tab(d, back = false) {
+  let i = list.index(nd_fields, d.focus)
+  let step = 1
+  if (back) {
+    step = len(nd_fields) - 1
+  }
+  nd_focus(d, nd_fields[(i + step) % len(nd_fields)])
+}
+
+-~> Moves the focus to a field; the proposed name stops being selected.
+function nd_focus(d, field) {
+  d.focus = field
+  d.fresh = false
+  d
+}
+
+-~> The size the fields give, or null when it isn't one.
+function nd_size(d) {
+  if (d.w == "" || d.h == "") {
+    return null
+  }
+  let w = int(text.number(d.w))
+  let h = int(text.number(d.h))
+  if (w < 1 || h < 1 || w > nd_max_side || h > nd_max_side) {
+    return null
+  }
+  (w, h)
+}
+
+-~> The background field as a color literal "#rrggbb" (lower case), or null.
+function nd_color(d) {
+  let v = text.lower(d.bg)
+  if (len(v) != 7 || v[0] != "#") {
+    return null
+  }
+  for (let i = 1; i < 7; i = i + 1) {
+    if (text.find("0123456789abcdef", v[i]) < 0) {
+      return null
+    }
+  }
+  v
+}
+
+-~> What stops Create: {"error", "at"} (at: the field to fix), or null.
+-~> taken: the file names already in the folder.
+function nd_problem(d, taken) {
+  let name = home_clean_name(d.name)
+  if (name == null) {
+    return {"error": t("home.bad_name"), "at": "name"}
+  }
+  if (list.index(taken, name + home_ext) >= 0) {
+    return {"error": t("home.exists", {"file": name + home_ext}), "at": "name"}
+  }
+  if (nd_size(d) == null) {
+    return {"error": t("new.bad_size", {"max": str(nd_max_side)}), "at": "w"}
+  }
+  if (nd_color(d) == null) {
+    return {"error": t("new.bad_color"), "at": "bg"}
+  }
+  null
+}
+
+-~> The text of the new drawing. max 0 (not known) leaves "max_objects" out.
+function nd_text(size, bg, max) {
+  let cnv = "\"size\": (" + str(size.x) + ", " + str(size.y) + "), \"background\": " + bg
+  if (max > 0) {
+    cnv = cnv + ", \"max_objects\": " + str(max)
+  }
+  "-~> lzdraw 1\ncanvas = {" + cnv + "}\n"
+}
+
+-~> Checks the dialog: {"name", "text"} to create, or null with d.error and
+-~> d.error_at set (and the focus on the field to fix).
+function nd_result(d, taken) {
+  let p = nd_problem(d, taken)
+  if (p != null) {
+    d.error = p.error
+    d.error_at = p.at
+    nd_focus(d, p.at)
+    return null
+  }
+  {"name": home_clean_name(d.name), "text": nd_text(nd_size(d), nd_color(d), budget_recommended())}
+}

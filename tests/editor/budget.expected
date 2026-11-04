@@ -1,0 +1,25 @@
+-- the counter
+["objects", "objects 7 / 10", "mute"]
+["objects", "objects 8 / 10", "amber"]
+["warn", "objects 12 / 10", "ember"]
+
+-- its tooltip
+status:objects true 
+12 objects (ember) · recommended 10 (mute)
+Repaints may get slow above this on <machine>. (text)
+Measured from memory and speed · Settings (mute)
+true (above the status bar)
+-- made on a faster machine
+true Made on a faster computer: up to 4,000 objects there, 1,800 on <machine>
+["warn", "Made on a faster computer: up to 4,000 objects there, 1,800 on <machine>", "amber"]
+true (the file is not changed)
+["objects", "objects 3 / 4,000", "mute"]
+null
+-- Cmd+N opens the New drawing dialog
+home true Untitled 1800
+editor false true
+-~> lzdraw 1
+canvas = {"size": (1920, 1080), "background": #ffffff, "max_objects": 1800}
+
+["objects", "objects 0 / 1,800", "mute"]
+

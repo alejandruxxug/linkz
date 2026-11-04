@@ -1,0 +1,473 @@
+-~> color_vars: the drawing's color variables, the hash
+-~>   let colors = {"sky": #f2a65a, "dusk": gradient([#3b2a6b, #e0607a], 90deg)}
+-~> at the top of the file, read and changed as code. Pure functions: they
+-~> take a model and return a new one (or a refusal). A variable holds a
+-~> color or a gradient, interchangeably; a shape uses one as `colors.sky`,
+-~> so changing the variable changes every shape that uses it.
+-~>
+-~> colors_find(m) is null when the file has no `let colors = {` at its
+-~> top level, else {"line", "end_line", "open", "close", "entries"}: the
+-~> braces as positions {"l", "c"} (lines from 1, columns from 0), and per
+-~> entry {"name", "text", "span", "from", "to"} where span is the value's
+-~> text and from/to the whole entry, as edit spans {"l1", "c1", "l2", "c2"}
+-~> (columns from 1, the end just after, like span_replace).
+
+use "editor_doc"
+use "editor_twoway"
+use "i18n"
+
+-~> The name of the variable that holds the hash.
+let colors_name = "colors"
+
+-~> == Reading ==
+
+-~> The line (from 1) of the top-level `let colors = {`, or 0, from the
+-~> top-level statements of the parse the editor keeps.
+function colors_line(m) {
+  let st = doc_parsed(m).statements
+  for (let i = 0; i < len(st); i = i + 1) {
+    let s = st[i]
+    if (s.kind == "let" && s.name == colors_name) {
+      let at = text.find(m.lines[s.line - 1], "=")
+      if (at >= 0 && text.starts(text.trim(text.slice(m.lines[s.line - 1], at + 1, len(m.lines[s.line - 1]))), "{")) {
+        return s.line
+      }
+    }
+  }
+  0
+}
+
+-~> A reader over the lines from a position: {"lines", "l", "c"} (l from 0).
+function cv_reader(lines, l, c) {
+  {"lines": lines, "l": l, "c": c}
+}
+
+-~> The character at the reader, "\n" at the end of a line, "" at the end.
+function cv_peek(rd) {
+  if (rd.l >= len(rd.lines)) {
+    return ""
+  }
+  let s = rd.lines[rd.l]
+  if (rd.c >= len(s)) {
+    return "\n"
+  }
+  s[rd.c]
+}
+
+function cv_next(rd) {
+  if (rd.l >= len(rd.lines)) {
+    return null
+  }
+  if (rd.c >= len(rd.lines[rd.l])) {
+    rd.l = rd.l + 1
+    rd.c = 0
+  } else {
+    rd.c = rd.c + 1
+  }
+}
+
+-~> Skips spaces, line ends and -~> comments.
+function cv_skip(rd) {
+  while (true) {
+    let ch = cv_peek(rd)
+    if (ch == " " || ch == "\t" || ch == "\n") {
+      cv_next(rd)
+    } elif (ch == "-" && text.slice(rd.lines[rd.l], rd.c, rd.c + 3) == "-~>") {
+      rd.c = len(rd.lines[rd.l])
+    } else {
+      return null
+    }
+  }
+}
+
+-~> Skips a string that starts at the reader; gives its text without quotes.
+function cv_string(rd) {
+  let out = ""
+  cv_next(rd)
+  while (true) {
+    let ch = cv_peek(rd)
+    if (ch == "" || ch == "\n") {
+      return null
+    }
+    cv_next(rd)
+    if (ch == "\"") {
+      return out
+    }
+    if (ch == "\\") {
+      ch = cv_peek(rd)
+      cv_next(rd)
+    }
+    out = out + ch
+  }
+}
+
+-~> Reads a value up to the comma or the brace that ends it (outside
+-~> brackets and strings). Gives [start, end] positions, the end after the
+-~> last character that is not a space.
+function cv_value(rd) {
+  let start = {"l": rd.l, "c": rd.c}
+  let last = {"l": rd.l, "c": rd.c}
+  let depth = 0
+  while (true) {
+    let ch = cv_peek(rd)
+    if (ch == "") {
+      return null
+    }
+    if (depth == 0 && (ch == "," || ch == "}")) {
+      return [start, last]
+    }
+    if (ch == "\"") {
+      cv_string(rd)
+      last = {"l": rd.l, "c": rd.c}
+    } elif (ch == "-" && text.slice(rd.lines[rd.l], rd.c, rd.c + 3) == "-~>") {
+      rd.c = len(rd.lines[rd.l])
+    } else {
+      if (ch == "(" || ch == "[" || ch == "{") {
+        depth = depth + 1
+      } elif (ch == ")" || ch == "]" || ch == "}") {
+        depth = depth - 1
+      }
+      cv_next(rd)
+      if (ch != " " && ch != "\t" && ch != "\n") {
+        last = {"l": rd.l, "c": rd.c}
+      }
+    }
+  }
+}
+
+-~> An edit span from two reader positions.
+function cv_span(a, b) {
+  {"l1": a.l + 1, "c1": a.c + 1, "l2": b.l + 1, "c2": b.c + 1}
+}
+
+-~> The last colors_find, kept for the text it was made from.
+let cv_memo = {"id": null, "cv": null}
+
+-~> The color variables of the file (see the top), or null. Kept per text.
+function colors_find(m) {
+  if (cv_memo.id == m.cache.id) {
+    return cv_memo.cv
+  }
+  let cv = cv_find(m)
+  cv_memo.id = m.cache.id
+  cv_memo.cv = cv
+  cv
+}
+
+function cv_find(m) {
+  let line = colors_line(m)
+  if (line == 0) {
+    return null
+  }
+  let lines = m.lines
+  let rd = cv_reader(lines, line - 1, text.find(lines[line - 1], "{"))
+  let open = {"l": rd.l + 1, "c": rd.c}
+  cv_next(rd)
+  let entries = []
+  while (true) {
+    cv_skip(rd)
+    let ch = cv_peek(rd)
+    if (ch == "}") {
+      break
+    }
+    if (ch != "\"") {
+      return null
+    }
+    let from = {"l": rd.l, "c": rd.c}
+    let name = cv_string(rd)
+    cv_skip(rd)
+    if (name == null || cv_peek(rd) != ":") {
+      return null
+    }
+    cv_next(rd)
+    cv_skip(rd)
+    let v = cv_value(rd)
+    if (v == null) {
+      return null
+    }
+    let sp = cv_span(v[0], v[1])
+    push(entries, {"name": name, "text": span_text(lines, sp.l1, sp.c1, sp.l2, sp.c2), "span": sp, "from": cv_span(from, v[1]), "to": null})
+    if (cv_peek(rd) == ",") {
+      cv_next(rd)
+    }
+  }
+  {"line": line, "end_line": rd.l + 1, "open": open, "close": {"l": rd.l + 1, "c": rd.c}, "entries": entries}
+}
+
+-~> The entry called name, or null.
+function colors_entry(cv, name) {
+  if (cv == null) {
+    return null
+  }
+  for (let i = 0; i < len(cv.entries); i = i + 1) {
+    if (cv.entries[i].name == name) {
+      return cv.entries[i]
+    }
+  }
+  null
+}
+
+-~> The names of the variables, in the file's order.
+function colors_names(cv) {
+  let out = []
+  if (cv != null) {
+    for (let i = 0; i < len(cv.entries); i = i + 1) {
+      push(out, cv.entries[i].name)
+    }
+  }
+  out
+}
+
+-~> Whether s can be a variable's name: letters, digits and _, not first a digit.
+function colors_valid_name(s) {
+  if (len(s) == 0 || text.find("0123456789", s[0]) >= 0) {
+    return false
+  }
+  for (let i = 0; i < len(s); i = i + 1) {
+    if (text.find("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_", s[i]) < 0) {
+      return false
+    }
+  }
+  true
+}
+
+-~> A name made from what was typed: spaces and dashes become _, and anything
+-~> else that a name can't have goes.
+function colors_clean_name(s) {
+  let out = ""
+  let low = text.trim(s)
+  for (let i = 0; i < len(low); i = i + 1) {
+    let ch = low[i]
+    if (ch == " " || ch == "-") {
+      ch = "_"
+    }
+    if (text.find("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_", ch) >= 0) {
+      out = out + ch
+    }
+  }
+  while (len(out) > 0 && text.find("0123456789", out[0]) >= 0) {
+    out = text.slice(out, 1, len(out))
+  }
+  out
+}
+
+-~> A name not in use: base, else base_2, base_3 ...
+function colors_free_name(cv, base) {
+  let names = colors_names(cv)
+  if (list.index(names, base) < 0) {
+    return base
+  }
+  let k = 2
+  while (list.index(names, base + "_" + str(k)) >= 0) {
+    k = k + 1
+  }
+  base + "_" + str(k)
+}
+
+-~> Whether a character can be part of a name.
+function cv_word_char(ch) {
+  ch != "" && text.find("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_", ch) >= 0
+}
+
+-~> Where `colors.name` is written in a line, outside strings and comments:
+-~> the columns (from 0) where each starts.
+function colors_refs_in(s, name) {
+  let out = []
+  let word = colors_name + "." + name
+  let inside = false
+  let i = 0
+  while (i < len(s)) {
+    let ch = s[i]
+    if (ch == "\"") {
+      inside = !inside
+      i = i + 1
+    } elif (!inside && text.slice(s, i, i + 3) == "-~>") {
+      return out
+    } elif (!inside && cv_word_at(s, i, word)) {
+      push(out, i)
+      i = i + len(word)
+    } else {
+      i = i + 1
+    }
+  }
+  out
+}
+
+-~> Whether the whole word is at i: not a part of a longer name or of a.b.word.
+function cv_word_at(s, i, word) {
+  if (text.slice(s, i, i + len(word)) != word) {
+    return false
+  }
+  if (i > 0 && (cv_word_char(s[i - 1]) || s[i - 1] == ".")) {
+    return false
+  }
+  !cv_word_char(text.slice(s, i + len(word), i + len(word) + 1))
+}
+
+-~> The lines (from 1) that use the variable, outside its own hash.
+function colors_uses(m, name) {
+  let cv = colors_find(m)
+  let out = []
+  for (let i = 0; i < len(m.lines); i = i + 1) {
+    let inside = cv != null && i + 1 >= cv.line && i + 1 <= cv.end_line
+    if (!inside && text.find(m.lines[i], colors_name + "." + name) >= 0 && len(colors_refs_in(m.lines[i], name)) > 0) {
+      push(out, i + 1)
+    }
+  }
+  out
+}
+
+-~> == Changing ==
+
+-~> Whether the hash is written on one line.
+function cv_one_line(cv) {
+  cv.line == cv.close.l
+}
+
+-~> The model with a new variable `name` = value (code text) at the end of
+-~> the hash; the hash is made, after the file's opening comments, when there
+-~> is none. A refusal when the name is taken or not a name.
+function colors_add(m, name, value) {
+  if (!colors_valid_name(name)) {
+    return {"refused": t("refuse.var_name", {"name": name})}
+  }
+  let cv = colors_find(m)
+  if (cv == null) {
+    return colors_create(m, name, value)
+  }
+  if (colors_entry(cv, name) != null) {
+    return {"refused": t("refuse.var_taken", {"name": name})}
+  }
+  let item = "\"" + name + "\": " + value
+  let cl = cv.close
+  let lines = m.lines
+  if (cv_one_line(cv)) {
+    let sep = ", "
+    if (len(cv.entries) == 0) {
+      sep = ""
+    }
+    return doc_with(m, span_replace(lines, cl.l, cl.c + 1, cl.l, cl.c + 1, sep + item), m.line, m.col)
+  }
+  -~> one entry per line: a new line before the closing brace, like the others
+  let last = null
+  if (len(cv.entries) > 0) {
+    last = cv.entries[len(cv.entries) - 1]
+  }
+  let pad = "  "
+  if (last != null) {
+    pad = " " * leading_ws(lines[last.from.l1 - 1])
+  }
+  let out = lines
+  if (last != null) {
+    let after = lines[last.span.l2 - 1]
+    if (text.slice(after, last.span.c2 - 1, last.span.c2) != ",") {
+      out = span_replace(out, last.span.l2, last.span.c2, last.span.l2, last.span.c2, ",")
+    }
+  }
+  out = list.slice(out, 0, cl.l - 1) + [pad + item] + list.slice(out, cl.l - 1, len(out))
+  let line = m.line
+  if (line >= cl.l) {
+    line = line + 1
+  }
+  doc_with(m, out, line, m.col)
+}
+
+-~> The model with `let colors = {"name": value}` made after the file's
+-~> opening comments (and the blank line under them), then a blank line.
+function colors_create(m, name, value) {
+  let at = twoway_after_header(m)
+  let add = ["let " + colors_name + " = {\"" + name + "\": " + value + "}"]
+  if (at < len(m.lines) && is_blank(m.lines[at]) && at > 0) {
+    at = at + 1
+  }
+  if (at < len(m.lines) && !is_blank(m.lines[at])) {
+    push(add, "")
+  }
+  let lines = list.slice(m.lines, 0, at) + add + list.slice(m.lines, at, len(m.lines))
+  let line = m.line
+  if (line > at) {
+    line = line + len(add)
+  }
+  doc_with(m, lines, line, m.col)
+}
+
+-~> The model with the variable's value written as `value` (code text).
+function colors_set(m, name, value) {
+  let e = colors_entry(colors_find(m), name)
+  if (e == null) {
+    return {"refused": t("refuse.no_var", {"name": name})}
+  }
+  if (e.text == value) {
+    return m
+  }
+  twoway_apply(m, [{"l1": e.span.l1, "c1": e.span.c1, "l2": e.span.l2, "c2": e.span.c2, "text": value}])
+}
+
+-~> The model with the variable renamed, and every `colors.old` with it.
+function colors_rename(m, old, name) {
+  if (old == name) {
+    return m
+  }
+  if (!colors_valid_name(name)) {
+    return {"refused": t("refuse.var_name", {"name": name})}
+  }
+  let cv = colors_find(m)
+  let e = colors_entry(cv, old)
+  if (e == null) {
+    return {"refused": t("refuse.no_var", {"name": old})}
+  }
+  if (colors_entry(cv, name) != null) {
+    return {"refused": t("refuse.var_taken", {"name": name})}
+  }
+  let edits = [{"l1": e.from.l1, "c1": e.from.c1, "l2": e.from.l1, "c2": e.from.c1 + len(old) + 2, "text": "\"" + name + "\""}]
+  let word = colors_name + "." + old
+  for (let i = 0; i < len(m.lines); i = i + 1) {
+    let at = colors_refs_in(m.lines[i], old)
+    for (let k = 0; k < len(at); k = k + 1) {
+      push(edits, {"l1": i + 1, "c1": at[k] + 1, "l2": i + 1, "c2": at[k] + 1 + len(word), "text": colors_name + "." + name})
+    }
+  }
+  twoway_apply(m, edits)
+}
+
+-~> The model without the variable. Shapes that still use it would stop
+-~> working, so it is refused while any row uses it, unless `force`.
+function colors_remove(m, name, force) {
+  let cv = colors_find(m)
+  let e = colors_entry(cv, name)
+  if (e == null) {
+    return {"refused": t("refuse.no_var", {"name": name})}
+  }
+  let uses = colors_uses(m, name)
+  if (len(uses) > 0 && !force) {
+    return {"refused": t("refuse.var_used", {"name": name, "n": len(uses)}), "uses": len(uses)}
+  }
+  let i = list.index(colors_names(cv), name)
+  let lines = m.lines
+  if (cv_one_line(cv)) {
+    let a = e.from
+    let c2 = a.c2
+    let c1 = a.c1
+    if (i + 1 < len(cv.entries)) {
+      c2 = cv.entries[i + 1].from.c1
+    } elif (i > 0) {
+      c1 = cv.entries[i - 1].span.c2
+    }
+    return doc_with(m, span_replace(lines, a.l1, c1, a.l1, c2, ""), m.line, m.col)
+  }
+  -~> one entry per line: its lines go (the comma of the one before stays
+  -~> harmless when it was the last)
+  let out = list.slice(lines, 0, e.from.l1 - 1) + list.slice(lines, e.from.l2, len(lines))
+  if (i == len(cv.entries) - 1 && i > 0) {
+    let prev = cv.entries[i - 1]
+    let s = out[prev.span.l2 - 1]
+    if (text.slice(s, prev.span.c2 - 1, prev.span.c2) == ",") {
+      out[prev.span.l2 - 1] = text.slice(s, 0, prev.span.c2 - 1) + text.slice(s, prev.span.c2, len(s))
+    }
+  }
+  let line = m.line
+  if (line > e.from.l2) {
+    line = line - (e.from.l2 - e.from.l1 + 1)
+  }
+  doc_with(m, out, line, m.col)
+}

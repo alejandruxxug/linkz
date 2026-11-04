@@ -9,7 +9,9 @@
 -~> The app's screen router uses it through home_register(), which sets
 -~> screens["home"] = {"event", "paint", "enter", "needs_paint", "wants_hover"}.
 -~> The editor tells it about files with home_note_opened(path) and
--~> home_note_saved(path).
+-~> home_note_saved(path). "+ New drawing" and Cmd+N open the New drawing
+-~> dialog (new_drawing_view.liz), which gets every event while it is open;
+-~> show_screen("home", {"new": true}) opens it too.
 
 use "app_screens"
 use "editor_state"
@@ -20,6 +22,7 @@ use "home_example"
 use "home_gfx"
 use "home_thumbs"
 use "i18n"
+use "new_drawing_view"
 
 -~> files: every drawing, newest first. recent: the paths opened last.
 -~> focus: the search field is being typed in. cards: the cards of the last
@@ -82,16 +85,20 @@ function home_refresh() {
   home_say(t("home.refreshed", {"n": len(home.files)}))
 }
 
-function home_enter(_args) {
+function home_enter(args) {
   fb.canvas((0, 0), (0, 0))
   fb.target("ui")
   home_scan()
   home.menu = null
   home.dialog = null
+  nd_close()
   home.hover = null
   home.warm = false
   home.scroll = 0
   home.needs_paint = true
+  if (args != null && args.new == true) {
+    home_new_dialog()
+  }
 }
 
 function home_dirty() {
@@ -324,20 +331,51 @@ function home_open(path) {
   true
 }
 
-function home_new_drawing() {
+-~> Writes a new drawing called name (without the extension) into the
+-~> folder: {"path"}, or {"error"} when it can't be written.
+function home_write_new(name, body) {
   let dir = home_dir()
-  let taken = home_names(home_list(dir))
-  let name = home_free_name("Untitled", taken)
   let path = dir + "/" + name + home_ext
   try {
     fs.mkdir(dir)
-    fs.write(path, home_new_text())
+    fs.write(path, body)
   } catch (e) {
-    home_say(e.message)
-    return false
+    return {"error": e.message}
   }
   home_scan()
-  home_open(path)
+  {"path": path}
+}
+
+-~> A new empty drawing, "Untitled", made and opened at once (the backdoor's
+-~> NewDrawing).
+function home_new_drawing() {
+  let taken = home_names(home_list(home_dir()))
+  let made = home_write_new(home_free_name("Untitled", taken), home_new_text())
+  if (made.error != null) {
+    home_say(made.error)
+    return false
+  }
+  home_open(made.path)
+}
+
+-~> The New drawing dialog's Create: "" when the drawing was made and opened.
+function home_create_drawing(name, body) {
+  let made = home_write_new(name, body)
+  if (made.error != null) {
+    return made.error
+  }
+  if (!home_open(made.path)) {
+    return home.status
+  }
+  ""
+}
+
+-~> Opens the New drawing dialog over the home screen.
+function home_new_dialog() {
+  home.menu = null
+  home.dialog = null
+  nd_open(home_names(home_list(home_dir())), home.size, home_create_drawing)
+  home_dirty()
 }
 
 function home_open_example() {
@@ -806,8 +844,9 @@ function home_paint() {
   if (home.dialog != null) {
     home_paint_dialog()
   }
+  nd_paint(size)
   home.warm = true
-  home.needs_paint = !lay.empty && len(home_thumbs_waiting()) > 0
+  home.needs_paint = (!lay.empty && len(home_thumbs_waiting()) > 0) || nd_wants_paint()
 }
 
 -~> == Events ==
@@ -980,7 +1019,7 @@ function home_click(hit, e) {
     home.sort = home_next_sort(home.sort)
     home_dirty()
   } elif (hit.kind == "new" || hit.kind == "newbtn") {
-    home_new_drawing()
+    home_new_dialog()
   } elif (hit.kind == "example") {
     home_open_example()
   } elif (hit.kind == "more" || (hit.kind == "card" && e.button == 1)) {
@@ -1003,7 +1042,14 @@ function home_event(e) {
   if (e.type == "resize") {
     home.size = e.size
     home_clamp_scroll()
+    nd_event(e)
     home_dirty()
+    return null
+  }
+  if (nd_is_open()) {
+    if (nd_event(e)) {
+      home_dirty()
+    }
     return null
   }
   if (home.dialog != null) {
@@ -1099,7 +1145,7 @@ function home_key(e) {
     return null
   }
   if (e.mods.cmd && (k == "KeyN" || k == "N" || k == "n")) {
-    home_new_drawing()
+    home_new_dialog()
     return null
   }
   if ((e.mods.cmd || e.mods.ctrl) && (k == "KeyR" || k == "R" || k == "r")) {
@@ -1208,6 +1254,7 @@ function home_debug_state() {
     "status": home.status,
     "recent": home.recent,
     "renders": home_thumbs.renders,
+    "new_dialog": nd_debug_state(),
     "new_card": nr,
     "cards": cards
   }

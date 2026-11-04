@@ -1,0 +1,88 @@
+-~> color_harmony: the colors that go with a color, by the color wheel's
+-~> rules. Pure functions. A harmony is a list of colors that starts with the
+-~> base color itself:
+-~>   complementary   the opposite hue (+180°)
+-~>   split           the two hues beside the opposite one (+150°, +210°)
+-~>   analogous       the neighbours (-30°, +30°)
+-~>   triadic         three hues a third apart (+120°, +240°)
+-~>   square          four hues a quarter apart (+90°, +180°, +270°)
+-~>   mono            the same hue, lighter and darker
+-~> Every color keeps the base's saturation, value and alpha but mono, which
+-~> keeps its hue and alpha.
+
+use "color_hsv"
+
+-~> The harmonies in the order the popover shows them.
+let harmony_modes = ["complementary", "split", "analogous", "triadic", "square", "mono"]
+
+-~> The hue offsets (degrees) of a harmony's other colors; mono has none.
+function harmony_offsets(mode) {
+  if (mode == "complementary") {
+    return [180]
+  }
+  if (mode == "split") {
+    return [150, 210]
+  }
+  if (mode == "analogous") {
+    return [-30, 30]
+  }
+  if (mode == "triadic") {
+    return [120, 240]
+  }
+  if (mode == "square") {
+    return [90, 180, 270]
+  }
+  []
+}
+
+-~> The base's hsv (the picker's own, so a grey keeps its hue) and its
+-~> harmony: [hsv, ...], the base first.
+function harmony_hsvs(base, mode) {
+  let out = [base]
+  if (mode == "mono") {
+    let lighter = hash.copy(base)
+    lighter.s = base.s * 0.45
+    lighter.v = math.min(1.0, base.v + (1 - base.v) * 0.6 + 0.1)
+    let darker = hash.copy(base)
+    darker.v = base.v * 0.55
+    push(out, lighter)
+    push(out, darker)
+    return out
+  }
+  let offs = harmony_offsets(mode)
+  for (let i = 0; i < len(offs); i = i + 1) {
+    let h = hash.copy(base)
+    h.h = hue_wrap(base.h + offs[i])
+    push(out, h)
+  }
+  out
+}
+
+-~> The colors of a harmony of c (a color or an hsv), the base first.
+function harmony_colors(c, mode) {
+  let base = c
+  if (type(c) == "COLOR") {
+    base = hsv_of(c)
+  }
+  let hs = harmony_hsvs(base, mode)
+  let out = []
+  for (let i = 0; i < len(hs); i = i + 1) {
+    push(out, hsv_color(hs[i]))
+  }
+  out
+}
+
+-~> The names "+ add all" gives the colors after the base: base_2, base_3 ...,
+-~> skipping the names in `taken`.
+function harmony_names(base, n, taken) {
+  let out = []
+  let k = 2
+  while (len(out) < n) {
+    let name = base + "_" + str(k)
+    if (list.index(taken, name) < 0 && list.index(out, name) < 0) {
+      push(out, name)
+    }
+    k = k + 1
+  }
+  out
+}

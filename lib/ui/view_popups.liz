@@ -7,6 +7,7 @@ use "../draw/gradient"
 use "../draw/pens"
 use "../draw/shapes"
 use "../gfx/raster"
+use "budget_view"
 use "complete_state"
 use "complete_view"
 use "editor_doc"
@@ -22,6 +23,7 @@ use "view_gfx"
 use "view_input"
 use "view_layout"
 use "shape_popups"
+use "color_route"
 
 let tip_delay = 400
 
@@ -126,6 +128,9 @@ function tip_place(r, size, dx) {
 
 -~> The tooltip for what the pointer is over, or null: {"lines", "x", "y", "w", "h"}.
 function tip_for(hover) {
+  if (color_tip_owned(hover)) {
+    return color_tip(hover)
+  }
   let parts = text.split(hover, ":")
   let kind = parts[0]
   let lines = null
@@ -168,6 +173,9 @@ function tip_for(hover) {
       lines = tip_doc_lines(props.callee, parts[1])
       anchor = view_hit_rect(hover)
     }
+  } elif (kind == "status") {
+    lines = budget_tip_lines()
+    anchor = budget_counter_rect()
   }
   if (lines == null || anchor == null) {
     return null
@@ -408,6 +416,7 @@ function popup_list() {
     push(out, ["dialog", [V.dialog.x, V.dialog.y, V.dialog.w + 2, V.dialog.h + 2]])
   }
   out = out + shape_popup_rects()
+  out = out + color_popup_rects()
   if (V.dialog == null) {
     out = out + cmp_popup_rects()
   }
@@ -427,7 +436,7 @@ function popup_content_key() {
   if (V.dialog != null) {
     k = k + V.hover
   }
-  k + ed.pen + cmp_content_key() + shape_popup_key() + pen_route_popup_key()
+  k + ed.pen + cmp_content_key() + shape_popup_key() + pen_route_popup_key() + color_popup_key()
 }
 
 -~> Draws every open popup over the panels, into both buffers.
@@ -447,6 +456,9 @@ function popup_paint() {
   }
   if (shape_popup_open()) {
     push(both, "shape")
+  }
+  if (color_popup_open()) {
+    push(both, "color")
   }
   if (V.dialog != null) {
     push(both, "dialog")
@@ -476,6 +488,8 @@ function popup_paint() {
         cmp_draw()
       } elif (k == "shape") {
         shape_popup_draw()
+      } elif (k == "color") {
+        color_popup_draw()
       } elif (k == "pen") {
         pen_route_popup_draw()
       } else {

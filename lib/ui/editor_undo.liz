@@ -105,11 +105,19 @@ function ed_redo_text() {
   ed_label_text(ed.redo_labels[len(ed.redo_labels) - 1])
 }
 
--~> The status note "Undone: ..." is shown for this many ms.
+-~> The status note "Undone: ..." is shown for this many ms. A note may
+-~> carry its own "ms" (and an "icon" and "color" for the status bar).
 let ed_note_ms = 2500
 
 function ed_note_active() {
-  ed.note != null && ed_now() - ed.note.at < ed_note_ms
+  if (ed.note == null) {
+    return false
+  }
+  let ms = ed_note_ms
+  if (ed.note.ms != null) {
+    ms = ed.note.ms
+  }
+  ed_now() - ed.note.at < ms
 }
 
 -~> The current model (an empty document until something is opened).

@@ -1,0 +1,59 @@
+0
+1800 1,800 1,234,567 42
+2500 2500
+1800 null
+0
+Untitled 2 true square 512 512 #ffffff name
+512×512 | 1080×1080 | 1920×1080 | A4 | Phone | Custom
+a4 1240 1754
+custom 1240 1754 w false
+192 custom
+1080 1080 post
+10809 (at most 5 digits)
+sunset2 false
+[]
+#1234ab #1234ab
+null
+name w h bg name bg
+-~> lzdraw 1
+canvas = {"size": (512, 512), "background": #ffffff, "max_objects": 1800}
+
+-~> lzdraw 1
+canvas = {"size": (1920, 1080), "background": #000000}
+
+null sunset.lzdraw already exists name
+null That name can't be used for a file
+null Width and height: 1 to 10000 w
+null Use a color like #ffffff
+sunset-2
+-~> lzdraw 1
+canvas = {"size": (640, 512), "background": #f4f1e8, "max_objects": 1800}
+
+[] {"size": (640, 512), "background": #f4f1e8, "max_objects": 1800}
+true Untitled 2
+{"x": 106, "y": 64, "w": 300, "h": 234} 274 true
+dune hd 1920 1080
+{"kind": "info"}
+{"kind": "dim"} {"kind": "dialog"}
+#000000
+1 dune false
+-~> lzdraw 1
+canvas = {"size": (1920, 1080), "background": #000000, "max_objects": 1800}
+
+true disk full name
+false
+{"x": 10, "y": 2, "w": 300, "h": 234}
+measure again
+show measuring… 0
+ 1 Recommended: up to ~2,100 objects
+["objects", "objects 840 / 1,800", "mute"]
+["objects", "objects 1,520 / 1,800", "amber"]
+["warn", "objects 2,130 / 1,800", "ember"]
+["warn", "objetos 2.130 / 1.800", "ember"]
+Recomendado: hasta ~1.800 objetos · medido en este computador
+["objects", "objects 3", "mute"] Recommended: not measured yet
+Made on a faster computer: up to 3,900 objects there, 1,800 on this computer
+null
+null
+null
+["objects", "objects 3,500 / 3,900", "amber"]

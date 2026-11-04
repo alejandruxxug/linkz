@@ -1,0 +1,256 @@
+-~> blend_menu: the blend dropdown of a layer, opened from the blend field of
+-~> the properties panel or from the badge of a layer row. It lists the modes
+-~> Normal │ Multiply, Darken │ Screen, Lighten, Add │ Overlay, each with a
+-~> 10x10 preview (the sky under the shade, and what the mode makes of them)
+-~> and its three letters; the layer's mode now is lit. Choosing one writes
+-~> the layer's blend row (layer_blend.liz), one undo step.
+-~> Keys: Up and Down pick, Enter chooses, Esc closes.
+-~> Metrics (style guide, R002 "Blend" and "Context menu"): rows 14,
+-~> separators 4, preview at +6, label at +18, code 6 from the edge.
+
+use "editor_undo"
+use "i18n"
+use "layer_blend"
+use "view_gfx"
+use "view_input"
+use "view_layout"
+
+let BM = {"open": false, "line": 0, "x": 0, "y": 0, "w": 0, "h": 0, "hot": -1, "mode": "normal"}
+
+let bm_row_h = 14
+let bm_sep_h = 4
+
+-~> The two colors of the previews: the sky behind and the shade on it.
+let bm_sky = #f2a65a
+let bm_shade = #7b5cb8
+
+-~> == The previews ==
+
+-~> One channel (0 to 1) of the shade s over the backdrop b in a mode.
+function bm_mix(mode, b, s) {
+  if (mode == "multiply") {
+    return b * s
+  }
+  if (mode == "screen") {
+    return 1 - (1 - b) * (1 - s)
+  }
+  if (mode == "overlay") {
+    if (b < 0.5) {
+      return 2 * b * s
+    }
+    return 1 - 2 * (1 - b) * (1 - s)
+  }
+  if (mode == "darken") {
+    return math.min(b, s)
+  }
+  if (mode == "lighten") {
+    return math.max(b, s)
+  }
+  if (mode == "add") {
+    return math.min(1, b + s)
+  }
+  s
+}
+
+-~> The color the shade makes over the sky in a mode.
+function bm_result(mode) {
+  let b = bm_sky
+  let s = bm_shade
+  rgb(bm_mix(mode, b.r / 255.0, s.r / 255.0) * 255, bm_mix(mode, b.g / 255.0, s.g / 255.0) * 255,
+    bm_mix(mode, b.b / 255.0, s.b / 255.0) * 255)
+}
+
+-~> Draws the 10x10 preview of a mode with its top left at (x, y): the sky
+-~> on the left, the result on the right, in a void frame.
+function blend_swatch_draw(mode, x, y) {
+  g_frame(x, y, 10, 10, P.void)
+  g_rect(x + 1, y + 1, 3, 8, bm_sky)
+  g_rect(x + 4, y + 1, 5, 8, bm_result(mode))
+}
+
+-~> == Where it is ==
+
+-~> The y of each mode from the top of the list, separators included.
+function bm_rows(y0) {
+  let out = []
+  let y = y0
+  for (let i = 0; i < len(blend_menu_modes); i += 1) {
+    if (list.index(blend_menu_groups, i) >= 0) {
+      y += bm_sep_h
+    }
+    push(out, y)
+    y += bm_row_h
+  }
+  out
+}
+
+-~> The size [w, h] of the list: at least `min_w` wide.
+function bm_size(min_w) {
+  let lw = 0
+  for (let i = 0; i < len(blend_menu_modes); i += 1) {
+    lw = math.max(lw, g_text_w(blend_label(blend_menu_modes[i])))
+  }
+  let w = math.max(min_w, 18 + lw + 12 + g_text_w("MUL") + 6)
+  [w, 4 + len(blend_menu_modes) * bm_row_h + len(blend_menu_groups) * bm_sep_h]
+}
+
+-~> == Opening and closing ==
+
+-~> Opens the list for the layer on `line` under the box [x, y, w, h] (or
+-~> over it, when the window ends first), right-aligned with it when `right`.
+function blend_menu_open(line, box, right) {
+  let st = layer_style_of(ed_model(), line)
+  if (st == null) {
+    return false
+  }
+  if (!st.readable) {
+    ed_try_at({"refused": t("refuse.blend_code")}, null, line)
+    return false
+  }
+  let size = bm_size(box[2])
+  let x = box[0]
+  if (right) {
+    x = box[0] + box[2] - size[0]
+  }
+  let y = box[1] + box[3] + 1
+  if (y + size[1] + 3 > V.h) {
+    y = box[1] - size[1] - 1
+  }
+  BM.x = math.max(1, math.min(x, V.w - size[0] - 3))
+  BM.y = math.max(17, y)
+  BM.w = size[0]
+  BM.h = size[1]
+  BM.line = line
+  BM.mode = st.mode
+  BM.hot = list.index(blend_menu_modes, st.mode)
+  BM.open = true
+  view_touch()
+  true
+}
+
+function blend_menu_close() {
+  if (BM.open) {
+    BM.open = false
+    view_touch()
+  }
+}
+
+-~> The box it covers, with its shadow, as [kind, rect].
+function blend_menu_rects() {
+  if (!BM.open) {
+    return []
+  }
+  [["blend_menu", [BM.x, BM.y, BM.w + 2, BM.h + 2]]]
+}
+
+-~> What it shows, as a text: it is drawn again when this changes.
+function blend_menu_key() {
+  if (!BM.open) {
+    return ""
+  }
+  "b" + str(BM.hot) + BM.mode + str(BM.line)
+}
+
+-~> == The pointer and the keys ==
+
+-~> The hover id at a UI point: bmenu:i on a mode, bmenu:box between them,
+-~> null off it. Pointing at a mode makes it the current one.
+function blend_menu_hover_at(x, y) {
+  if (!BM.open || !view_in(x, y, BM.x, BM.y, BM.w, BM.h)) {
+    return null
+  }
+  let rows = bm_rows(BM.y + 2)
+  for (let i = 0; i < len(rows); i += 1) {
+    if (y >= rows[i] && y < rows[i] + bm_row_h) {
+      BM.hot = i
+      return "bmenu:" + str(i)
+    }
+  }
+  "bmenu:box"
+}
+
+-~> A press while it is open: chooses the mode under it, or closes it when
+-~> the press is outside (that press then does nothing else). True when it
+-~> was the list's.
+function blend_menu_down(e) {
+  if (!BM.open) {
+    return false
+  }
+  let id = blend_menu_hover_at(e.pos.x, e.pos.y)
+  if (id == null) {
+    blend_menu_close()
+    return true
+  }
+  let parts = text.split(id, ":")
+  if (parts[1] != "box") {
+    blend_menu_choose(blend_menu_modes[int(parts[1])])
+  }
+  true
+}
+
+-~> A key while it is open. True when it used it (every key does).
+function blend_menu_key_down(e) {
+  if (!BM.open) {
+    return false
+  }
+  let k = text.lower(e.key)
+  let n = len(blend_menu_modes)
+  if (k == "escape") {
+    blend_menu_close()
+  } elif (k == "arrowdown") {
+    BM.hot = (BM.hot + 1) % n
+    view_touch()
+  } elif (k == "arrowup") {
+    BM.hot = (math.max(0, BM.hot) - 1 + n) % n
+    view_touch()
+  } elif ((k == "enter" || k == "return" || k == " ") && BM.hot >= 0) {
+    blend_menu_choose(blend_menu_modes[BM.hot])
+  }
+  true
+}
+
+-~> Writes the mode and closes the list.
+function blend_menu_choose(mode) {
+  let line = BM.line
+  blend_menu_close()
+  ed_set_blend(line, mode)
+  view_prepare()
+  view_after()
+}
+
+-~> == Drawing ==
+
+function blend_menu_draw() {
+  if (!BM.open) {
+    return null
+  }
+  g_box(BM.x, BM.y, BM.w, BM.h)
+  let rows = bm_rows(BM.y + 2)
+  for (let i = 0; i < len(rows); i += 1) {
+    if (list.index(blend_menu_groups, i) >= 0) {
+      g_rect(BM.x + 4, rows[i] - 3, BM.w - 8, 1, P.bevel)
+    }
+    blend_mode_row_draw(BM.x, rows[i], BM.w, blend_menu_modes[i], blend_menu_modes[i] == BM.mode, i == BM.hot)
+  }
+}
+
+-~> One mode of a list: the layer's mode now is moss with a lizard bar, the
+-~> one pointed at is `row` with bright text.
+function blend_mode_row_draw(x, y, w, mode, current, hot) {
+  let tc = P.text
+  let kc = P.mute
+  if (current) {
+    g_rect(x + 1, y, w - 2, bm_row_h, P.moss)
+    g_rect(x + 1, y, 2, bm_row_h, P.lizard)
+    tc = P.bright
+    kc = P.text
+  } elif (hot) {
+    g_rect(x + 1, y, w - 2, bm_row_h, P.bevel)
+    tc = P.bright
+    kc = P.text
+  }
+  blend_swatch_draw(mode, x + 5, y + 2)
+  g_text(blend_label(mode), x + 18, y, tc)
+  let code = blend_codes[mode]
+  g_text(code, x + w - 6 - g_text_w(code), y, kc)
+}

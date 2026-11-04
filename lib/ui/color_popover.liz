@@ -1,0 +1,978 @@
+-~> color_popover: the popover that opens next to a clicked color (a row's
+-~> swatch, a properties color field, the fill editor's stop color), with a
+-~> tail toward it. Top to bottom: the drawing's VARIABLES (picking one
+-~> writes `colors.sky`, a live reference), RECENT colors, the wheel (hue
+-~> ring and triangle) with hex, alpha, the eyedropper and old / new,
+-~> HARMONY (six modes, markers on the ring, swatches to use and "+ add
+-~> all"), "+ Save as variable…" and what it writes.
+-~> Every click, field and drag is one undo step (color_target.liz).
+-~> Keys: Tab moves between the variables and the wheel; in the variables
+-~> the arrows move the amber ring and Enter picks; on the wheel the arrows
+-~> turn the hue (left / right) and the value (up / down, the saturation
+-~> with alt); Esc closes.
+-~> Metrics (style guide R002 "Color popover", R003 "Color wheel",
+-~> "Harmony"): 172 wide, variables 4 columns × 40 (chip 36×10 + name),
+-~> recent 14 swatches 9×9 step 10, ring 88 Ø 7 thick, harmony segments 27
+-~> wide, swatches 24×14, a 3 px hard shadow and a 5-step tail.
+
+use "color_draw"
+use "color_harmony"
+use "color_hsv"
+use "color_picker"
+use "color_state"
+use "color_target"
+use "color_vars"
+use "editor_undo"
+use "i18n"
+use "icons_color"
+use "view_canvas"
+use "view_gfx"
+use "view_input"
+use "view_layout"
+
+let CP = {
+  "open": false,
+  "target": null,
+  "anchor": null,
+  "x": 0,
+  "y": 0,
+  "h": 0,
+  "tail": null,
+  "hsv": null,
+  "old": null,
+  "harmony": "complementary",
+  "focus": null,
+  "save": false,
+  "kf": -1,
+  "zone": "vars",
+  "drag": null,
+  "dropper": false,
+  "hist": null
+}
+
+let cp_w = 172
+
+-~> == Opening ==
+
+-~> Opens the popover on a target (color_target.liz) next to the rectangle
+-~> [x, y, w, h] that was clicked.
+function cp_open(tg, anchor) {
+  let c = ct_read(tg)
+  if (c == null) {
+    return false
+  }
+  CP.open = true
+  CP.target = tg
+  CP.anchor = anchor
+  CP.hsv = hsv_of(c)
+  CP.old = c
+  CP.focus = null
+  CP.save = false
+  CP.kf = -1
+  CP.zone = "vars"
+  CP.drag = null
+  CP.dropper = false
+  CP.hist = ed.undo
+  V.tip = null
+  V.tip_due = 0
+  cp_place()
+  view_touch()
+  true
+}
+
+function cp_close() {
+  if (CP.open) {
+    CP.open = false
+    CP.focus = null
+    CP.drag = null
+    CP.dropper = false
+    view_touch()
+  }
+  null
+}
+
+-~> Reads the target again when the code changed under the popover (an undo,
+-~> typing in the row); closes it when the target is gone.
+function cp_sync() {
+  if (!CP.open || CP.drag != null) {
+    return null
+  }
+  if (!ct_alive(CP.target)) {
+    return cp_close()
+  }
+  let c = ct_read(CP.target)
+  if (c != hsv_color(CP.hsv)) {
+    CP.hsv = hsv_keep_hue(c, CP.hsv)
+  }
+  let lay = cp_layout()
+  if (lay.h != CP.h) {
+    cp_place()
+  }
+}
+
+-~> Puts the popover under its anchor, else over it, else beside it (right,
+-~> then left), kept inside the window, the tail pointing at the anchor.
+function cp_place() {
+  CP.x = 0
+  CP.y = 0
+  let h = cp_layout().h
+  CP.h = h
+  let a = CP.anchor
+  let gm = view_geom()
+  let top = 18
+  let bottom = gm.status_y - 3
+  let x = math.max(2, math.min(a[0] + a[2] // 2 - 20, V.w - cp_w - 5))
+  let y = a[1] + a[3] + 6
+  let side = "up"
+  if (y + h > bottom) {
+    y = a[1] - h - 6
+    side = "down"
+  }
+  if (y < top) {
+    let mid = a[1] + a[3] // 2
+    y = math.max(top, math.min(mid - 40, bottom - h))
+    x = a[0] + a[2] + 7
+    side = "left"
+    if (x + cp_w + 4 > V.w) {
+      x = a[0] - cp_w - 7
+      side = "right"
+    }
+    if (x < 2) {
+      x = math.max(2, V.w - cp_w - 5)
+      side = ""
+    }
+    CP.x = x
+    CP.y = y
+    CP.tail = null
+    if (side != "" && mid >= y + 8 && mid < y + h - 8) {
+      CP.tail = {"side": side, "y": mid}
+    }
+    return null
+  }
+  CP.x = x
+  CP.y = y
+  CP.tail = null
+  let tx = a[0] + a[2] // 2
+  if (tx >= x + 8 && tx < x + cp_w - 8) {
+    CP.tail = {"side": side, "x": tx}
+  }
+}
+
+-~> == Where its parts are ==
+
+-~> The variables as the popover shows them, and the one the target uses now.
+function cp_vars() {
+  ct_vars()
+}
+
+-~> The name of the variable the target is (or uses), or null.
+function cp_current_var() {
+  let tg = CP.target
+  if (tg.kind == "var") {
+    return tg.name
+  }
+  if (tg.kind == "span") {
+    return ct_span_ref(tg)
+  }
+  null
+}
+
+-~> The recent colors to show (see ct_recent).
+function cp_recent(n) {
+  ct_recent(n)
+}
+
+-~> The harmony's colors (the base first) for the color shown now.
+function cp_harmony() {
+  harmony_colors(CP.hsv, CP.harmony)
+}
+
+-~> The base of the names "+ add all" writes.
+function cp_harmony_base() {
+  let v = cp_current_var()
+  if (v != null) {
+    return v
+  }
+  "color"
+}
+
+-~> The names "+ add all" would write.
+function cp_harmony_names() {
+  harmony_names(cp_harmony_base(), len(cp_harmony()) - 1, colors_names(colors_find(ed_model())))
+}
+
+-~> Where everything sits: {"h", "vars_y", "cells": [{x, y, i}], "recent_y",
+-~> "wheel": picker, "right_x", "rule_y", "harm_y", "sw_y", "hint_y",
+-~> "save_y", "writes_y"}, from CP.x and CP.y.
+function cp_layout() {
+  let x = CP.x
+  let y = CP.y
+  let lay = {"cells": []}
+  lay.vars_y = y + 3
+  let vs = cp_vars()
+  let cy = y + 17
+  for (let i = 0; i < len(vs); i = i + 1) {
+    push(lay.cells, {"x": x + 6 + (i % 4) * 40, "y": cy + (i // 4) * 25, "i": i})
+  }
+  let rows = (len(vs) + 3) // 4
+  if (rows == 0) {
+    rows = 1
+  }
+  lay.recent_y = cy + rows * 25 + 1
+  let wy = lay.recent_y + 28
+  lay.wheel = cpk_ring(x + 6, wy, 88, 7, 0)
+  lay.right_x = x + 100
+  lay.rule_y = wy + 88 + 6
+  lay.harm_y = lay.rule_y + 4
+  lay.seg_y = lay.harm_y + 15
+  lay.sw_y = lay.seg_y + 19
+  lay.hint_y = lay.sw_y + 16
+  let yy = lay.hint_y + 14
+  lay.save_y = null
+  if (CP.target.kind != "var") {
+    lay.save_y = yy
+    yy = yy + 16
+    if (CP.save) {
+      yy = yy + 20
+    }
+  }
+  lay.writes_y = yy
+  lay.h = yy + 16 - y
+  lay
+}
+
+-~> The width of each harmony swatch for n of them, so "+ add all" fits.
+function cp_sw_w(n) {
+  math.min(24, (cp_w - 12 - g_text_w(t("color.add_all")) - 14) // math.max(1, n) - 3)
+}
+
+-~> The buttons, fields and cells as [{"id", "x", "y", "w", "h"}].
+function cp_parts(lay) {
+  let x = CP.x
+  let out = []
+  for (let i = 0; i < len(lay.cells); i = i + 1) {
+    let c = lay.cells[i]
+    push(out, {"id": "var:" + str(c.i), "x": c.x, "y": c.y, "w": 38, "h": 24})
+  }
+  let rc = cp_recent(14)
+  for (let i = 0; i < len(rc); i = i + 1) {
+    push(out, {"id": "recent:" + str(i), "x": x + 6 + i * 10, "y": lay.recent_y + 14, "w": 10, "h": 10})
+  }
+  let rx = lay.right_x
+  let wy = lay.wheel.wheel.cy - 44
+  push(out, {"id": "hex", "x": rx, "y": wy, "w": 66, "h": 16})
+  push(out, {"id": "alpha", "x": rx, "y": wy + 20, "w": 36, "h": 16})
+  push(out, {"id": "dropper", "x": rx + 52, "y": wy + 21, "w": 14, "h": 14})
+  push(out, {"id": "old", "x": rx, "y": wy + 40, "w": 33, "h": 13})
+  push(out, {"id": "new", "x": rx + 33, "y": wy + 40, "w": 33, "h": 13})
+  for (let i = 0; i < len(harmony_modes); i = i + 1) {
+    push(out, {"id": "hmode:" + str(i), "x": x + 6 + i * 26, "y": lay.seg_y, "w": 27, "h": 14})
+  }
+  let hs = cp_harmony()
+  let sw = cp_sw_w(len(hs))
+  for (let i = 0; i < len(hs); i = i + 1) {
+    push(out, {"id": "hsw:" + str(i), "x": x + 6 + i * (sw + 3), "y": lay.sw_y, "w": sw, "h": 14})
+  }
+  let ax = x + 6 + len(hs) * (sw + 3) + 3
+  push(out, {"id": "addall", "x": ax, "y": lay.sw_y, "w": g_text_w(t("color.add_all")) + 11, "h": 14})
+  if (lay.save_y != null) {
+    push(out, {"id": "save", "x": x + 6, "y": lay.save_y, "w": g_text_w(t("color.save_var")) + 11, "h": 14})
+    if (CP.save) {
+      push(out, {"id": "name", "x": x + 6, "y": lay.save_y + 16, "w": 104, "h": 16})
+      push(out, {"id": "savebtn", "x": x + 114, "y": lay.save_y + 16, "w": 52, "h": 16})
+    }
+  }
+  out
+}
+
+function cp_part(lay, id) {
+  let ps = cp_parts(lay)
+  for (let i = 0; i < len(ps); i = i + 1) {
+    if (ps[i].id == id) {
+      return ps[i]
+    }
+  }
+  null
+}
+
+-~> == What it covers ==
+
+function cp_popup_rects() {
+  if (!CP.open) {
+    return []
+  }
+  [["color_popover", [CP.x - 1, CP.y - 6, cp_w + 5, CP.h + 13]]]
+}
+
+function cp_content_key() {
+  if (!CP.open) {
+    return ""
+  }
+  let k = "c" + str(CP.hsv) + "|" + str(CP.harmony) + "|" + str(CP.save) + "|" + str(CP.kf) + CP.zone + str(CP.dropper) + "|" + str(ed.undo === CP.hist) +
+    str(len(ed.undo)) + "|" + ct_writes(CP.target) + str(len(color_recent))
+  if (CP.focus != null) {
+    k = k + CP.focus.field + CP.focus.text + str(CP.focus.caret)
+  }
+  if (text.starts(V.hover, "cp:")) {
+    k = k + V.hover
+  }
+  k
+}
+
+-~> == The pointer ==
+
+-~> The hover id at a UI point: cp:<part>, cp:ring, cp:triangle, cp:box (on
+-~> it, nowhere special), or null off it.
+function cp_hover_at(x, y) {
+  if (!CP.open) {
+    return null
+  }
+  if (!view_in(x, y, CP.x, CP.y, cp_w, CP.h)) {
+    if (CP.dropper) {
+      return "cp:dropper_at"
+    }
+    return null
+  }
+  let lay = cp_layout()
+  let ps = cp_parts(lay)
+  for (let i = 0; i < len(ps); i = i + 1) {
+    let p = ps[i]
+    if (view_in(x, y, p.x, p.y, p.w, p.h)) {
+      return "cp:" + p.id
+    }
+  }
+  let part = cpk_part_at(lay.wheel, CP.hsv, (x, y))
+  if (part != "") {
+    return "cp:" + part
+  }
+  "cp:box"
+}
+
+-~> A press. True when it was the popover's; a press anywhere else closes it
+-~> (and goes on to what is there), but the eyedropper takes it.
+function cp_down(e) {
+  if (!CP.open) {
+    return false
+  }
+  let id = cp_hover_at(e.pos.x, e.pos.y)
+  if (id == "cp:dropper_at") {
+    cp_eyedrop(e.pos)
+    return true
+  }
+  if (id == null) {
+    cp_commit_focus()
+    cp_close()
+    return false
+  }
+  let parts = text.split(id, ":")
+  let what = parts[1]
+  if (CP.focus != null && CP.focus.field != what) {
+    cp_commit_focus()
+  }
+  if (what == "ring" || what == "triangle") {
+    CP.zone = "wheel"
+    ed_begin_gesture("color")
+    CP.drag = {"kind": "picker", "part": what}
+    V.drag = {"kind": "color"}
+    cp_drag_to(e.pos)
+  } elif (what == "var") {
+    CP.kf = int(parts[2])
+    cp_pick_var(int(parts[2]))
+  } elif (what == "recent") {
+    cp_set(cp_recent(14)[int(parts[2])], null)
+    cp_note()
+  } elif (what == "hex" || what == "alpha" || what == "name") {
+    cp_focus(what)
+  } elif (what == "dropper") {
+    CP.dropper = !CP.dropper
+  } elif (what == "old") {
+    cp_set(CP.old, null)
+    cp_note()
+  } elif (what == "hmode") {
+    CP.harmony = harmony_modes[int(parts[2])]
+    cp_place()
+  } elif (what == "hsw") {
+    CP.drag = {"kind": "swatch", "i": int(parts[2]), "moved": false}
+    V.drag = {"kind": "color"}
+  } elif (what == "addall") {
+    cp_add_all()
+  } elif (what == "save") {
+    CP.save = !CP.save
+    if (CP.save) {
+      cp_place()
+      CP.focus = {"field": "name", "text": colors_free_name(colors_find(ed_model()), "color"), "caret": 0, "fresh": true}
+      CP.focus.caret = len(CP.focus.text)
+    } else {
+      CP.focus = null
+      cp_place()
+    }
+  } elif (what == "savebtn") {
+    cp_save_var()
+  }
+  view_touch()
+  true
+}
+
+-~> The color at a point of the drawing, for the eyedropper: the paint of
+-~> the frontmost shape there.
+function cp_eyedrop(p) {
+  CP.dropper = false
+  let cl = view_canvas_layout()
+  let gm = view_geom()
+  if (p.x < gm.cx || p.x >= gm.cx + gm.cw || p.y < gm.cy || p.y >= gm.cy + gm.ch) {
+    return view_touch()
+  }
+  let s = view_hit_shape(cl, view_to_drawing(cl, p.x, p.y))
+  if (s != null) {
+    let v = s.fill
+    if (v == null) {
+      v = s.stroke
+    }
+    let c = ct_color_of(v)
+    if (c != null) {
+      cp_set(c, null)
+      cp_note()
+    }
+  }
+  view_touch()
+}
+
+-~> Moves the picker's color to a point (during a drag).
+function cp_drag_to(p) {
+  let lay = cp_layout()
+  let hsv = cpk_drag(lay.wheel, CP.drag.part, p, CP.hsv)
+  cp_set(hsv_color(hsv), hsv)
+}
+
+-~> A move while the picker or a harmony swatch is held.
+function cp_move(e) {
+  let d = CP.drag
+  if (d == null) {
+    return null
+  }
+  if (d.kind == "picker") {
+    cp_drag_to(e.pos)
+  } else {
+    d.moved = true
+  }
+  view_touch()
+}
+
+-~> The release: a picker drag is one undo step; a harmony swatch let go on
+-~> the palette sidebar becomes a variable, else it is used.
+function cp_up(e) {
+  let d = CP.drag
+  CP.drag = null
+  if (d == null) {
+    return null
+  }
+  if (d.kind == "picker") {
+    ed_end_gesture()
+    cp_note()
+  } else {
+    let c = cp_harmony()[d.i]
+    let gm = view_geom()
+    if (d.moved && e.pos.x >= gm.cx + gm.cw && e.pos.y >= gm.cy && e.pos.y < gm.status_y) {
+      let name = colors_free_name(colors_find(ed_model()), cp_harmony_base())
+      ct_add_var(name, color_hex(c))
+    } elif (cp_hover_at(e.pos.x, e.pos.y) == "cp:hsw:" + str(d.i)) {
+      cp_set(c, null)
+      cp_note()
+    }
+  }
+  view_prepare()
+  view_after()
+}
+
+-~> == Changes ==
+
+-~> Shows a color and writes it to the target. hsv: the picker's own (keeps
+-~> a grey's hue), or null to read it from c. key: see ct_write.
+function cp_set(c, hsv, key = null) {
+  if (c == null) {
+    return null
+  }
+  if (hsv == null) {
+    hsv = hsv_keep_hue(c, CP.hsv)
+  }
+  CP.hsv = hsv
+  ct_write(CP.target, c, 0, key)
+  view_prepare()
+  view_after()
+}
+
+-~> The color shown now goes first in the recent colors.
+function cp_note() {
+  color_note_recent(hsv_color(CP.hsv))
+}
+
+-~> Picks variable i: a span gets `colors.name`, the others its color.
+function cp_pick_var(i) {
+  let vs = cp_vars()
+  if (i < 0 || i >= len(vs)) {
+    return null
+  }
+  if (ct_use_var(CP.target, vs[i].name)) {
+    let c = ct_read(CP.target)
+    if (c != null) {
+      CP.hsv = hsv_keep_hue(c, CP.hsv)
+    }
+  }
+  view_prepare()
+  view_after()
+}
+
+-~> "+ add all": the harmony's colors after the base, as new variables (one step).
+function cp_add_all() {
+  let hs = cp_harmony()
+  let names = cp_harmony_names()
+  ct_add_vars(names, list.slice(hs, 1, len(hs)))
+  for (let i = 1; i < len(hs); i = i + 1) {
+    color_note_recent(hs[i])
+  }
+  view_prepare()
+  view_after()
+  cp_place()
+}
+
+-~> Saves the color as a new variable named by the inline field, and the
+-~> target uses it.
+function cp_save_var() {
+  let fo = CP.focus
+  let name = ""
+  if (fo != null && fo.field == "name") {
+    name = colors_clean_name(fo.text)
+  }
+  if (name == "") {
+    name = colors_free_name(colors_find(ed_model()), "color")
+  }
+  CP.focus = null
+  if (ct_save_as(CP.target, name)) {
+    CP.save = false
+    cp_note()
+  }
+  view_prepare()
+  view_after()
+  cp_place()
+}
+
+-~> == The fields ==
+
+function cp_field_text(id) {
+  if (CP.focus != null && CP.focus.field == id) {
+    return CP.focus.text
+  }
+  let c = hsv_color(CP.hsv)
+  if (id == "hex") {
+    return color_hex(color_with_alpha(c, 255))
+  }
+  if (id == "alpha") {
+    return alpha_text(c)
+  }
+  ""
+}
+
+function cp_focus(field) {
+  let s = cp_field_text(field)
+  CP.focus = {"field": field, "text": s, "caret": len(s), "fresh": true}
+}
+
+-~> Writes what a field holds (one undo step) and leaves it.
+function cp_commit_focus() {
+  let fo = CP.focus
+  if (fo == null) {
+    return null
+  }
+  CP.focus = null
+  if (!CP.open) {
+    return null
+  }
+  let c = hsv_color(CP.hsv)
+  if (fo.field == "hex") {
+    let n = color_parse(fo.text)
+    if (n != null) {
+      if (len(text.replace(text.trim(fo.text), "#", "")) != 8) {
+        n = color_with_alpha(n, c.a)
+      }
+      cp_set(n, null)
+      cp_note()
+    }
+  } elif (fo.field == "alpha") {
+    let a = alpha_parse(fo.text)
+    if (a != null) {
+      let hsv = hash.copy(CP.hsv)
+      hsv.a = a
+      cp_set(hsv_color(hsv), hsv)
+      cp_note()
+    }
+  } elif (fo.field == "name") {
+    CP.focus = fo
+    cp_save_var()
+  }
+}
+
+-~> A key while the popover is open. True when it used it.
+function cp_key(e) {
+  if (!CP.open) {
+    return false
+  }
+  let k = text.lower(e.key)
+  let fo = CP.focus
+  if (fo != null) {
+    if (k == "enter" || k == "return" || k == "tab") {
+      cp_commit_focus()
+    } elif (k == "escape") {
+      CP.focus = null
+      if (fo.field == "name") {
+        CP.save = false
+        cp_place()
+      }
+    } elif (k == "backspace") {
+      if (fo.fresh) {
+        fo.text = ""
+        fo.caret = 0
+      } elif (fo.caret > 0) {
+        fo.text = text.slice(fo.text, 0, fo.caret - 1) + text.slice(fo.text, fo.caret, len(fo.text))
+        fo.caret = fo.caret - 1
+      }
+    } elif (k == "arrowleft") {
+      fo.caret = math.max(0, fo.caret - 1)
+    } elif (k == "arrowright") {
+      fo.caret = math.min(len(fo.text), fo.caret + 1)
+    } else {
+      return true
+    }
+    fo.fresh = false
+    view_touch()
+    return true
+  }
+  if (k == "escape") {
+    if (CP.dropper) {
+      CP.dropper = false
+    } else {
+      cp_close()
+    }
+    view_touch()
+    return true
+  }
+  if (k == "tab") {
+    if (CP.zone == "vars") {
+      CP.zone = "wheel"
+    } else {
+      CP.zone = "vars"
+    }
+    view_touch()
+    return true
+  }
+  if (CP.zone == "wheel") {
+    let hsv = cpk_key(CP.hsv, k, e.mods)
+    if (hsv != null) {
+      cp_set(hsv_color(hsv), hsv, "color_key")
+      cp_note()
+      return true
+    }
+    if (k == "enter" || k == "return") {
+      cp_close()
+      return true
+    }
+    return false
+  }
+  let n = len(cp_vars())
+  if (n == 0) {
+    return false
+  }
+  let moves = {"arrowleft": -1, "arrowright": 1, "arrowup": -4, "arrowdown": 4}
+  if (moves[k] != null) {
+    CP.kf = math.max(0, math.min(n - 1, CP.kf + moves[k]))
+    view_touch()
+    return true
+  }
+  if ((k == "enter" || k == "return") && CP.kf >= 0) {
+    cp_pick_var(CP.kf)
+    return true
+  }
+  false
+}
+
+-~> Text typed into the focused field.
+function cp_text(s) {
+  if (!CP.open || CP.focus == null) {
+    return false
+  }
+  let fo = CP.focus
+  if (fo.fresh) {
+    fo.text = ""
+    fo.caret = 0
+    fo.fresh = false
+  }
+  fo.text = text.slice(fo.text, 0, fo.caret) + s + text.slice(fo.text, fo.caret, len(fo.text))
+  fo.caret = fo.caret + len(s)
+  view_touch()
+  true
+}
+
+-~> == Drawing ==
+
+-~> The box (3 px hard shadow), the tail, the parts.
+function cp_draw() {
+  if (!CP.open) {
+    return null
+  }
+  let x = CP.x
+  let y = CP.y
+  let h = CP.h
+  let lay = cp_layout()
+  g_rect(x + 3, y + 3, cp_w, h, P.void)
+  g_frame(x, y, cp_w, h, P.void)
+  g_rect(x + 1, y + 1, cp_w - 2, h - 2, P.row)
+  g_rect(x + 1, y + 1, cp_w - 2, 1, P.bevel)
+  cp_draw_tail()
+  cp_draw_vars(lay)
+  cp_draw_recent(lay)
+  cp_draw_wheel(lay)
+  cp_draw_harmony(lay)
+  cp_draw_footer(lay)
+}
+
+-~> The 5-step pixel tail on the side toward the anchor.
+function cp_draw_tail() {
+  let tl = CP.tail
+  if (tl == null) {
+    return null
+  }
+  if (tl.side == "left" || tl.side == "right") {
+    return cp_draw_side_tail(tl)
+  }
+  for (let k = 0; k < 6; k = k + 1) {
+    let span = 11 - 2 * k
+    if (span <= 0) {
+      break
+    }
+    let cy = CP.y - k
+    if (tl.side == "down") {
+      cy = CP.y + CP.h - 1 + k
+    }
+    let left = tl.x - span // 2
+    g_rect(left, cy, span, 1, P.void)
+    if (span > 2) {
+      let fill = P.row
+      if (tl.side == "up" && k == 0) {
+        fill = P.bevel
+      }
+      g_rect(left + 1, cy, span - 2, 1, fill)
+    }
+  }
+}
+
+-~> The tail on the left or the right side, pointing across.
+function cp_draw_side_tail(tl) {
+  for (let k = 0; k < 6; k = k + 1) {
+    let span = 11 - 2 * k
+    if (span <= 0) {
+      break
+    }
+    let cx = CP.x - k
+    if (tl.side == "right") {
+      cx = CP.x + cp_w - 1 + k
+    }
+    let top = tl.y - span // 2
+    g_rect(cx, top, 1, span, P.void)
+    if (span > 2) {
+      g_rect(cx, top + 1, 1, span - 2, P.row)
+    }
+  }
+}
+
+function cp_state(id) {
+  if (V.hover == "cp:" + id) {
+    return "hover"
+  }
+  "normal"
+}
+
+function cp_draw_vars(lay) {
+  let x = CP.x
+  g_text(t("color.variables"), x + 6, lay.vars_y, P.mute)
+  let vs = cp_vars()
+  if (len(vs) == 0) {
+    g_text(t("color.no_vars"), x + 6, lay.vars_y + 15, P.dim)
+  }
+  let cur = cp_current_var()
+  for (let i = 0; i < len(lay.cells); i = i + 1) {
+    let c = lay.cells[i]
+    let v = vs[c.i]
+    if (v.name == cur) {
+      g_rect(c.x - 1, c.y - 1, 40, 25, P.moss)
+    }
+    cd_chip(c.x, c.y, 36, 10, v.value)
+    let name = v.name
+    if (g_text_w(name) > 38) {
+      name = text.slice(name, 0, 4) + "…"
+    }
+    let tc = P.text
+    if (v.name == cur) {
+      tc = P.bright
+    }
+    g_text(name, c.x, c.y + 10, tc)
+    if (CP.kf == c.i && CP.zone == "vars") {
+      g_frame(c.x - 2, c.y - 2, 42, 27, P.amber)
+    } elif (V.hover == "cp:var:" + str(c.i)) {
+      g_frame(c.x - 2, c.y - 2, 42, 27, P.bevel)
+    }
+  }
+}
+
+function cp_draw_recent(lay) {
+  let x = CP.x
+  g_text(t("color.recent"), x + 6, lay.recent_y, P.mute)
+  let rc = cp_recent(14)
+  for (let i = 0; i < len(rc); i = i + 1) {
+    let sx = x + 6 + i * 10
+    let sy = lay.recent_y + 14
+    g_frame(sx, sy, 9, 9, P.void)
+    if (rc[i].a < 255) {
+      cd_checker(sx + 1, sy + 1, 7, 7, 2)
+    }
+    g_rect(sx + 1, sy + 1, 7, 7, rc[i])
+    if (V.hover == "cp:recent:" + str(i)) {
+      g_frame(sx - 1, sy - 1, 11, 11, P.bright)
+    }
+  }
+}
+
+-~> The wheel with the harmony's hues marked, and the column on its right.
+function cp_draw_wheel(lay) {
+  let hs = harmony_hsvs(CP.hsv, CP.harmony)
+  let marks = []
+  if (CP.harmony != "mono") {
+    for (let i = 1; i < len(hs); i = i + 1) {
+      push(marks, [hs[i].h, hsv_color(hs[i])])
+    }
+  }
+  cpk_draw(lay.wheel, CP.hsv, marks)
+  if (CP.zone == "wheel") {
+    let wh = lay.wheel.wheel
+    g_frame(math.round(wh.cx - wh.r) - 2, math.round(wh.cy - wh.r) - 2, 92, 92, P.amber)
+  }
+  let c = hsv_color(CP.hsv)
+  cp_draw_field(cp_part(lay, "hex"), "text")
+  cp_draw_field(cp_part(lay, "alpha"), "amber")
+  let dp = cp_part(lay, "dropper")
+  let st = cp_state("dropper")
+  if (CP.dropper) {
+    st = "active"
+  }
+  g_button(dp.x, dp.y, dp.w, dp.h, "eyedropper", "", st)
+  let o = cp_part(lay, "old")
+  g_frame(o.x, o.y, 66, 13, P.void)
+  if (CP.old.a < 255 || c.a < 255) {
+    cd_checker(o.x + 1, o.y + 1, 64, 11, 2)
+  }
+  g_rect(o.x + 1, o.y + 1, 32, 11, CP.old)
+  g_rect(o.x + 33, o.y + 1, 32, 11, c)
+  g_text(t("color.old"), o.x, o.y + 14, P.dim)
+  g_text(t("color.new"), o.x + 33, o.y + 14, P.dim)
+  let hint = t("color.ring_hint")
+  if (V.hover == "cp:triangle" || (CP.drag != null && CP.drag.part == "triangle")) {
+    hint = t("color.triangle_hint")
+  }
+  if (CP.dropper) {
+    hint = t("color.dropper_hint")
+  }
+  g_text(hint, o.x, o.y + 28, P.dim)
+}
+
+-~> A field: its text (or the text being typed, with the caret).
+function cp_draw_field(p, color) {
+  let focused = CP.focus != null && CP.focus.field == p.id
+  g_field(p.x, p.y, p.w, p.h, focused)
+  let s = cp_field_text(p.id)
+  let room = (p.w - 6) // 7
+  let from = 0
+  if (focused) {
+    from = math.max(0, CP.focus.caret - room)
+  }
+  g_text(text.slice(s, from, math.min(len(s), from + room)), p.x + 4, p.y + 2, P[color])
+  if (focused) {
+    g_rect(p.x + 4 + (CP.focus.caret - from) * 7, p.y + 3, 1, 11, P.amber)
+  }
+}
+
+function cp_draw_harmony(lay) {
+  let x = CP.x
+  g_rect(x + 6, lay.rule_y, cp_w - 12, 1, P.bevel)
+  g_text(t("color.harmony"), x + 6, lay.harm_y, P.mute)
+  let name = t("harmony." + CP.harmony)
+  g_text(name, x + cp_w - 6 - g_text_w(name), lay.harm_y, P.text)
+  for (let i = 0; i < len(harmony_modes); i = i + 1) {
+    let p = cp_part(lay, "hmode:" + str(i))
+    let st = cp_state("hmode:" + str(i))
+    if (harmony_modes[i] == CP.harmony) {
+      st = "active"
+    }
+    g_button(p.x, p.y, p.w, p.h, "harmony-" + harmony_modes[i], "", st)
+  }
+  let hs = cp_harmony()
+  for (let i = 0; i < len(hs); i = i + 1) {
+    let p = cp_part(lay, "hsw:" + str(i))
+    cd_chip(p.x, p.y, p.w, p.h, hs[i])
+    if (V.hover == "cp:hsw:" + str(i)) {
+      g_frame(p.x - 1, p.y - 1, p.w + 2, p.h + 2, P.bright)
+    }
+  }
+  let a = cp_part(lay, "addall")
+  let ac = P.lizard
+  if (V.hover == "cp:addall") {
+    ac = P.bright
+  }
+  g_icon("plus", a.x, a.y + 3, ac)
+  g_text(t("color.add_all"), a.x + 10, a.y, ac)
+  let names = cp_harmony_names()
+  let shown = []
+  for (let i = 0; i < len(names); i = i + 1) {
+    if (i == 0) {
+      push(shown, colors_name + "." + names[i])
+    } else {
+      push(shown, names[i])
+    }
+  }
+  let hint = t("color.add_as", {"names": text.join(shown, ", ")})
+  if (g_text_w(hint) > cp_w - 12) {
+    hint = text.slice(hint, 0, (cp_w - 12) // 7 - 1) + "…"
+  }
+  g_text(hint, x + 6, lay.hint_y, P.dim)
+}
+
+function cp_draw_footer(lay) {
+  let x = CP.x
+  if (lay.save_y != null) {
+    let sv = cp_part(lay, "save")
+    let sc = P.lizard
+    if (V.hover == "cp:save") {
+      sc = P.bright
+    }
+    g_icon("plus", sv.x, sv.y + 3, sc)
+    g_text(t("color.save_var"), sv.x + 10, sv.y, sc)
+    if (CP.save) {
+      let nm = cp_part(lay, "name")
+      cp_draw_field(nm, "text")
+      let b = cp_part(lay, "savebtn")
+      g_button(b.x, b.y, b.w, b.h, "", t("color.save"), cp_state("savebtn"))
+    }
+  }
+  let wy = lay.writes_y
+  let label = t("color.writes")
+  g_text(label, x + 6, wy, P.mute)
+  let wx = x + 6 + g_text_w(label) + 6
+  g_rect(wx, wy + 4, 6, 6, P.void)
+  g_rect(wx + 1, wy + 5, 4, 4, hsv_color(CP.hsv))
+  let what = ct_writes(CP.target)
+  if (CP.save && CP.focus != null && CP.focus.field == "name") {
+    what = colors_name + "." + colors_clean_name(CP.focus.text) + " = " + color_hex(hsv_color(CP.hsv))
+  }
+  let room = (x + cp_w - 6 - (wx + 8)) // 7
+  if (len(what) > room) {
+    what = text.slice(what, 0, room - 1) + "…"
+  }
+  g_text(what, wx + 8, wy, P.text)
+}
