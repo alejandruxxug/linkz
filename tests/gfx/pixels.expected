@@ -29,3 +29,4 @@ tiles: 8 of 8 pixels right
 size after drag: 4 limit: 4
 still cached: true
 grew to fit: true size: 10
+spans touching: 0

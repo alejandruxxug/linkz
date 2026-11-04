@@ -30,3 +30,27 @@ function stab_paint(tip, cursor, radius) {
   fb.fill((tx - 4, ty - 4), (8, 8), P.void)
   fb.fill((tx - 3, ty - 3), (6, 6), P.bright)
 }
+
+-~> The raw path of the cursor as a dotted `mute` line: a 2x2 dot every 8
+-~> pixels or so along the polyline of `pts` (buffer pixels). The ink follows
+-~> the string, this shows where the cursor really went.
+function stab_paint_raw(pts) {
+  let carry = 0.0
+  for (let i = 1; i < len(pts); i = i + 1) {
+    let a = pts[i - 1]
+    let b = pts[i]
+    let d = math.dist(a, b)
+    let at = 8.0 - carry
+    while (at <= d) {
+      let p = a + (b - a) * (at / d)
+      fb.fill((math.round(p.x) - 1, math.round(p.y) - 1), (2, 2), P.mute)
+      at = at + 8.0
+    }
+    carry = d - (at - 8.0)
+  }
+}
+
+-~> The cursor's end of the string: a 5x5 (UI pixels) `sky` square.
+function stab_paint_cursor(cursor) {
+  fb.fill((math.round(cursor.x) - 5, math.round(cursor.y) - 5), (10, 10), P.sky)
+}

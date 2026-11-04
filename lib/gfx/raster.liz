@@ -147,7 +147,14 @@ function raster_scan(polys, rule) {
         start = xs[i][0]
       } elif (!now && inside) {
         if (xs[i][0] > start) {
-          push(spans, [r, start, xs[i][0]])
+          -~> pieces that only touch (two quads of a stroke meeting at one x) join into one
+          -~> span: their soft ends would blend twice and leave a light hairline
+          let n = len(spans)
+          if (n > 0 && spans[n - 1][0] == r && spans[n - 1][2] == start) {
+            spans[n - 1][2] = xs[i][0]
+          } else {
+            push(spans, [r, start, xs[i][0]])
+          }
         }
       }
       inside = now

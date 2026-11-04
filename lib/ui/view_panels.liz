@@ -13,6 +13,7 @@ use "layer_band"
 use "pen_props"
 use "select_model"
 use "tool_route"
+use "tools_stroke_stab"
 use "artist_route"
 use "view_code"
 use "view_gfx"
@@ -483,11 +484,15 @@ function view_status_parts() {
     push(left, note)
   } elif (ed.refusal != null) {
     push(left, ["", ed.refusal.message, "ember"])
-  } elif (V.mouse_draw != null && route_status() == "") {
+  } elif (V.mouse_draw != null && route_status() == "" && stab_pressure_part() == null) {
     push(right, ["", "x " + str(math.round(V.mouse_draw.x)) + " y " + str(math.round(V.mouse_draw.y)), "mute", "cursor"])
   }
   if (route_status() != "") {
     push(right, ["", route_status(), "mute"])
+  }
+  -~> the pen's pressure while a stroke is drawn (tools_stroke_stab.liz)
+  if (stab_pressure_part() != null) {
+    push(right, stab_pressure_part())
   }
   push(right, ["", str(math.round(view_canvas_layout().zoom * 100)) + "%", "mute"])
   push(right, ["language", text.upper(lang_get()), "text"])

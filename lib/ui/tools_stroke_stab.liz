@@ -7,9 +7,11 @@
 -~> string and circle are drawn over the canvas.
 
 use "editor_undo"
+use "i18n"
 use "pen_edit"
 use "stabilize"
 use "stabilize_view"
+use "view_gfx"
 use "tool_stabilizer"
 use "view_layout"
 use "view_tools"
@@ -19,6 +21,8 @@ function tools_stab_begin(g) {
   g.stab = tool_stab_get(tool_stab_key(g.tool, ed.pen))
   g.stab_state = stabilize_new()
   g.ticks = 0
+  g.raw = []
+  g.pressure_now = null
 }
 
 -~> The settings with the length in drawing units at a zoom.
@@ -33,12 +37,25 @@ function tools_stab_feed(g, cl, s) {
     pw.live_p = s.pressure
     pw.live_src = g.source
   }
+  g.pressure_now = s.pressure
+  if (g.stab != null && g.stab.mode == "string" && s.canvas_pos != null) {
+    tools_stab_raw(g, cl, s.canvas_pos)
+  }
   if (g.stab == null || g.stab.mode == "off" || s.canvas_pos == null) {
     return tools_stroke_add(g, cl, s)
   }
   let out = stabilize(g.stab_state, {"pos": s.canvas_pos, "ui": s.pos, "pressure": s.pressure, "t": s.t}, tools_stab_scaled(g, cl.zoom))
   for (let i = 0; i < len(out); i = i + 1) {
     tools_stroke_add(g, cl, {"pos": out[i].ui, "canvas_pos": out[i].pos, "pressure": out[i].pressure, "t": out[i].t})
+  }
+}
+
+-~> Keeps a point of the raw cursor path (the dotted line of the string), not
+-~> closer than 3 screen pixels to the last one.
+function tools_stab_raw(g, cl, p) {
+  let n = len(g.raw)
+  if (n == 0 || math.dist(g.raw[n - 1], p) * cl.zoom >= 3) {
+    push(g.raw, p)
   }
 }
 
@@ -57,13 +74,48 @@ function tools_stab_finish(g, cl) {
   }
 }
 
--~> The tip, the string and the circle of the stroke being drawn, in the
--~> canvas buffer.
+-~> The raw cursor path, the tip, the string, the circle and the cursor square
+-~> of the stroke being drawn, in the canvas buffer, then its tooltip.
 function tools_stab_paint(cl) {
   let g = V.live
   if (g == null || g.stab == null || g.stab.mode != "string" || g.stab_state == null || g.stab_state.tip == null) {
     return null
   }
   let st = g.stab_state
-  stab_paint(cl.offset + st.tip * cl.zoom, cl.offset + st.cursor * cl.zoom, g.stab.length)
+  let raw = []
+  for (let i = 0; i < len(g.raw); i = i + 1) {
+    push(raw, cl.offset + g.raw[i] * cl.zoom)
+  }
+  stab_paint_raw(raw)
+  let cursor = cl.offset + st.cursor * cl.zoom
+  stab_paint(cl.offset + st.tip * cl.zoom, cursor, g.stab.length)
+  stab_paint_cursor(cursor)
+  tools_stab_tip(cl, view_to_window(cl, st.cursor) / 2)
+}
+
+-~> "ink follows the string / release: catches up to the cursor", a tooltip
+-~> 21 UI pixels above the cursor (below it near the top), kept in the canvas.
+function tools_stab_tip(cl, at) {
+  let a = t("stab.tip")
+  let b = t("stab.tip_catch")
+  let w = math.max(g_text_w(a), g_text_w(b)) + 14
+  let cr = cl.crect
+  let x = math.max(cr[0] + 2, math.min(math.round(at.x - w / 2), cr[0] + cr[2] - w - 4))
+  let y = math.round(at.y) - 57
+  if (y < cr[1] + 2) {
+    y = math.round(at.y) + 21
+  }
+  g_box(x, y, w, 36)
+  g_text(a, x + 7, y + 4, P.text)
+  g_text(b, x + 7, y + 19, P.mute)
+}
+
+-~> The status bar's `pressure 0.71` while a stroke is drawn with a pen or a
+-~> trackpad (null otherwise): [icon, text, color], like the other parts.
+function stab_pressure_part() {
+  let g = V.live
+  if (g == null || g.source == "mouse" || g.pressure_now == null) {
+    return null
+  }
+  ["", t("stab.pressure") + " " + str(math.round(g.pressure_now * 100) / 100.0), "mute"]
 }

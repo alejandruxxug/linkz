@@ -142,3 +142,7 @@ check("tiles", tiles, [
 -~> (a paint program sees the libraries' names but can't change them).
 let cache = fs.join(libs_dir(), "gfx", "tests", "cache.liz")
 io.write(harness_output(harness_run(cache, host_globals(img.new(32, 32)))))
+
+-~> A stroke through many points paints as one piece: spans of a row never touch.
+let seam = fs.join(libs_dir(), "gfx", "tests", "seam.liz")
+io.write(harness_output(harness_run(seam, host_globals(img.new(32, 32)))))
