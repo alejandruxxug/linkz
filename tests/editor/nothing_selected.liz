@@ -1,0 +1,47 @@
+-~> A file opens with nothing selected: the properties say so (and hint at
+-~> hovering a layer), no row is lit, and an eye click on a hidden layer keeps
+-~> that state and the scroll. Hidden rows show no [hidden] comment and an
+-~> amber eye-off.
+
+use "../../lib/app/editor"
+use "rig"
+
+let code = "-~> lzdraw 1
+canvas = {\"size\": (480, 320), \"background\": #f6d9a8}
+layer sun
+  circle((360, 90), 34, #fff3c4)
+layer boat -~> [hidden]
+  rect((10, 10), (20, 20), #333333)
+layer sea
+  rect((0, 200), (480, 120), #2d6a8f)
+"
+
+let modules = rig_modules + ["ui/view_panels", "ui/layer_band", "ui/artist_layout", "ui/artist_route", "ui/artist_layers", "ui/select_model", "ui/view_canvas"]
+let rig = rig_open(fs.join(fs.home(), "none-test"), code, editor_size, modules)
+let n = rig.names
+
+puts("-- on open")
+puts(n.ed_nothing_selected(), n.view_selected(n.ed_model(), 1))
+let pl = n.view_props_layout_build()
+puts(pl.title)
+puts(pl.msg)
+puts(pl.hint)
+puts(len(n.view_selected_shapes()))
+n.lang_use("es")
+pl = n.view_props_layout_build()
+puts(pl.title, pl.msg, pl.hint)
+n.lang_use("en")
+
+puts("-- a hidden row shows no flag comment")
+let r = n.view_rows()[4]
+puts(r.hidden, n.view_row_code(r)[0])
+puts(n.doc_text(n.ed_model()) != "", text.find(n.doc_text(n.ed_model()), "[hidden]") >= 0)
+
+puts("-- an eye click keeps nothing selected and the scroll")
+let top = n.V.top
+n.ed_set_hidden(3, true)
+puts(n.ed_nothing_selected(), n.V.top == top)
+
+puts("-- a click on a row selects it")
+n.view_select_line(3)
+puts(n.ed_nothing_selected(), n.view_selected(n.ed_model(), 3))

@@ -619,6 +619,24 @@ function view_props_cached() {
   V.pl
 }
 
+-~> The panel when nothing is selected (a file just opened): the canvas size and
+-~> the hint to hover a layer. The artist bar has no title, so it says it itself.
+function view_props_none() {
+  let size = ed_canvas_size()
+  let out = {
+    "title": text.upper(t("panel.properties")) + " · " + t("props.none"),
+    "labels": [],
+    "boxes": [],
+    "msg": t("props.canvas", {"w": str(size.x), "h": str(size.y)}),
+    "hint": t("props.hover_hint"),
+    "props": null
+  }
+  if (mode_artist()) {
+    out.msg = t("props.none")
+  }
+  out
+}
+
 function view_props_build() {
   art_ctx_wrap(pen_props_strip_wrap(color_props_wrap(blend_props_wrap(pen_props_wrap(view_props_layout_build())))))
 }
@@ -634,6 +652,9 @@ function view_props_layout_build() {
   }
   if (cmp_typing()) {
     return cmp_props_typing(view_props_title(null, m.line), V.pw - 12)
+  }
+  if (ed_nothing_selected()) {
+    return view_props_none()
   }
   let props = ed_props()
   let y = gm.props_y + 22

@@ -348,7 +348,7 @@ function art_layers_press(id, e) {
       ed_toggle_fold(line)
     }
     view_prepare()
-    view_after()
+    view_after_flag()
   } elif (what == "row") {
     let line = int(parts[2])
     view_select_line(line)
@@ -644,7 +644,7 @@ function la_paint_flags(row, x, y, dy, sel) {
   let eye = "eye"
   if (row.hidden) {
     eye = "eye-off"
-    ec = P.dim
+    ec = P.amber
   }
   if (V.hover == "al:eye:" + str(row.line)) {
     ec = P.bright

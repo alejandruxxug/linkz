@@ -275,6 +275,18 @@ function view_after() {
   app.needs_paint = true
 }
 
+-~> Like view_after for an eye or lock click: the click is not a selection, so the
+-~> scroll stays where it was and the caret row is not brought into view.
+function view_after_flag() {
+  V.ver = V.ver + 1
+  V.flash = 0
+  if (ed.refusal != null) {
+    V.flash = 1
+  }
+  cmp_sync()
+  app.needs_paint = true
+}
+
 -~> Adds a shape (or a value, or a layer) with a tool and focuses its first property.
 function view_add(id) {
   let ok = false
@@ -804,11 +816,11 @@ function view_press_row(id, e) {
   if (kind == "eye") {
     ed_set_hidden(line, !r.hidden)
     view_prepare()
-    view_after()
+    view_after_flag()
   } elif (kind == "lock") {
     ed_set_locked(line, !r.locked)
     view_prepare()
-    view_after()
+    view_after_flag()
   } elif (kind == "fold") {
     ed_toggle_fold(line)
     view_after()

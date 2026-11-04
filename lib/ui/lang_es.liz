@@ -22,6 +22,9 @@ lang_register("es", {
   "props.hidden": "Oculta",
   "props.locked": "Bloqueada",
   "props.empty": "No hay nada que editar en esta fila",
+  "props.none": "nada seleccionado",
+  "props.canvas": "lienzo ({w}, {h})",
+  "props.hover_hint": "pasa sobre una capa para verla",
 
   "button.save": "Guardar",
   "button.export": "Exportar PNG",

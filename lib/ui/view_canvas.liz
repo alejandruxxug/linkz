@@ -69,6 +69,9 @@ function view_selected_shapes() {
   if (V.tool == "brush") {
     return []
   }
+  if (ed_nothing_selected()) {
+    return []
+  }
   let m = ed_model()
   let a = m.line
   let b = m.line

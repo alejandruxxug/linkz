@@ -46,7 +46,8 @@ let ed = {
   "patch": null,
   "ran": null,
   "held": null,
-  "edit_key": null
+  "edit_key": null,
+  "none": true
 }
 
 -~> How many steps the history keeps, and how long a pause (ms) ends a typing step.
@@ -130,6 +131,12 @@ function ed_model() {
   ed.model
 }
 
+-~> True while nothing is selected: right after a file opens, until the first
+-~> click, key or edit. The row at the caret is then not shown as selected.
+function ed_nothing_selected() {
+  ed.none
+}
+
 -~> Forgets everything about the open document and starts from this text.
 function ed_reset(code, file) {
   ed.model = doc_new(code)
@@ -156,6 +163,7 @@ function ed_reset(code, file) {
   ed.pending = true
   ed.status = ""
   ed.refusal = null
+  ed.none = true
 }
 
 function ed_dirty() {
@@ -190,6 +198,7 @@ function ed_apply(newm, key) {
   }
   ed.label = null
   ed.model = newm
+  ed.none = false
   changed
 }
 
@@ -236,6 +245,7 @@ function ed_undo() {
   ed.merge = null
   ed.edit_key = null
   ed.model = prev
+  ed.none = false
   ed.note = {"text": t("undo.undone", {"what": ed_label_text(l)}), "at": ed_now()}
   true
 }
@@ -252,6 +262,7 @@ function ed_redo() {
   ed.merge = null
   ed.edit_key = null
   ed.model = next
+  ed.none = false
   ed.note = {"text": t("undo.redone", {"what": ed_label_text(l)}), "at": ed_now()}
   true
 }

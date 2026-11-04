@@ -22,6 +22,9 @@ lang_register("en", {
   "props.hidden": "Hidden",
   "props.locked": "Locked",
   "props.empty": "Nothing to edit on this row",
+  "props.none": "nothing selected",
+  "props.canvas": "canvas ({w}, {h})",
+  "props.hover_hint": "hover a layer to preview it",
 
   "button.save": "Save",
   "button.export": "Export PNG",

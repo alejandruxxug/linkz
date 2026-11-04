@@ -434,7 +434,9 @@ function ed_set_hidden(line, on) {
   if (on) {
     key = "hide"
   }
+  let none = ed.none
   ed_try_as(key, null, set_row_hidden(ed_model(), line, on))
+  ed.none = none
 }
 
 function ed_set_locked(line, on) {
@@ -442,7 +444,9 @@ function ed_set_locked(line, on) {
   if (on) {
     key = "lock"
   }
+  let none = ed.none
   ed_try_as(key, null, set_row_locked(ed_model(), line, on))
+  ed.none = none
 }
 
 -~> == The canvas editing the code ==

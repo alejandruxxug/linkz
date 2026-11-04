@@ -108,6 +108,9 @@ function view_selected(m, line) {
   if (pick_active()) {
     return pick_has(line)
   }
+  if (ed_nothing_selected()) {
+    return false
+  }
   if (m.sel != null) {
     return line >= m.sel.from && line <= m.sel.to
   }
@@ -116,8 +119,18 @@ function view_selected(m, line) {
 
 -~> The text of a row without its indentation and how many characters that was.
 function view_row_code(r) {
-  let lead = leading_ws(r.text)
-  return [text.slice(r.text, lead, len(r.text)), lead]
+  let body = r.text
+  if ((r.hidden || r.locked) && r.kind != "comment") {
+    -~> the eye and the lock say it: the [hidden] / [locked] flags stay in the file only
+    let parts = comment_split(body)
+    body = parts[0]
+    let name = comment_parts(parts[1]).name
+    if (name != "") {
+      body = body + " -~> " + name
+    }
+  }
+  let lead = leading_ws(body)
+  return [text.slice(body, lead, len(body)), lead]
 }
 
 -~> The x of the code of a row of this depth.
@@ -178,7 +191,7 @@ function view_paint_row(r, y, pinned) {
     }
     if (r.hidden) {
       eye = "eye-off"
-      ec = P.dim
+      ec = P.amber
     }
     if (V.hover == "eye:" + str(r.line)) {
       ec = P.bright

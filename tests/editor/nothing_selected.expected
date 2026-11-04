@@ -1,0 +1,14 @@
+-- on open
+true false
+PROPERTIES · nothing selected
+canvas (480, 320)
+hover a layer to preview it
+0
+PROPIEDADES · nada seleccionado lienzo (480, 320) pasa sobre una capa para verla
+-- a hidden row shows no flag comment
+true layer boat
+true true
+-- an eye click keeps nothing selected and the scroll
+true true
+-- a click on a row selects it
+false true
