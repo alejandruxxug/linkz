@@ -1,0 +1,8 @@
+-~> lzdraw 1
+
+canvas = {"size": (480, 320), "background": #f6d9a8}
+
+layer dots
+  for (let i = 0; i < 3400; i = i + 1) {
+    circle((i % 80 * 6, i / 80 * 6), 2, #3b2a6b)
+  }

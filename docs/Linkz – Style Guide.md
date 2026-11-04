@@ -68,7 +68,9 @@ Old → new names (for the rule table above): ink → `void`, night → `coal`, 
 
 | File | Pages |
 |---|---|
-| **Linkz** (Figma desktop, edited through the Figwright plugin) | 🖼️ Inputs (direction + references) · 🎨 Style (palette, font 1× and 2×, components, 8×8 icons) · 🧪 Reviews (one section per review; R001 – Editor views is kept there as history) · ✅ Approved (the frames to build from) |
+| **Linkz** (Figma desktop, edited through the Figwright plugin) | 🖼️ Inputs (direction + references) · 🎨 Style (palette, font 1× and 2×, components, 8×8 icons) · 🧪 Reviews (one section per review while it is open) · ✅ Approved (the frames to build from) |
+
+⚠️ 2026-11-03: the 🧪 Reviews page is **empty**. The R001, R002 and R003 review sections (`3:2`, `6:1257`, `9:2302`) were moved, not copied, to ✅ Approved (they now have new `21:*` ids), so the old review node ids in the tables below are history only. Their pictures are still in `docs/Art/Reviews/R002/` and `R003/`. If the team wants the review copies back on 🧪 Reviews, clone the three ✅ Approved sections there.
 
 Mockups are drawn at window size (1024×720) with every UI pixel as a 2×2 block. Each UI part is its own layer, rendered pixel-exact from the real 7×13 font and 8×8 icons. The canvas drawing is vector and smooth, and home thumbnails are rendered drawings. Layer names say what each part is (`row line 10 · circle (selected)`, `properties panel`, `tool strip`, `card menu ⋯ (open)`), so the builder reads the frame tree. The generator that produced them works in UI pixels with the numbers below.
 
@@ -87,9 +89,58 @@ Approved frames (page ✅ Approved, node ids):
 | Home – empty (first launch) | `4:1184` | `3:105` |
 | Home – gallery, Spanish | `4:1194` | `4:748` |
 
+The ✅ Approved page also has section **R001 – Editor views** `21:2692` (the review frames, moved from 🧪 Reviews; same pictures as the table above).
+
+Approved sections for R002 and R003 (page ✅ Approved). Each PNG in `docs/Art/Approved/` is named after its node id, exported at 1× (1024×720 unless noted). The app's v1.1 check against them is in `docs/Reviews/2026-11-03 v1.1 design check.md`.
+
+**R002 – Menu, fill, palette, artist mode, tutorial** (section `21:3120`):
+
+| # | Frame | Node | PNG | Review node (history) |
+|---|---|---|---|---|
+| 1 | Shape menu – right-click on canvas, Fill ▸ open | `21:3121` | `21-3121.png` | `6:1258` |
+| 2 | Fill editor – linear gradient on the sky | `21:3151` | `21-3151.png` | `6:1259` |
+| 3 | Fill editor – stepped gradient, 5 bands | `21:3181` | `21-3181.png` | `6:1260` |
+| 4 | Palette sidebar – editing variable `colors.sky` | `21:3214` | `21-3214.png` | `6:1261` |
+| 5 | Artist mode – layers.lzdraw | `21:3240` | `21-3240.png` | `6:1262` |
+| 6 | Artist mode – code drawer open | `21:3285` | `21-3285.png` | `6:1263` |
+| 7 | Blend modes – coder, `shadows` in Multiply | `21:3331` | `21-3331.png` | `6:1264` |
+| 8 | Blend modes – artist, dropdown open | `21:3362` | `21-3362.png` | `6:1265` |
+| 9 | Spanish – shape menu + fill editor (radial, hard stop), two windows | `21:3414` | `21-3414.png` (2128×720) | `6:1266` |
+| 10 | Tutorial 1 – Make your first shape | `21:3472` | `21-3472.png` | `6:1267` |
+| 11 | Tutorial 2 – Change its color | `21:3487` | `21-3487.png` | `6:1268` |
+| 12 | Tutorial 3 – First brush stroke | `21:3504` | `21-3504.png` | `6:1269` |
+| 13 | Tutorial 4 – Peek at the code (done) | `21:3522` | `21-3522.png` | `6:1270` |
+| 14 | Tutorial 1 – Spanish | `21:3541` | `21-3541.png` | `6:1271` |
+| 15 | New drawing dialog – object budget | `21:3826` | `21-3826.png` | `7:1963` |
+| 16 | New drawing dialog – Spanish | `21:3890` | `21-3890.png` | `7:2025` |
+| 17 | Status bar – object counter (normal, near, over) | `21:3556` | `21-3556.png` (1024×328) | `6:1272` |
+| 18 | Pen settings – coder (old panel, superseded by 18b) | `21:3566` | `21-3566.png` | `6:1273` |
+| 19 | Pen settings – artist ES (old panel, superseded by 19b) | `21:3598` | `21-3598.png` | `6:1274` |
+| 18b | Pen settings pop-up – coder (test pad, stabilization, code) | `21:4003` | `21-4003.png` | `9:2304` |
+| 18b-2 | Pen settings pop-up – empty test pad | `21:4091` | `21-4091.png` (982×464) | `9:2306` |
+| 18c | Pen picker – ⚙ per row | `21:3954` | `21-3954.png` | `9:2303` |
+| 19b | Pen settings pop-up – artist mode, Spanish | `21:4038` | `21-4038.png` | `9:2305` |
+| 20 | Autocomplete – typing `ci` | `21:3647` | `21-3647.png` | `6:1275` |
+| 21 | Autocomplete – signature hint | `21:3673` | `21-3673.png` | `6:1276` |
+| 22 | Autocomplete – member `math.s` | `21:3699` | `21-3699.png` | `6:1277` |
+| 23 | Color popover – from a code-row swatch (square picker; the wheel replaces it, see R003-5) | `21:3725` | `21-3725.png` | `6:1278` |
+| 24 | Color popover – fill field, save as variable | `21:3753` | `21-3753.png` | `6:1279` |
+| 25 | Color popover – artist mode, Spanish | `21:3780` | `21-3780.png` | `6:1280` |
+
+**R003 – Select, lasso, stabilizer, color wheel, trace** (section `21:4094`):
+
+| # | Frame | Node | PNG | Review node (history) |
+|---|---|---|---|---|
+| 1 | Select tool – moving 2 objects | `21:4095` | `21-4095.png` | `9:2307` |
+| 2 | Lasso select – loop in progress, string stabilizer | `21:4123` | `21-4123.png` | `9:2308` |
+| 3 | Lasso fill – loop became a polygon row | `21:4149` | `21-4149.png` | `9:2309` |
+| 4 | Brush – pulled-string stabilizer (stroke in progress) | `21:4176` | `21-4176.png` | `9:2310` |
+| 5 | Color popover – wheel + harmonies | `21:4223` | `21-4223.png` | `9:2311` |
+| 6 | Trace image dialog – line art, before/after (design only, not built) | `21:4251` | `21-4251.png` | `9:2312` |
+
 Style page: palette section `4:501` (swatches bound to the **Linkz Dark** variables `color/<name>`, paint styles `Linkz Dark/<name>`), font `4:502`, components `4:503` (`button/*`, `tool/*`, `field/*`, `row/*`, `tooltip`), icons `4:504` (components `icon/<name>`). R002 components ✅ in section `7:2125`: `menu/shape`, `menu item/{normal,hover,disabled,danger,submenu ▸,current}`, `gradient bar/{smooth,stepped}`, `color stop/{normal,selected,hard,ghost}`, `segmented tabs`, `hsv picker`, `variable chip/{solid,linear,radial,stepped}`, `color popover`, `fill editor`, `layer row (thumbnail)/{normal,selected + blend badge}`, `row/layer with blend badge`, `blend dropdown (open)`, `slider/{single,range}`, `coach-mark`, `status counter/{normal,near,over}`, `autocomplete popup`, `pen settings panel`, and 30 more icons (`icon/up … icon/settings`, incl. the home icons).
 
-R002 – Menu, fill, palette, artist mode, tutorial ✅ (🧪 Reviews, section `6:1257`; generator `docs/Art/Figma-gen/r002.py` + `r002_split.py`; PNGs in `docs/Art/Reviews/R002/`):
+R002 – Menu, fill, palette, artist mode, tutorial ✅ (review ids, history: 🧪 Reviews section `6:1257`, now ✅ Approved `21:3120`, see above; generator `docs/Art/Figma-gen/r002.py` + `r002_split.py`; PNGs in `docs/Art/Reviews/R002/`):
 
 | # | Frame | Node |
 |---|---|---|
@@ -226,6 +277,9 @@ R003 metrics ✅ (UI pixels):
 | 2026-11-03 | R003 – stabilization, live while drawing: pulled string (`sky` string from cursor to tip, radius circle, ink only at the tip, catch up at the end) for brush, pencil and lasso; per pen (in the pen hash) and in the brush inspector `9:2310` | ✅ approved 2026-11-03 |
 | 2026-11-03 | R003 – color wheel (hue ring + triangle, Krita/Painter style) + harmonies (complementary, split, analogous, triadic, square, mono) with ring markers, swatches and "+ add all as variables" in the color popover `9:2311` | ✅ approved 2026-11-03 |
 | 2026-11-03 | R003 – trace image dialog (Tracing v2 UI): Photo / Line art, line threshold, colors, detail, snap to shapes, flow, before/after split on an original placeholder head (no copyrighted art), show lines / fills, stats, Insert as layer / Open as drawing `9:2312` | ✅ approved 2026-11-03 (design only, not scheduled) |
+| 2026-11-03 | R002 + R003 moved to ✅ Approved (developer: "everything on figma is approved, move it and check it"): sections `21:3120` (R002, 29 frames) and `21:4094` (R003, 6 frames), plus R001 `21:2692`. They were moved, not copied, before this pass, so 🧪 Reviews is empty. The 35 frames are exported at 1× to `docs/Art/Approved/21-*.png` and listed in the approved tables | ✅ moved · ⚠️ review copies gone from 🧪 Reviews (pictures kept in `docs/Art/Reviews/`) |
+| 2026-11-03 | v1.1 design check, real app vs approved frames (`docs/Reviews/2026-11-03 v1.1 design check.md`, shots in `docs/Art/Checks/v1.1/`) | 3 ✅ · 23 🟡 · 5 🔴 (R002-6 artist selection not revealed, R002-9 submenu off-window, R002-20 / 22 autocomplete layout + error while typing, R002-25 named colors open no popover) · R003-3 not verifiable · R003-6 not built · R002-18/19 superseded |
+| 2026-11-03 | Proposal from the check: R002-9's code preview `hard(#f2a65a, 0.6)` should read `hard(#f2a65a)` (the library's one-argument `hard` is the better API). Additions the app made (Arrange + Blend ▸ in the shape menu, fill-editor `angle` / `alcance`, dialog Background + `measure again`, tutorial `Back`) should be drawn into the frames next pass | ⏳ proposed |
 
 ## Approval of R002 and R003 (2026-11-03)
 

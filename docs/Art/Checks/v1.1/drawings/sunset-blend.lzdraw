@@ -1,0 +1,32 @@
+-~> lzdraw 1
+-~> A sunset in layers, with its colors as variables.
+
+canvas = {"size": (480, 320), "background": #f6d9a8}
+
+let colors = {"sky": #f2a65a, "sea": #2d6a8f, "sun": #fff3c4, "boat": #3b2a6b, "dusk": gradient([#3b2a6b, #e0607a, #f2a65a], 90deg), "glow": radial_gradient([#fff3c4, #f2a65a00]), "dune": gradient([#f6d9a8, #c0703a], 0deg, 4)}
+let horizon = 200
+
+layer shadows
+  blend("multiply")
+  opacity(0.8)
+  polygon([(0, 120), (150, 96), (190, 320), (0, 320)], #8a6fb0)
+  ellipse((152, 240), (44, 7), #3b2a6b)
+
+layer sun
+  circle((360, 90), 34, colors.sun)
+  circle((360, 90), 56, #f2a65a66)
+
+layer boat
+  polygon([(120, 214), (180, 214), (165, 232), (135, 232)], colors.boat)
+  line((150, 214), (150, 170), colors.boat, 3)
+  polygon([(152, 174), (152, 208), (182, 208)], #fbf8ef)
+
+layer sea
+  layer waves
+    for (let i = 0; i < 5; i = i + 1) {
+      stroke([(40 + i * 20, horizon + 30 + i * 18), (140 + i * 30, horizon + 24 + i * 18), (240 + i * 20, horizon + 32 + i * 18), (440 - i * 10, horizon + 26 + i * 18)], #a9d3e4, 3)
+    }
+  rect((0, horizon), (480, 120), colors.sea)
+
+layer sky
+  rect((0, 0), (480, horizon), colors.sky)
