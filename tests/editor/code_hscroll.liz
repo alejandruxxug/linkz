@@ -1,0 +1,111 @@
+-~> The code panel scrolls sideways in a headless editor: a trackpad dx moves
+-~> the code (dx above 0 to the right), Shift+wheel does the same with dy, the
+-~> offset stops at the longest line plus a little room, typing at the end of a
+-~> long line keeps the caret on screen, and a click at an offset lands on the
+-~> column under it. What is fixed on the left of a row stays; the scrollbar
+-~> under the rows shows only when something is hidden.
+
+use "../../lib/app/editor"
+use "rig"
+
+let code = "canvas = {\"size\": (480, 320), \"background\": #f6d9a8}
+layer sun
+  circle((360, 90), 34, #fff3c4)
+  polygon([(10, 10), (20, 20), (30, 30), (40, 40), (50, 50), (60, 60), (70, 70), (80, 80)], #3b2a6b)
+"
+
+let modules = rig_modules + ["ui/view_panels", "ui/view_canvas", "ui/view_hscroll", "ui/view_code", "ui/view_gfx", "ui/complete_state"]
+let rig = rig_open(fs.join(fs.home(), "hscroll-test"), code, editor_size, modules)
+let n = rig.names
+let none = {"shift": false, "alt": false, "cmd": false, "ctrl": false}
+let shift = {"shift": true, "alt": false, "cmd": false, "ctrl": false}
+
+-~> The row on `line` as shown now: {"y", "row"}.
+function shown(line) {
+  let vis = n.view_visible()
+  for (let i = 0; i < len(vis); i += 1) {
+    if (vis[i].item.t == "row" && vis[i].item.line == line) {
+      return {"y": vis[i].y, "row": vis[i].item.row}
+    }
+  }
+  null
+}
+
+function str_ends(s, tail) {
+  text.slice(s, len(s) - len(tail), len(s)) == tail
+}
+
+function wheel(dx, dy, mods = none) {
+  let at = shown(4)
+  rig_frame(rig, [{"type": "scroll", "pos": (100, at.y + 9), "dx": dx, "dy": dy, "mods": mods}])
+}
+
+-~> The x on screen of the caret in a row.
+function caret_x(line) {
+  let r = shown(line).row
+  let rr = n.view_row_render(r)
+  let m = n.ed_model()
+  rr[1] + rr[0].xs[math.min(m.col - n.view_row_code(r)[1], len(rr[0].xs) - 1)]
+}
+
+puts("-- it starts at the left, and the long line shows the bar")
+puts(n.view_left(), n.view_left_max() > 0, n.view_hscrollbar() != null)
+
+puts("-- a swipe with dx below 0 moves the code left, dx above 0 brings it back")
+wheel(-2, 0)
+let first = n.view_left()
+puts(first > 0)
+wheel(1, 0)
+puts(n.view_left() < first, n.view_left() >= 0)
+wheel(100, 0)
+puts(n.view_left())
+
+puts("-- Shift+wheel does the same with dy; a plain wheel still scrolls the rows")
+wheel(0, -3, shift)
+puts(n.view_left() > 0)
+wheel(0, 3, shift)
+puts(n.view_left())
+let top = n.V.top
+wheel(0, -1)
+puts(n.view_left(), n.V.top >= top)
+
+puts("-- it stops at the longest line plus 14 pixels")
+let long = shown(4).row
+let width = n.code_render(n.view_row_code(long)[0], 0, false).w
+wheel(-1000, 0)
+puts(n.view_left() == n.view_left_max(), n.view_left_max() == width - n.view_code_avail(long) + 14)
+puts(n.view_hscrollbar() != null)
+
+puts("-- the fixed part stays, the code moves: a click on the eye still toggles it")
+let y = shown(4).y
+rig_frame(rig, [{"type": "down", "pos": (8, y + 9), "button": "left", "mods": none}, {"type": "up", "pos": (8, y + 9), "button": "left", "mods": none}])
+puts(shown(4).row.hidden)
+rig_frame(rig, [{"type": "down", "pos": (8, y + 9), "button": "left", "mods": none}, {"type": "up", "pos": (8, y + 9), "button": "left", "mods": none}])
+puts(shown(4).row.hidden)
+
+puts("-- a click at an offset lands on the column under it")
+wheel(100, 0)
+wheel(-10, 0)
+let left = n.view_left()
+let r = shown(4).row
+let rr = n.view_row_render(r)
+let k = 40
+let want_x = rr[1] + rr[0].xs[k] + 3
+rig_frame(rig, [{"type": "down", "pos": (want_x, shown(4).y + 9), "button": "left", "mods": none}, {"type": "up", "pos": (want_x, shown(4).y + 9), "button": "left", "mods": none}])
+puts(n.ed_model().line, n.ed_model().col - n.view_row_code(r)[1], left > 0)
+
+puts("-- typing at the end of a long line keeps the caret on screen")
+wheel(100, 0)
+n.ed_set_caret(4, len(n.view_rows()[3].text))
+n.view_after()
+rig_frame(rig)
+puts(n.view_left() > 0, caret_x(4) < n.V.pw - 8, caret_x(4) >= n.view_code_x(shown(4).row))
+rig_frame(rig, [{"type": "type", "text": "x", "mods": none}])
+rig_frame(rig, [{"type": "type", "text": "y", "mods": none}])
+puts(n.ed_model().line, str_ends(n.view_rows()[3].text, "xy"), caret_x(4) < n.V.pw - 8, caret_x(4) >= n.view_code_x(shown(4).row))
+
+puts("-- going to a short line brings the code back")
+n.ed_set_caret(3, 4)
+n.view_after()
+rig_frame(rig)
+puts(n.view_left(), caret_x(3) >= n.view_code_x(shown(3).row))

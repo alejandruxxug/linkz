@@ -1,0 +1,51 @@
+-~> stamp_color: the color shift of a stamped brush's color_jitter. A color
+-~> is moved in hue (degrees) and in saturation and brightness (shares, 0 to
+-~> 1), and comes back as a color with the alpha it had.
+
+-~> The color c with its hue turned by dh degrees, and its saturation and
+-~> brightness moved by ds and db (each clamped to 0..1).
+function stamp_shift_color(c, dh, ds, db) {
+  let r = c.r / 255.0
+  let g = c.g / 255.0
+  let b = c.b / 255.0
+  let hi = math.max(r, g, b)
+  let lo = math.min(r, g, b)
+  let d = hi - lo
+  let h = 0.0
+  if (d > 0) {
+    if (hi == r) {
+      h = 60.0 * ((g - b) / d)
+    } elif (hi == g) {
+      h = 60.0 * ((b - r) / d + 2)
+    } else {
+      h = 60.0 * ((r - g) / d + 4)
+    }
+  }
+  let s = 0.0
+  if (hi > 0) {
+    s = d / hi
+  }
+  h = h + dh
+  h = h - 360.0 * math.floor(h / 360.0)
+  s = math.max(0.0, math.min(1.0, s + ds))
+  let v = math.max(0.0, math.min(1.0, hi + db))
+  let sector = h / 60.0
+  let i = math.floor(sector)
+  let f = sector - i
+  let p = v * (1 - s)
+  let q = v * (1 - s * f)
+  let u = v * (1 - s * (1 - f))
+  let out = [v, u, p]
+  if (i == 1) {
+    out = [q, v, p]
+  } elif (i == 2) {
+    out = [p, v, u]
+  } elif (i == 3) {
+    out = [p, q, v]
+  } elif (i == 4) {
+    out = [u, p, v]
+  } elif (i >= 5) {
+    out = [v, p, q]
+  }
+  rgba(math.round(out[0] * 255), math.round(out[1] * 255), math.round(out[2] * 255), c.a)
+}

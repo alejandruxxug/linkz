@@ -138,6 +138,11 @@ function pad_paint(pad, origin) {
     if (sp.fill !== null) {
       raster.draw(sp.fill, off, shapes[i].fill)
     }
+    if (sp.stamps !== null) {
+      for (let j = 0; j < len(sp.stamps); j = j + 1) {
+        raster.draw(sp.stamps[j][0], off, sp.stamps[j][1])
+      }
+    }
   }
   let g = pw.pad_live
   if (g != null && g.settings.mode == "string" && g.state.tip != null) {

@@ -9,6 +9,8 @@ use "app"
 use "artist_route"
 use "blend_props"
 use "budget_view"
+use "canvas_zoom"
+use "zoom_menu"
 use "pen_library"
 use "pen_props"
 use "pen_route"
@@ -23,6 +25,7 @@ use "i18n"
 use "layer_card"
 use "view_canvas"
 use "view_code"
+use "view_hscroll"
 use "view_items"
 use "view_layout"
 use "view_panels"
@@ -148,6 +151,10 @@ function view_hover_at(x, y) {
   if (budget_id != null) {
     return budget_id
   }
+  let zoom_id = zoom_status_hover(x, y)
+  if (zoom_id != null) {
+    return zoom_id
+  }
   ""
 }
 
@@ -166,7 +173,8 @@ function view_hover_row(r, x) {
   if (r.foldable && x >= 23 + r.depth * 10 && x < 34 + r.depth * 10) {
     return "fold:" + line
   }
-  if (r.callee != "" && x >= cx && x < cx + 7 * len(r.callee)) {
+  let callee_x = cx - view_left()
+  if (r.callee != "" && x >= cx && x >= callee_x && x < callee_x + 7 * len(r.callee)) {
     return "callee:" + line
   }
   let badge = blend_badge_hover(r, x)
@@ -230,7 +238,8 @@ function view_hit_rect(id) {
     for (let i = 0; i < len(vis); i = i + 1) {
       if (vis[i].item.t == "row" && vis[i].item.line == int(parts[1])) {
         let r = vis[i].item.row
-        return [view_code_x(r), vis[i].y, 7 * len(r.callee), 18]
+        let at = math.max(view_code_x(r), view_code_x(r) - view_left())
+        return [at, vis[i].y, math.max(0, view_code_x(r) - view_left() + 7 * len(r.callee) - at), 18]
       }
     }
   } elif (kind == "field") {
@@ -271,6 +280,7 @@ function view_after() {
     V.flash = 1
   }
   view_reveal(ed_model().line)
+  view_reveal_x()
   cmp_sync()
   app.needs_paint = true
 }
@@ -420,6 +430,11 @@ function view_export() {
       }
       if (r.stroke !== null) {
         raster.draw(r.stroke, (0, 0), resolve_paint(shapes[i], "stroke"))
+      }
+      if (r.stamps !== null) {
+        for (let j = 0; j < len(r.stamps); j = j + 1) {
+          raster.draw(r.stamps[j][0], (0, 0), r.stamps[j][1])
+        }
       }
     }
     fb.save_png(path)
@@ -932,7 +947,15 @@ function view_down(e) {
     V.drag = {"kind": "split"}
     return null
   }
+  if (kind == "zoom") {
+    zoom_menu_open()
+    return null
+  }
   if (view_in_canvas(p.x, p.y)) {
+    if (canvas_space_held()) {
+      canvas_pan_begin(e)
+      return null
+    }
     view_canvas_down(e)
   }
 }
@@ -941,6 +964,10 @@ function view_move(e) {
   let p = e.pos
   V.mouse = p
   if (pen_route_move(e)) {
+    return null
+  }
+  if (V.drag != null && V.drag.kind == "pan") {
+    canvas_pan_move(e)
     return null
   }
   if (V.drag != null) {
@@ -1045,6 +1072,10 @@ function view_up(e) {
   if (d == null) {
     return null
   }
+  if (d.kind == "pan") {
+    canvas_pan_end()
+    return null
+  }
   if (pen_route_up(e, d)) {
     app.needs_paint = true
     return null
@@ -1086,8 +1117,14 @@ function view_wheel(e) {
     return null
   }
   let p = e.pos
+  if (V.dialog == null && !V.picker && view_in_canvas(p.x, p.y) && canvas_wheel(e)) {
+    return null
+  }
   let wr = art_rows_wheel_rect()
   if (view_in(p.x, p.y, wr[0], wr[1], wr[2], wr[3])) {
+    if (view_wheel_x(e)) {
+      return null
+    }
     let n = math.max(1, math.round(math.abs(e.dy)))
     if (e.dy > 0) {
       V.top = math.max(0, V.top - n)
@@ -1190,6 +1227,9 @@ function view_key(e) {
     }
   }
   let cmd = mods.cmd || mods.ctrl
+  if (canvas_zoom_key(e)) {
+    return null
+  }
   if (cmd && k == "s") {
     view_save()
     return null
@@ -1259,6 +1299,10 @@ function view_text(e) {
   }
   V.tip = null
   V.tip_due = 0
+  if (e.text == " " && V.focus == null && V.mouse != null && view_in_canvas(V.mouse.x, V.mouse.y)) {
+    -~> Space over the canvas is the pan key (canvas_zoom_key), it types nothing
+    return null
+  }
   if (V.focus != null) {
     view_field_text_in(e.text)
     return null

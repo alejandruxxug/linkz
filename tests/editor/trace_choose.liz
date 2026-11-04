@@ -1,0 +1,98 @@
+-~> The Trace image dialog's Change… button: it asks for the system's open-file
+-~> dialog (here the rig's own, which opens nothing) for images, in the folder
+-~> of the current picture. The answer is a "chosen" event: a path sets the
+-~> picture like a drop does, a cancel changes nothing, and a second click
+-~> while the dialog is open asks for nothing more.
+
+use "rig"
+
+let code = "-~> lzdraw 1
+canvas = {\"size\": (480, 320), \"background\": #f6d9a8}
+layer sun
+  circle((360, 90), 34, #fff3c4)
+"
+
+let dir = fs.join(fs.home(), "trace-choose-test")
+fs.mkdir(dir)
+let pic = img.new(64, 48)
+img.fill(pic, [0, 0, 64, 48], #dbe4f0)
+img.fill(pic, [12, 20, 40, 28], #5a3d8c)
+let first = fs.join(dir, "first.png")
+let second = fs.join(dir, "second.png")
+img.save(pic, first)
+img.save(pic, second)
+let notes = fs.join(dir, "notes.txt")
+fs.write(notes, "x")
+
+let modules = rig_modules + ["ui/view_panels", "ui/view_canvas", "ui/view_popups", "ui/i18n", "ui/home_view", "ui/app_screens",
+  "ui/trace_model", "ui/trace_view", "ui/trace_editor"]
+let rig = rig_open(fs.join(dir, "editor"), code, (512, 360), modules, {"tutorial_done": true, "drawings_dir": fs.join(dir, "drawings")})
+let n = rig.names
+let none = {"shift": false, "alt": false, "cmd": false, "ctrl": false}
+
+function frame(events = []) {
+  rig_frame(rig, events)
+}
+
+function click_change() {
+  let r = n.tr_layout().change
+  let p = (r.x + 4, r.y + 4)
+  frame([{"type": "down", "pos": p}, {"type": "up", "pos": p}])
+}
+
+function settle() {
+  for (let i = 0; i < 8; i += 1) {
+    if (n.T.d != null && n.T.d.phase == "wait") {
+      n.T.d.due = 0
+    }
+    frame()
+    if (n.T.d == null || n.T.d.phase == "idle") {
+      break
+    }
+  }
+}
+
+function calls() {
+  len(rig_dialog_calls)
+}
+
+puts("-- the dialog with no picture: images only, no folder, a title")
+frame([{"type": "key", "key": "T", "mods": {"shift": true, "alt": false, "cmd": true, "ctrl": false}}])
+puts(n.tr_is_open(), calls())
+click_change()
+puts(calls(), rig_dialog_calls[0].types, rig_dialog_calls[0].title == n.t("trace.choose_title"), hash.has(rig_dialog_calls[0], "folder"))
+puts("-- a second click while it is open asks for nothing")
+click_change()
+puts(calls())
+
+puts("-- chosen with a path sets the picture, like a drop")
+frame([{"type": "chosen", "paths": [first]}])
+settle()
+puts(n.T.d.path == first, n.T.d.image.name, n.T.d.error == "", n.T.d.choosing)
+
+puts("-- the next dialog starts in the folder of the picture")
+click_change()
+puts(calls(), rig_dialog_calls[1].folder == dir)
+
+puts("-- cancel changes nothing")
+frame([{"type": "chosen", "paths": []}])
+puts(n.T.d.path == first, n.T.d.image.name, n.T.d.choosing, n.tr_is_open())
+
+puts("-- chosen with another kind of file is said, as a drop says it")
+click_change()
+frame([{"type": "chosen", "paths": [notes]}])
+puts(n.T.d.error == n.t("drop.cant_open", {"file": "notes.txt"}), n.T.d.path == first)
+
+puts("-- the first of many paths wins; Spanish title")
+click_change()
+frame([{"type": "chosen", "paths": [second, first]}])
+settle()
+puts(n.T.d.path == second)
+n.lang_use("es")
+puts(n.t("trace.choose_title"))
+n.lang_use("en")
+
+puts("-- a dialog that can't open says why")
+rig_dialog.choose_file = function(options) { error("needs zenity") }
+click_change()
+puts(n.T.d.error, n.T.d.choosing)

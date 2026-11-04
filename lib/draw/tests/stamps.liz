@@ -1,0 +1,173 @@
+-~> Stamped brushes: spacing, determinism, taper, shapes, rotation, scatter,
+-~> count, jitter, grain, speed and the stamped pens of pens.liz.
+use "../geometry"
+use "../pens"
+use "../shapes"
+use "../stamps"
+function r2(x) { math.round(x * 100) / 100.0 }
+
+-~> A plain stamped pen: 10 pixels wide, no taper, full opacity. `extra` adds keys.
+function flat_pen(extra = {}) {
+  let pen = {
+    "name": "t",
+    "render": "stamped",
+    "min": 10,
+    "max": 10,
+    "taper": 0,
+    "opacity": [1, 1],
+    "nib": null,
+    "grain": 0,
+    "pressure": {"smoothing": 0, "speed": 0}
+  }
+  let ks = keys(extra)
+  for (let i = 0; i < len(ks); i += 1) {
+    pen[ks[i]] = extra[ks[i]]
+  }
+  pen
+}
+
+function line_stamps(pen, to = (100, 0)) {
+  brush([(0, 0), to], [1, 1], #000000, pen).stamps
+}
+
+-~> A vector pen has no stamps; a stamped one does, and keeps its outline as the hit area.
+let v = brush([(0, 0), (100, 0)], [1, 1], #000000, pens.marker)
+puts(stamp_is(pens.marker), stamp_is(pens.chalk), v.stamps, v.stamp_key)
+let s = brush([(0, 0), (100, 0)], [1, 1], #000000, flat_pen())
+puts(len(s.stamps) > 0, point_in_path(s.path, (50, 0)), point_in_path(s.path, (50, 20)), s.fill)
+
+-~> Spacing is a share of the stamp's size: 10 pixels wide at spacing 1 is a stamp every 10 pixels.
+let st = line_stamps(flat_pen({"spacing": 1}))
+puts(len(st), r2(st[0].x), r2(st[1].x), r2(st[10].x))
+puts(len(line_stamps(flat_pen({"spacing": 0.5}))), len(line_stamps(flat_pen({"spacing": 2}))))
+puts(r2(st[0].rx), r2(st[0].ry), st[0].color)
+-~> size: the stamp is a share of the stroke's width.
+let small = line_stamps(flat_pen({"spacing": 1, "size": 0.4}))
+puts(r2(small[0].rx), len(small))
+
+-~> Determinism: the same stroke gives the same stamps, another stroke other ones.
+let wild = flat_pen({"jitter": 0.4, "size_jitter": 0.5, "opacity_jitter": 0.5, "rotation": "random", "scatter": 0.3, "count": 2, "color_jitter": [30, 0.2, 0.2]})
+let a = brush([(0, 0), (100, 0)], [1, 1], #3fa34d, wild)
+let b = brush([(0, 0), (100, 0)], [1, 1], #3fa34d, wild)
+let c = brush([(0, 0), (100, 1)], [1, 1], #3fa34d, wild)
+puts(str(a.stamps) == str(b.stamps), str(a.stamps) == str(c.stamps), a.stamp_key == b.stamp_key, a.stamp_key == c.stamp_key)
+
+-~> Taper: the stamps shrink towards the ends.
+let tp = line_stamps(flat_pen({"taper": 0.3, "spacing": 1}))
+puts(r2(tp[0].rx), r2(tp[5].rx), r2(tp[len(tp) - 1].rx))
+
+-~> Each shape: its path has the corners it should (M, L..., Z).
+let shapes_seen = ["round", "square", "flat", "star", "bitmap-later"]
+for (let i = 0; i < len(shapes_seen); i += 1) {
+  let one = line_stamps(flat_pen({"shape": shapes_seen[i], "spacing": 3}))[0]
+  puts(shapes_seen[i], one.kind, one.ellipse, len(one.path) - 2, one.path[0][0], one.path[len(one.path) - 1][0])
+}
+-~> A square 10 wide centered on (0, 0), and roundness squashing the height.
+let sq = line_stamps(flat_pen({"shape": "square", "spacing": 3}))[0]
+puts(path_bounds(sq.path))
+let sq2 = line_stamps(flat_pen({"shape": "square", "roundness": 0.5, "spacing": 3}))[0]
+puts(path_bounds(sq2.path), r2(sq2.ry))
+-~> A round stamp has about the right radius.
+let rd = line_stamps(flat_pen({"spacing": 3}))[0]
+let bd = path_bounds(rd.path)
+puts(r2(bd.max.x - bd.min.x) > 9.5, r2(bd.max.x - bd.min.x) <= 10.01)
+
+-~> Rotation: fixed uses the angle, follow turns with the stroke, random varies.
+let fx = line_stamps(flat_pen({"rotation": "fixed", "angle": 0.5, "spacing": 3}), (100, 100))
+puts(r2(fx[0].angle), r2(fx[3].angle))
+let fo = line_stamps(flat_pen({"rotation": "follow", "angle": 0.5, "spacing": 3}), (100, 100))
+puts(r2(fo[0].angle), r2(fo[3].angle))
+let fo2 = line_stamps(flat_pen({"rotation": "follow", "spacing": 3}), (0, 100))
+puts(r2(fo2[2].angle), r2(math.pi / 2))
+let ra = line_stamps(flat_pen({"rotation": "random", "spacing": 3}))
+puts(ra[0].angle != ra[1].angle, ra[0].angle >= 0, ra[0].angle < 2 * math.pi)
+-~> A flat nib turned along the stroke has its long side on the stroke.
+let nib = line_stamps(flat_pen({"shape": "flat", "rotation": "follow", "spacing": 3}), (0, 100))[1]
+let nb = path_bounds(nib.path)
+puts(nb.max.y - nb.min.y > nb.max.x - nb.min.x)
+
+-~> Scatter spreads the stamps across the stroke, count makes more of them.
+let sc = line_stamps(flat_pen({"scatter": 1, "spacing": 1}))
+let wide = 0.0
+for (let i = 0; i < len(sc); i += 1) {
+  wide = math.max(wide, math.abs(sc[i].y))
+}
+puts(wide > 2, wide <= 10)
+puts(len(line_stamps(flat_pen({"count": 3, "spacing": 1}))), len(line_stamps(flat_pen({"count": 1, "spacing": 1}))))
+let jt = line_stamps(flat_pen({"jitter": 0.5, "spacing": 1}))
+let moved = 0.0
+for (let i = 0; i < len(jt); i += 1) {
+  moved = math.max(moved, math.abs(jt[i].y))
+}
+puts(moved > 0.5, moved <= 5.0)
+
+-~> Size and opacity jitter, and color jitter, stay in range.
+let sj = line_stamps(flat_pen({"size_jitter": 0.5, "spacing": 1}))
+let lo = 99.0
+let hi = 0.0
+for (let i = 0; i < len(sj); i += 1) {
+  lo = math.min(lo, sj[i].rx)
+  hi = math.max(hi, sj[i].rx)
+}
+puts(lo >= 2.5, hi <= 7.5, hi - lo > 0.5)
+let oj = line_stamps(flat_pen({"opacity_jitter": 0.6, "spacing": 1}))
+let faint = 255
+for (let i = 0; i < len(oj); i += 1) {
+  faint = math.min(faint, oj[i].color.a)
+}
+puts(faint < 255, faint >= 102)
+let cj = brush([(0, 0), (100, 0)], [1, 1], #3fa34d, flat_pen({"color_jitter": [40, 0, 0], "spacing": 1})).stamps
+puts(cj[0].color != cj[3].color, cj[0].color.a)
+let same = brush([(0, 0), (100, 0)], [1, 1], #3fa34d, flat_pen({"spacing": 1})).stamps
+puts(same[0].color == #3fa34d, same[5].color == #3fa34d)
+
+-~> Grain: a number roughens the edge; a hash fades the stamps. Moving grain travels with the
+-~> stroke (the same when the stroke is moved); fixed grain stays on the canvas (it differs when moved).
+let rough = line_stamps(flat_pen({"grain": 1.5, "spacing": 3}))[0]
+puts(rough.ellipse, len(rough.path) > 6)
+let fixed = line_stamps(flat_pen({"grain": {"kind": "noise", "scale": 4, "depth": 0.8}, "spacing": 1}))
+let alphas = []
+for (let i = 0; i < len(fixed); i += 1) {
+  push(alphas, fixed[i].color.a)
+}
+let amin = 255
+let amax = 0
+for (let i = 0; i < len(alphas); i += 1) {
+  amin = math.min(amin, alphas[i])
+  amax = math.max(amax, alphas[i])
+}
+puts(amin < amax, amax <= 255)
+let mv1 = brush([(0, 0), (100, 0)], [1, 1], #000000, flat_pen({"grain": {"scale": 4, "depth": 0.8, "moving": true}, "spacing": 1})).stamps
+let mv2 = brush([(0, 50), (100, 50)], [1, 1], #000000, flat_pen({"grain": {"scale": 4, "depth": 0.8, "moving": true}, "spacing": 1})).stamps
+puts(mv1[3].color.a == mv2[3].color.a, mv1[8].color.a == mv2[8].color.a)
+let fx1 = brush([(0, 0), (100, 0)], [1, 1], #000000, flat_pen({"grain": {"scale": 4, "depth": 0.8}, "spacing": 1})).stamps
+let fx2 = brush([(0, 50), (100, 50)], [1, 1], #000000, flat_pen({"grain": {"scale": 4, "depth": 0.8}, "spacing": 1})).stamps
+puts(fx1[3].color.a == fx2[3].color.a && fx1[8].color.a == fx2[8].color.a)
+
+-~> Speed: far apart points (a fast hand) shrink the stamps when speed.size is negative.
+let slow = brush([(0, 0), (20, 0), (40, 0)], [1, 1, 1], #000000, flat_pen({"speed": {"size": -0.5, "opacity": -0.5}, "spacing": 1})).stamps
+let fast = brush([(0, 0), (200, 0), (400, 0)], [1, 1, 1], #000000, flat_pen({"speed": {"size": -0.5, "opacity": -0.5}, "spacing": 1})).stamps
+puts(slow[2].rx > fast[2].rx, slow[2].color.a > fast[2].color.a)
+let still = brush([(0, 0), (200, 0), (400, 0)], [1, 1, 1], #000000, flat_pen({"spacing": 1})).stamps
+puts(r2(still[2].rx), r2(fast[2].rx))
+
+-~> Pressure: the pen's width follows it, so does the stamp size and opacity.
+let pp = flat_pen({"min": 4, "max": 20, "opacity": [0.2, 1], "spacing": 1})
+let light = brush([(0, 0), (100, 0)], [0, 0], #000000, pp).stamps
+let hard = brush([(0, 0), (100, 0)], [1, 1], #000000, pp).stamps
+puts(r2(light[0].rx), r2(hard[0].rx), light[0].color.a, hard[0].color.a)
+
+-~> One point is a burst of stamps in one place; a very long tight stroke is capped.
+let dot = brush([(50, 50)], [1], #000000, flat_pen({"count": 4})).stamps
+puts(len(dot), r2(dot[0].x), r2(dot[0].y))
+let longs = brush([(0, 0), (30000, 0)], [1, 1], #000000, flat_pen({"spacing": 0.01})).stamps
+puts(len(longs) <= stamp_limit + 1)
+
+-~> The pens that come with Linkz.
+let names = ["chalk", "spray", "ink_dots", "star_trail"]
+for (let i = 0; i < len(names); i += 1) {
+  let p = pens[names[i]]
+  let sh = brush([(20, 20), (100, 60), (180, 20), (260, 70)], [0.3, 0.9, 0.5, 0.8], #223344, p)
+  puts(names[i], p.name == names[i], stamp_is(p), len(sh.stamps) > 10, sh.kind)
+}
+puts(len(pens.list), list.index(pens.list, pens.chalk))

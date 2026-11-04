@@ -1,0 +1,42 @@
+false true null null
+true true false #000000
+11 0.0 10.0 100.0
+21 6
+5.0 5.0 #000000
+2.0 26
+true false true false
+0.75 5.0 0.75
+round round true 9 M Z
+square square false 3 M Z
+flat flat false 3 M Z
+star star false 9 M Z
+bitmap-later bitmap-later true 9 M Z
+{"min": (-5.0, -5.0), "max": (5.0, 5.0)}
+{"min": (-5.0, -2.5), "max": (5.0, 2.5)} 2.5
+true true
+0.5 0.5
+1.29 1.29
+1.57 1.57
+true true true
+true
+true true
+33 11
+true true
+true true true
+true true
+true 255
+true true
+false true
+true true
+true true
+false
+true true
+5.0 2.73
+2.0 10.0 51 255
+4 50.0 50.0
+true
+chalk true true true brush
+spray true true true brush
+ink_dots true true true brush
+star_trail true true true brush
+5 -1

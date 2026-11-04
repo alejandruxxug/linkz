@@ -1,14 +1,15 @@
 -~> events: the window's events as the editor takes them. The editor was
 -~> written for the events of the old Go host, so this keeps them as they were:
 -~>   type        down, up, move, wheel (the window's scroll), key, text (type),
--~>               resize, focus, leave, enter, drop (pos, paths)
+-~>               resize, focus, leave, enter, drop (pos, paths),
+-~>               chosen (paths: what window.choose_file picked; none on cancel)
 -~>   pos         the pointer in ui pixels
 -~>   canvas_pos  the pointer in the canvas's own (full resolution) pixels, when it is
 -~>               over the canvas
 -~>   button      0 left, 1 right, 2 middle
 -~>   samples     move: [{"pos", "canvas_pos", "pressure", "t"}], every point since the
 -~>               last frame
--~>   dy, key, text, size, focused   as the window gives them
+-~>   dx, dy, key, text, size, focused   as the window gives them
 -~>   mods        {"shift", "alt", "cmd", "ctrl"}, always there
 -~>   pen         {"pressure", "tilt", "rotation", "source", "eraser"}, always there
 
@@ -65,6 +66,9 @@ function events_app(e) {
       h.samples = events_samples(e.samples)
     } elif (type == "wheel") {
       h.dy = e.dy
+      if (e.dx != null) {
+        h.dx = e.dx
+      }
     }
   } elif (type == "key") {
     h.key = e.key
@@ -76,6 +80,8 @@ function events_app(e) {
     h.focused = e.focused
   } elif (type == "drop") {
     h.pos = e.pos
+    h.paths = e.paths
+  } elif (type == "chosen") {
     h.paths = e.paths
   }
   h.mods = events_no_mods

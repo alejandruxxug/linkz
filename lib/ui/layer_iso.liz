@@ -95,7 +95,7 @@ function iso_paint(cl, off) {
   if (iso_line() == 0) {
     return null
   }
-  fb.fill(off, (cl.sw, cl.sh), iso_dim)
+  fb.fill((cl.clip[0], cl.clip[1]), (cl.clip[2] - cl.clip[0], cl.clip[3] - cl.clip[1]), iso_dim)
   raster.paint(iso_shapes(cl), off)
 }
 

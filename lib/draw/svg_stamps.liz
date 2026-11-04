@@ -1,0 +1,37 @@
+-~> svg_stamps: the SVG of a stamped brush (see stamps.liz). svg.liz uses
+-~> this file, so it hands over its own text helpers in a hash `w`
+-~> ({"attr", "num", "hex", "path"}: svg_attr, svg_num, color_hex, path_data)
+-~> rather than this file using svg.liz back.
+
+-~> One stamp as an element: an <ellipse> for a round one (turned when it is
+-~> not a circle), else a <path>. The fill is left out when it is `base`.
+function svg_stamp(st, base, w) {
+  let out = ""
+  if (st.ellipse) {
+    out = "<ellipse" + w.attr("cx", w.num(st.x)) + w.attr("cy", w.num(st.y)) + w.attr("rx", w.num(st.rx)) + w.attr("ry", w.num(st.ry))
+    let deg = st.angle * 180.0 / math.pi
+    if (st.rx != st.ry && w.num(deg) != "0") {
+      out = out + w.attr("transform", "rotate(" + w.num(deg) + " " + w.num(st.x) + " " + w.num(st.y) + ")")
+    }
+  } else {
+    out = "<path" + w.attr("d", w.path(st.path))
+  }
+  if (w.hex(st.color) != w.hex(base)) {
+    out = out + w.attr("fill", w.hex(st.color))
+  }
+  if (st.color.a != 255) {
+    out = out + w.attr("fill-opacity", w.num(st.color.a / 255.0))
+  }
+  out + "/>"
+}
+
+-~> The stamps of a brush shape: a <g> with the stroke's color, one element
+-~> for each stamp, each on a line of its own.
+function svg_stamps(shape, pad, w) {
+  let base = shape.args[2]
+  let out = pad + "<g" + w.attr("class", "stamps") + w.attr("fill", w.hex(base)) + ">\n"
+  for (let i = 0; i < len(shape.stamps); i = i + 1) {
+    out = out + pad + "  " + svg_stamp(shape.stamps[i], base, w) + "\n"
+  }
+  out + pad + "</g>\n"
+}

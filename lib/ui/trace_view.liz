@@ -720,8 +720,7 @@ function tr_click(hit, x) {
     d.focus = null
   }
   if (hit == "change") {
-    d.focus = "path"
-    d.fresh = true
+    tr_choose()
   } elif (hit == "photo" || hit == "lineart") {
     tr_set_mode(hit)
   } elif (hit == "lines") {
@@ -824,6 +823,38 @@ function tr_drop(e) {
   tr_apply_path()
 }
 
+-~> Change…: asks for the system's open-file dialog, for images, starting in the
+-~> folder of the current picture. It returns at once; the answer comes later as
+-~> a "chosen" event (tr_chosen). Nothing is asked while a dialog is open.
+function tr_choose() {
+  let d = T.d
+  if (d.choosing == true) {
+    return null
+  }
+  let options = {"title": t("trace.choose_title"), "types": ["png", "jpg", "jpeg"]}
+  let folder = trace_folder(d.path)
+  if (folder != "") {
+    options.folder = folder
+  }
+  try {
+    dialog.choose_file(options)
+    d.choosing = true
+  } catch (e) {
+    d.error = e.message
+  }
+}
+
+-~> The answer of the open-file dialog: the first path becomes the picture, as a
+-~> drop does; no path (cancel) changes nothing.
+function tr_chosen(e) {
+  let d = T.d
+  d.choosing = false
+  if (e.paths == null || len(e.paths) == 0) {
+    return tr_touch()
+  }
+  tr_drop(e)
+}
+
 -~> One event while the dialog is open (the screen hands over every one).
 function tr_event(e) {
   let d = T.d
@@ -858,6 +889,8 @@ function tr_event(e) {
     tr_on_key(e)
   } elif (ty == "drop") {
     tr_drop(e)
+  } elif (ty == "chosen") {
+    tr_chosen(e)
   } elif (ty == "text" && (e.mods == null || (!e.mods.cmd && !e.mods.ctrl))) {
     tr_type(e.text)
   }

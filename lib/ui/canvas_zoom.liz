@@ -1,0 +1,271 @@
+-~> canvas_zoom: the user's zoom and pan of the canvas, on top of "fit". Until the
+-~> user zooms, the drawing is fitted (view_canvas_layout picks the largest step
+-~> that leaves room) and a resize refits it. Once the user zooms, CZ.user is the
+-~> zoom (window pixels per drawing pixel) and a resize keeps it. CZ.px, CZ.py is
+-~> the pan: how far the drawing sits from the centre of the canvas area, in
+-~> window pixels (two per UI pixel). The state belongs to the open document: a new
+-~> drawing starts fitted (canvas_zoom_reset); it is not saved in the file.
+-~>
+-~>   canvas_zoom_at(factor, ui_point)   zoom by a factor, the drawing point under the
+-~>                                      point staying where it is (the pinch will call it)
+-~>   canvas_zoom_set(zoom, ui_point)    the same to an exact zoom
+-~>   canvas_zoom_step(dir)              the next step up (1) or down (-1), around the centre
+-~>   canvas_zoom_fit()  canvas_zoom_100()   Cmd+0 and Cmd+1
+-~>   canvas_pan_by(dx, dy)              pan in window pixels
+-~> The pan is clamped (canvas_pan_axis): a drawing smaller than the area stays
+-~> inside it, a bigger one keeps at least canvas_zoom_keep window pixels in view.
+
+use "app"
+use "editor_state"
+use "view_layout"
+
+let CZ = {"user": null, "px": 0, "py": 0, "space_at": -10000, "pan": null}
+
+-~> The zooms Cmd+plus and Cmd+minus go through (window pixels per drawing pixel).
+let canvas_zoom_steps = [0.05, 0.0625, 0.125, 0.25, 0.33, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 12.0, 16.0, 24.0, 32.0]
+let canvas_zoom_min = 0.05
+let canvas_zoom_max = 32.0
+
+-~> The drawing keeps at least this much (window pixels, 32 UI pixels) in view.
+let canvas_zoom_keep = 64
+
+-~> How long after a Space key it counts as held (the host sends no key release).
+let canvas_space_ms = 650
+
+-~> Back to fitting: a new drawing, or Cmd+0.
+function canvas_zoom_reset() {
+  CZ.user = null
+  CZ.px = 0
+  CZ.py = 0
+  CZ.pan = null
+}
+
+-~> Whether the user has zoomed (so the zoom is not fit).
+function canvas_zoom_is_user() {
+  CZ.user !== null
+}
+
+-~> Where the drawing's top left sits on one axis, in window pixels from the area's
+-~> start, with the drawing centred.
+function canvas_centre(size, area) {
+  ((area - size) // 4) * 2
+}
+
+-~> The pan on one axis kept in range: a drawing that fits the area stays whole inside
+-~> it, a bigger one keeps canvas_zoom_keep pixels inside the area.
+function canvas_pan_axis(size, area, p) {
+  let c = canvas_centre(size, area)
+  if (size <= area) {
+    return math.max(-c, math.min(area - size - c, math.round(p)))
+  }
+  math.max(canvas_zoom_keep - size - c, math.min(area - canvas_zoom_keep - c, math.round(p)))
+}
+
+-~> Applies the user's zoom to the fitted one: the zoom to use.
+function canvas_zoom_value(fit) {
+  if (CZ.user === null) {
+    return fit
+  }
+  CZ.user
+}
+
+-~> The pan (px, py) clamped for a drawing of sw x sh in an area of aw x ah window pixels.
+function canvas_pan_for(sw, sh, aw, ah) {
+  if (CZ.user === null) {
+    return (0, 0)
+  }
+  (canvas_pan_axis(sw, aw, CZ.px), canvas_pan_axis(sh, ah, CZ.py))
+}
+
+-~> == Changing it ==
+
+-~> The canvas and the status bar's readout are painted again (the status bar's
+-~> key has the zoom, the canvas' has the zoom and the drawing's place).
+function canvas_zoom_changed() {
+  app.needs_paint = true
+}
+
+-~> Zooms to `zoom` (kept inside the limits) so the drawing point under the UI
+-~> point `at` stays under it.
+function canvas_zoom_set(zoom, at) {
+  let z = math.max(canvas_zoom_min, math.min(canvas_zoom_max, zoom))
+  let cl = view_canvas_layout()
+  let p = view_to_drawing(cl, at.x, at.y)
+  let gm = view_geom()
+  let size = ed_canvas_size()
+  let sw = math.round(size.x * z)
+  let sh = math.round(size.y * z)
+  let aw = gm.cw * 2
+  let ah = gm.ch * 2
+  -~> where the drawing's top left must be for p to stay under `at`
+  let wx = at.x * 2 - p.x * z
+  let wy = at.y * 2 - p.y * z
+  CZ.user = z
+  CZ.px = canvas_pan_axis(sw, aw, wx - gm.cx * 2 - canvas_centre(sw, aw))
+  CZ.py = canvas_pan_axis(sh, ah, wy - gm.cy * 2 - canvas_centre(sh, ah))
+  canvas_zoom_changed()
+}
+
+-~> Zooms by a factor around a UI point.
+function canvas_zoom_at(factor, at) {
+  canvas_zoom_set(view_canvas_layout().zoom * factor, at)
+}
+
+-~> The middle of the canvas area, in UI pixels.
+function canvas_zoom_centre() {
+  let gm = view_geom()
+  (gm.cx + gm.cw / 2.0, gm.cy + gm.ch / 2.0)
+}
+
+-~> The next zoom step above (dir 1) or below (dir -1) the zoom now, or null at the end.
+function canvas_zoom_next(zoom, dir) {
+  let steps = canvas_zoom_steps
+  if (dir > 0) {
+    for (let i = 0; i < len(steps); i += 1) {
+      if (steps[i] > zoom * 1.0001) {
+        return steps[i]
+      }
+    }
+  } else {
+    for (let i = len(steps) - 1; i >= 0; i -= 1) {
+      if (steps[i] < zoom / 1.0001) {
+        return steps[i]
+      }
+    }
+  }
+  null
+}
+
+-~> Cmd+plus (dir 1) and Cmd+minus (dir -1), around the centre of the area.
+function canvas_zoom_step(dir) {
+  let z = canvas_zoom_next(view_canvas_layout().zoom, dir)
+  if (z !== null) {
+    canvas_zoom_set(z, canvas_zoom_centre())
+  }
+}
+
+-~> Cmd+0: fit again.
+function canvas_zoom_fit() {
+  canvas_zoom_reset()
+  canvas_zoom_changed()
+}
+
+-~> Cmd+1: 100%.
+function canvas_zoom_100() {
+  canvas_zoom_set(1.0, canvas_zoom_centre())
+}
+
+-~> Moves the drawing by (dx, dy) window pixels.
+function canvas_pan_by(dx, dy) {
+  if (CZ.user === null) {
+    -~> panning a fitted drawing: it stays fitted until the user zooms
+    return null
+  }
+  CZ.px += dx
+  CZ.py += dy
+  let cl = view_canvas_layout()
+  CZ.px = cl.pan.x
+  CZ.py = cl.pan.y
+  canvas_zoom_changed()
+}
+
+-~> == Events ==
+
+-~> How many window pixels one unit of a scroll moves the drawing.
+let canvas_scroll_px = 16
+
+-~> A scroll over the canvas: with Cmd or Ctrl it zooms around the pointer, else it
+-~> pans (Shift: sideways). The scroll's dx may be missing on older hosts. Always true.
+function canvas_wheel(e) {
+  let dy = e.dy
+  let dx = 0
+  if (e.dx != null) {
+    dx = e.dx
+  }
+  let mods = e.mods
+  if (mods != null && (mods.cmd == true || mods.ctrl == true)) {
+    let d = math.max(-15, math.min(15, dy))
+    canvas_zoom_at(1.0 + d * 0.02, e.pos)
+    return true
+  }
+  if (mods != null && mods.shift == true && dx == 0) {
+    dx = dy
+    dy = 0
+  }
+  canvas_pan_by(dx * canvas_scroll_px, dy * canvas_scroll_px)
+  true
+}
+
+-~> A Space key was seen at time ms.
+function canvas_space_seen() {
+  CZ.space_at = time.ms()
+}
+
+-~> Whether Space is being held (it repeats while held).
+function canvas_space_held() {
+  time.ms() - CZ.space_at < canvas_space_ms
+}
+
+-~> Starts a pan drag (middle button, or Space and the left button) at an event.
+function canvas_pan_begin(e) {
+  CZ.pan = {"last": e.pos}
+  V.drag = {"kind": "pan"}
+}
+
+-~> A middle-button press: a pan drag when it is over the canvas.
+function canvas_middle_down(e) {
+  if (V.dialog == null && V.drag == null && view_in_canvas(e.pos.x, e.pos.y)) {
+    canvas_pan_begin(e)
+  }
+}
+
+-~> The pointer moved during the pan drag.
+function canvas_pan_move(e) {
+  if (CZ.pan === null) {
+    return null
+  }
+  let d = (e.pos - CZ.pan.last) * 2
+  CZ.pan.last = e.pos
+  canvas_pan_by(d.x, d.y)
+}
+
+-~> The pan drag ended.
+function canvas_pan_end() {
+  CZ.pan = null
+  if (V.drag != null && V.drag.kind == "pan") {
+    V.drag = null
+  }
+}
+
+-~> The key of a canvas zoom shortcut: Cmd or Ctrl with plus, minus, 0 or 1 zoom; Space
+-~> is noted for the pan drag when the pointer is over the canvas (it types nothing
+-~> there). True when the key was used.
+function canvas_zoom_key(e) {
+  let k = text.lower(e.key)
+  let mods = e.mods
+  if (k == "space" || k == " ") {
+    if (mods != null && (mods.cmd == true || mods.ctrl == true || mods.alt == true)) {
+      return false
+    }
+    if (V.mouse != null && view_in_canvas(V.mouse.x, V.mouse.y)) {
+      canvas_space_seen()
+      return true
+    }
+    return false
+  }
+  if (mods == null || !(mods.cmd == true || mods.ctrl == true) || mods.alt == true) {
+    return false
+  }
+  if (k == "equal" || k == "=" || k == "plus" || k == "+" || k == "numpadadd") {
+    canvas_zoom_step(1)
+  } elif (k == "minus" || k == "-" || k == "numpadsubtract") {
+    canvas_zoom_step(-1)
+  } elif (k == "digit0" || k == "0" || k == "numpad0") {
+    canvas_zoom_fit()
+  } elif (k == "digit1" || k == "1" || k == "numpad1") {
+    canvas_zoom_100()
+  } else {
+    return false
+  }
+  true
+}

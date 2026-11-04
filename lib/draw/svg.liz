@@ -1,9 +1,9 @@
--~> svg: turns the drawing into SVG text, one <path> for each shape.
--~> The shapes are painted in paint_order(): bottom row first, so a shape that
--~> is higher in the file ends up in front of the ones below it.
+-~> svg: turns the drawing into SVG text, one <path> for each shape (a <g> of stamps
+-~> for a stamped brush), painted in paint_order(): bottom row first.
 
 use "gradient"
 use "shapes"
+use "svg_stamps"
 
 let hex_digits = "0123456789abcdef"
 
@@ -202,7 +202,9 @@ function svg_document(canvas, shapes) {
     for (let d = 0; d < depth; d = d + 1) {
       pad = pad + "  "
     }
-    if (kind == "shape") {
+    if (kind == "shape" && events[i][1].stamps != null) {
+      body = body + svg_stamps(events[i][1], pad, {"attr": svg_attr, "num": svg_num, "hex": color_hex, "path": path_data})
+    } elif (kind == "shape") {
       body = body + pad + svg_shape(events[i][1]) + nl
     } elif (kind == "open") {
       body = body + pad + "<g" + svg_attr("style", svg_layer_style(events[i][1])) + ">" + nl

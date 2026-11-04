@@ -12,6 +12,11 @@ let rig_modules = editor_modules + ["ui/view_layout", "ui/view_input", "ui/view_
 let rig_clip_text = {"text": ""}
 let rig_clip = {"get": function() { rig_clip_text.text }, "set": function(s) { rig_clip_text.text = s }}
 
+-~> The system dialogs of the rig: none opens. choose_file records its options
+-~> in rig_dialog_calls; a test then injects the "chosen" event itself.
+let rig_dialog_calls = []
+let rig_dialog = {"choose_file": function(options) { push(rig_dialog_calls, options) }}
+
 -~> The settings a rig's editor starts with: the first-run tutorial already
 -~> seen, so it doesn't cover the editor (tests/editor/tutorial.liz passes {}).
 let rig_settings = {"tutorial_done": true}
@@ -24,7 +29,7 @@ function rig_open(dir, code, size = editor_size, modules = rig_modules, settings
   fs.mkdir(dir)
   fs.write(path, code)
   let win = window.open(size.x, size.y, "Linkz", hash.merge(editor_options(), {"headless": true}))
-  let ed = editor_load(win, path, settings, {}, modules, {"clip": rig_clip})
+  let ed = editor_load(win, path, settings, {}, modules, {"clip": rig_clip, "dialog": rig_dialog})
   let rig = {"win": win, "ed": ed, "names": ed.names, "path": path}
   rig_frame(rig)
   rig

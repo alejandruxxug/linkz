@@ -33,7 +33,9 @@ rig_frame(rig, [{"type": "key", "key": "Backspace"}])
 puts(n.ed_model().lines[11], n.ed_model().col, rig.ed.error)
 
 puts("-- an edit repaints like a fresh open")
-let canvas = n.view_canvas_layout().crect
+let crect = n.view_canvas_layout().crect
+-~> the shot is in screen pixels (the interface is drawn at scale 2), the layout in ui pixels
+let canvas = [crect[0] * 2, crect[1] * 2, crect[2] * 2, crect[3] * 2]
 cmds.SelectRow([12])
 rig_frame(rig)
 puts(cmds.SetProp(["width", "6"]).ok)

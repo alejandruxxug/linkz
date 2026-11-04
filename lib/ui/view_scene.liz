@@ -204,7 +204,11 @@ function scene_new(cl, rows) {
     "index": spatial_new(scene_cell),
     "tiles": tiles_new("canvas", (cl.sw, cl.sh), scene_tile)
   }
+  -~> only the part of the drawing on screen is kept as pixels (tiles.liz)
+  tiles_set_view(sc.tiles, cl.vis)
   scene_rebuild(sc, rows)
+  -~> every tile is unpainted, which counts as dirty: the marks are not needed
+  sc.tiles.regions = []
   sc
 }
 
@@ -217,6 +221,7 @@ function scene_sync(cl) {
     V.scene = scene_new(cl, rows)
     return V.scene
   }
+  tiles_set_view(sc.tiles, cl.vis)
   let hidden = scene_hidden_key(rows)
   if (sc.ver != ed.shapes_ver || sc.hidden != hidden) {
     let p = ed.patch
@@ -404,6 +409,13 @@ function scene_ops(e) {
     push(ops, p)
     push(ops, type(p) == "HASH")
   }
+  if (r.stamps !== null) {
+    for (let i = 0; i < len(r.stamps); i = i + 1) {
+      push(ops, r.stamps[i][0])
+      push(ops, r.stamps[i][1])
+      push(ops, false)
+    }
+  }
   ops
 }
 
@@ -444,7 +456,7 @@ function scene_any_styled(entries) {
 -~> finds there, back to front. Layers with a blend mode or an opacity are
 -~> drawn in a buffer of their own and mixed, as raster.paint does.
 function scene_paint_box(sc, box, off) {
-  fb.fill(off, sc.size, sc.bg)
+  fb.fill((box[0], box[1]) + off, (box[2] - box[0], box[3] - box[1]), sc.bg)
   let entries = scene_entries_in(sc, box)
   if (!scene_any_styled(entries)) {
     for (let i = 0; i < len(entries); i += 1) {
@@ -472,7 +484,7 @@ function scene_render(sc) {
   tiles_render(sc.tiles, function(box, o) { scene_paint_box(sc, box, o) })
 }
 
--~> Repaints the dirty parts of the tiles and draws them all at off on the
+-~> Repaints the dirty parts of the tiles in view and draws them at off on the
 -~> current target (the canvas buffer).
 function scene_paint(sc, off) {
   scene_render(sc)

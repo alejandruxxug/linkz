@@ -1,0 +1,40 @@
+-~> Stamped brushes in SVG: a <g> with a fill, one element for each stamp.
+use "../pens"
+use "../shapes"
+use "../svg"
+
+canvas = {"size": (60, 30), "background": #ffffff}
+let dots = {
+  "name": "d",
+  "render": "stamped",
+  "min": 8,
+  "max": 8,
+  "taper": 0,
+  "opacity": [0.5, 0.5],
+  "nib": null,
+  "grain": 0,
+  "spacing": 2,
+  "roundness": 0.5,
+  "rotation": "follow"
+}
+brush([(5, 8), (40, 8)], [1, 1], #3fa34d, dots)
+let boxes = {
+  "name": "b",
+  "render": "stamped",
+  "min": 6,
+  "max": 6,
+  "taper": 0,
+  "opacity": [1, 1],
+  "nib": null,
+  "grain": 0,
+  "spacing": 3,
+  "shape": "square",
+  "color_jitter": [60, 0, 0]
+}
+brush([(5, 22), (25, 22)], [1, 1], #3fa34d, boxes)
+puts(svg_document(canvas, drawing))
+-~> A stamped brush next to a vector one, and a one-point stroke.
+drawing = []
+brush([(5, 8), (40, 8)], [1, 1], #000000, pens.marker)
+brush([(10, 20)], [1], #000000, {"name": "p", "render": "stamped", "min": 6, "max": 6, "taper": 0, "opacity": [1, 1], "nib": null, "grain": 0})
+puts(svg_document(canvas, drawing))

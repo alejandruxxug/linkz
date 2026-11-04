@@ -39,12 +39,22 @@ Order: finish B007b (editor view) + B015 (home) → **B007c autocomplete (mandat
 | B028 | **Color wheel + harmonies** in the color popover and fill editor: ring + triangle, harmony modes, swatches → variables | Complementary of #3fa34d is its 180° hue; "add all as variables" writes one `colors` entry per swatch, one undo step |
 | B019 | First-run tutorial | Runs once, skippable, en + es, `tutorial_done` in settings |
 
+## 🖌️ Parked features, before the release (started 2026-11-04)
+> "Finish 2 before 1 no native mac window" — the developer, 2026-11-04 (the parked ideas before M9; the own Cocoa window is dropped)
+
+| Batch | What | State |
+|---|---|---|
+| B060 | Stamped brushes (engine, headless) | building (Sonnet) |
+| B061 | Pen pressure on Windows and Linux (lizard-script `pen`) | building (Opus) |
+| B062 | Trace: belt outlines | building (Sonnet) |
+| R005 | Figma: brush creator, brush picker import/export, tooltip mini videos | designing, then the developer approves |
+| next | `.lzbrush` export/import (sandboxed) → Procreate importer (ABR/SUT after) → brush creator UI and tooltip videos (after R005) → trace strokes along curves | queued |
+
 ## 🗃️ Later (parked ideas)
 | Idea | Why parked |
 |---|---|
 | Brush creator (Procreate-style) + `.lzbrush` import/export + Procreate/ABR import | See [[Linkz – Brushes]]; after v1.1 |
 | Mini videos in pen/tool tooltips | Needs a solid tooltip + animation structure first |
-| Own Cocoa window layer (drop Ebitengine) | After v1 |
 | Tablet pressure tested on real hardware | No tablet here |
 | Pressure on Windows/Linux | macOS first. Windows keeps the stub (mouse, pressure 1.0); real pens need Windows Ink / `WM_POINTER` (`GetPointerPenInfo`), via `golang.org/x/sys/windows`, no cgo |
 | Windows/Linux tested on real machines | `scripts/crossbuild.sh` only proves they compile and vet; clipboard, Recycle Bin, reveal and locale need a run on a Windows PC and a Linux desktop |

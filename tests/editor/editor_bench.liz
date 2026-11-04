@@ -7,6 +7,7 @@
 -~> (lizardscript test --bench runs it as part of the tests, once each).
 
 use "../../lib/app/libs"
+use "../../lib/app/paint"
 use "rig"
 
 let rounds = 1
@@ -56,7 +57,7 @@ function bench(rig, name, f, undo = null) {
 }
 
 -~> The modules the artist cases reach into, besides the rig's.
-let bench_modules = rig_modules + ["ui/artist_route", "ui/artist_layers", "ui/view_panels", "ui/view_canvas"]
+let bench_modules = rig_modules + ["ui/artist_route", "ui/artist_layers", "ui/view_panels", "ui/view_canvas", "ui/canvas_zoom"]
 
 let sizes = [2000, 10000]
 for (let s = 0; s < len(sizes); s += 1) {
@@ -76,6 +77,27 @@ for (let s = 0; s < len(sizes); s += 1) {
     n.app.needs_paint = true
     []
   })
+
+  -~> zoomed in, panning: every frame moves the drawing 48 window pixels, back
+  -~> and forth along the drawing (zoom, repaint the visible part, tiles)
+  let steps = [["zoom_400", 4.0], ["zoom_1600", 16.0]]
+  for (let z = 0; z < len(steps); z += 1) {
+    let dir = 1
+    bench(rig, k + steps[z][0] + "_set", function(_i) {
+      n.canvas_zoom_set(steps[z][1], n.canvas_zoom_centre())
+      []
+    })
+    bench(rig, k + steps[z][0] + "_pan", function(_i) {
+      let before = n.view_canvas_layout().wx
+      n.canvas_pan_by(-48 * dir, -20 * dir)
+      if (n.view_canvas_layout().wx == before) {
+        dir = -dir
+      }
+      []
+    })
+  }
+  n.canvas_zoom_fit()
+  rig_frame(rig)
 
   n.ed_select(first_shape)
   n.view_after()
@@ -209,3 +231,7 @@ for (let s = 0; s < len(sizes); s += 1) {
   n.art_set_mode(false)
   rig_frame(rig)
 }
+
+-~> a stamped brush stroke: 300 points, about 2000 stamps (lib/gfx/tests/stamped_bench.liz)
+puts("stamped brush, 300 points:")
+paint_run(fs.read(fs.join(libs_dir(), "gfx", "tests", "stamped_bench.liz")), (640, 400))

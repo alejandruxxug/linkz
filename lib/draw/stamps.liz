@@ -1,0 +1,331 @@
+-~> stamps: the stamped brush. A pen with "render": "stamped" does not draw
+-~> one outline; the stroke becomes many small shapes (stamps) placed along
+-~> the smooth curve, one every `spacing` of the width. brush() calls
+-~> stamp_stroke() and keeps the result in shape.stamps, so a stroke is made
+-~> once and the canvas, the PNG export and the SVG all read the same list.
+-~>
+-~> A stamp is {"kind": the shape name, "ellipse": whether it is an exact
+-~> ellipse (round, no rough edge), "x", "y", "rx", "ry", "angle", "color"
+-~> (with the stamp's own alpha), "path": the closed outline, absolute}.
+-~>
+-~> The keys a stamped pen reads (all optional; see the header of pens.liz):
+-~>   spacing, size, jitter, shape, roundness, rotation, angle, scatter, count,
+-~>   grain, size_jitter, opacity_jitter, color_jitter, speed.
+-~>
+-~> Everything is deterministic. The random numbers come from a seed made of
+-~> the stroke's points (stamp_seed), so a file always renders the same.
+
+use "check"
+use "geometry"
+use "pens"
+use "stamp_color"
+
+-~> The most stamps one stroke may get (a very long, tight stroke gets a
+-~> wider spacing instead of an endless list).
+let stamp_limit = 20000
+
+-~> Whether a pen draws stamps.
+function stamp_is(pen) {
+  type(pen) == "HASH" && pen.render == "stamped"
+}
+
+-~> The settings of a stamped pen: the defaults, then what the pen says.
+-~> A `grain` that is a number is the roughness of each stamp's edge in
+-~> pixels ("edge"); a hash is a texture inside the stroke ("texture").
+function stamp_block(pen) {
+  let b = {
+    "spacing": 0.25,
+    "size": 1.0,
+    "jitter": 0.0,
+    "shape": "round",
+    "roundness": 1.0,
+    "rotation": "fixed",
+    "angle": 0.0,
+    "scatter": 0.0,
+    "count": 1,
+    "edge": 0.0,
+    "texture": null,
+    "size_jitter": 0.0,
+    "opacity_jitter": 0.0,
+    "color_jitter": [0, 0, 0],
+    "speed": {"size": 0.0, "opacity": 0.0}
+  }
+  let names = ["spacing", "size", "jitter", "shape", "roundness", "rotation", "angle", "scatter", "count", "size_jitter", "opacity_jitter", "color_jitter"]
+  for (let i = 0; i < len(names); i += 1) {
+    if (pen[names[i]] != null) {
+      b[names[i]] = pen[names[i]]
+    }
+  }
+  b.spacing = math.max(0.01, float(b.spacing))
+  b.size = math.max(0.02, float(b.size))
+  b.roundness = math.max(0.05, float(b.roundness))
+  b.count = math.max(1, int(b.count))
+  let g = pen.grain
+  if (is_number(g) && g > 0) {
+    b.edge = float(g)
+  } elif (type(g) == "HASH") {
+    let t = {"kind": "noise", "scale": 6.0, "depth": 0.5, "moving": false}
+    let tn = keys(g)
+    for (let i = 0; i < len(tn); i += 1) {
+      t[tn[i]] = g[tn[i]]
+    }
+    t.scale = math.max(0.5, float(t.scale))
+    b.texture = t
+  }
+  if (type(pen.speed) == "HASH") {
+    if (is_number(pen.speed.size)) {
+      b.speed.size = float(pen.speed.size)
+    }
+    if (is_number(pen.speed.opacity)) {
+      b.speed.opacity = float(pen.speed.opacity)
+    }
+  }
+  b
+}
+
+-~> The extra number between points i and j at t (0 when there is none).
+function stamp_extra(extra, i, j, t) {
+  if (extra == null) {
+    return 0.0
+  }
+  lerp(extra[i], extra[j], t)
+}
+
+-~> A number kept for a stroke from its points, so the same stroke always
+-~> gets the same random numbers.
+function stamp_seed(points) {
+  let s = 17.0
+  for (let i = 0; i < len(points); i += 1) {
+    s = s * 31.0 + points[i].x * 7.0 + points[i].y * 13.0
+    s = s - 100003.0 * math.floor(s / 100003.0)
+  }
+  s
+}
+
+-~> The random number (0 up to 1) number k of a stroke with this seed.
+function stamp_rand(seed, k) {
+  pen_noise(seed + k)
+}
+
+-~> Smooth noise (0 up to 1) at a place: the corners of the grid cell are
+-~> random numbers, blended with a smooth step.
+function stamp_value_noise(x, y) {
+  let ix = math.floor(x)
+  let iy = math.floor(y)
+  let fx = x - ix
+  let fy = y - iy
+  fx = fx * fx * (3.0 - 2.0 * fx)
+  fy = fy * fy * (3.0 - 2.0 * fy)
+  let a = pen_noise(ix * 7.31 + iy * 19.77)
+  let b = pen_noise((ix + 1) * 7.31 + iy * 19.77)
+  let c = pen_noise(ix * 7.31 + (iy + 1) * 19.77)
+  let d = pen_noise((ix + 1) * 7.31 + (iy + 1) * 19.77)
+  lerp(lerp(a, b, fx), lerp(c, d, fx), fy)
+}
+
+-~> How fast the hand moved at each point, 0 (still) to 1 (fast): the
+-~> distance to the neighbouring points, as pen_prepare reads it.
+function stamp_speeds(points) {
+  let n = len(points)
+  let out = []
+  for (let i = 0; i < n; i += 1) {
+    let a = math.dist(points[math.max(i - 1, 0)], points[i])
+    let c = math.dist(points[i], points[math.min(i + 1, n - 1)])
+    let near = 1
+    if (i > 0 && i < n - 1) {
+      near = 2
+    }
+    push(out, math.min(1.0, ((a + c) / near) / 220.0))
+  }
+  out
+}
+
+-~> The unit outlines already made, by name (and by sides for a round one).
+let stamp_units = {}
+
+-~> The outline of a stamp as points around (0, 0), about -1 to 1 across.
+-~> `sides` is for the round one. A shape name this file does not know (a
+-~> bitmap, later) is drawn round: this is where a new shape plugs in.
+function stamp_unit(shape, sides) {
+  let key = str(shape) + str(sides)
+  if (stamp_units[key] !== null) {
+    return stamp_units[key]
+  }
+  let pts = []
+  if (shape == "square") {
+    pts = [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)]
+  } elif (shape == "flat") {
+    pts = [(-1.0, -0.25), (1.0, -0.25), (1.0, 0.25), (-1.0, 0.25)]
+  } elif (shape == "star") {
+    for (let i = 0; i < 10; i += 1) {
+      let a = -math.pi / 2 + i * math.pi / 5
+      let r = 1.0
+      if (i % 2 == 1) {
+        r = 0.4
+      }
+      push(pts, (math.cos(a) * r, math.sin(a) * r))
+    }
+  } else {
+    for (let i = 0; i < sides; i += 1) {
+      let a = i * 2 * math.pi / sides
+      push(pts, (math.cos(a), math.sin(a)))
+    }
+  }
+  stamp_units[key] = pts
+  pts
+}
+
+-~> How many sides a round stamp of this radius needs to look round.
+function stamp_sides(r) {
+  math.max(6, math.min(32, math.floor(math.pi * math.sqrt(2.0 * r)) + 1))
+}
+
+-~> The closed outline of a stamp at (x, y): the unit outline scaled by
+-~> rx and ry, turned by `angle`. `rough` pushes each corner in or out by up
+-~> to that many pixels (from the seed and the salt).
+function stamp_path(unit, x, y, rx, ry, angle, rough, seed, salt) {
+  let c = math.cos(angle)
+  let s = math.sin(angle)
+  let path = []
+  for (let j = 0; j < len(unit); j += 1) {
+    let ux = unit[j].x * rx
+    let uy = unit[j].y * ry
+    if (rough > 0) {
+      let f = 1.0 + rough * (pen_noise(seed + salt + j) - 0.5) * 2.0 / math.max(rx, 0.5)
+      ux = ux * f
+      uy = uy * f
+    }
+    let p = (x + ux * c - uy * s, y + ux * s + uy * c)
+    if (j == 0) {
+      push(path, ["M", p])
+    } else {
+      push(path, ["L", p])
+    }
+  }
+  push(path, ["Z"])
+  path
+}
+
+-~> The stamp's angle: fixed (the pen's angle), following the stroke, or random.
+function stamp_angle(b, direction, r) {
+  if (b.rotation == "follow") {
+    return direction + b.angle
+  }
+  if (b.rotation == "random") {
+    return b.angle + r * 2.0 * math.pi
+  }
+  float(b.angle)
+}
+
+-~> The color of a stamp: the stroke's color shifted by color_jitter, with
+-~> the alpha scaled by `op` (0 to 1). h is in degrees, s and b are shares.
+function stamp_color_of(color, b, op, r1, r2, r3) {
+  let c = color
+  let cj = b.color_jitter
+  if (type(cj) == "ARRAY" && len(cj) == 3 && (cj[0] != 0 || cj[1] != 0 || cj[2] != 0)) {
+    c = stamp_shift_color(color, cj[0] * (2.0 * r1 - 1.0), cj[1] * (2.0 * r2 - 1.0), cj[2] * (2.0 * r3 - 1.0))
+  }
+  rgba(c.r, c.g, c.b, math.round(c.a * math.max(0.0, math.min(1.0, op))))
+}
+
+-~> The stamps of a stroke. `samples` are the points of its smooth curve
+-~> ({"pos", "w", "op", "x" (the speed, 0 to 1)}, see brush_samples), color
+-~> the stroke's color, pen a stamped pen and seed stamp_seed(points). The
+-~> width is the pen's response to the pressure; the taper shrinks the stamps
+-~> near the ends, the speed settings move size and opacity, and the grain
+-~> fades each stamp by a noise.
+function stamp_stroke(samples, color, pen, seed) {
+  let b = stamp_block(pen)
+  let n = len(samples)
+  let along = [0.0]
+  for (let i = 1; i < n; i += 1) {
+    push(along, along[i - 1] + math.dist(samples[i - 1].pos, samples[i].pos))
+  }
+  let total = along[n - 1]
+  let out = []
+  let tex = b.texture
+  let dist = 0.0
+  let j = 0
+  let idx = 0
+  let done = false
+  while (!done) {
+    while (j < n - 2 && along[j + 1] < dist) {
+      j += 1
+    }
+    let a = samples[j]
+    let pos = a.pos
+    let w = a.w
+    let op = a.op
+    let sp = a.x
+    let dir = 0.0
+    if (n > 1) {
+      let c = samples[j + 1]
+      let seg = along[j + 1] - along[j]
+      let t = 0.0
+      if (seg > 0) {
+        t = math.max(0.0, math.min(1.0, (dist - along[j]) / seg))
+      }
+      pos = a.pos + (c.pos - a.pos) * t
+      w = lerp(a.w, c.w, t)
+      op = lerp(a.op, c.op, t)
+      sp = lerp(a.x, c.x, t)
+      let d = c.pos - a.pos
+      if (d.x != 0 || d.y != 0) {
+        dir = math.atan2(d.y, d.x)
+      }
+    }
+    let frac = 0.0
+    if (total > 0) {
+      frac = dist / total
+    }
+    let size0 = math.max(0.2, w * (1.0 + b.speed.size * sp))
+    let full = size0 * b.size
+    let size = full * pen_taper(pen, frac)
+    let opa = op * (1.0 + b.speed.opacity * sp)
+    let tx = math.cos(dir)
+    let ty = math.sin(dir)
+    for (let k = 0; k < b.count; k += 1) {
+      let base = (idx * b.count + k) * 10
+      let sz = math.max(0.3, size * (1.0 + b.size_jitter * (2.0 * stamp_rand(seed, base + 3) - 1.0)))
+      let off = b.scatter * size0 * (2.0 * stamp_rand(seed, base + 2) - 1.0)
+      let jx = b.jitter * sz * (2.0 * stamp_rand(seed, base) - 1.0)
+      let jy = b.jitter * sz * (2.0 * stamp_rand(seed, base + 1) - 1.0)
+      let x = pos.x - ty * off + jx
+      let y = pos.y + tx * off + jy
+      let o = opa * (1.0 - b.opacity_jitter * stamp_rand(seed, base + 4))
+      if (tex != null) {
+        let v = 0.0
+        if (tex.moving) {
+          v = stamp_value_noise(dist / tex.scale, off / tex.scale + 0.5 * k)
+        } else {
+          v = stamp_value_noise(x / tex.scale, y / tex.scale)
+        }
+        o = o * (1.0 - tex.depth * v)
+      }
+      let col = stamp_color_of(color, b, o, stamp_rand(seed, base + 5), stamp_rand(seed, base + 6), stamp_rand(seed, base + 7))
+      if (col.a > 0) {
+        let rx = sz / 2.0
+        let ry = math.max(0.15, rx * b.roundness)
+        let angle = stamp_angle(b, dir, stamp_rand(seed, base + 8))
+        let unit = stamp_unit(b.shape, stamp_sides(math.max(rx, ry)))
+        push(out, {
+          "kind": b.shape,
+          "ellipse": b.shape != "square" && b.shape != "flat" && b.shape != "star" && b.edge == 0,
+          "x": x,
+          "y": y,
+          "rx": rx,
+          "ry": ry,
+          "angle": angle,
+          "color": col,
+          "path": stamp_path(unit, x, y, rx, ry, angle, b.edge, seed, base + 9)
+        })
+      }
+    }
+    idx += 1
+    dist += math.max(0.5, b.spacing * full, total / stamp_limit)
+    if (dist > total + 0.001 || n < 2) {
+      done = true
+    }
+  }
+  out
+}

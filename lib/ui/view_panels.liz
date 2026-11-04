@@ -17,6 +17,7 @@ use "tools_stroke_stab"
 use "artist_route"
 use "view_code"
 use "view_gfx"
+use "view_hscroll"
 use "view_layout"
 
 -~> == Toolbar and tabs ==
@@ -141,7 +142,8 @@ function view_code_x(r) {
   46 + r.depth * 10
 }
 
--~> A row's code rendered for its place: [rendered, x of the code, count hidden by a fold].
+-~> A row's code rendered for its place: [rendered, x of the code, count hidden by a fold,
+-~> the pixels of code that show]. Scrolled sideways, the line is whole and its x moves left.
 function view_row_render(r) {
   let m = ed_model()
   let sel = view_selected(m, r.line)
@@ -156,7 +158,11 @@ function view_row_render(r) {
   }
   maxw = maxw - blend_badge_room(r)
   let cd = view_row_code(r)
-  return [code_render(cd[0], maxw, sel), cx, count]
+  let left = view_left()
+  if (left > 0) {
+    return [code_render(cd[0], 0, sel), cx - left, count, maxw]
+  }
+  return [code_render(cd[0], maxw, sel), cx, count, maxw]
 }
 
 -~> Draws one row of code at y: background, bars, eye and lock, guides, chevron,
@@ -238,7 +244,13 @@ function view_paint_row(r, y, pinned) {
   let rendered = rr[0]
   let cx = rr[1]
   let count = rr[2]
-  code_draw(rendered, cx, y + 3)
+  if (cx < view_code_x(r)) {
+    view_code_clip(r, y)
+    code_draw(rendered, cx, y + 3)
+    view_rows_clip(pinned)
+  } else {
+    code_draw(rendered, cx, y + 3)
+  }
   if (count > 0) {
     let cw = g_text_w(str(count))
     let bx = pw - cw - 8
@@ -250,7 +262,7 @@ function view_paint_row(r, y, pinned) {
   if (r.line == m.line && V.focus == null && V.dialog == null) {
     let idx = math.max(0, math.min(m.col - cd[1], len(rendered.xs) - 1))
     let cxx = cx + rendered.xs[idx]
-    if (cxx < pw - 8) {
+    if (cxx < pw - 8 && cxx >= view_code_x(r)) {
       g_rect(cxx, y + 3, 1, 12, P.amber)
     }
   }
@@ -266,6 +278,10 @@ function view_paint_row(r, y, pinned) {
           n = n + 1
         }
         let ew = math.min(n * 7, pw - 8 - ex)
+        if (ex < view_code_x(r)) {
+          ew = ew - (view_code_x(r) - ex)
+          ex = view_code_x(r)
+        }
         for (let i = 0; i < ew; i = i + 2) {
           g_rect(ex + i, y + 15 + (i // 2) % 2, math.min(2, ew - i), 1, ec_err)
         }
@@ -312,6 +328,13 @@ function view_paint_err(it, y) {
   g_rect(0, y, 2, 16, c)
   g_rect(cx - 9, y + 2, 1, 12, c)
   let room = (V.pw - 8 - cx) // 7
+  let left = view_left()
+  if (left > 0) {
+    g_clip(cx, y, V.pw - 8 - cx, 16)
+    g_text(text.slice(err_words(it.row.error), 0, room + left // 7), cx - left, y + 1, c)
+    view_rows_clip(false)
+    return null
+  }
   g_text(text.slice(err_words(it.row.error), 0, room), cx, y + 1, c)
 }
 
@@ -364,6 +387,11 @@ function view_paint_rows() {
   if (sb != null) {
     g_rect(V.pw - 5, gm.rows_y, 4, gm.lim - 1 - gm.rows_y, P.coal)
     g_rect(V.pw - 5, sb[0], 4, sb[1], P.bevel)
+  }
+  let hb = view_hscrollbar()
+  if (hb != null) {
+    g_rect(2, gm.lim - 5, V.pw - 8, 4, P.coal)
+    g_rect(hb[0], gm.lim - 5, hb[1], 4, P.bevel)
   }
   let pin = view_pinned_row()
   if (pin != null && gm.pin_y >= 0) {
@@ -516,7 +544,7 @@ function view_status_parts() {
   if (stab_pressure_part() != null) {
     push(right, stab_pressure_part())
   }
-  push(right, ["", str(math.round(view_canvas_layout().zoom * 100)) + "%", "mute"])
+  push(right, ["", str(math.round(view_canvas_layout().zoom * 100)) + "%", "mute", "zoom"])
   push(right, ["language", text.upper(lang_get()), "text"])
   return [left, right]
 }

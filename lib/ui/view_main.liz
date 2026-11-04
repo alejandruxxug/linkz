@@ -4,6 +4,7 @@
 
 use "app"
 use "app_screens"
+use "canvas_zoom"
 use "artist_route"
 use "budget_view"
 use "editor_commands"
@@ -58,13 +59,13 @@ function view_panel_key(name) {
     return common + view_file_name() + "|" + str(ed_dirty()) + "|" + view_hover_is(["tab", "tool", "bar", "mode"]) + "|" + str(V.overflow) + art_bar_key()
   }
   if (name == "rows") {
-    return common + str(V.ver) + "|" + str(V.top) + "|" + view_hover_is(["row", "eye", "lock", "fold", "callee", "add", "strip", "dr"]) + "|" + str(V.focus != null) + "|" + route_rows_key() + art_bar_key()
+    return common + str(V.ver) + "|" + str(V.top) + "|" + str(V.left) + "|" + view_hover_is(["row", "eye", "lock", "fold", "callee", "add", "strip", "dr"]) + "|" + str(V.focus != null) + "|" + route_rows_key() + art_bar_key()
   }
   if (name == "props") {
     return common + str(V.ver) + "|" + str(V.focus) + "|" + view_hover_is(["field"]) + "|" + str(V.picker) + "|" + str(V.hover_anchor)
   }
   if (name == "status") {
-    return common + str(V.ver) + "|" + str(V.mouse_draw) + "|" + V.pen_note + "|" + V.tool + "|" + str(ed_note_active())
+    return common + str(V.ver) + "|" + str(V.mouse_draw) + "|" + V.pen_note + "|" + V.tool + "|" + str(ed_note_active()) + "|" + str(view_canvas_layout().zoom)
   }
   if (name == "palette") {
     return common + color_panel_key()
@@ -252,7 +253,9 @@ function view_event(e) {
       tr_editor_event(e)
     }
   } elif (ty == "down") {
-    if (e.button == 1 || (e.button == 0 && e.mods != null && e.mods.ctrl == true)) {
+    if (e.button == 2) {
+      canvas_middle_down(e)
+    } elif (e.button == 1 || (e.button == 0 && e.mods != null && e.mods.ctrl == true)) {
       shape_context(e)
     } elif (e.button == 0) {
       view_down(e)
@@ -260,6 +263,8 @@ function view_event(e) {
   } elif (ty == "up") {
     if (e.button == 0) {
       view_up(e)
+    } elif (e.button == 2) {
+      canvas_pan_end()
     }
   } elif (ty == "move") {
     view_move(e)
@@ -325,7 +330,9 @@ function view_enter(args) {
     V.focus = null
     V.tool = ""
     V.picker = false
+    canvas_zoom_reset()
   } elif (args != null && args.new == true) {
+    canvas_zoom_reset()
     ed_reset("", "")
     V.top = 0
     V.focus = null

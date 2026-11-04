@@ -1,0 +1,167 @@
+-~> view_hscroll: the code panel scrolls sideways. A line longer than the panel
+-~> used to end in a » and the rest was out of reach; now the code of every row
+-~> moves together by V.left pixels, while what is fixed on the left of a row (the
+-~> eye, the lock, the fold chevron, the icon and the depth guides) stays where it is.
+-~>   view_left()           how far the code is scrolled, in pixels (0 = at the start)
+-~>   view_left_max()       the farthest it can go: the longest line on screen plus a little room
+-~>   view_wheel_x(e)       a sideways wheel or Shift+wheel over the panel (true when taken)
+-~>   view_reveal_x()       scrolls so the caret is on screen, like view_reveal does for its row
+-~>   view_hscrollbar()     the thin bar under the rows: [x, width], or null when nothing is hidden
+-~>   view_code_clip(r, y)  limits drawing to the code of a row at y
+-~>   view_rows_clip(pinned) puts the clip of the rows panel back
+-~> view_row_render (view_panels.liz) puts the offset into the x of the code, so the
+-~> caret, the clicks, the autocomplete popup and the color swatches follow it.
+
+use "app"
+use "editor_doc"
+use "editor_undo"
+use "view_code"
+use "view_gfx"
+use "view_layout"
+use "view_panels"
+
+-~> The room kept after the longest line, and between the caret and the panel's edge.
+let hs_room = 14
+
+-~> The farthest left for the rows on screen (found again when V.ver changes).
+let hs_cache = {"key": "", "max": 0}
+
+-~> The pixels of a row's code that show, before the count of a fold and the badges.
+function view_code_avail(r) {
+  V.pw - view_code_x(r) - 4
+}
+
+-~> How wide a row's code is drawn, without drawing it: 7 pixels a character and
+-~> 8 more for the swatch of each color (code_render's widths). Rendering every
+-~> row to measure it cost a whole frame on a long drawing. A # that isn't a color
+-~> only adds a little room at the end.
+function view_code_w(r) {
+  let s = r.text
+  let w = (len(s) - leading_ws(s)) * 7
+  if (text.find(s, "#") >= 0) {
+    w += (len(text.split(s, "#")) - 1) * 8
+  }
+  w
+}
+
+-~> Only the rows on screen count: measuring every row after each edit cost
+-~> several milliseconds a frame at 10k lines. Scrolling down to shorter lines
+-~> pulls the code back, and V.left is kept, so coming back up restores it.
+function view_left_max() {
+  let key = str(V.ver) + "|" + str(V.pw)
+  if (hs_cache.key == key) {
+    return hs_cache.max
+  }
+  let vis = view_visible()
+  let most = 0
+  for (let i = 0; i < len(vis); i += 1) {
+    let it = vis[i].item
+    if (it.t == "row") {
+      most = math.max(most, view_code_w(it.row) - view_code_avail(it.row))
+    }
+  }
+  if (most > 0) {
+    most += hs_room
+  }
+  hs_cache.key = key
+  hs_cache.max = most
+  most
+}
+
+function view_left() {
+  if (V.left <= 0) {
+    return 0
+  }
+  math.max(0, math.min(V.left, view_left_max()))
+}
+
+-~> Moves the code px pixels to the right (negative: to the left), inside its limits.
+function view_scroll_x(px) {
+  let to = math.max(0, math.min(view_left() + px, view_left_max()))
+  if (to != V.left) {
+    V.left = to
+    V.ver += 1
+    app.needs_paint = true
+  }
+}
+
+-~> A wheel over the rows that goes sideways: a trackpad swipe that is more along x
+-~> than along y, or Shift with the wheel. dx above 0 moves the content to the right,
+-~> like dy above 0 moves it down.
+function view_wheel_x(e) {
+  let dx = e.dx
+  let dy = e.dy
+  if (dx == null) {
+    dx = 0
+  }
+  if (dy == null) {
+    dy = 0
+  }
+  let along = 0
+  if (math.abs(dx) > math.abs(dy)) {
+    along = dx
+  } elif (e.mods != null && e.mods.shift) {
+    along = dy
+  }
+  if (along == 0) {
+    return false
+  }
+  -~> at least one character, so a slow swipe moves
+  let px = math.max(7, int(math.round(math.abs(along) * 14)))
+  if (along > 0) {
+    px = -px
+  }
+  view_scroll_x(px)
+  true
+}
+
+-~> Scrolls sideways so the caret is on screen, the way view_reveal does for its row.
+function view_reveal_x() {
+  let m = ed_model()
+  let rows = view_rows()
+  let gm = view_geom()
+  if (gm.lim <= gm.rows_y || m.line < 1 || m.line > len(rows)) {
+    return null
+  }
+  let r = rows[m.line - 1]
+  let cd = view_row_code(r)
+  let xs = code_render(cd[0], 0, false).xs
+  let x = xs[math.max(0, math.min(m.col - cd[1], len(xs) - 1))]
+  let avail = view_row_render(r)[3]
+  let left = view_left()
+  if (x - left < 0) {
+    V.left = math.max(0, x - hs_room)
+  } elif (x - left > avail - 7) {
+    V.left = math.min(view_left_max(), x - (avail - hs_room))
+  }
+}
+
+-~> The bar under the rows: [x, width] of its thumb in the track (the vertical bar's
+-~> look: a coal track and a bevel thumb), or null when every line fits.
+function view_hscrollbar() {
+  let most = view_left_max()
+  if (most == 0) {
+    return null
+  }
+  let track = V.pw - 8
+  let avail = V.pw - 50
+  let tw = math.max(8, track * avail // (avail + most))
+  [2 + (track - tw) * view_left() // most, tw]
+}
+
+-~> Limits drawing to the code of a row at y (its fixed part stays untouched).
+function view_code_clip(r, y) {
+  let rr = view_row_render(r)
+  g_clip(view_code_x(r), y, rr[3], 18)
+}
+
+-~> Puts the clip of the rows panel back (the pinned row has the panel's whole rect).
+function view_rows_clip(pinned) {
+  if (pinned) {
+    let pr = view_panel_rects().rows
+    g_clip(pr[0], pr[1], pr[2], pr[3])
+    return null
+  }
+  let gm = view_geom()
+  g_clip(0, gm.rows_y, V.pw, gm.lim - gm.rows_y)
+}

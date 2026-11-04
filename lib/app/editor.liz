@@ -32,6 +32,13 @@ function editor_options() {
   {"scale": 2, "resizable": true, "min_size": editor_min_size, "on_demand": true, "hover": false}
 }
 
+-~> The system's dialogs for the UI libraries, as `dialog` (a test puts its own in
+-~> stand_ins). choose_file(options) returns at once; the answer comes back as a
+-~> "chosen" event (see window.choose_file).
+function editor_dialog(win) {
+  {"choose_file": function(options) { window.choose_file(win, options) }}
+}
+
 -~> The editor on the window win, started on path ("" for the home screen):
 -~> {"win", "names" (every name the modules define), "app", "path", "error"
 -~> (the last paint's or event's), "stats"}. stand_ins replace some of the
@@ -46,7 +53,7 @@ function editor_load(win, path, settings, machine, modules = editor_modules, sta
     "events": 0,
     "events_coalesced": 0
   }
-  let around = hash.merge(hash.merge(host_globals(win, true), {"settings": settings, "machine": machine}), stand_ins)
+  let around = hash.merge(hash.merge(host_globals(win, true), {"settings": settings, "machine": machine, "dialog": editor_dialog(win)}), stand_ins)
   let kept = {"machine": machine}
   around.linkz = hash.merge(around.linkz, {
     "machine": function() { kept.machine },

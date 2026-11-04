@@ -50,6 +50,7 @@ function trace_new(known, defaults) {
     "path": "",
     "text": "",
     "fresh": false,
+    "choosing": false,
     "focus": "path",
     "image": null,
     "error": "",
@@ -496,6 +497,18 @@ function trace_base(path) {
     slash -= 1
   }
   text.slice(path, slash + 1, len(path))
+}
+
+-~> The folder of a path ("" when it has none), with either kind of slash.
+function trace_folder(path) {
+  let slash = len(path) - 1
+  while (slash >= 0 && path[slash] != "/" && path[slash] != "\\") {
+    slash -= 1
+  }
+  if (slash <= 0) {
+    return ""
+  }
+  text.slice(path, 0, slash)
 }
 
 -~> What a dropped file is for: "image" (a PNG or JPEG, which the trace dialog

@@ -343,6 +343,9 @@ function raster_brush(points, widths) {
 }
 
 function raster_key(shape) {
+  if (shape.stamp_key != null) {
+    return "stamps|" + shape.stamp_key
+  }
   str(shape.path) + "|" + str(shape.width) + "|" + str(shape.widths) + "|" + str(shape.rule) + "|" + str(shape.fill != null) + str(shape.stroke != null)
 }
 
@@ -352,12 +355,15 @@ function raster_key(shape) {
 function raster_same_look(a, b) {
   a.path === b.path && a.fill === b.fill && a.stroke === b.stroke && a.width === b.width &&
     a.widths === b.widths && a.rule === b.rule && a.kind === b.kind && a.layer === b.layer &&
-    a.styles === b.styles
+    a.styles === b.styles &&
+    a.stamp_key === b.stamp_key
 }
 
 -~> The spans of a shape record: {"fill": spans or null, "stroke": spans or
--~> null}. A brush shape is its outline, filled. The result is kept by path
--~> and widths, so a shape that did not change is never rasterized again. A
+-~> null}. A brush shape is its outline, filled. A brush of a stamped pen has
+-~> no fill or stroke: it gets "stamps", a list of [spans, color], one for each
+-~> stamp, drawn in order. The result is kept by path
+-~> and widths (by the stamps' key for a stamped one), so a shape that did not change is never rasterized again. A
 -~> shape may carry "rule": "evenodd" (the default is nonzero).
 function raster_shape(shape) {
   let key = raster_key(shape)
@@ -370,11 +376,16 @@ function raster_shape(shape) {
   if (shape.rule == "evenodd") {
     rule = "evenodd"
   }
-  let out = {"fill": null, "stroke": null, "frame": raster_cache_frame}
-  if (shape.fill != null) {
+  let out = {"fill": null, "stroke": null, "stamps": null, "frame": raster_cache_frame}
+  if (shape.stamps != null) {
+    out.stamps = []
+    for (let i = 0; i < len(shape.stamps); i += 1) {
+      push(out.stamps, [raster_fill(shape.stamps[i].path, "nonzero"), shape.stamps[i].color])
+    }
+  } elif (shape.fill != null) {
     out.fill = raster_fill(shape.path, rule)
   }
-  if (shape.stroke != null && shape.width > 0) {
+  if (shape.stamps == null && shape.stroke != null && shape.width > 0) {
     out.stroke = raster_stroke(shape.path, shape.width)
   }
   if (raster_cache_size >= raster_cache_limit) {
@@ -403,6 +414,11 @@ function raster_paint_shape(s, offset) {
   }
   if (r.stroke !== null) {
     raster_draw(r.stroke, offset, resolve_paint(s, "stroke"))
+  }
+  if (r.stamps !== null) {
+    for (let i = 0; i < len(r.stamps); i += 1) {
+      fb.spans(r.stamps[i][0], offset, r.stamps[i][1])
+    }
   }
 }
 

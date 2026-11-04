@@ -6,6 +6,8 @@
 -~>   path     [["M", p], ["L", p], ["C", c1, c2, p], ["Z"]] with absolute points
 -~>   fill     a color or null     stroke  a color or null     width  a number
 -~>   widths, opacities   per point, only for brush (from the pen), else null
+-~>   stamps, stamp_key   only for a brush of a stamped pen (see stamps.liz): the
+-~>            stamps to draw, and a text that changes when they would; else null
 -~>   anchors  [{"pos": p, "arg": i, "item": j or null, "role": ...}]: which
 -~>            argument (and which element of an array argument) a handle edits
 -~>   line, layer   where the call is in the file, when the host says so
@@ -16,6 +18,7 @@ use "geometry"
 use "gradient"
 use "here"
 use "pens"
+use "stamps"
 
 let drawing = []
 
@@ -239,7 +242,8 @@ function stroke(points, color, width) {
 
 -~> Where the outline of a brush stroke gets its points: a list of
 -~> {"pos", "w" (width), "op" (opacity)} along the smooth curve, 8 per piece.
-function brush_samples(points, widths, opacities) {
+-~> `extra` (optional) is one more number for each point, kept as "x".
+function brush_samples(points, widths, opacities, extra = null) {
   let n = len(points)
   let steps = 8
   let samples = []
@@ -251,11 +255,12 @@ function brush_samples(points, widths, opacities) {
       push(samples, {
         "pos": bezier_point(points[i], piece[0], piece[1], piece[2], t),
         "w": lerp(widths[i], widths[i + 1], t),
-        "op": lerp(opacities[i], opacities[i + 1], t)
+        "op": lerp(opacities[i], opacities[i + 1], t),
+        "x": stamp_extra(extra, i, i + 1, t)
       })
     }
   }
-  push(samples, {"pos": points[n - 1], "w": widths[n - 1], "op": opacities[n - 1]})
+  push(samples, {"pos": points[n - 1], "w": widths[n - 1], "op": opacities[n - 1], "x": stamp_extra(extra, n - 1, n - 1, 0.0)})
   samples
 }
 
@@ -290,7 +295,7 @@ function brush_outline(samples, pen) {
       frac = along[i] / total
     }
     let half = samples[i].w * pen_taper(pen, frac) / 2.0
-    if (pen.grain > 0) {
+    if (is_number(pen.grain) && pen.grain > 0) {
       half = half + pen.grain * (pen_noise(i) - 0.5)
     }
     half = math.max(0.1, half)
@@ -381,6 +386,11 @@ function brush(points, pressures, color, pen) {
   let shape = make_shape("brush", [points, pressures, color, pen], outline, fade_color(color, mean), null, widest, anchors_of(points))
   shape.widths = widths
   shape.opacities = opacities
+  if (stamp_is(pen)) {
+    -~> The outline stays as the shape's hit area; the stamps are what is drawn.
+    shape.stamps = stamp_stroke(brush_samples(points, widths, opacities, stamp_speeds(points)), color, pen, stamp_seed(points))
+    shape.stamp_key = str(points) + str(widths) + str(opacities) + str(color) + str(pen)
+  }
   shape
 }
 

@@ -17,6 +17,12 @@
 -~> that overlaps a region joining it. So an edit paints each thing once, however
 -~> many tiles it covers. A region wider or taller than tiles_chunk is painted in
 -~> pieces, so a buffer never gets too big.
+-~> A picture much bigger than the screen can keep a view (tiles_set_view): a box of
+-~> the picture, widened to whole tiles. Then only the dirty parts inside it are
+-~> painted (the rest stays dirty until the view reaches it), a tile that was never
+-~> painted and is in view counts as dirty, and tiles_blit draws only the tiles in
+-~> view. Tiles far from the view are given up (tiles_evict), so the memory held
+-~> follows the screen, not the picture.
 -~> After tiles_render, t.painted is how many tiles it repainted, t.regions_painted
 -~> how many regions, t.area how many pixels and t.box the box around them all
 -~> (null when nothing was dirty).
@@ -26,6 +32,12 @@
 let tiles_max_regions = 24
 let tiles_slack = 64 * 64
 let tiles_chunk = 1024
+
+-~> The most painted tiles kept once a view is set; past it the ones out of view go.
+let tiles_keep = 96
+
+-~> Past this many dirty parts waiting outside the view they are joined into one.
+let tiles_max_waiting = 48
 
 function tiles_new(name, size, side) {
   let t = {
@@ -40,10 +52,90 @@ function tiles_new(name, size, side) {
     "regions_painted": 0,
     "area": 0,
     "box": null,
-    "slack": tiles_slack
+    "slack": tiles_slack,
+    "view": null
   }
   tiles_mark_all(t)
   t
+}
+
+-~> Limits the work to a box [x0, y0, x1, y1] of the picture (see the top). The first
+-~> view drops the dirty marks: every tile is still unpainted, which counts as dirty.
+function tiles_set_view(t, box) {
+  let x0 = math.max(0, math.floor(box[0] / float(t.side))) * t.side
+  let y0 = math.max(0, math.floor(box[1] / float(t.side))) * t.side
+  let x1 = math.min(t.size.x, math.ceil(box[2] / float(t.side)) * t.side)
+  let y1 = math.min(t.size.y, math.ceil(box[3] / float(t.side)) * t.side)
+  if (t.view === null) {
+    t.regions = []
+  }
+  t.view = [x0, y0, math.max(x0, x1), math.max(y0, y1)]
+}
+
+-~> The first and last columns and rows of the tiles in view: [c0, r0, c1, r1] (c1, r1 excluded).
+function tiles_view_cells(t) {
+  let v = t.view
+  [v[0] // t.side, v[1] // t.side, math.ceil(v[2] / float(t.side)), math.ceil(v[3] / float(t.side))]
+}
+
+-~> The tiles in view that were never painted are dirty.
+function tiles_pull_unmade(t) {
+  let c = tiles_view_cells(t)
+  for (let row = c[1]; row < c[3]; row += 1) {
+    for (let col = c[0]; col < c[2]; col += 1) {
+      if (t.made[tiles_key(t, col, row)] != true) {
+        tiles_add_region(t, tiles_rect(t, col, row))
+      }
+    }
+  }
+}
+
+-~> The part of box a inside box b, or null.
+function tiles_inter(a, b) {
+  let r = [math.max(a[0], b[0]), math.max(a[1], b[1]), math.min(a[2], b[2]), math.min(a[3], b[3])]
+  if (r[2] <= r[0] || r[3] <= r[1]) {
+    return null
+  }
+  r
+}
+
+-~> What is left of box r when box c (inside it) is taken out: up to four strips.
+function tiles_around(r, c) {
+  let out = []
+  if (c[1] > r[1]) {
+    push(out, [r[0], r[1], r[2], c[1]])
+  }
+  if (c[3] < r[3]) {
+    push(out, [r[0], c[3], r[2], r[3]])
+  }
+  if (c[0] > r[0]) {
+    push(out, [r[0], c[1], c[0], c[3]])
+  }
+  if (c[2] < r[2]) {
+    push(out, [c[2], c[1], r[2], c[3]])
+  }
+  out
+}
+
+-~> Gives up the painted tiles out of view once more than tiles_keep are held (their
+-~> buffers are replaced by a one-pixel one, and they count as unpainted).
+function tiles_evict(t) {
+  let ks = keys(t.made)
+  if (len(ks) <= tiles_keep) {
+    return null
+  }
+  let c = tiles_view_cells(t)
+  for (let i = 0; i < len(ks); i += 1) {
+    let k = ks[i]
+    let col = k % t.cols
+    let row = k // t.cols
+    if (col < c[0] || col >= c[2] || row < c[1] || row >= c[3]) {
+      fb.offscreen((1, 1))
+      fb.keep(tiles_buffer(t, k))
+      delete(t.made, k)
+    }
+  }
+  null
 }
 
 -~> The number of a tile, and the name of its buffer.
@@ -149,11 +241,24 @@ function tiles_render(t, paint) {
   t.regions_painted = 0
   t.area = 0
   t.box = null
+  if (t.view !== null) {
+    tiles_pull_unmade(t)
+  }
   let rs = t.regions
   t.regions = []
+  let waiting = []
   let parts = []
   for (let i = 0; i < len(rs); i += 1) {
     let r = rs[i]
+    if (t.view !== null) {
+      let c = tiles_inter(r, t.view)
+      if (c === null) {
+        push(waiting, r)
+        continue
+      }
+      waiting = waiting + tiles_around(r, c)
+      r = c
+    }
     -~> in pieces of at most tiles_chunk pixels a side, on the chunk grid
     for (let cy = r[1] // tiles_chunk; cy <= (r[3] - 1) // tiles_chunk; cy += 1) {
       for (let cx = r[0] // tiles_chunk; cx <= (r[2] - 1) // tiles_chunk; cx += 1) {
@@ -185,6 +290,17 @@ function tiles_render(t, paint) {
   let ks = keys(per_tile)
   for (let i = 0; i < len(ks); i += 1) {
     tiles_copy_in(t, ks[i], parts, per_tile[ks[i]])
+  }
+  if (t.view !== null) {
+    if (len(waiting) > tiles_max_waiting) {
+      let all = waiting[0]
+      for (let i = 1; i < len(waiting); i += 1) {
+        all = tiles_union(all, waiting[i])
+      }
+      waiting = [all]
+    }
+    t.regions = waiting
+    tiles_evict(t)
   }
   null
 }
@@ -225,8 +341,22 @@ function tiles_copy_in(t, k, parts, which) {
 }
 
 function tiles_blit(t, pos) {
-  for (let row = 0; row < t.rows; row += 1) {
-    for (let col = 0; col < t.cols; col += 1) {
+  let c0 = 0
+  let r0 = 0
+  let c1 = t.cols
+  let r1 = t.rows
+  if (t.view !== null) {
+    let c = tiles_view_cells(t)
+    c0 = c[0]
+    r0 = c[1]
+    c1 = c[2]
+    r1 = c[3]
+  }
+  for (let row = r0; row < r1; row += 1) {
+    for (let col = c0; col < c1; col += 1) {
+      if (t.view !== null && t.made[tiles_key(t, col, row)] != true) {
+        continue
+      }
       let r = tiles_rect(t, col, row)
       fb.blit(tiles_buffer(t, tiles_key(t, col, row)), pos + (r[0], r[1]))
     }

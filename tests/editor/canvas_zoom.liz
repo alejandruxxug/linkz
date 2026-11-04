@@ -1,0 +1,177 @@
+-~> The canvas zoom and pan: Cmd+plus, minus, 0 and 1, scrolling with Cmd
+-~> around the pointer (the drawing point under it stays), the wheel pans
+-~> (Shift sideways) and the pan keeps 32 UI pixels of the drawing in view; a
+-~> resize keeps the user's zoom, a new drawing starts fitted; a stroke at 400%
+-~> after a pan and a hit test at 1600% land on the right drawing points; the
+-~> status bar's zoom opens a menu of Fit, 50%, 100%, 200% and 400%.
+
+use "../../lib/app/libs"
+use "rig"
+
+let dir = fs.join(fs.home(), "canvas-zoom-test")
+let code = fs.read(fs.join(libs_root(), "examples", "layers.lzdraw"))
+let rig = rig_open(dir, code, (900, 640), rig_modules + ["ui/view_panels", "ui/canvas_zoom", "ui/zoom_menu", "ui/view_scene", "ui/view_canvas"])
+let n = rig.names
+
+let plain = {"shift": false, "alt": false, "cmd": false, "ctrl": false}
+let cmd = {"shift": false, "alt": false, "cmd": true, "ctrl": false}
+let shift = {"shift": true, "alt": false, "cmd": false, "ctrl": false}
+
+function layout() {
+  n.view_canvas_layout()
+}
+
+function pct() {
+  math.round(layout().zoom * 100)
+}
+
+function key(k, mods = cmd) {
+  rig_frame(rig, [{"type": "key", "key": k, "mods": mods}])
+}
+
+-~> The middle of the canvas area, in UI pixels.
+function centre() {
+  n.canvas_zoom_centre()
+}
+
+-~> How far the drawing point under UI point p is from where it was, in drawing pixels.
+function drift(p, before) {
+  math.dist(n.view_to_drawing(layout(), p.x, p.y), before)
+}
+
+puts("-- fitted at the start")
+puts(pct(), n.canvas_zoom_is_user())
+
+puts("-- Cmd+1 is 100%, Cmd+plus and Cmd+minus go through the steps, Cmd+0 fits again")
+key("Digit1")
+puts(pct(), n.canvas_zoom_is_user())
+key("Equal")
+puts(pct())
+key("Equal")
+puts(pct())
+key("Minus")
+key("Minus")
+key("Minus")
+puts(pct())
+key("Digit0")
+puts(pct(), n.canvas_zoom_is_user())
+
+puts("-- zooming around the pointer keeps the drawing point under it")
+let fit_pct = pct()
+let p = centre() + (37, -21)
+let before = n.view_to_drawing(layout(), p.x, p.y)
+rig_frame(rig, [{"type": "scroll", "pos": p, "dy": 10, "dx": 0, "mods": cmd}])
+puts(pct() > fit_pct, drift(p, before) < 1)
+n.canvas_zoom_at(3.0, p)
+puts(drift(p, before) < 1)
+n.canvas_zoom_at(0.2, p)
+puts(drift(p, before) < 2)
+
+puts("-- the limits: 5% to 3200%")
+n.canvas_zoom_set(1000, centre())
+puts(pct())
+n.canvas_zoom_set(0.001, centre())
+puts(pct())
+
+puts("-- the pan is clamped: 32 UI pixels of the drawing stay in view")
+n.canvas_zoom_set(8.0, centre())
+for (let i = 0; i < 4; i += 1) {
+  rig_frame(rig, [{"type": "scroll", "pos": centre(), "dy": -1000, "dx": -1000, "mods": plain}])
+}
+let cl = layout()
+puts(cl.clip[2] - cl.clip[0] >= 64, cl.clip[3] - cl.clip[1] >= 64)
+for (let i = 0; i < 4; i += 1) {
+  rig_frame(rig, [{"type": "scroll", "pos": centre(), "dy": 1000, "dx": 1000, "mods": plain}])
+}
+cl = layout()
+puts(cl.clip[2] - cl.clip[0] >= 64, cl.clip[3] - cl.clip[1] >= 64)
+
+puts("-- the wheel pans; Shift makes it sideways")
+n.canvas_zoom_set(4.0, centre())
+let w0 = layout().wx
+let h0 = layout().wy
+rig_frame(rig, [{"type": "scroll", "pos": centre(), "dy": 2, "dx": 0, "mods": plain}])
+puts(layout().wx == w0, layout().wy != h0)
+h0 = layout().wy
+rig_frame(rig, [{"type": "scroll", "pos": centre(), "dy": 2, "mods": shift}])
+puts(layout().wx != w0, layout().wy == h0)
+w0 = layout().wx
+-~> (the event's dx, called directly: an older lizardscript sends none)
+n.canvas_wheel({"pos": centre(), "dy": 0, "dx": -2, "mods": plain})
+puts(layout().wx != w0)
+
+puts("-- a middle-button drag pans")
+w0 = layout().wx
+let c = centre()
+rig_frame(rig, [{"type": "down", "pos": c, "button": "middle", "mods": plain}])
+rig_frame(rig, [{"type": "move", "pos": c + (10, 5), "mods": plain}])
+rig_frame(rig, [{"type": "up", "pos": c + (10, 5), "button": "middle", "mods": plain}])
+puts(layout().wx - w0, n.V.drag == null)
+
+puts("-- a resize keeps the user's zoom; a fitted drawing refits")
+n.canvas_zoom_set(4.0, centre())
+rig_frame(rig, [{"type": "resize", "size": (700, 500)}])
+puts(pct(), n.canvas_zoom_is_user())
+key("Digit0")
+let small = pct()
+rig_frame(rig, [{"type": "resize", "size": (900, 640)}])
+puts(pct() != small)
+
+puts("-- a stroke at 400% after a pan lands on the drawing points under the pointer")
+n.canvas_zoom_set(4.0, centre())
+rig_frame(rig, [{"type": "scroll", "pos": centre(), "dy": 3, "dx": 5, "mods": plain}])
+rig_frame(rig, [{"type": "key", "key": "P", "mods": plain}])
+let tool = n.V.tool
+n.V.tool = "pencil"
+cl = layout()
+let a = centre() + (-30, -10)
+let b = centre() + (30, 20)
+let want_a = n.view_to_drawing(cl, a.x, a.y)
+let want_b = n.view_to_drawing(cl, b.x, b.y)
+rig_frame(rig, [{"type": "down", "pos": a, "mods": plain}])
+for (let i = 1; i <= 6; i += 1) {
+  rig_frame(rig, [{"type": "move", "pos": a + (b - a) * (i / 6.0), "mods": plain}])
+}
+rig_frame(rig, [{"type": "up", "pos": b, "mods": plain}])
+let shape = n.ed_shapes_of(n.ed_model().line)[0]
+let pts = shape.args[0]
+puts(len(pts) > 1, math.dist(pts[0], want_a) < 1.5, math.dist(pts[len(pts) - 1], want_b) < 1.5, rig.ed.error)
+n.ed_undo()
+n.view_after()
+n.V.tool = ""
+
+puts("-- a hit test at 1600%")
+let sun = n.view_to_window(layout(), (360, 90)) * 0.5
+key("Digit0")
+n.canvas_zoom_set(16.0, centre())
+let target = (360, 90)
+-~> bring the sun's centre under the middle of the canvas
+let now_at = n.view_to_window(layout(), target) * 0.5
+let delta = (centre() - now_at) * 2
+n.canvas_pan_by(delta.x, delta.y)
+now_at = n.view_to_window(layout(), target) * 0.5
+puts(math.dist(now_at, centre()) < 1)
+let hit = n.view_hit_shape(layout(), n.view_to_drawing(layout(), now_at.x, now_at.y))
+puts(hit != null, hit.kind)
+let off = n.view_hit_shape(layout(), n.view_to_drawing(layout(), now_at.x + 400, now_at.y))
+puts(off == null || off.line != hit.line)
+
+puts("-- the zoom menu in the status bar")
+key("Digit0")
+let r = n.zoom_status_rect()
+puts(r != null)
+rig_frame(rig, [{"type": "down", "pos": (r[0] + 3, r[1] + 5), "mods": plain}])
+rig_frame(rig, [{"type": "up", "pos": (r[0] + 3, r[1] + 5), "mods": plain}])
+puts(n.ZM.open, len(n.zoom_menu_items))
+rig_frame(rig, [{"type": "down", "pos": (n.ZM.x + 8, n.ZM.y + 2 + 14 * 4 + 6), "mods": plain}])
+rig_frame(rig, [{"type": "up", "pos": (n.ZM.x + 8, n.ZM.y + 2 + 14 * 4 + 6), "mods": plain}])
+puts(n.ZM.open, pct())
+rig_frame(rig, [{"type": "down", "pos": (r[0] + 3, r[1] + 5), "mods": plain}])
+rig_frame(rig, [{"type": "up", "pos": (r[0] + 3, r[1] + 5), "mods": plain}])
+rig_frame(rig, [{"type": "key", "key": "ArrowUp", "mods": plain}, {"type": "key", "key": "Enter", "mods": plain}])
+puts(n.ZM.open, pct())
+
+puts("-- a new drawing starts fitted")
+n.canvas_zoom_set(8.0, centre())
+n.view_enter({"new": true})
+puts(n.canvas_zoom_is_user())

@@ -9,6 +9,7 @@ use "app_screens"
 use "artist_ctx"
 use "artist_layout"
 use "blend_props"
+use "canvas_zoom"
 use "color_route"
 use "color_state"
 use "complete_state"
@@ -30,6 +31,7 @@ let V = {
   "h": 360,
   "pw": 320,
   "top": 0,
+  "left": 0,
   "pw_user": false,
   "ver": 0,
   "run_id": 0,
@@ -506,7 +508,8 @@ let view_zoom_room = 10
 
 -~> Where the drawing sits: the zoom, its rectangle in UI pixels and its place
 -~> in the canvas buffer. The zoom is the largest step that leaves
--~> view_zoom_room around the drawing. The canvas buffer normally covers the
+-~> view_zoom_room around the drawing, unless the user zoomed (canvas_zoom.liz:
+-~> then their zoom and pan). The canvas buffer normally covers the
 -~> canvas area; with the pen picker open it covers the whole window (the
 -~> picker draws smooth strokes outside the area).
 function view_canvas_layout() {
@@ -521,10 +524,13 @@ function view_canvas_layout() {
       break
     }
   }
+  zoom = canvas_zoom_value(zoom)
   let sw = math.round(size.x * zoom)
   let sh = math.round(size.y * zoom)
-  let dx = ((gm.cw * 2 - sw) // 4) * 2
-  let dy = ((gm.ch * 2 - sh) // 4) * 2
+  -~> the user's pan, kept in range, moves the centred drawing
+  let pan = canvas_pan_for(sw, sh, gm.cw * 2, gm.ch * 2)
+  let dx = ((gm.cw * 2 - sw) // 4) * 2 + pan.x
+  let dy = ((gm.ch * 2 - sh) // 4) * 2 + pan.y
   -~> the drawing's top left in window pixels (two per UI pixel)
   let wx = gm.cx * 2 + dx
   let wy = gm.cy * 2 + dy
@@ -532,6 +538,13 @@ function view_canvas_layout() {
   if (V.picker || pw.open) {
     crect = [0, 0, gm.w, gm.h]
   }
+  let offset = (wx - crect[0] * 2, wy - crect[1] * 2)
+  -~> the part of the drawing inside the canvas buffer: `clip` in buffer pixels,
+  -~> `vis` the same in drawing pixels at this zoom (the scene paints only that)
+  let cx0 = math.max(0, offset.x)
+  let cy0 = math.max(0, offset.y)
+  let cx1 = math.max(cx0, math.min(crect[2] * 2, offset.x + sw))
+  let cy1 = math.max(cy0, math.min(crect[3] * 2, offset.y + sh))
   {
     "zoom": zoom,
     "sw": sw,
@@ -540,7 +553,10 @@ function view_canvas_layout() {
     "wy": wy,
     "crect": crect,
     "frame": [wx // 2 - 1, wy // 2 - 1, (sw + 1) // 2 + 2, (sh + 1) // 2 + 2],
-    "offset": (wx - crect[0] * 2, wy - crect[1] * 2)
+    "offset": offset,
+    "pan": pan,
+    "clip": [cx0, cy0, cx1, cy1],
+    "vis": [cx0 - offset.x, cy0 - offset.y, cx1 - offset.x, cy1 - offset.y]
   }
 }
 

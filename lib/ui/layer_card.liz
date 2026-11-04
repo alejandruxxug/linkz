@@ -25,6 +25,7 @@ use "color_draw"
 use "editor_state"
 use "editor_undo"
 use "i18n"
+use "view_hscroll"
 use "layer_blend"
 use "layer_thumbs"
 use "view_gfx"
@@ -96,7 +97,7 @@ function lc_anchor(id, line) {
   for (let i = 0; i < len(vis); i += 1) {
     let it = vis[i].item
     if (it.t == "row" && it.line == line) {
-      let end = view_code_x(row) + 7 * len("layer " + row.stmt.name)
+      let end = math.max(view_code_x(row), view_code_x(row) - view_left() + 7 * len("layer " + row.stmt.name))
       return {"rect": [0, vis[i].y, V.pw, 18], "side": "right", "text_x": end}
     }
   }

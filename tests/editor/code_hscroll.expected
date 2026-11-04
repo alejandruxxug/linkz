@@ -1,0 +1,23 @@
+-- it starts at the left, and the long line shows the bar
+0 true true
+-- a swipe with dx below 0 moves the code left, dx above 0 brings it back
+true
+true true
+0
+-- Shift+wheel does the same with dy; a plain wheel still scrolls the rows
+true
+0
+0 true
+-- it stops at the longest line plus 14 pixels
+true true
+true
+-- the fixed part stays, the code moves: a click on the eye still toggles it
+true
+false
+-- a click at an offset lands on the column under it
+4 40 true
+-- typing at the end of a long line keeps the caret on screen
+true true true
+4 true true true
+-- going to a short line brings the code back
+0 true

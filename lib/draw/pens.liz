@@ -8,7 +8,40 @@
 -~>   opacity  [low, high]: the opacity (0 to 1) at pressure 0 and at pressure 1
 -~>   nib      null, or an angle in radians: the width then comes from the angle
 -~>            between the stroke's direction and the nib, not from the pressure
--~>   grain    0, or the roughness of the edge in pixels (deterministic noise)
+-~>   grain    0, or the roughness of the edge in pixels (deterministic noise);
+-~>            for a stamped pen it can also be a hash, see below
+-~>
+-~> Stamped pens. "render": "stamped" (the default is "vector", the outline
+-~> brush above) makes the stroke many small stamps placed along it, see
+-~> stamps.liz. min, max, taper, opacity, nib and the pressure block (below)
+-~> work as for any pen: they say how big and how opaque the stamp is at each
+-~> point. Every key below is optional; the default is in brackets.
+-~>   size           [1]    the stamp's width as a share of the stroke's width
+-~>                  (the stroke's width is still how far scatter reaches)
+-~>   spacing        [0.25] the distance between stamps, as a share of the stamp's size
+-~>   jitter         [0]    each stamp moves by up to this share of its size
+-~>   shape          ["round"] "round", "square", "flat" (a wide, thin nib) or
+-~>                  "star". Any other name draws round; a bitmap goes here later
+-~>   roundness      [1]    0.05 to 1: how much of its width the height keeps
+-~>   rotation       ["fixed"] "fixed" (the angle below), "follow" (the direction
+-~>                  of the stroke, plus the angle) or "random" (a different
+-~>                  turn for every stamp)
+-~>   angle          [0]    radians, the turn of a fixed or following stamp
+-~>   scatter        [0]    stamps spread across the stroke by up to this share of the width
+-~>   count          [1]    stamps at every step (with scatter, a spray)
+-~>   grain          a hash {"kind": "noise", "scale": 6, "depth": 0.5, "moving": false}:
+-~>                  a noise that fades each stamp (depth 0 to 1, how much; scale
+-~>                  in pixels). Fixed grain is the same for any stroke on the
+-~>                  canvas, like paper; moving grain travels with the stroke.
+-~>                  A plain number keeps its meaning: a rough edge, in pixels.
+-~>   size_jitter    [0]    each stamp's size changes by up to this share, either way
+-~>   opacity_jitter [0]    each stamp loses up to this share of its opacity
+-~>   color_jitter   [[0, 0, 0]] [hue in degrees, saturation, brightness]: how far
+-~>                  each stamp's color may move, either way (the last two are shares)
+-~>   speed          {"size": 0, "opacity": 0}: how much a fast hand scales the
+-~>                  size and the opacity (-0.5 shrinks a fast stroke by up to half)
+-~> The random numbers come from a seed made of the stroke's points, so a file
+-~> always renders the same.
 -~>
 -~> pressure   how raw pressure (0 to 1, as the stroke stores it) turns into a
 -~>            look. Every key is optional; a missing key keeps the default in
@@ -140,7 +173,105 @@ pens.calligraphy = {
   "tilt": {"nib": 0.6}
 }
 
--~> The pens for the editor's picker, in order.
+-~> chalk: dry square flecks turned every which way, grainy and a little
+-~> see-through. Pressing makes it wider and darker.
+pens.chalk = {
+  "name": "chalk",
+  "render": "stamped",
+  "min": 6,
+  "max": 18,
+  "taper": 0.05,
+  "opacity": [0.5, 0.9],
+  "nib": null,
+  "grain": {"kind": "noise", "scale": 3, "depth": 0.7, "moving": false},
+  "shape": "square",
+  "roundness": 0.6,
+  "rotation": "random",
+  "spacing": 0.2,
+  "jitter": 0.25,
+  "size_jitter": 0.4,
+  "opacity_jitter": 0.4,
+  "pressure": {
+    "curve": [[0, 0], [1, 1]],
+    "smoothing": 0.2,
+    "speed": 0,
+    "inputs": {"trackpad": {"floor": 0.1}, "tablet": {}, "mouse": {"speed": 0.6}}
+  }
+}
+
+-~> spray: a cloud of tiny dots around the line, like an airbrush.
+pens.spray = {
+  "name": "spray",
+  "render": "stamped",
+  "min": 14,
+  "max": 34,
+  "taper": 0,
+  "opacity": [0.25, 0.6],
+  "nib": null,
+  "grain": 0,
+  "shape": "round",
+  "size": 0.14,
+  "spacing": 0.8,
+  "count": 3,
+  "scatter": 0.5,
+  "size_jitter": 0.6,
+  "opacity_jitter": 0.5,
+  "pressure": {
+    "curve": [[0, 0], [1, 1]],
+    "smoothing": 0.3,
+    "speed": 0,
+    "inputs": {"trackpad": {"floor": 0.1}, "tablet": {}, "mouse": {"speed": 0.5}}
+  }
+}
+
+-~> ink_dots: a row of round dots; the harder you press, the bigger they are.
+pens.ink_dots = {
+  "name": "ink_dots",
+  "render": "stamped",
+  "min": 3,
+  "max": 14,
+  "taper": 0.15,
+  "opacity": [1, 1],
+  "nib": null,
+  "grain": 0,
+  "shape": "round",
+  "spacing": 1.2,
+  "pressure": {
+    "curve": [[0, 0], [1, 1]],
+    "smoothing": 0.3,
+    "speed": 0,
+    "inputs": {"trackpad": {"floor": 0.1}, "tablet": {}, "mouse": {"speed": 1.0}}
+  }
+}
+
+-~> star_trail: stars that point along the stroke, a little smaller when the
+-~> hand is fast and a little different in color each.
+pens.star_trail = {
+  "name": "star_trail",
+  "render": "stamped",
+  "min": 8,
+  "max": 22,
+  "taper": 0.25,
+  "opacity": [0.8, 1],
+  "nib": null,
+  "grain": 0,
+  "shape": "star",
+  "rotation": "follow",
+  "angle": 90deg,
+  "spacing": 1.1,
+  "size_jitter": 0.25,
+  "color_jitter": [25, 0.1, 0.1],
+  "speed": {"size": -0.4, "opacity": 0},
+  "pressure": {
+    "curve": [[0, 0], [1, 1]],
+    "smoothing": 0.3,
+    "speed": 0,
+    "inputs": {"trackpad": {"floor": 0.1}, "tablet": {}, "mouse": {"speed": 0.8}}
+  }
+}
+
+-~> The pens for the editor's picker, in order. The stamped ones above are
+-~> not in it yet: the picker is made for the first five.
 pens.list = [pens.ink, pens.pencil, pens.marker, pens.brush, pens.calligraphy]
 
 -~> The pressure settings of a pen for a device: the defaults, then the pen's

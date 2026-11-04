@@ -1,0 +1,202 @@
+-~> zoom_menu: the small menu over the zoom readout in the status bar. Clicking the
+-~> `90%` opens a list: Fit, 50%, 100%, 200% and 400% (the zoom now is lit);
+-~> choosing one zooms the canvas around its centre (canvas_zoom.liz). Up and
+-~> Down pick, Enter chooses, Esc closes. Rows are 14 high like the blend
+-~> dropdown's (style guide R002 "Context menu").
+
+use "canvas_zoom"
+use "i18n"
+use "view_gfx"
+use "view_layout"
+use "view_panels"
+
+let ZM = {"open": false, "x": 0, "y": 0, "w": 0, "h": 0, "hot": -1}
+
+let zm_row_h = 14
+
+-~> What the rows do: "fit", or the zoom to go to.
+let zoom_menu_items = ["fit", 0.5, 1.0, 2.0, 4.0]
+
+-~> The label of a row.
+function zm_label(item) {
+  if (item == "fit") {
+    return t("zoom.fit")
+  }
+  str(math.round(item * 100)) + "%"
+}
+
+-~> Whether a row is the zoom now.
+function zm_is_current(item) {
+  if (item == "fit") {
+    return !canvas_zoom_is_user()
+  }
+  canvas_zoom_is_user() && math.abs(view_canvas_layout().zoom - item) < 0.0001
+}
+
+-~> == The readout ==
+
+-~> The zoom readout's rectangle [x, y, w, h] in the status bar, as painted.
+function zoom_status_rect() {
+  let right = view_status_fitted()[1]
+  let y = view_geom().status_y
+  let x = V.w - 6
+  for (let i = len(right) - 1; i >= 0; i -= 1) {
+    let p = right[i]
+    let w = g_text_w(p[1])
+    if (len(p) > 3 && p[3] == "zoom") {
+      return [x - w - 3, y, w + 6, 16]
+    }
+    if (p[0] != "") {
+      w += 10
+    }
+    x = x - w - 13
+  }
+  null
+}
+
+-~> "zoom:status" when (x, y) is on the readout, else null.
+function zoom_status_hover(x, y) {
+  let r = zoom_status_rect()
+  if (r != null && view_in(x, y, r[0], r[1], r[2], r[3])) {
+    return "zoom:status"
+  }
+  null
+}
+
+-~> == Opening and closing ==
+
+-~> Opens the menu over the readout.
+function zoom_menu_open() {
+  let r = zoom_status_rect()
+  if (r == null) {
+    return null
+  }
+  let w = 0
+  for (let i = 0; i < len(zoom_menu_items); i += 1) {
+    w = math.max(w, g_text_w(zm_label(zoom_menu_items[i])))
+  }
+  w += 24
+  ZM.w = w
+  ZM.h = 4 + len(zoom_menu_items) * zm_row_h
+  ZM.x = math.max(1, math.min(r[0] + r[2] - w, V.w - w - 3))
+  ZM.y = r[1] - ZM.h - 1
+  ZM.hot = -1
+  for (let i = 0; i < len(zoom_menu_items); i += 1) {
+    if (zm_is_current(zoom_menu_items[i])) {
+      ZM.hot = i
+    }
+  }
+  ZM.open = true
+  view_touch()
+}
+
+function zoom_menu_close() {
+  if (ZM.open) {
+    ZM.open = false
+    view_touch()
+  }
+}
+
+-~> The box it covers, with its shadow, as [kind, rect].
+function zoom_menu_rects() {
+  if (!ZM.open) {
+    return []
+  }
+  [["zoom_menu", [ZM.x, ZM.y, ZM.w + 2, ZM.h + 2]]]
+}
+
+-~> What it shows, as a text: it is drawn again when this changes.
+function zoom_menu_key() {
+  if (!ZM.open) {
+    return ""
+  }
+  "z" + str(ZM.hot) + str(view_canvas_layout().zoom)
+}
+
+-~> == The pointer and the keys ==
+
+-~> The hover id at a UI point: zmenu:i on a row, zmenu:box between them, null off it.
+function zoom_menu_hover_at(x, y) {
+  if (!ZM.open || !view_in(x, y, ZM.x, ZM.y, ZM.w, ZM.h)) {
+    return null
+  }
+  let i = (y - ZM.y - 2) // zm_row_h
+  if (y >= ZM.y + 2 && i >= 0 && i < len(zoom_menu_items)) {
+    ZM.hot = i
+    return "zmenu:" + str(i)
+  }
+  "zmenu:box"
+}
+
+-~> Goes to the zoom of a row and closes the menu.
+function zoom_menu_choose(item) {
+  zoom_menu_close()
+  if (item == "fit") {
+    canvas_zoom_fit()
+  } else {
+    canvas_zoom_set(item, canvas_zoom_centre())
+  }
+}
+
+-~> A press while it is open: chooses the row under it, or closes the menu when the
+-~> press is outside. True when it was the menu's.
+function zoom_menu_down(e) {
+  if (!ZM.open) {
+    return false
+  }
+  let id = zoom_menu_hover_at(e.pos.x, e.pos.y)
+  if (id == null) {
+    zoom_menu_close()
+    -~> a press on the readout itself closes it and does not open it again
+    return true
+  }
+  let parts = text.split(id, ":")
+  if (parts[1] != "box") {
+    zoom_menu_choose(zoom_menu_items[int(parts[1])])
+  }
+  true
+}
+
+-~> A key while it is open. True when it used it (every key does).
+function zoom_menu_key_down(e) {
+  if (!ZM.open) {
+    return false
+  }
+  let k = text.lower(e.key)
+  let n = len(zoom_menu_items)
+  if (k == "escape") {
+    zoom_menu_close()
+  } elif (k == "arrowdown") {
+    ZM.hot = (ZM.hot + 1) % n
+    view_touch()
+  } elif (k == "arrowup") {
+    ZM.hot = (math.max(0, ZM.hot) - 1 + n) % n
+    view_touch()
+  } elif ((k == "enter" || k == "return" || k == "space") && ZM.hot >= 0) {
+    zoom_menu_choose(zoom_menu_items[ZM.hot])
+  }
+  true
+}
+
+-~> == Drawing ==
+
+function zoom_menu_draw() {
+  if (!ZM.open) {
+    return null
+  }
+  g_box(ZM.x, ZM.y, ZM.w, ZM.h)
+  for (let i = 0; i < len(zoom_menu_items); i += 1) {
+    let y = ZM.y + 2 + i * zm_row_h
+    let item = zoom_menu_items[i]
+    let tc = P.text
+    if (zm_is_current(item)) {
+      g_rect(ZM.x + 1, y, ZM.w - 2, zm_row_h, P.moss)
+      g_rect(ZM.x + 1, y, 2, zm_row_h, P.lizard)
+      tc = P.bright
+    } elif (i == ZM.hot) {
+      g_rect(ZM.x + 1, y, ZM.w - 2, zm_row_h, P.bevel)
+      tc = P.bright
+    }
+    g_text(zm_label(item), ZM.x + 12, y, tc)
+  }
+}

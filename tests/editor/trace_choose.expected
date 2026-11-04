@@ -1,0 +1,18 @@
+-- the dialog with no picture: images only, no folder, a title
+true 0
+1 ["png", "jpg", "jpeg"] true false
+-- a second click while it is open asks for nothing
+1
+-- chosen with a path sets the picture, like a drop
+true first.png true false
+-- the next dialog starts in the folder of the picture
+2 true
+-- cancel changes nothing
+true first.png false true
+-- chosen with another kind of file is said, as a drop says it
+true true
+-- the first of many paths wins; Spanish title
+true
+Elige una imagen
+-- a dialog that can't open says why
+needs zenity false

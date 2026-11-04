@@ -1,0 +1,11 @@
+-~> Stamped brushes: the four stamped pens, each on a stroke of its own.
+fb.fill((0, 0), (240, 140), #ffffff)
+let wave = [(15, 20), (60, 8), (110, 30), (160, 12), (225, 24)]
+let press = [0.3, 0.9, 0.6, 1.0, 0.4]
+raster.paint([brush(wave, press, #223344, pens.chalk)], (0, 0))
+let low = [(15, 55), (60, 45), (110, 67), (160, 49), (225, 61)]
+raster.paint([brush(low, press, #aa2200, pens.spray)], (0, 0))
+let lower = [(15, 90), (60, 80), (110, 102), (160, 84), (225, 96)]
+raster.paint([brush(lower, press, #115599, pens.ink_dots)], (0, 0))
+let last = [(15, 125), (60, 115), (110, 130), (160, 118), (225, 128)]
+raster.paint([brush(last, press, #cc8800, pens.star_trail)], (0, 0))

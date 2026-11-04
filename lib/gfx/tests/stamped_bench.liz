@@ -1,0 +1,30 @@
+-~> How long a 300-point stroke takes with a stamped pen (about 2000 stamps)
+-~> and, to compare, with the vector pen ink: making the stroke, its spans,
+-~> painting it, and painting it again from the cache. Run it with
+-~> tests/editor/editor_bench.liz, or: linkz paint lib/gfx/tests/stamped_bench.liz out.png 640x400
+let pts = []
+let pressures = []
+for (let i = 0; i < 300; i += 1) {
+  push(pts, (20 + i * 2, 200 + math.sin(i / 12.0) * 120))
+  push(pressures, 0.4 + 0.5 * math.sin(i / 20.0) * math.sin(i / 20.0))
+}
+
+function bench_pen(name, pen) {
+  let t0 = time.ms()
+  let shape = brush(pts, pressures, #223344, pen)
+  let t1 = time.ms()
+  raster.shape(shape)
+  let t2 = time.ms()
+  raster.paint([shape], (0, 0))
+  let t3 = time.ms()
+  raster.paint([shape], (0, 0))
+  let t4 = time.ms()
+  let n = 0
+  if (shape.stamps != null) {
+    n = len(shape.stamps)
+  }
+  puts(name, n, "stamps: make", math.round(t1 - t0), "ms, spans", math.round(t2 - t1), "ms, first paint", math.round(t3 - t2), "ms, cached paint", math.round(t4 - t3), "ms")
+}
+
+bench_pen("vector ink", pens.ink)
+bench_pen("stamped", hash.merge(pens.ink_dots, {"min": 4, "max": 8, "spacing": 0.15}))

@@ -1,0 +1,40 @@
+-- fitted at the start
+150 false
+-- Cmd+1 is 100%, Cmd+plus and Cmd+minus go through the steps, Cmd+0 fits again
+100 true
+150
+200
+75
+150 false
+-- zooming around the pointer keeps the drawing point under it
+true true
+true
+true
+-- the limits: 5% to 3200%
+3200
+5
+-- the pan is clamped: 32 UI pixels of the drawing stay in view
+true true
+true true
+-- the wheel pans; Shift makes it sideways
+true true
+true true
+true
+-- a middle-button drag pans
+20 true
+-- a resize keeps the user's zoom; a fitted drawing refits
+400 true
+true
+-- a stroke at 400% after a pan lands on the drawing points under the pointer
+true true true 
+-- a hit test at 1600%
+true
+true circle
+true
+-- the zoom menu in the status bar
+true
+true 5
+false 400
+false 200
+-- a new drawing starts fitted
+false
