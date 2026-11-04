@@ -25,6 +25,7 @@ use "view_gfx"
 use "view_layout"
 use "view_scene"
 use "view_tools"
+use "overlay_rules"
 
 -~> What the overlay shows besides the selection: the rows a marquee or a
 -~> lasso would select ("hot"), and the last move, for the properties panel.
@@ -79,7 +80,7 @@ function select_handles(box) {
 -~> The handle under a UI point, or null.
 function select_handle_at(cl, ux, uy) {
   let box = select_ui_box(cl, select_shapes())
-  if (box == null) {
+  if (box == null || !ov_shape_handles()) {
     return null
   }
   let hs = select_handles(box)
@@ -141,7 +142,7 @@ function select_down(e, cl) {
     let again = pick_has(s.line)
     if (!again) {
       pick_set([s.line])
-      view_reveal(s.line)
+      view_show_line(s.line)
     }
     select_begin_move(e, cl, s.line, again)
     return null
@@ -486,6 +487,9 @@ function select_paint(cl) {
   if (box != null) {
     view_sel_box(box[0] * 2, box[1] * 2, box[2] * 2, box[3] * 2)
     let hs = select_handles(box)
+    if (!ov_shape_handles()) {
+      hs = []
+    }
     for (let i = 0; i < len(hs); i += 1) {
       if (hs[i].id == "turn") {
         select_turn_ring(hs[i].x, hs[i].y, box[1])

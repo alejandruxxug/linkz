@@ -102,6 +102,35 @@ function g_text_w(s) {
   len(s) * 7
 }
 
+-~> The text cut to fit w pixels at a word boundary, ending in "…" (a
+-~> single word too long is cut where it must); the whole text when it fits.
+function g_fit_words(s, w) {
+  if (g_text_w(s) <= w) {
+    return s
+  }
+  let max = w // 7 - 1
+  if (max < 1) {
+    return ""
+  }
+  let cut = text.slice(s, 0, max)
+  -~> back to the last space when the cut is inside a word
+  if (text.slice(s, max, max + 1) != " ") {
+    let sp = max - 1
+    while (sp > 0 && text.slice(cut, sp, sp + 1) != " ") {
+      sp = sp - 1
+    }
+    if (sp > 0) {
+      cut = text.slice(cut, 0, sp)
+    }
+  }
+  -~> no dangling separator before the ellipsis
+  let ends = [" ", "·", ",", "-"]
+  while (len(cut) > 1 && list.index(ends, text.slice(cut, len(cut) - 1, len(cut))) >= 0) {
+    cut = text.slice(cut, 0, len(cut) - 1)
+  }
+  cut + "…"
+}
+
 -~> Draws a text with its top left at (x, y).
 function g_text(s, x, y, c) {
   if (len(s) > 0) {

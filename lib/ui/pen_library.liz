@@ -24,6 +24,24 @@ function pen_is_builtin(key) {
   list.index(pen_lib.builtin_keys, key) >= 0
 }
 
+-~> The name the editor shows for a pen: a built-in one's in the
+-~> interface's language (`tinta` for ink), a saved one's as it was saved.
+-~> The code keeps the key (`pens.ink`).
+function pen_display_name(pen) {
+  if (pen == null) {
+    return ""
+  }
+  if (pen.key != null || !pen_is_builtin(pen.name)) {
+    return pen.name
+  }
+  let k = "pen.name." + pen.name
+  let w = t(k)
+  if (w == k) {
+    return pen.name
+  }
+  w
+}
+
 -~> A copy of a pen's value, all the way down (the pen settings edit copies).
 function pen_deep_copy(v) {
   if (type(v) == "ARRAY") {

@@ -204,18 +204,24 @@ function sm_size(items, title, swatches) {
   [w, h]
 }
 
+-~> The lowest y a menu's box (with its shadow) may reach: menus stay above
+-~> the status bar.
+function sm_bottom() {
+  view_geom().status_y
+}
+
 -~> Where a box of size [w, h] goes for the point (x, y): right of it and
--~> down, flipped left or up when the window ends first.
+-~> down, flipped left or up when the window (or the status bar) comes first.
 function sm_place(x, y, size) {
   let px = x + 2
   let py = y
   if (px + size[0] + 3 > V.w) {
     px = x - size[0] - 2
   }
-  if (py + size[1] + 3 > V.h) {
-    py = V.h - size[1] - 3
+  if (py + size[1] + 3 > sm_bottom()) {
+    py = sm_bottom() - size[1] - 3
   }
-  [math.max(1, px), math.max(17, py)]
+  [math.max(1, math.min(px, V.w - size[0] - 3)), math.max(17, py)]
 }
 
 -~> The y of each entry, from the top of the menu (y0: after the header).
@@ -234,7 +240,8 @@ function sm_rows(items, y0) {
 }
 
 -~> The submenu's box: {"x", "y", "w", "h", "items", "rows", "swatches"}, beside
--~> its entry (Fill or Blend), on the side that has room.
+-~> its entry (Fill or Blend), on the side that has room (the one with more
+-~> when neither has enough), kept inside the window and above the status bar.
 function sm_sub_box() {
   let s = SM.sub
   let items = s.items
@@ -250,10 +257,12 @@ function sm_sub_box() {
   let at = list.index(sm_ids(SM.items), s.of)
   let iy = SM.y + 16 + sm_rows(SM.items, 0)[at]
   let x = SM.x + SM.w - 2
-  if (x + size[0] + 3 > V.w) {
-    x = SM.x - size[0] + 2
+  let left = SM.x - size[0] + 2
+  if (x + size[0] + 3 > V.w && (left >= 1 || SM.x > V.w - SM.x - SM.w)) {
+    x = left
   }
-  let y = math.max(17, math.min(iy - 2, V.h - size[1] - 3))
+  x = math.max(1, math.min(x, V.w - size[0] - 3))
+  let y = math.max(17, math.min(iy - 2, sm_bottom() - size[1] - 3))
   {"x": x, "y": y, "w": size[0], "h": size[1], "items": items, "rows": sm_rows(items, y + 2), "swatches": sw}
 }
 

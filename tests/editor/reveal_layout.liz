@@ -1,0 +1,192 @@
+-~> The v1.1 layout fixes in a headless editor (style guide R002 metrics):
+-~> the canvas zoom rule (90% beside the palette rail, 55% beside the open
+-~> palette, 125% in artist mode, 75% over the code drawer), the drawer at
+-~> y 196 with every tool of the column above it, a shape picked on the
+-~> canvas revealed (its folded layer opens, the drawer and the layers scroll
+-~> to it), the compact palette and the fill chip following the selection,
+-~> the status bar's counter never cut, the brush inspector in two rows and
+-~> a context bar that never runs off the window, and the Spanish words.
+
+use "../../lib/app/editor"
+use "rig"
+
+let code = "-~> lzdraw 1
+canvas = {\"size\": (480, 320), \"background\": #f6d9a8}
+let colors = {\"sky\": #f2a65a, \"sea\": #2d6a8f}
+layer sun
+  circle((360, 90), 34, #fff3c4)
+  circle((360, 90), 56, #f2a65a66)
+layer boat
+  polygon([(120, 214), (180, 214), (165, 232), (135, 232)], #3b2a6b)
+  line((150, 214), (150, 170), #3b2a6b, 3)
+layer sea
+  rect((0, 200), (480, 120), colors.sea)
+layer sky
+  rect((0, 0), (480, 200), colors.sky)
+"
+
+let modules = rig_modules + ["ui/view_panels", "ui/view_canvas", "ui/i18n", "ui/mode_state", "ui/artist_layout", "ui/artist_route",
+  "ui/artist_layers", "ui/artist_ctx", "ui/artist_tools", "ui/palette_view", "ui/palette_compact", "ui/color_state", "ui/color_target",
+  "ui/pen_props", "ui/pen_library", "ui/error_words", "ui/view_gfx", "draw/pens"]
+let rig = rig_open(fs.join(fs.home(), "reveal-test"), code, editor_size, modules)
+let n = rig.names
+let cmds = rig.ed.app.debug_commands
+let none = {"shift": false, "alt": false, "cmd": false, "ctrl": false}
+
+function click(p) {
+  rig_frame(rig, [{"type": "move", "pos": p, "mods": none}])
+  rig_frame(rig, [{"type": "down", "pos": p, "mods": none}, {"type": "up", "pos": p, "mods": none}])
+}
+
+function zoom() {
+  n.view_canvas_layout().zoom
+}
+
+-~> A point of the drawing as a UI point.
+function on_canvas(p) {
+  n.view_to_window(n.view_canvas_layout(), p) * 0.5
+}
+
+-~> The texts of the status bar as painted, left then right.
+function status() {
+  let parts = n.view_status_fitted()
+  let out = []
+  for (let side = 0; side < 2; side += 1) {
+    for (let i = 0; i < len(parts[side]); i += 1) {
+      push(out, parts[side][i][1])
+    }
+  }
+  out
+}
+
+-~> Whether every part of the props layout is inside the window's width.
+function ctx_inside() {
+  let bar = n.view_props_cached()
+  let all = bar.labels + bar.boxes
+  if (bar.own != null) {
+    all = all + bar.own
+  }
+  for (let i = 0; i < len(all); i += 1) {
+    let w = all[i].w
+    if (w == null) {
+      w = len(all[i].s) * 7
+    }
+    if (all[i].x + w > n.V.w) {
+      return false
+    }
+  }
+  true
+}
+
+puts("-- the zoom rule: rail 90%, open palette 55%")
+puts(n.pal_is_open(n.V.w), zoom())
+n.pal_set_open(true)
+rig_frame(rig)
+puts(n.pal_is_open(n.V.w), zoom())
+n.pal_set_open(false)
+rig_frame(rig)
+
+puts("-- the status bar: the counter whole, the cursor gives way")
+rig_frame(rig, [{"type": "move", "pos": on_canvas((300, 100)), "mods": none}])
+puts(status())
+n.ed.file = "a-drawing-with-a-very-long-name-that-fills-the-bar.lzdraw"
+n.view_touch()
+puts(status())
+
+puts("-- the brush: its inspector in two rows, its hint there and not in the status bar")
+cmds.Tool(["brush"])
+rig_frame(rig)
+let lay = n.view_props_cached()
+puts(lay.title, n.V.props_extra, len(n.view_selected_shapes()))
+let labels = []
+for (let i = 0; i < len(lay.labels); i += 1) {
+  push(labels, lay.labels[i].s)
+}
+puts(labels)
+puts(list.index(status(), n.t("hint.brush")) < 0)
+n.lang_use("es")
+n.view_touch()
+rig_frame(rig)
+lay = n.view_props_cached()
+labels = []
+for (let i = 0; i < len(lay.labels); i += 1) {
+  push(labels, lay.labels[i].s)
+}
+puts(labels, n.V.props_extra)
+n.lang_use("en")
+n.V.tool = ""
+n.view_touch()
+rig_frame(rig)
+
+puts("-- artist mode: 125%, the drawer at y 196 and 75%, every tool above it")
+n.art_set_mode(true)
+rig_frame(rig)
+puts(zoom())
+n.art_toggle_drawer()
+rig_frame(rig)
+let gm = n.view_geom()
+puts(gm.main_y, zoom(), n.art_column_end() <= gm.main_y, len(n.art_column().buttons))
+
+puts("-- a shape picked on the canvas is revealed: its layer opens, both panels show its row")
+n.ed_toggle_fold(4)
+cmds.Tool(["select"])
+rig_frame(rig)
+let sun = on_canvas((360, 90))
+click(sun)
+let line = n.ed_model().line
+let listed = []
+let vis = n.la_visible()
+for (let i = 0; i < len(vis); i += 1) {
+  push(listed, vis[i].row.line)
+}
+let shown = []
+let rows = n.view_visible()
+for (let i = 0; i < len(rows); i += 1) {
+  push(shown, rows[i].item.line)
+}
+puts(line, n.ed_rows()[3].collapsed, list.index(listed, line) >= 0, list.index(shown, line) >= 0)
+
+puts("-- the compact palette and the fill chip follow the selection")
+click(on_canvas((100, 100)))
+puts(n.ed_model().line, n.pal_title(n.pal_target()), n.ct_read(n.art_chip_target()))
+n.PAL.sel = "sea"
+n.view_touch()
+rig_frame(rig)
+puts(n.pal_title(n.pal_target()))
+click(sun)
+puts(n.ed_model().line, n.pal_title(n.pal_target()), n.ct_read(n.pal_target()), n.ct_read(n.art_chip_target()))
+
+puts("-- the context bar never runs off the window")
+puts(ctx_inside(), n.view_props_cached().ctx_end <= n.V.w)
+cmds.Tool(["brush"])
+rig_frame(rig)
+puts(n.view_props_cached().ctx_title, ctx_inside())
+n.lang_use("es")
+n.view_touch()
+rig_frame(rig)
+puts(n.view_props_cached().ctx_title, ctx_inside())
+n.V.w = 360
+n.view_touch()
+rig_frame(rig)
+let ids = []
+let own = n.view_props_cached().own
+for (let i = 0; i < len(own); i += 1) {
+  push(ids, own[i].id)
+}
+puts(ctx_inside(), list.index(ids, "art:more") >= 0)
+n.art_ctx_press("art:more")
+rig_frame(rig)
+puts(ctx_inside(), n.CTX.page)
+n.V.w = 512
+n.lang_use("en")
+n.view_touch()
+rig_frame(rig)
+
+puts("-- Spanish: the built-in pens' names, the language's errors")
+n.lang_use("es")
+puts(n.pen_display_name(n.pens.ink), n.pen_display_name(n.pens.calligraphy), n.t("pen.copy_name", {"name": n.pen_display_name(n.pens.ink)}))
+puts(n.err_words("[line 3, column 5] runtime error: wrong number of arguments: want 1, got 2"))
+puts(n.g_fit_words("elige una pluma · el engranaje la ajusta", 120))
+n.lang_use("en")
+puts(n.err_words("[line 3, column 5] runtime error: division by zero"))
+puts(rig.ed.error)

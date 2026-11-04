@@ -1,5 +1,6 @@
 -~> Autocomplete: ranking, members, the document's own names, the inserted call with
 -~> its first argument selected, Tab between arguments, the signature hint, Enter, undo.
+use "../complete_info"
 use "../complete_model"
 use "../complete_state"
 use "../editor_commands"
@@ -315,3 +316,106 @@ puts(ed_undo_text())
 puts(t("complete.header"), t("complete.member", {"owner": "math"}))
 set_language("en")
 puts(ed_undo_text())
+
+-~> == The approved list (R002-20, 22): kind column, icons, doc block ==
+function shown_rows() {
+  let out = []
+  for (let i = 0; i < len(cmp.items); i = i + 1) {
+    let it = cmp.items[i].item
+    push(out, it.name + " " + cmp_icon(it) + cmp_icon_letter(it) + " " + cmp_kind_label(ed_model(), it))
+  }
+  text.join(out, " | ")
+}
+function block_now() {
+  let b = cmp_doc_block(cmp.items[cmp.sel].item)
+  let sig = b.name
+  if (b.call) {
+    sig = b.name + "(" + b.params + ")"
+  }
+  sig + " / " + b.doc
+}
+fresh("function circle_ring(c, r) {\n  circle(c, r, #fff)\n}\nlet city_glow = 3\nlayer city\n  rect((0, 0), (1, 1), #000)\n")
+typed("ci")
+puts(shown_rows())
+puts(block_now())
+fresh("")
+typed("math.s")
+puts(shown_rows())
+puts(block_now())
+fresh("")
+typed("pens.c")
+puts(shown_rows(), "/", block_now())
+fresh("let colors = {\"sun\": #fff3c4}\n")
+typed("colors.s")
+puts(shown_rows(), "/", block_now())
+fresh("")
+typed("conti")
+puts(shown_rows(), "/", block_now())
+set_language("es")
+fresh("")
+typed("math.s")
+puts(shown_rows(), "/", block_now(), "/", t("complete.footer"))
+set_language("en")
+
+-~> == Typing a row keeps the last good drawing ==
+-~> A half-typed name or call breaks the run; while the caret stays on the row
+-~> its errors wait and the drawing stays as it was (no error state).
+fresh("circle((10, 10), 5, #fff)\n")
+ed_settle()
+typed("ci")
+ed_settle()
+puts("typing ci:", len(ed.shapes), len(ed.errors), ed.stale, ed_holding(), cmp_typing())
+press("Escape", null)
+puts("list closed, still held:", ed_holding(), cmp_typing(), len(ed.errors))
+typed("rcle((20, 20), ")
+ed_settle()
+cmp_sync()
+puts("half a call:", len(ed.errors), ed.stale, ed_holding(), cmp.hint.param)
+ed_move_caret("up", false)
+cmp_sync()
+puts("caret left the row:", len(ed.errors), ed.stale, ed_holding(), ed.errors[0].line)
+ed_move_caret("down", false)
+cmp_sync()
+puts("back on it:", len(ed.errors), ed.stale, ed_holding())
+-~> Finishing the row runs it as usual.
+fresh("circle((10, 10), 5, #fff)\n")
+ed_settle()
+typed("rect((1, 1), (2, 2), #000)")
+ed_settle()
+puts("finished:", len(ed.shapes), len(ed.errors), ed.stale, ed_holding())
+-~> Enter on a broken row shows its errors.
+fresh("circle((10, 10), 5, #fff)\n")
+ed_settle()
+typed("ci")
+ed_settle()
+press("Escape", null)
+press("Enter", null)
+ed_settle()
+cmp_sync()
+puts("enter:", len(ed.errors), ed.stale, ed_holding())
+-~> A drawing that was broken already shows a new error at once.
+fresh("nope(1)\n")
+ed_settle()
+typed("ci")
+ed_settle()
+puts("already broken:", len(ed.errors), ed.stale, ed_holding())
+-~> Typing on a row while another row changed since the last good run: shown.
+fresh("circle((10, 10), 5, #fff)\n")
+ed_settle()
+ed_set_code("circle((10, 10), 5, #fff)\nzz\n")
+ed_settle()
+puts("set code:", len(ed.errors), ed.stale, ed_holding())
+-~> Undo after a held error: the good text again, nothing held.
+fresh("circle((10, 10), 5, #fff)\n")
+ed_settle()
+typed("ci")
+ed_settle()
+ed_undo()
+ed_settle()
+cmp_sync()
+puts("undo:", len(ed.errors), ed.stale, ed_holding(), editor_debug_state().complete.held)
+-~> The properties panel's line while typing, cut at a space when the panel is narrow.
+let wide = cmp_props_typing("P", 400)
+let narrow = cmp_props_typing("P", 244)
+puts(wide.msg, "|", wide.hint)
+puts(narrow.msg, "|", narrow.hint)

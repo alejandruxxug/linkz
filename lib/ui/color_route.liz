@@ -11,10 +11,12 @@ use "color_draw"
 use "color_popover"
 use "color_state"
 use "color_target"
+use "color_vars"
 use "editor_props"
 use "editor_state"
 use "fill_editor"
 use "i18n"
+use "overlay_rules"
 use "palette_view"
 use "view_code"
 use "view_gfx"
@@ -178,7 +180,11 @@ function color_down(e) {
         y = vis[i].y
       }
     }
-    cp_open(color_target_of(tg), [rr[1] + rr[0].swatches[int(parts[3])][0], y + 3, 7, 12])
+    -~> the swatch gets the ring; beside it, the popover leaves the literal readable
+    let sx = rr[1] + rr[0].swatches[int(parts[3])][0]
+    let lw = math.max(7, math.min(8 + (tg.c2 - tg.c1) * 7, view_geom().pw - sx))
+    cp_open(color_target_of(tg), [sx, y + 3, 7, 12], [sx, y + 3, lw, 12], [sx - 1, y + 6, 8, 8])
+    ov_quiet_here()
     return true
   }
   if (parts[1] == "field") {
@@ -189,7 +195,7 @@ function color_down(e) {
     }
     let tg = color_target_of({"kind": "span", "line": f.line, "c1": f.start, "c2": f.end})
     let r = view_hit_rect("field:" + parts[2] + ":0")
-    cp_open(tg, r)
+    cp_open(tg, r, null, r)
     return true
   }
   false
@@ -248,6 +254,25 @@ function color_tip(hover) {
   let size = tip_size(lines)
   let at = tip_place([anchor.x, anchor.y, anchor.w, anchor.h], size, 3)
   {"lines": lines, "x": at[0], "y": at[1], "w": size[0], "h": size[1], "key": hover}
+}
+
+-~> == Named colors in the properties ==
+
+-~> The swatch of a properties field that names a color variable
+-~> (`colors.sun`): the variable's color (a gradient's first stop), or null
+-~> for any other field. Such a field is a color field like a literal (style
+-~> guide R002: "named colors get a swatch like a literal"): its swatch
+-~> opens the popover, with the variable marked current.
+function color_field_swatch(f) {
+  let s = text.trim(f.text)
+  if (f.missing || f.kind == "color" || !text.starts(s, colors_name + ".")) {
+    return null
+  }
+  let v = ct_var(text.slice(s, len(colors_name) + 1, len(s)))
+  if (v == null) {
+    return null
+  }
+  ct_color_of(v.value)
 }
 
 -~> == The properties panel beside the sidebar ==

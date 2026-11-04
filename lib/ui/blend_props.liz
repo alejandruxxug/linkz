@@ -165,7 +165,7 @@ function blend_props_wrap(lay) {
     shown = t("blend.code")
   }
   let bw = math.max(82, bm_size(0)[0] - 20)
-  push(lay.boxes, {"field": "blend", "sub": 0, "kind": "blend", "x": x, "y": y, "w": bw, "h": 16, "text": shown, "focus": BM.open})
+  push(lay.boxes, {"field": "blend", "sub": 0, "kind": "blend", "x": x, "y": y, "w": bw, "h": 16, "text": shown, "focus": blend_menu_open_from("props")})
   x = x + bw + 8
   let ptxt = str(blend_percent(st.opacity)) + "%"
   let focused = V.focus != null && V.focus.field == "opacity"
@@ -243,7 +243,7 @@ function blend_props_press(b, e) {
     if (BM.open) {
       blend_menu_close()
     } else {
-      blend_menu_open(props.line, [b.x, b.y, b.w, b.h], false)
+      blend_menu_open(props.line, [b.x, b.y, b.w, b.h], false, "props")
     }
     view_after()
     return true

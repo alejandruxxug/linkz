@@ -1,0 +1,178 @@
+-~> The overlays and popups of the v1.1 design check, in a headless editor:
+-~> a fill that names a color variable is a color field (swatch, popover with
+-~> the variable current); the popover keeps its place when "Save as
+-~> variable…" opens and rings what it edits; the signature hint waits while
+-~> it is open and after a canvas tool moved the caret; menus stay above the
+-~> status bar and inside the window; the fill editor goes over the code and
+-~> hides the select handles; a selected layer gets its dashed box; the blend
+-~> dropdown rings only the control that opened it.
+
+use "../../lib/app/editor"
+use "rig"
+
+let code = "canvas = {\"size\": (480, 320), \"background\": #f6d9a8}
+let colors = {\"sky\": #f2a65a, \"sun\": #fff3c4}
+layer sun
+  circle((360, 90), 34, colors.sun)
+  circle((360, 90), 56, #f2a65a66)
+layer sky
+  blend(\"multiply\")
+  rect((0, 0), (480, 200), colors.sky)
+  circle((60, 60), 20, #3b2a6b)
+  line((10, 300), (200, 300), #3b2a6b, 3)
+"
+
+let modules = rig_modules + ["ui/view_panels", "ui/view_canvas", "ui/color_popover", "ui/color_route", "ui/color_target", "ui/shape_menu",
+  "ui/fill_editor", "ui/blend_menu", "ui/blend_props", "ui/tool_select", "ui/overlay_rules", "ui/complete_state"]
+let rig = rig_open(fs.join(fs.home(), "overlays-test"), code, editor_size, modules)
+let n = rig.names
+
+function key(k) {
+  rig_frame(rig, [{"type": "key", "key": k}])
+}
+
+function click(p, button = "left") {
+  rig_frame(rig, [{"type": "down", "pos": p, "button": button}, {"type": "up", "pos": p, "button": button}])
+}
+
+function hover(p) {
+  rig_frame(rig, [{"type": "move", "pos": p}])
+}
+
+-~> Selects the row on `line` the way a click does (the view follows).
+function select(line) {
+  n.ed_select(line)
+  n.view_after()
+  rig_frame(rig)
+}
+
+function mid(p) {
+  (p.x + p.w // 2, p.y + p.h // 2)
+}
+
+function cp_at(id) {
+  mid(n.cp_part(n.cp_layout(), id))
+}
+
+function box(field) {
+  let lay = n.view_props_cached()
+  for (let i = 0; i < len(lay.boxes); i += 1) {
+    if (lay.boxes[i].field == field) {
+      return lay.boxes[i]
+    }
+  }
+  null
+}
+
+-~> The UI point in the middle of the row on `line`, and of its k-th swatch.
+function on_row(line) {
+  let vis = n.view_visible()
+  for (let i = 0; i < len(vis); i += 1) {
+    if (vis[i].item.t == "row" && vis[i].item.line == line) {
+      return (n.view_code_x(vis[i].item.row) + 20, vis[i].y + 9)
+    }
+  }
+  null
+}
+
+function swatch_of(line, k) {
+  let vis = n.view_visible()
+  for (let i = 0; i < len(vis); i += 1) {
+    if (vis[i].item.t == "row" && vis[i].item.line == line) {
+      let rr = n.view_row_render(vis[i].item.row)
+      return (rr[1] + rr[0].swatches[k][0] + 3, vis[i].y + 9)
+    }
+  }
+  null
+}
+
+function on_canvas(p) {
+  n.view_to_window(n.view_canvas_layout(), p) * 0.5
+}
+
+puts("-- a fill that names a variable is a color field with its swatch")
+select(4)
+let f = box("fill")
+puts(f.kind, f.text, f.swatch, rig.ed.error)
+select(5)
+puts(box("fill").kind, box("fill").swatch)
+
+puts("-- its swatch opens the popover with the variable current, the field ringed")
+select(4)
+f = box("fill")
+click((f.x + 7, f.y + 9))
+puts(n.CP.open, n.cp_current_var(), n.CP.ring == [f.x, f.y, f.w, f.h], n.ct_writes(n.CP.target))
+puts(n.CP.y + n.CP.h <= n.view_geom().status_y - 3, n.CP.y >= 18)
+
+puts("-- Save as variable… opens in place: same box, the name field instead of the link")
+let at = [n.CP.x, n.CP.y, n.CP.h]
+click(cp_at("save"))
+puts(n.CP.save, [n.CP.x, n.CP.y, n.CP.h] == at, n.cp_part(n.cp_layout(), "save") == null, n.cp_part(n.cp_layout(), "name") != null)
+key("Escape")
+puts(n.CP.save, n.CP.open)
+
+puts("-- the signature hint waits while the popover is open")
+puts(n.ov_cmp_quiet(), len(n.ov_cmp_rects()))
+key("Escape")
+puts(n.CP.open)
+
+puts("-- a row's swatch: the popover rings it, leaves the literal readable, and the hint waits after")
+click(swatch_of(5, 0))
+let kp = n.CP.keep
+puts(n.CP.open, n.CP.ring != null, n.CP.x >= kp[0] + kp[2] || n.CP.x + 172 <= kp[0] || n.CP.y >= kp[1] + kp[3] || n.CP.y + n.CP.h <= kp[1])
+key("Escape")
+puts(n.CP.open, n.ov_cmp_quiet())
+key("ArrowLeft")
+puts(n.ov_cmp_quiet())
+
+puts("-- a canvas tool quiets the hint until the caret moves")
+n.V.tool = "select"
+click(on_canvas((60, 60)))
+puts(list.index([8, 9], n.ed_model().line) >= 0, n.ov_cmp_quiet())
+key("ArrowRight")
+puts(n.ov_cmp_quiet())
+
+puts("-- menus end above the status bar, inside the window")
+let sy = n.view_geom().status_y
+click(on_row(10), "right")
+puts(n.SM.open, n.SM.y + n.SM.h + 3 <= sy, n.SM.x >= 1, n.SM.x + n.SM.w + 3 <= n.V.w)
+let fill_at = list.index(n.sm_ids(n.SM.items), "fill")
+n.sm_open_sub("fill")
+let sub = n.sm_sub_box()
+puts(sub.y + sub.h + 3 <= sy, sub.x >= 1, sub.x + sub.w + 3 <= n.V.w, fill_at >= 0)
+key("Escape")
+key("Escape")
+puts(n.SM.open)
+click(on_canvas((190, 300)), "right")
+puts(n.SM.open, n.SM.line, n.SM.y + n.SM.h + 3 <= sy, n.SM.x + n.SM.w + 3 <= n.V.w)
+key("Escape")
+
+puts("-- the fill editor: over the code when the canvas is narrow, the select handles give way")
+select(8)
+let cl = n.view_canvas_layout()
+puts(n.select_handle_at(cl, n.select_ui_box(cl, n.select_shapes())[0], n.select_ui_box(cl, n.select_shapes())[1]) != null, n.ov_shape_handles())
+n.fe_open(8, "fill")
+rig_frame(rig)
+let gm = n.view_geom()
+puts(n.FE.open, n.ov_shape_handles(), n.select_handle_at(cl, n.select_ui_box(cl, n.select_shapes())[0], n.select_ui_box(cl, n.select_shapes())[1]))
+puts(n.FE.x + 186 <= gm.cx || n.FE.x >= on_canvas((480, 0)).x, n.FE.x >= 2)
+n.fe_close()
+rig_frame(rig)
+
+puts("-- a selected layer gets the dashed box around what it draws")
+select(6)
+cl = n.view_canvas_layout()
+let lb = n.ov_layer_box(cl)
+let lo = n.view_to_window(cl, (0, 0))
+let hi = n.view_to_window(cl, (480, 300))
+puts(lb != null, lb[0] < lo.x, lb[1] < lo.y, lb[2] > hi.x, lb[3] > hi.y)
+select(8)
+puts(n.ov_layer_box(n.view_canvas_layout()))
+
+puts("-- the blend dropdown rings only the control that opened it")
+select(6)
+let b = box("blend")
+click((b.x + 10, b.y + 8))
+puts(n.BM.open, n.blend_menu_open_from("props"), n.blend_menu_open_from("layers"), box("blend").focus)
+key("Escape")
+puts(n.BM.open, n.blend_menu_open_from("props"))

@@ -1,0 +1,195 @@
+-~> complete_info: what a suggestion says about itself in the list (R002-20,
+-~> 22): its icon, the kind in the right column (`function`, `line 30`,
+-~> `value`, `layer`, `keyword`, `pen`, or the owner of a member such as
+-~> `math`) and the doc block under the rows (a signature line and a doc
+-~> line). The words come from the language files; the signatures of the
+-~> builtin members are code, so they are written here.
+
+use "doc_cache"
+use "editor_doc"
+use "i18n"
+use "icons"
+use "view_gfx"
+
+-~> The signatures of the builtin hashes' members the editor offers after a dot,
+-~> with their docs in the language files as `member.<owner>.<name>`.
+let cmp_member_sigs = {
+  "math.abs": "math.abs(x)",
+  "math.acos": "math.acos(x)",
+  "math.angle": "math.angle(p, q)",
+  "math.asin": "math.asin(x)",
+  "math.atan2": "math.atan2(y, x)",
+  "math.ceil": "math.ceil(x)",
+  "math.cos": "math.cos(x)",
+  "math.dist": "math.dist(p, q)",
+  "math.floor": "math.floor(x)",
+  "math.max": "math.max(a, b, ...)",
+  "math.min": "math.min(a, b, ...)",
+  "math.pi": "math.pi",
+  "math.random": "math.random(a, b)",
+  "math.round": "math.round(x)",
+  "math.seed": "math.seed(n)",
+  "math.sin": "math.sin(x)",
+  "math.sqrt": "math.sqrt(x)",
+  "math.tan": "math.tan(x)",
+  "math.tau": "math.tau",
+  "text.char": "text.char(code)",
+  "text.code": "text.code(s, i)",
+  "text.digest": "text.digest(s)",
+  "text.ends": "text.ends(s, suffix)",
+  "text.find": "text.find(s, sub)",
+  "text.join": "text.join(list, sep)",
+  "text.lines": "text.lines(s)",
+  "text.lower": "text.lower(s)",
+  "text.number": "text.number(s)",
+  "text.replace": "text.replace(s, old, new)",
+  "text.slice": "text.slice(s, start, end)",
+  "text.split": "text.split(s, sep)",
+  "text.starts": "text.starts(s, prefix)",
+  "text.trim": "text.trim(s)",
+  "text.upper": "text.upper(s)",
+  "list.copy": "list.copy(a)",
+  "list.index": "list.index(a, x)",
+  "list.insert": "list.insert(a, i, x)",
+  "list.remove": "list.remove(a, i)",
+  "list.reverse": "list.reverse(a)",
+  "list.slice": "list.slice(a, start, end)",
+  "list.sort": "list.sort(a)"
+}
+
+-~> == The icon ==
+
+-~> The icon of an item: a drawing function that makes a shape gets the shape's
+-~> icon (the one its rows have), the other functions and values ƒ, a layer the
+-~> layer icon, a pen the brush. A keyword has no icon: it shows a `k`
+-~> (cmp_icon_letter).
+function cmp_icon(item) {
+  let k = item.kind
+  if (k == "fn") {
+    let name = item.name
+    if (name == "ellipse") {
+      name = "circle"
+    }
+    if (icon_art[name] != null) {
+      return name
+    }
+    return "function"
+  }
+  if (k == "layer") {
+    return "layer"
+  }
+  if (k == "pen" || (k == "member" && item.owner == "pens")) {
+    return "brush"
+  }
+  if (k == "kw") {
+    return ""
+  }
+  "function"
+}
+
+-~> The letter drawn in place of an icon, or "".
+function cmp_icon_letter(item) {
+  if (item.kind == "kw") {
+    return "k"
+  }
+  ""
+}
+
+-~> == The kind column ==
+
+-~> The line where the document defines the function `name` (its first
+-~> definition, searching layers, blocks and bodies), or 0. Kept per text.
+let cmp_def_cache = {"id": -1, "lines": {}}
+
+function cmp_def_line(m, name) {
+  if (cmp_def_cache.id != doc_id(m)) {
+    cmp_def_cache.id = doc_id(m)
+    cmp_def_cache.lines = {}
+  }
+  let at = cmp_def_cache.lines[name]
+  if (at == null) {
+    at = cmp_find_def(doc_parsed(m).statements, name)
+    cmp_def_cache.lines[name] = at
+  }
+  at
+}
+
+function cmp_find_def(stmts, name) {
+  for (let i = 0; i < len(stmts); i = i + 1) {
+    let s = stmts[i]
+    if (s.kind == "function" && s.name == name) {
+      return s.line
+    }
+    let inner = cmp_find_def(s.children, name)
+    if (inner > 0) {
+      return inner
+    }
+  }
+  0
+}
+
+-~> The text of the right column for an item of the model m.
+function cmp_kind_label(m, item) {
+  let k = item.kind
+  if (k == "user") {
+    let line = cmp_def_line(m, item.name)
+    if (line > 0) {
+      return t("complete.kind.line", {"n": line})
+    }
+    return t("complete.kind.fn")
+  }
+  if (k == "member") {
+    if (item.owner == "pens") {
+      return t("complete.kind.pen")
+    }
+    return item.owner
+  }
+  t(prefixed("complete.kind.", k))
+}
+
+-~> == The doc block ==
+
+-~> The doc block of an item: {"name", "call", "params", "doc"}. A call (call
+-~> true) is shown as its name and its parameters in parentheses; doc is the
+-~> second line, "" for none.
+function cmp_doc_block(item) {
+  let k = item.kind
+  if ((k == "fn" || k == "user") && item.params != null) {
+    let doc = item.summary
+    if (doc == null || doc == "") {
+      doc = t(prefixed("complete.", k))
+    }
+    return {"name": item.name, "call": true, "params": text.join(item.params, ", "), "doc": doc}
+  }
+  if (k == "member") {
+    return cmp_member_block(item)
+  }
+  if (k == "pen") {
+    return {"name": item.name, "call": false, "params": "", "doc": item.summary}
+  }
+  let head = item.name
+  if (k == "layer") {
+    head = "layer " + item.name
+  }
+  {"name": head, "call": false, "params": "", "doc": t(prefixed("complete.", k))}
+}
+
+-~> A member's block: the signature and doc of a builtin (`math.sin(x)`, `Sine
+-~> of x in radians.`), the pen's description, or `colors.sun` and whose part it is.
+function cmp_member_block(item) {
+  let full = item.owner + "." + item.name
+  let sig = cmp_member_sigs[full]
+  if (sig != null) {
+    let open = text.find(sig, "(")
+    if (open < 0) {
+      return {"name": sig, "call": false, "params": "", "doc": t("member." + full)}
+    }
+    let params = text.slice(sig, open + 1, len(sig) - 1)
+    return {"name": text.slice(sig, 0, open), "call": true, "params": params, "doc": t("member." + full)}
+  }
+  let doc = item.summary
+  if (doc == null || doc == "") {
+    doc = t("complete.member", {"owner": item.owner})
+  }
+  {"name": full, "call": false, "params": "", "doc": doc}
+}

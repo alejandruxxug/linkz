@@ -113,8 +113,10 @@ function cmp_force() {
 
 -~> After anything changed: the list closes when the caret left its word, the
 -~> arguments end when the line changed under them, the hint follows the caret.
+-~> Errors held while a row was typed show once the caret has left it.
 -~> Nothing to do when the text, the caret and the list are as at the last sync.
 function cmp_sync() {
+  ed_hold_release()
   if (cmp_sync_key() == cmp.synced) {
     return null
   }
@@ -298,7 +300,8 @@ function cmp_ed_key(name, mods) {
 }
 
 -~> What the backdoor's Dump shows: the list ({"open", "items", "selected"}), the signature
--~> hint (callee and the current parameter) and the argument that is selected.
+-~> hint (callee and the current parameter), the argument that is selected and
+-~> whether the caret row's errors are held while it is typed.
 function cmp_debug_state() {
   cmp_sync()
   let names = []
@@ -314,5 +317,31 @@ function cmp_debug_state() {
     let sp = cmp.ph.spans[cmp.ph.cur]
     arg = text.slice(cmp.ph.expect, sp[0], sp[1])
   }
-  {"open": cmp.open, "items": names, "selected": cmp.sel, "hint": hint, "arg": arg}
+  {"open": cmp.open, "items": names, "selected": cmp.sel, "hint": hint, "arg": arg, "held": ed_holding()}
+}
+
+-~> Whether the caret's row is being typed: the list is open on it, or its errors
+-~> are held. The properties panel then says how typing ends (R002-20..22).
+function cmp_typing() {
+  cmp.open || ed_holding()
+}
+
+-~> What the properties panel shows while the row is typed: `typing… Tab
+-~> completes, Enter keeps the line` under the title, cut at a space onto a
+-~> second line when it is wider than `room` pixels (7 per character).
+function cmp_props_typing(title, room) {
+  let msg = t("complete.typing")
+  let rest = ""
+  let fit = room // 7
+  if (len(msg) > fit) {
+    let cut = fit
+    while (cut > 0 && msg[cut] != " ") {
+      cut = cut - 1
+    }
+    if (cut > 0) {
+      rest = text.slice(msg, cut + 1, len(msg))
+      msg = text.slice(msg, 0, cut)
+    }
+  }
+  {"title": title, "labels": [], "boxes": [], "msg": msg, "hint": rest, "props": null}
 }

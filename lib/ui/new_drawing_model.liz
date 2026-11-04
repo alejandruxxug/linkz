@@ -9,10 +9,12 @@ use "budget_model"
 use "home_data"
 use "i18n"
 
--~> The size presets, in the order of their buttons. A4 is 210 x 297 mm at
+-~> The size presets, in the order of their buttons; the first one (480 x
+-~> 320, the size of the examples and the tutorial) is the default. A4 is 210 x 297 mm at
 -~> 150 dpi; phone is a 6.1" phone's screen. A label is a language key, or
 -~> the size itself when it has none.
 let nd_presets = [
+  {"id": "wide", "size": (480, 320), "key": null},
   {"id": "square", "size": (512, 512), "key": null},
   {"id": "post", "size": (1080, 1080), "key": null},
   {"id": "hd", "size": (1920, 1080), "key": null},
@@ -35,15 +37,25 @@ let nd_fields = ["name", "w", "h", "bg"]
 function nd_new(taken) {
   {
     "name": home_free_name(t("new.untitled"), taken),
+    "name_lang": lang_get(),
     "fresh": true,
-    "preset": "square",
-    "w": "512",
-    "h": "512",
+    "preset": nd_presets[0].id,
+    "w": str(nd_presets[0].size.x),
+    "h": str(nd_presets[0].size.y),
     "bg": nd_backgrounds[0],
     "focus": "name",
     "error": "",
     "error_at": "",
     "measure": ""
+  }
+}
+
+-~> The proposed name in the language now: an untouched one follows a
+-~> change of language ("Untitled 3" becomes "Sin título 3").
+function nd_name_follow(d, taken) {
+  if (d.fresh && d.name_lang != lang_get()) {
+    d.name = home_free_name(t("new.untitled"), taken)
+    d.name_lang = lang_get()
   }
 }
 

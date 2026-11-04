@@ -64,7 +64,7 @@ function pw_open(key) {
   pw.orig = pen_deep_copy(pen)
   pw.name = pen.name
   if (pen_is_builtin(key)) {
-    pw.name = t("pen.copy_name", {"name": pen.name})
+    pw.name = t("pen.copy_name", {"name": pen_display_name(pen)})
   }
   pw.name_focus = false
   pw.name_caret = len(pw.name)

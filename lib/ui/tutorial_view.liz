@@ -10,7 +10,8 @@
 -~> exactly what was painted in a frame (tut_overlay, after the panels);
 -~> when the targets move every panel is painted again (tutorial.liz).
 -~> The coach-mark is a popup: it is drawn last, over everything, and
--~> hides while another popup (a color popover, the pen picker) is open.
+-~> hides while another popup (the pen picker, a menu) is open; under a
+-~> color popover it waits, drawn before it.
 
 use "app"
 use "color_route"
@@ -36,9 +37,25 @@ let tut_sparkles = [[-11, 0, "amber"], [-23, 12, "peach"], [99, -4, "lizard"], [
 -~> == Where it goes ==
 
 -~> Whether the coach-mark shows now: not while a dialog or a popup has the
--~> user's attention (the spotlight stays).
+-~> user's attention (the spotlight stays). A color popover is the step's own
+-~> action (step 2): the coach-mark waits under it.
 function tut_box_shown() {
-  V.dialog == null && !V.picker && !color_popup_open() && !shape_popup_open() && !pen_route_popup_open()
+  V.dialog == null && !V.picker && !shape_popup_open() && !pen_route_popup_open()
+}
+
+-~> Whether a UI point is on an open color popover (over the coach-mark).
+function tut_under_color(x, y) {
+  if (!color_popup_open()) {
+    return false
+  }
+  let rs = color_popup_rects()
+  for (let i = 0; i < len(rs); i += 1) {
+    let r = rs[i][1]
+    if (view_in(x, y, r[0], r[1], r[2], r[3])) {
+      return true
+    }
+  }
+  false
 }
 
 -~> A rectangle grown by d on every side.
@@ -221,7 +238,7 @@ function tut_popup_key() {
 -~> tut:box for the rest of it), or null.
 function tut_hover_at(x, y) {
   let lay = TUT.lay
-  if (!TUT.on || lay == null || !lay.shown) {
+  if (!TUT.on || lay == null || !lay.shown || tut_under_color(x, y)) {
     return null
   }
   for (let i = 0; i < len(lay.buttons); i += 1) {

@@ -31,6 +31,7 @@ use "shape_popups"
 use "tool_route"
 use "color_route"
 use "tutorial_view"
+use "overlay_rules"
 
 -~> == What is under the pointer ==
 
@@ -1089,6 +1090,7 @@ function view_max_top() {
 -~> brush) are in view_tools.liz.
 function view_canvas_down(e) {
   tools_canvas_down(e)
+  ov_quiet_here()
 }
 
 function view_canvas_move(e) {
@@ -1097,6 +1099,7 @@ function view_canvas_move(e) {
 
 function view_canvas_up(e) {
   tools_canvas_up(e)
+  ov_quiet_here()
 }
 
 -~> == The keyboard ==

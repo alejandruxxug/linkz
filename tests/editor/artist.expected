@@ -45,7 +45,7 @@ opacity opfield
   opacity(0.5)
   circle((360, 90), 20, #fff3c4)   circle((360, 90), 56, #f2a65a66)
 -- the drawer: Cmd+/ and the button; the rows under the canvas
-true 232 247 182 [0, 232, 360, 112] [0, 50, 20, 182]
+true 196 211 146 [0, 196, 360, 148] [0, 50, 20, 146]
 true dr:head dr:close
 269
 false

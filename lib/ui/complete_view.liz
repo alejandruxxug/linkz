@@ -1,10 +1,14 @@
 -~> complete_view: where the suggestion list, the signature hint and the selected
--~> argument go on screen, and drawing them. The look is the pen picker's: a `row`
--~> box with a `void` outline, a `bevel` top line and a 2 px shadow, a `raised`
--~> header, 18 px rows with a `moss` selected row and a `lizard` bar.
--~> cmp_popup_rects() works the layout out once per paint (view_popups calls it
--~> and then cmp_draw()).
+-~> argument go on screen, and drawing them, as the approved frames R002-20..22
+-~> have them. The list is 214 wide under the word: 14 px rows (the kind's icon,
+-~> the name with the typed letters in `lizard`, the kind in `mute` on the
+-~> right; the selected row `moss` with a `lizard` bar), then the doc block
+-~> (signature, one doc line) and the footer `Tab insert · Esc close`. The box
+-~> is the pen picker's: `row`, a `void` outline, a `bevel` top line and a
+-~> 2 px shadow. cmp_popup_rects() works the layout out once per paint
+-~> (view_popups calls it and then cmp_draw()).
 
+use "complete_info"
 use "complete_state"
 use "editor_doc"
 use "editor_undo"
@@ -14,35 +18,11 @@ use "view_gfx"
 use "view_layout"
 use "view_panels"
 
+-~> The height of a code row (the list opens under it) and of a list row.
 let cmp_row_h = 18
+let cmp_item_h = 14
+let cmp_list_w = 214
 let cmp_list_max_w = 330
-
--~> The icon of a kind of item and its color.
-function cmp_icon(kind) {
-  if (kind == "fn" || kind == "user") {
-    return "function"
-  }
-  if (kind == "layer") {
-    return "layer"
-  }
-  if (kind == "kw") {
-    return "chevron-right"
-  }
-  "dot"
-}
-
-function cmp_icon_color(kind) {
-  if (kind == "fn") {
-    return P.lizard
-  }
-  if (kind == "kw") {
-    return P.sky
-  }
-  if (kind == "let") {
-    return P.amber
-  }
-  P.text
-}
 
 -~> A text cut to fit w pixels, with a » when it was cut.
 function cmp_fit(s, w) {
@@ -51,25 +31,6 @@ function cmp_fit(s, w) {
     return s
   }
   text.slice(s, 0, math.max(0, room - 1)) + "»"
-}
-
--~> The part of an item shown after its name: "(center, r, fill)" for a function.
-function cmp_tail(item) {
-  if ((item.kind == "fn" || item.kind == "user") && item.params != null) {
-    return "(" + text.join(item.params, ", ") + ")"
-  }
-  ""
-}
-
--~> The line under the list about the selected item.
-function cmp_footer_text(item) {
-  if (item.summary != null && item.summary != "") {
-    return item.summary
-  }
-  if (item.kind == "member") {
-    return t("complete.member", {"owner": item.owner})
-  }
-  t(prefixed("complete.", item.kind))
 }
 
 -~> Where the caret is on screen: {"x", "y", "cx", "row", "start_x"} or null when its row is
@@ -97,31 +58,45 @@ function cmp_caret_pos() {
 
 -~> == The list ==
 
+-~> The doc block's height: a signature line and, when there is one, a doc line.
+function cmp_block_h(block) {
+  if (block.doc == "") {
+    return 17
+  }
+  30
+}
+
 function cmp_list_layout(pos) {
+  let m = ed_model()
   let n = len(cmp.items)
   let shown = math.min(n, cmp_max_visible)
-  let w = 150
+  let kinds = []
+  let w = cmp_list_w
   for (let i = 0; i < n; i = i + 1) {
     let it = cmp.items[i].item
-    w = math.max(w, 16 + g_text_w(it.name + cmp_tail(it)) + 12)
+    let kind = cmp_kind_label(m, it)
+    push(kinds, kind)
+    w = math.max(w, 16 + g_text_w(it.name) + 14 + g_text_w(kind) + 8)
   }
   w = math.min(w, cmp_list_max_w)
-  let h = 16 + shown * cmp_row_h + 18
-  let x = math.max(2, math.min(pos.start_x - 4, V.w - w - 4))
+  let block = cmp_doc_block(cmp.items[cmp.sel].item)
+  let h = 1 + shown * cmp_item_h + 1 + cmp_block_h(block) + cmp_item_h + 1
+  let x = math.max(2, math.min(pos.start_x - 16, V.w - w - 4))
   let y = pos.y + cmp_row_h
   let above = false
   if (y + h + 2 > V.h - 16) {
     y = pos.y - h
     above = true
   }
-  {"x": x, "y": math.max(0, y), "w": w, "h": h, "shown": shown, "above": above}
+  {"x": x, "y": math.max(0, y), "w": w, "h": h, "shown": shown, "above": above, "kinds": kinds, "block": block}
 }
 
--~> Draws a name with the letters the prefix matched in amber.
-function cmp_draw_name(name, hits, x, y, color) {
+-~> Draws a name with the letters the prefix matched in lizard. The hits count
+-~> from `at` (a pen's letters are matched after its `pens.`).
+function cmp_draw_name(name, hits, at, x, y, color) {
   let marks = {}
   for (let i = 0; i < len(hits); i = i + 1) {
-    marks[str(hits[i])] = true
+    marks[str(hits[i] + at)] = true
   }
   let k = 0
   while (k < len(name)) {
@@ -132,59 +107,121 @@ function cmp_draw_name(name, hits, x, y, color) {
     }
     let c = color
     if (hot) {
-      c = P.amber
+      c = P.lizard
     }
     g_text(text.slice(name, k, e), x + k * 7, y, c)
     k = e
   }
 }
 
+function cmp_draw_row(l, i, ry) {
+  let e = cmp.items[i]
+  let it = e.item
+  let on = i == cmp.sel
+  let tc = P.text
+  let kc = P.mute
+  let ic = P.mute
+  if (on) {
+    g_rect(l.x + 1, ry, l.w - 2, cmp_item_h, P.moss)
+    g_rect(l.x + 1, ry, 2, cmp_item_h, P.lizard)
+    tc = P.bright
+    kc = P.text
+    ic = P.lizard
+  }
+  let icon = cmp_icon(it)
+  if (icon != "") {
+    g_icon(icon, l.x + 5, ry + 3, ic)
+  } else {
+    g_text(cmp_icon_letter(it), l.x + 5, ry + 1, ic)
+  }
+  let kind = l.kinds[i]
+  let kw = g_text_w(kind)
+  let at = 0
+  if (it.at != null) {
+    at = it.at
+  }
+  let room = l.w - 16 - kw - 14
+  if (g_text_w(it.name) > room) {
+    g_text(cmp_fit(it.name, room), l.x + 16, ry + 1, tc)
+  } else {
+    cmp_draw_name(it.name, e.hits, at, l.x + 16, ry + 1, tc)
+  }
+  g_text(kind, l.x + l.w - 6 - kw, ry + 1, kc)
+}
+
+-~> The signature line of a doc block or hint: the name and parentheses
+-~> `bright`, the parameters `mute`; returns the x after it.
+function cmp_draw_sig(block, x, y) {
+  g_text(block.name, x, y, P.bright)
+  if (!block.call) {
+    return x + g_text_w(block.name)
+  }
+  let px = x + g_text_w(block.name)
+  g_text("(", px, y, P.bright)
+  g_text(block.params, px + 7, y, P.mute)
+  let cx = px + 7 + g_text_w(block.params)
+  g_text(")", cx, y, P.bright)
+  cx + 7
+}
+
 function cmp_draw_list(l) {
   g_box(l.x, l.y, l.w, l.h)
-  g_rect(l.x + 1, l.y + 1, l.w - 2, 13, P.raised)
-  g_text(text.upper(t("complete.header")) + " · " + str(len(cmp.items)), l.x + 5, l.y, P.mute)
   for (let r = 0; r < l.shown; r = r + 1) {
-    let i = cmp.top + r
-    let e = cmp.items[i]
-    let it = e.item
-    let ry = l.y + 16 + r * cmp_row_h
-    let tc = P.text
-    if (i == cmp.sel) {
-      g_rect(l.x + 1, ry, l.w - 2, cmp_row_h, P.moss)
-      g_rect(l.x + 1, ry, 2, cmp_row_h, P.lizard)
-      tc = P.bright
-    }
-    g_icon(cmp_icon(it.kind), l.x + 5, ry + 5, cmp_icon_color(it.kind))
-    cmp_draw_name(it.name, e.hits, l.x + 16, ry + 3, tc)
-    let tail = cmp_fit(cmp_tail(it), l.w - 16 - 7 * len(it.name) - 8)
-    g_text(tail, l.x + 16 + 7 * len(it.name), ry + 3, P.mute)
+    cmp_draw_row(l, cmp.top + r, l.y + 1 + r * cmp_item_h)
   }
-  if (len(cmp.items) > l.shown) {
-    let ty = l.y + 16
-    let th = l.shown * cmp_row_h
-    g_rect(l.x + l.w - 5, ty, 4, th, P.coal)
-    let bh = math.max(6, th * l.shown // len(cmp.items))
-    let by = ty + (th - bh) * cmp.top // math.max(1, len(cmp.items) - l.shown)
-    g_rect(l.x + l.w - 5, by, 4, bh, P.bevel)
+  let n = len(cmp.items)
+  if (n > l.shown) {
+    let ty = l.y + 1
+    let th = l.shown * cmp_item_h
+    g_rect(l.x + l.w - 4, ty, 3, th, P.coal)
+    let bh = math.max(6, th * l.shown // n)
+    let by = ty + (th - bh) * cmp.top // math.max(1, n - l.shown)
+    g_rect(l.x + l.w - 4, by, 3, bh, P.bevel)
   }
-  let fy = l.y + 16 + l.shown * cmp_row_h
+  let fy = l.y + 1 + l.shown * cmp_item_h
   g_rect(l.x + 1, fy, l.w - 2, 1, P.void)
-  g_text(cmp_fit(cmp_footer_text(cmp.items[cmp.sel].item), l.w - 12), l.x + 6, fy + 2, P.mute)
+  let b = l.block
+  let sig = b.name
+  if (b.call) {
+    sig = b.name + "(" + b.params + ")"
+  }
+  if (g_text_w(sig) > l.w - 12) {
+    g_text(cmp_fit(sig, l.w - 12), l.x + 6, fy + 3, P.bright)
+  } else {
+    cmp_draw_sig(b, l.x + 6, fy + 3)
+  }
+  if (b.doc != "") {
+    g_text(cmp_fit(b.doc, l.w - 12), l.x + 6, fy + 16, P.text)
+  }
+  let foot = l.y + l.h - 1 - cmp_item_h
+  g_rect(l.x + 1, foot, l.w - 2, cmp_item_h, P.panel)
+  g_text(cmp_fit(t("complete.footer"), l.w - 12), l.x + 6, foot + 1, P.mute)
 }
 
 -~> == The signature hint ==
+
+-~> The hint's doc line: the current parameter's name and its doc (R002-21:
+-~> `r the radius in pixels`), or the function's summary when the parameter
+-~> has no doc. {"param", "doc"}, param "" when the line is the summary.
+function cmp_hint_doc(h) {
+  if (h.doc != "") {
+    return {"param": h.param, "doc": h.doc}
+  }
+  {"param": "", "doc": h.summary}
+}
 
 -~> The hint's box and the x of each parameter in its first line.
 function cmp_hint_layout(pos, list_l) {
   let h = cmp.hint
   let sig = h.callee + "(" + text.join(h.params, ", ") + ")"
-  let doc = h.doc
-  if (doc == "") {
-    doc = h.summary
+  let line = cmp_hint_doc(h)
+  let doc_w = g_text_w(line.doc)
+  if (line.param != "") {
+    doc_w = doc_w + g_text_w(line.param + " ")
   }
-  let w = math.min(math.max(g_text_w(sig), g_text_w(doc)) + 12, 420)
+  let w = math.min(math.max(g_text_w(sig), doc_w) + 12, 420)
   let lines = 1
-  if (doc != "") {
+  if (line.doc != "") {
     lines = 2
   }
   let bh = lines * 15 + 6
@@ -207,22 +244,22 @@ function cmp_hint_layout(pos, list_l) {
     push(xs, dx)
     dx = dx + g_text_w(h.params[i]) + 14
   }
-  {"x": x, "y": math.max(0, y), "w": w, "h": bh, "doc": doc, "sig": sig, "xs": xs}
+  {"x": x, "y": math.max(0, y), "w": w, "h": bh, "line": line, "sig": sig, "xs": xs}
 }
 
+-~> The current parameter is `lizard` with a 1 px underline, the others `mute`.
 function cmp_draw_hint(l) {
   let h = cmp.hint
   g_box(l.x, l.y, l.w, l.h)
   let y = l.y + 4
-  g_text(h.callee, l.x + 6, y, P.bright)
-  g_text("(", l.x + 6 + g_text_w(h.callee), y, P.mute)
+  g_text(h.callee + "(", l.x + 6, y, P.bright)
   let dx = g_text_w(h.callee + "(")
   for (let i = 0; i < len(h.params); i = i + 1) {
     let p = h.params[i]
     let px = l.x + 6 + dx
     if (i == h.index) {
-      g_rect(px - 2, y + 1, g_text_w(p) + 4, 13, P.moss)
       g_text(p, px, y, P.lizard)
+      g_rect(px, y + 13, g_text_w(p), 1, P.lizard)
     } else {
       g_text(p, px, y, P.mute)
     }
@@ -231,9 +268,17 @@ function cmp_draw_hint(l) {
     }
     dx = dx + g_text_w(p) + 14
   }
-  g_text(")", l.x + 6 + g_text_w(h.callee + "(" + text.join(h.params, ", ")), y, P.mute)
-  if (l.doc != "") {
-    g_text(cmp_fit(l.doc, l.w - 12), l.x + 6, y + 15, P.text)
+  g_text(")", l.x + 6 + g_text_w(h.callee + "(" + text.join(h.params, ", ")), y, P.bright)
+  let line = l.line
+  if (line.doc != "") {
+    let x = l.x + 6
+    let room = l.w - 12
+    if (line.param != "") {
+      g_text(line.param, x, y + 15, P.lizard)
+      x = x + g_text_w(line.param + " ")
+      room = room - g_text_w(line.param + " ")
+    }
+    g_text(cmp_fit(line.doc, room), x, y + 15, P.text)
   }
 }
 
@@ -303,7 +348,7 @@ function cmp_content_key() {
   if (cmp.layout == null) {
     return ""
   }
-  let k = "c" + str(cmp.sel) + "," + str(cmp.top) + "," + str(len(cmp.items))
+  let k = "c" + str(cmp.sel) + "," + str(cmp.top) + "," + str(len(cmp.items)) + lang_get()
   if (cmp.open && len(cmp.items) > 0) {
     k = k + cmp.items[0].item.name
   }

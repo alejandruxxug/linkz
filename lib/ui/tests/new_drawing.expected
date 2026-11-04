@@ -3,8 +3,8 @@
 2500 2500
 1800 null
 0
-Untitled 2 true square 512 512 #ffffff name
-512×512 | 1080×1080 | 1920×1080 | A4 | Phone | Custom
+Untitled 2 true wide 480 320 #ffffff name
+480×320 | 512×512 | 1080×1080 | 1920×1080 | A4 | Phone | Custom
 a4 1240 1754
 custom 1240 1754 w false
 192 custom
@@ -27,9 +27,9 @@ null Width and height: 1 to 10000 w
 null Use a color like #ffffff
 sunset-2
 -~> lzdraw 1
-canvas = {"size": (640, 512), "background": #f4f1e8, "max_objects": 1800}
+canvas = {"size": (640, 320), "background": #f4f1e8, "max_objects": 1800}
 
-[] {"size": (640, 512), "background": #f4f1e8, "max_objects": 1800}
+[] {"size": (640, 320), "background": #f4f1e8, "max_objects": 1800}
 true Untitled 2
 {"x": 106, "y": 64, "w": 300, "h": 234} 274 true
 dune hd 1920 1080

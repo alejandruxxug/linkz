@@ -1,16 +1,19 @@
 -~> artist_tools: the tool column of artist mode (style guide R002 "Artist
 -~> mode": 20 wide, tools 14×14 step 15 from y 53, the fill / stroke chips
 -~> at the bottom). The buttons are the toolbar's tools ("tool:<id>"), so a
--~> click does what the toolbar's does. The fill chip is the color new
--~> shapes get (a click opens the color popover on it); the stroke chip
--~> behind it is the selected shape's stroke color.
+-~> click does what the toolbar's does. The fill chip is the selected
+-~> shape's fill, else the color new shapes get (a click opens the color
+-~> popover on it); the stroke chip behind it is the selected shape's stroke
+-~> color.
 
 use "artist_layout"
 use "color_popover"
+use "color_target"
 use "editor_props"
 use "editor_state"
 use "editor_undo"
 use "mode_state"
+use "palette_compact"
 use "view_gfx"
 use "view_layout"
 use "view_panels"
@@ -66,12 +69,22 @@ function art_stroke_color() {
   g_hex_color(f.text)
 }
 
+-~> What the fill chip shows and edits: the selected shape's fill, else
+-~> the color new shapes get.
+function art_chip_target() {
+  let tg = pal_compact_fill_target()
+  if (tg == null) {
+    return {"kind": "tool"}
+  }
+  tg
+}
+
 function art_tools_key() {
   let press = ""
   if (V.drag != null && V.drag.kind == "press") {
     press = V.drag.id
   }
-  str(V.h) + "|" + str(mode_drawer()) + str(MODE.low) + "|" + V.tool + "|" + V.hover + "|" + press + "|" + ed.color + "|" + str(art_stroke_color()) + "|" + str(V.picker)
+  str(V.h) + "|" + str(mode_drawer()) + str(MODE.low) + "|" + V.tool + "|" + V.hover + "|" + press + "|" + ed.color + "|" + str(ct_read(art_chip_target())) + "|" + str(art_stroke_color()) + "|" + str(V.picker)
 }
 
 function art_tools_paint() {
@@ -99,7 +112,7 @@ function art_tools_paint() {
     g_rect(s[0] + 1, s[1] + 1, s[2] - 2, s[3] - 2, sc)
   }
   let f = chips.fill
-  let fc = g_hex_color(ed.color)
+  let fc = ct_read(art_chip_target())
   g_frame(f[0], f[1], f[2], f[3], P.void)
   if (fc != null) {
     g_rect(f[0] + 1, f[1] + 1, f[2] - 2, f[3] - 2, fc)
@@ -113,6 +126,6 @@ function art_tools_paint() {
 function art_tools_chip() {
   let chips = art_chips(view_geom())
   if (chips != null) {
-    cp_open({"kind": "tool"}, chips.fill)
+    cp_open(art_chip_target(), chips.fill)
   }
 }

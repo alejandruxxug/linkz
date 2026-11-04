@@ -348,11 +348,11 @@ function home_write_new(name, body) {
   {"path": path}
 }
 
--~> A new empty drawing, "Untitled", made and opened at once (the backdoor's
+-~> A new empty drawing, "Untitled" ("Sin título"), made and opened at once (the backdoor's
 -~> NewDrawing).
 function home_new_drawing() {
   let taken = home_names(home_list(home_dir()))
-  let made = home_write_new(home_free_name("Untitled", taken), home_new_text())
+  let made = home_write_new(home_free_name(t("new.untitled"), taken), home_new_text())
   if (made.error != null) {
     home_say(made.error)
     return false

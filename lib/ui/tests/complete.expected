@@ -1,4 +1,4 @@
-ci: true circle continue
+ci: true circle continue pens.calligraphy
 sw: stroke_width 1 [0, 7]
 crc: circle 2 [0, 2, 3]
 c (by length): catch circle continue color_hex
@@ -57,7 +57,7 @@ same word stays closed: false
 next word opens: true
   let a = 1
 down: 1
-up wraps: 7 0
+up wraps: 8 1
 scroll: 9 2
 math.max
 caret moved off: false
@@ -89,3 +89,23 @@ false circle center (256, 256)
 insertar circle
 sugerencias parte de math
 insert circle
+city layer layer | circle circle function | city_glow function value | circle_ring function line 1 | continue k keyword | pens.calligraphy brush pen
+layer city / your layer
+sin function math | seed function math | sqrt function math
+math.sin(x) / Sine of x in radians.
+calligraphy brush pen / pens.calligraphy / 45° nib
+sun function colors / colors.sun / part of colors
+continue k keyword / continue / keyword
+sin function math | seed function math | sqrt function math / math.sin(x) / Seno de x en radianes. / Tab inserta · Esc cierra
+typing ci: 1 0 false true true
+list closed, still held: true true 0
+half a call: 0 false true r
+caret left the row: 1 true false 2
+back on it: 1 true false
+finished: 2 0 false false
+enter: 1 true false
+already broken: 1 true false
+set code: 1 true false
+undo: 0 false false false
+typing… Tab completes, Enter keeps the line | 
+typing… Tab completes, Enter keeps | the line

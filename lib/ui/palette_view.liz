@@ -34,6 +34,12 @@ use "view_layout"
 
 -~> The target of the sidebar (color_target.liz).
 function pal_target() {
+  if (mode_artist()) {
+    let own = pal_compact_target()
+    if (own != null) {
+      return own
+    }
+  }
   if (PAL.sel != null && ct_var(PAL.sel) != null) {
     return {"kind": "var", "name": PAL.sel}
   }

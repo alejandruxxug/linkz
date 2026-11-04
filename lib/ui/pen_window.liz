@@ -172,7 +172,7 @@ function pw_draw_title(lay) {
   }
   let head = text.upper(t("pen.settings"))
   g_text(head, tr[0] + 11, tr[1] + 1, P.mute)
-  let name = pw.draft.name
+  let name = pen_display_name(pw.draft)
   g_text(" · " + name, tr[0] + 11 + g_text_w(head), tr[1] + 1, P.bright)
   let rs = lay.reset
   g_rect(rs[0] - 3, tr[1] + 3, 1, 10, P.bevel)
@@ -398,14 +398,63 @@ function pw_draw_save(lay) {
   g_text(note, lay.pad[0] + lay.pad[2] + 5, lay.win[1] + 200, nc)
 }
 
--~> The lines the code view shows now and the one to mark: {"lines", "mark"}.
+-~> How many characters a line of the code view holds before it wraps.
+let pw_code_chars = 63
+
+-~> The lines the code view shows now, long ones wrapped (style guide R002
+-~> 18b: `"catch_up": true}}` goes on the next line), and the ones to mark:
+-~> {"lines", "mark", "mark_end"} (mark -1 for none; mark_end is the last
+-~> piece of the marked line).
 function pw_code_view() {
-  let lines = pen_code_lines(pw.draft)
-  let mark = -1
+  let code = pen_code_lines(pw.draft)
+  let at = -1
   if (pw.changed != "") {
-    mark = pen_code_line_of(lines, pw.changed)
+    at = pen_code_line_of(code, pw.changed)
   }
-  {"lines": lines, "mark": mark}
+  let lines = []
+  let mark = -1
+  let mark_end = -1
+  for (let i = 0; i < len(code); i = i + 1) {
+    if (i == at) {
+      mark = len(lines)
+    }
+    let pieces = pw_code_pieces(code[i].s, pw_code_chars)
+    for (let k = 0; k < len(pieces); k = k + 1) {
+      push(lines, {"s": pieces[k], "key": code[i].key})
+    }
+    if (i == at) {
+      mark_end = len(lines) - 1
+    }
+  }
+  {"lines": lines, "mark": mark, "mark_end": mark_end}
+}
+
+-~> A line of code cut into pieces of at most max characters, after a ", "
+-~> when it can; the pieces after the first are indented two more.
+function pw_code_pieces(s, max) {
+  let out = []
+  let indent = ""
+  while (len(indent) < len(s) && text.slice(s, len(indent), len(indent) + 1) == " ") {
+    indent = indent + " "
+  }
+  let rest = s
+  let lead = ""
+  while (len(lead) + len(rest) > max) {
+    let room = max - len(lead)
+    let cut = room
+    let k = room - 1
+    while (k > 1 && text.slice(rest, k - 1, k + 1) != ", ") {
+      k = k - 1
+    }
+    if (k > 1) {
+      cut = k + 1
+    }
+    push(out, lead + text.slice(rest, 0, cut))
+    rest = text.slice(rest, cut, len(rest))
+    lead = indent + "  "
+  }
+  push(out, lead + rest)
+  out
 }
 
 -~> Scrolls the code view so the marked line shows (it stays put otherwise).
@@ -415,8 +464,8 @@ function pw_code_follow() {
   if (v.mark >= 0) {
     if (v.mark < top) {
       top = v.mark
-    } elif (v.mark >= top + pw_code_lines) {
-      top = v.mark - pw_code_lines + 1
+    } elif (v.mark_end >= top + pw_code_lines) {
+      top = math.max(v.mark, v.mark_end - pw_code_lines + 1)
     }
   }
   pw.code_top = math.max(0, math.min(top, len(v.lines) - pw_code_lines))
@@ -436,7 +485,7 @@ function pw_draw_code(lay) {
     let k = pw.code_top + i
     if (k < n) {
       let y = cr[1] + 2 + i * 13
-      if (k == v.mark) {
+      if (k >= v.mark && k <= v.mark_end) {
         g_rect(cr[0] + 1, y, cr[2] - 6, 13, P.row)
         g_rect(cr[0] + 1, y, 2, 13, P.amber)
       }

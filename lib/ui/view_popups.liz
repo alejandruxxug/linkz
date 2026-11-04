@@ -26,6 +26,7 @@ use "view_layout"
 use "shape_popups"
 use "color_route"
 use "tutorial_view"
+use "overlay_rules"
 
 let tip_delay = 400
 
@@ -104,14 +105,14 @@ function tip_tool_lines(id) {
 
 -~> The tooltip lines of a pen in the picker.
 function tip_pen_lines(pen) {
-  let name = pen.name
+  let name = pen_display_name(pen)
   return [[tip_piece(name, 0, "bright"), tip_piece(" · pens." + pen_key_of(pen), g_text_w(name), "mute")],
     [tip_piece(picker_desc(pen), 0, "text")]]
 }
 
 -~> The tooltip of a pen row's gear: what it opens.
 function tip_gear_lines(pen) {
-  return [[tip_piece(t("pen.gear_tip"), 0, "bright")], [tip_piece(t("pen.gear_opens", {"name": pen.name}), 0, "mute")]]
+  return [[tip_piece(t("pen.gear_tip"), 0, "bright")], [tip_piece(t("pen.gear_opens", {"name": pen_display_name(pen)}), 0, "mute")]]
 }
 
 -~> Where a tooltip of size [w, h] goes for a thing at rect [x, y, w, h]: just below it,
@@ -325,10 +326,12 @@ function pick_draw(current) {
     }
     g_frame(px + 5, ry + 1, 52, 18, P.void)
     g_rect(px + 6, ry + 2, 50, 16, P.coal)
-    g_text(pen.name, px + 62, ry + 1, tc)
-    let desc = picker_desc(pen)
-    if (g_text_w(pen.name) + g_text_w(desc) + 7 < r[2] - 86) {
-      g_text(desc, px + 62 + g_text_w(pen.name) + 7, ry + 1, P.mute)
+    let shown = pen_display_name(pen)
+    g_text(shown, px + 62, ry + 1, tc)
+    -~> the description fits what is left of the row, cut at a word
+    let desc = g_fit_words(picker_desc(pen), r[2] - 86 - g_text_w(shown) - 7)
+    if (desc != "") {
+      g_text(desc, px + 62 + g_text_w(shown) + 7, ry + 1, P.mute)
     }
     let gr = picker_gear_rect(i)
     let gc = P.dim
@@ -425,7 +428,7 @@ function popup_list() {
   out = out + shape_popup_rects()
   out = out + color_popup_rects()
   if (V.dialog == null) {
-    out = out + cmp_popup_rects()
+    out = out + ov_cmp_rects()
   }
   out + tut_popup_rects()
 }
@@ -473,7 +476,13 @@ function popup_paint() {
     push(both, "cmp")
   }
   if (len(tut_popup_rects()) > 0) {
-    push(both, "tut")
+    -~> the coach-mark waits under an open color popover (tutorial step 2)
+    let at = list.index(both, "color")
+    if (at >= 0) {
+      list.insert(both, at, "tut")
+    } else {
+      push(both, "tut")
+    }
   }
   for (let pass = 0; pass < 2; pass = pass + 1) {
     if (pass == 0) {

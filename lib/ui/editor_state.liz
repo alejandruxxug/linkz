@@ -45,6 +45,10 @@ function ed_run_now() {
     -~> a spliced parse took the text for broken (see doc_splice.liz)
     doc_cache_rescan(m)
   }
+  ed.held = null
+  if (len(r.errors) > 0 && ed_typing_alone(m)) {
+    return ed_hold(m, r)
+  }
   ed.runs = ed.runs + 1
   ed.errors = r.errors
   ed.printed = r.printed
@@ -67,9 +71,68 @@ function ed_run_now() {
   r
 }
 
+-~> == Holding the errors of the row being typed ==
+
+-~> Whether the only change since the last good run is typing on the caret's
+-~> row: the drawing had no errors and every other row is as it was then. A
+-~> half-typed name (`ci`) or call (`circle((360, `) breaks the run on every
+-~> letter; those errors are the row's own and can wait.
+function ed_typing_alone(m) {
+  let k = ed.edit_key
+  if ((k != "type" && k != "backspace" && k != "delete") || ed.ran == null || ed.stale || len(ed.errors) > 0) {
+    return false
+  }
+  let old = ed.ran.model.lines
+  let now = m.lines
+  let at = m.line - 1
+  len(old) == len(now) && list.slice(old, 0, at) === list.slice(now, 0, at) &&
+    list.slice(old, at + 1, len(old)) === list.slice(now, at + 1, len(now))
+}
+
+-~> A run with errors while the row is being typed: the last good drawing stays
+-~> as it is, with no error on it, and the errors wait in ed.held until the
+-~> caret leaves the row (ed_hold_release). ed.ran stays the last good run.
+function ed_hold(m, r) {
+  ed.held = {"errors": r.errors, "line": m.line, "id": doc_id(m), "printed": r.printed}
+  ed.runs = ed.runs + 1
+  ed.stats = {"ms": r.ms, "steps": r.steps}
+  ed.patch = null
+  ed.pending = false
+  r
+}
+
+-~> Shows the held errors once the caret is on another row (Enter, a click, an
+-~> arrow): the drawing goes into the error state as any broken run does. True
+-~> when it did. Held errors of an older text are dropped (its run is pending).
+function ed_hold_release() {
+  let h = ed.held
+  if (h == null) {
+    return false
+  }
+  let m = ed_model()
+  if (doc_id(m) != h.id) {
+    ed.held = null
+    return false
+  }
+  if (m.line == h.line) {
+    return false
+  }
+  ed.held = null
+  ed.errors = h.errors
+  ed.printed = h.printed
+  ed.stale = true
+  true
+}
+
+-~> Whether the caret's row has errors held while it is typed.
+function ed_holding() {
+  ed.held != null && ed.held.line == ed_model().line
+}
+
 -~> The text is the one of the last good run again (an error typed and taken
 -~> back): its shapes are the ones on the canvas, nothing runs.
 function ed_run_same(m) {
+  ed.held = null
   let printed = ed.ran.printed
   if (printed == null) {
     printed = ""
@@ -98,6 +161,7 @@ function ed_run_patch(m, patch) {
   -~> the same kind of shape call on the same row: the drawing stays as plain as it was
   ed.ran = {"model": m, "literal": true, "plain": ed.ran.plain}
   ed.errors = []
+  ed.held = null
   ed.printed = ""
   ed.stale = false
   ed.runs = ed.runs + 1
@@ -130,6 +194,7 @@ function ed_run_range(m, patch) {
   ed.patch = patch
   ed.ran = {"model": m, "literal": true, "plain": true}
   ed.errors = []
+  ed.held = null
   ed.printed = ""
   ed.stale = false
   ed.runs = ed.runs + 1

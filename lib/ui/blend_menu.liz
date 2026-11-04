@@ -15,7 +15,7 @@ use "view_gfx"
 use "view_input"
 use "view_layout"
 
-let BM = {"open": false, "line": 0, "x": 0, "y": 0, "w": 0, "h": 0, "hot": -1, "mode": "normal"}
+let BM = {"open": false, "line": 0, "x": 0, "y": 0, "w": 0, "h": 0, "hot": -1, "mode": "normal", "from": ""}
 
 let bm_row_h = 14
 let bm_sep_h = 4
@@ -98,7 +98,9 @@ function bm_size(min_w) {
 
 -~> Opens the list for the layer on `line` under the box [x, y, w, h] (or
 -~> over it, when the window ends first), right-aligned with it when `right`.
-function blend_menu_open(line, box, right) {
+-~> `from` names the control that opened it: only that one shows the amber
+-~> ring (blend_menu_open_from).
+function blend_menu_open(line, box, right, from = "") {
   let st = layer_style_of(ed_model(), line)
   if (st == null) {
     return false
@@ -113,7 +115,7 @@ function blend_menu_open(line, box, right) {
     x = box[0] + box[2] - size[0]
   }
   let y = box[1] + box[3] + 1
-  if (y + size[1] + 3 > V.h) {
+  if (y + size[1] + 3 > view_geom().status_y) {
     y = box[1] - size[1] - 1
   }
   BM.x = math.max(1, math.min(x, V.w - size[0] - 3))
@@ -123,9 +125,15 @@ function blend_menu_open(line, box, right) {
   BM.line = line
   BM.mode = st.mode
   BM.hot = list.index(blend_menu_modes, st.mode)
+  BM.from = from
   BM.open = true
   view_touch()
   true
+}
+
+-~> Whether the list is open and was opened from the control `from`.
+function blend_menu_open_from(from) {
+  BM.open && BM.from == from
 }
 
 function blend_menu_close() {

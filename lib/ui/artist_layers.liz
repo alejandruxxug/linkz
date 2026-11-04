@@ -342,7 +342,7 @@ function art_layers_press(id, e) {
       if (BM.open) {
         blend_menu_close()
       } else {
-        blend_menu_open(layer, p, false)
+        blend_menu_open(layer, p, false, "layers")
       }
       view_after()
     } else {
@@ -543,7 +543,7 @@ function la_paint_blend(ps) {
     mode = st.mode
     op = st.opacity
   }
-  g_field(b[0], b[1], b[2], b[3], BM.open || V.hover == "al:blend")
+  g_field(b[0], b[1], b[2], b[3], blend_menu_open_from("layers") || V.hover == "al:blend")
   let tc = P.text
   if (st == null) {
     tc = P.dim
@@ -632,6 +632,11 @@ function la_paint_row(row, y, m) {
     lt_draw(rec, x + 34 + d, y + 1)
     let badge = blend_badge_text(blend_row_style(row))
     let room = w - 67 - d - 6
+    -~> the name comes first: the badge drops its opacity (the header shows it)
+    let parts = text.split(badge, " ")
+    if (len(parts) > 1 && g_text_w(row.stmt.name) > room - g_text_w(badge) - 6) {
+      badge = parts[0]
+    }
     if (badge != "") {
       room = room - g_text_w(badge) - 6
       g_text(badge, x + w - 6 - g_text_w(badge), y + 4, P.mute)

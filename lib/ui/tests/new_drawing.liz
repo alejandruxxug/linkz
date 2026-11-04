@@ -126,7 +126,7 @@ function click(r) {
   nd_event({"type": "down", "button": 0, "pos": at(r)})
 }
 nd_event({"type": "text", "text": "dune", "mods": {"cmd": false, "ctrl": false}})
-click(lay.presets[2])
+click(lay.presets[3])
 puts(nd_view.d.name, nd_view.d.preset, nd_view.d.w, nd_view.d.h)
 nd_event({"type": "move", "pos": at(lay.info)})
 puts(nd_view.hover)

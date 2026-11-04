@@ -1,0 +1,32 @@
+-- the zoom rule: rail 90%, open palette 55%
+false 0.9
+true 0.55
+-- the status bar: the counter whole, the cursor gives way
+["drawing.lzdraw", "saved", "objects 6", "x 300 y 100", "90%", "EN"]
+["a-drawing-with-a-very-long-name-that-…", "saved", "objects 6", "90%", "EN"]
+-- the brush: its inspector in two rows, its hint there and not in the status bar
+PROPERTIES · brush · pens.ink 0 0
+["pen", "drag, pressure sets…", "stab."]
+true
+["pen", "arrastra, la…", "estab."] 0
+-- artist mode: 125%, the drawer at y 196 and 75%, every tool above it
+1.25
+196 0.75 true 11
+-- a shape picked on the canvas is revealed: its layer opens, both panels show its row
+5 false true true
+-- the compact palette and the fill chip follow the selection
+13 colors.sky #f2a65a
+colors.sea
+5 COLOR #fff3c4 #fff3c4
+-- the context bar never runs off the window
+true true
+["brush", "brush", "sun"] true
+["brush", "pincel", ""] true
+true true
+true 1
+-- Spanish: the built-in pens' names, the language's errors
+tinta caligrafía mi tinta
+[line 3, column 5] error de ejecución: número de argumentos incorrecto: se esperan 1, hay 2
+elige una pluma…
+[line 3, column 5] runtime error: division by zero
+

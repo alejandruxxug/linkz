@@ -4,16 +4,78 @@
 -~> alpha and the eyedropper, one row of variable chips and recent colors).
 -~> It edits what the sidebar edits (palette_view.liz: the color new shapes
 -~> get, a selected variable, the fill editor's stop) with the sidebar's own
--~> parts and ids, laid out smaller; folded it is its header.
+-~> parts and ids, laid out smaller; folded it is its header. It follows the
+-~> selection: a selected shape's fill is what it shows and edits
+-~> (pal_compact_target), and picking another shape ends editing a variable.
 
 use "color_draw"
 use "color_picker"
 use "color_state"
 use "color_target"
+use "editor_props"
+use "editor_state"
+use "editor_undo"
+use "fill_editor"
 use "palette_view"
+use "select_model"
 use "view_canvas"
 use "view_gfx"
 use "view_layout"
+
+-~> seen: the selection the palette last followed; key and tg: the target
+-~> worked out for the editor's state `key`.
+let pcmp = {"seen": "", "key": "", "tg": null}
+
+-~> The selected shape's fill as a target (color_target.liz): its color
+-~> literal as a span, or the variable it names; null when the selection has
+-~> no plain color fill (a gradient, an expression, nothing selected), and
+-~> while the brush or the pencil paints in the color new strokes get.
+function pal_compact_fill_target() {
+  let key = str(V.ver) + "|" + str(ed_model().line) + "|" + V.tool
+  if (key == pcmp.key) {
+    return pcmp.tg
+  }
+  pcmp.key = key
+  pcmp.tg = null
+  if (V.tool == "brush" || V.tool == "pencil") {
+    return null
+  }
+  let props = ed_props()
+  if (props == null || props.kind != "call") {
+    return null
+  }
+  let f = props_field_named(props, "fill")
+  if (f == null || f.missing) {
+    return null
+  }
+  let tg = {"kind": "span", "line": f.line, "c1": f.start, "c2": f.end}
+  let ref = ct_span_ref(tg)
+  if (ref != null && ct_var(ref) != null) {
+    pcmp.tg = {"kind": "var", "name": ref}
+  } elif (f.kind == "color") {
+    pcmp.tg = tg
+  }
+  pcmp.tg
+}
+
+-~> What the compact palette edits in artist mode (pal_target asks it
+-~> first): the selected shape's fill, or null for the sidebar's own targets
+-~> (a variable picked in it, the fill editor's stop, the color new shapes
+-~> get). A newly selected shape with a fill ends editing a variable.
+function pal_compact_target() {
+  let tg = pal_compact_fill_target()
+  let seen = str(ed_model().line) + "|" + pick_key()
+  if (seen != pcmp.seen) {
+    pcmp.seen = seen
+    if (tg != null) {
+      PAL.sel = null
+    }
+  }
+  if (tg == null || PAL.sel != null || (FE.open && FE.f != null && !FE.code)) {
+    return null
+  }
+  tg
+}
 
 -~> Where everything sits: the sidebar's layout keys that the compact form
 -~> has, plus "compact" and "chips" ([{"id", "x", "y", "v"}]).

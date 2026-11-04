@@ -1,0 +1,34 @@
+-- a fill that names a variable is a color field with its swatch
+color colors.sun #fff3c4 
+color null
+-- its swatch opens the popover with the variable current, the field ringed
+true sun true colors.sun
+true true
+-- Save as variable… opens in place: same box, the name field instead of the link
+true true true true
+false true
+-- the signature hint waits while the popover is open
+true 0
+false
+-- a row's swatch: the popover rings it, leaves the literal readable, and the hint waits after
+true true true
+false true
+false
+-- a canvas tool quiets the hint until the caret moves
+true true
+false
+-- menus end above the status bar, inside the window
+true true true true
+true true true true
+false
+true 10 true true
+-- the fill editor: over the code when the canvas is narrow, the select handles give way
+true true
+true false null
+true true
+-- a selected layer gets the dashed box around what it draws
+true true true true true
+null
+-- the blend dropdown rings only the control that opened it
+true true false true
+false false

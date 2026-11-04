@@ -13,13 +13,13 @@ select
 [10, 11]
 -- a drag moves every selected shape, one undo step
 [10, 11]
-circle((329, 131), 34, #fff3c4) | circle((329, 131), 56, #f2a65a66)
+circle((330, 131), 34, #fff3c4) | circle((330, 131), 56, #f2a65a66)
 1 move 2 objects [10, 11]
 -- the arrows nudge while the canvas has the keyboard
-circle((330, 121), 34, #fff3c4) | circle((330, 121), 56, #f2a65a66) nudge
+circle((331, 121), 34, #fff3c4) | circle((331, 121), 56, #f2a65a66) nudge
 circle((360, 90), 34, #fff3c4) | circle((360, 90), 56, #f2a65a66)
 -- the handles scale and turn
-circle((375, 105), 49, #fff3c4) scale circle
+circle((373, 102), 47, #fff3c4) scale circle
 [14, 15]
 polygon([(137, 171), (137, 231), (119, 216), (119, 186)], #3b2a6b) | line((137, 201), (181, 201), #3b2a6b, 3) rotate 2 objects
 -- a rect can't turn, and a shape made by a loop can't move

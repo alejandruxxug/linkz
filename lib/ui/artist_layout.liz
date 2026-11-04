@@ -37,31 +37,31 @@ function art_right_x(w) {
   w - art_right_w
 }
 
--~> The top of the code drawer between y0 and the status bar at sy.
--~> The drawer opens from the middle, but never over the tool column's
--~> tools (R003 put select and lasso in the column after R002 was drawn:
--~> eleven tools reach y 230). The lowered drawer (its chevron) leaves the
--~> canvas three quarters.
+-~> The top of the code drawer between y0 and the status bar at sy: from
+-~> the middle (y 196 in 512×360, the approved frame), or three quarters down
+-~> when lowered (its chevron). The tool column packs its tools above it
+-~> (art_column).
 function art_drawer_top(sy) {
   let top = art_top + (sy - art_top) // 2 - 1
   if (MODE.low == true) {
     top = art_top + (sy - art_top) * 3 // 4 - 1
   }
-  math.min(sy - 40, math.max(top, art_column_end() + 2))
+  math.min(sy - 40, top)
 }
+
+-~> The y the tool column ends at now (art_geom notes it: the drawer's top,
+-~> or the status bar's).
+let art_col = {"bottom": 344}
 
 -~> The y under the column's last tool.
 function art_column_end() {
-  let n = 0
-  let seps = 0
-  for (let i = 0; i < len(art_tool_ids); i = i + 1) {
-    if (art_tool_ids[i] == "") {
-      seps = seps + 1
-    } else {
-      n = n + 1
-    }
+  let col = art_column()
+  let n = len(col.buttons)
+  if (n == 0) {
+    return art_top + 3
   }
-  art_top + 3 + n * 15 + seps * 4
+  let b = col.buttons[n - 1]
+  b.y + b.h + 1
 }
 
 -~> The geometry view_geom gives in artist mode (same keys as coder mode):
@@ -76,6 +76,7 @@ function art_geom(w, h) {
   if (mode_drawer()) {
     top = art_drawer_top(sy)
   }
+  art_col.bottom = top
   let rows_y = math.min(sy, top + 15)
   {
     "w": w,
@@ -135,21 +136,41 @@ function art_bar_buttons() {
 }
 
 -~> The tool column's buttons (group "tool") and the y of its separators.
+-~> Tools are 14×14 at step 15 with 4 px between groups; when they don't
+-~> fit above the drawer the groups close up to 2 px, then the tools shrink
+-~> (down to 11×11 at step 12), so every tool stays on screen.
 function art_column() {
+  let n = 0
+  let seps = 0
+  for (let i = 0; i < len(art_tool_ids); i = i + 1) {
+    if (art_tool_ids[i] == "") {
+      seps = seps + 1
+    } else {
+      n = n + 1
+    }
+  }
+  let room = art_col.bottom - 2 - (art_top + 3)
+  let step = 15
+  let gap = 4
+  if (n * step + seps * gap > room) {
+    gap = 2
+    step = math.max(12, math.min(15, (room - seps * gap) // n))
+  }
   let out = []
-  let seps = []
+  let marks = []
   let y = art_top + 3
   for (let i = 0; i < len(art_tool_ids); i = i + 1) {
     let id = art_tool_ids[i]
     if (id == "") {
-      push(seps, y + 1)
-      y = y + 4
+      push(marks, y + gap // 2 - 1)
+      y = y + gap
     } else {
-      push(out, {"id": id, "group": "tool", "x": 3, "y": y, "w": 14, "h": 14, "icon": id, "label": ""})
-      y = y + 15
+      let size = step - 1
+      push(out, {"id": id, "group": "tool", "x": 3 + (14 - size) // 2, "y": y, "w": size, "h": size, "icon": id, "label": ""})
+      y = y + step
     }
   }
-  {"buttons": out, "seps": seps}
+  {"buttons": out, "seps": marks}
 }
 
 -~> The fill and stroke chips at the bottom of the column: [x, y, w, h]

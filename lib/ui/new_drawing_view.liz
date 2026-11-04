@@ -21,7 +21,7 @@ use "new_drawing_model"
 let nd_view = {"d": null, "hover": null, "size": (512, 360), "taken": [], "create": null, "again": false}
 
 -~> The dialog's own icons (8x8, one color).
-home_icon_art["objects"] = "........|.##..##.|.##..##.|........|........|.##..##.|.##..##.|........"
+home_icon_art["objects"] = "###..###|###..###|###..###|........|........|###..###|###..###|###..###"
 home_icon_art["info"] = "..####..|.#....#.|#..##..#|#......#|#..##..#|#..##..#|.#....#.|..####.."
 home_icon_art["close"] = "........|.#....#.|..#..#..|...##...|...##...|..#..#..|.#....#.|........"
 home_icons_init()
@@ -303,6 +303,7 @@ function nd_paint(size) {
     return null
   }
   nd_view.size = size
+  nd_name_follow(d, nd_view.taken)
   if (d.measure == "run") {
     nd_measure_now()
   }

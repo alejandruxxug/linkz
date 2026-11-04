@@ -18,7 +18,7 @@ use "view_gfx"
 use "view_layout"
 use "view_panels"
 
-icon_art["objects"] = "........|.##..##.|.##..##.|........|........|.##..##.|.##..##.|........"
+icon_art["objects"] = "###..###|###..###|###..###|........|........|###..###|###..###|###..###"
 icon_art["warn"] = "...##...|..#..#..|..#..#..|.#.##.#.|.#.##.#.|#......#|#..##..#|########"
 
 -~> How long the faster-machine note stays, in milliseconds.
@@ -30,8 +30,7 @@ let budget_hover_id = "status:objects"
 -~> The counter's rectangle [x, y, w, h] in the status bar, as it is painted
 -~> (view_paint_status), or null when it isn't shown.
 function budget_counter_rect() {
-  let parts = view_status_parts()
-  let left = status_fit(parts[0], V.w - 12 - status_width(parts[1]))
+  let left = view_status_fitted()[0]
   let y = view_geom().status_y
   let x = 6
   for (let i = 0; i < len(left); i = i + 1) {

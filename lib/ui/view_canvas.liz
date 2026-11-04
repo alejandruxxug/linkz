@@ -20,6 +20,7 @@ use "view_gfx"
 use "view_layout"
 use "view_scene"
 use "view_tools"
+use "overlay_rules"
 
 -~> A shape with its path and width multiplied by k (the zoom). Shapes at 100%
 -~> are used as they are.
@@ -60,6 +61,11 @@ function view_scale_shape(s, k) {
 
 -~> The shapes of the selected rows, as [{"shape", "line"}].
 function view_selected_shapes() {
+  -~> while the brush paints nothing shows selected on the canvas (R002 12):
+  -~> its rows stay selected in the code and the layers
+  if (V.tool == "brush") {
+    return []
+  }
   let m = ed_model()
   let a = m.line
   let b = m.line
@@ -121,6 +127,7 @@ function view_anchor_ui(cl, pos) {
 }
 
 function view_paint_selection(cl) {
+  ov_paint_layer_box(cl)
   if (route_paint(cl)) {
     return null
   }
@@ -137,6 +144,9 @@ function view_paint_selection(cl) {
       }
       view_sel_box(lo.x - pad, lo.y - pad, hi.x + pad, hi.y + pad)
     }
+  }
+  if (!ov_shape_handles()) {
+    return null
   }
   for (let n = 0; n < len(sel); n = n + 1) {
     let s = sel[n].shape
@@ -166,7 +176,7 @@ function view_paint_selection(cl) {
 -~> The anchor of a selected shape under a UI pixel (within 4), or null:
 -~> {"line", "i", "anchor", "pos", "role"}.
 function view_anchor_at(cl, ux, uy) {
-  if (route_owns(V.tool)) {
+  if (route_owns(V.tool) || !ov_shape_handles()) {
     return null
   }
   let sel = view_selected_shapes()
@@ -217,7 +227,17 @@ function view_hit_shape(cl, p) {
 
 -~> Selects the row of a line and opens the layers around it.
 function view_select_line(line) {
+  view_open_around(line)
+  ed_select(line)
+  view_show_line(line)
+}
+
+-~> Unfolds the layers (and blocks) a line is inside, so its row shows.
+function view_open_around(line) {
   let rows = view_rows()
+  if (line < 1 || line > len(rows)) {
+    return null
+  }
   let r = rows[line - 1]
   let chain = []
   while (r.parent > 0) {
@@ -229,7 +249,12 @@ function view_select_line(line) {
       ed_toggle_fold(chain[i].line)
     }
   }
-  ed_select(line)
+}
+
+-~> A line selected on the canvas shows everywhere: its layers unfold, and
+-~> the code panel (the drawer) and the layers panel scroll to its row.
+function view_show_line(line) {
+  view_open_around(line)
   view_touch()
   view_reveal(line)
 }
@@ -248,7 +273,7 @@ function view_canvas_key() {
     anchor = str(V.hover_anchor.line) + "." + str(V.hover_anchor.i) + "." + str(V.hover_anchor.anchor)
   }
   str(V.run_id) + "|" + str(ed.runs) + "|" + sel + "|" + str(ed.stale) + "|" + str(len(ed.errors)) + "|" + anchor + "|" + str(cl.zoom) + "|" +
-    str(cl.crect) + "|" + str(V.live_n) + str(V.sel_anchor) + "|" + str(V.w) + "x" + str(V.h) + "|" + str(V.pw) + "|" + str(ed_canvas_size()) + "|" + route_canvas_key()
+    str(cl.crect) + "|" + str(V.live_n) + str(V.sel_anchor) + "|" + str(V.w) + "x" + str(V.h) + "|" + str(V.pw) + "|" + str(ed_canvas_size()) + "|" + route_canvas_key() + "|" + str(V.tool == "brush")
 }
 
 function view_paint_canvas_ui(cl) {
@@ -320,6 +345,7 @@ function view_overlay_box(cl) {
     }
   }
   box = tiles_union(box, route_overlay_win(cl))
+  box = tiles_union(box, ov_layer_box(cl))
   if (box === null) {
     return null
   }

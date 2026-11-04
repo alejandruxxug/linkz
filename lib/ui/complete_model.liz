@@ -7,7 +7,9 @@
 -~>
 -~> An item is {"name", "kind", "sig", "summary", "example", "params", "lower"};
 -~> kind is fn (a drawing function), user (the document's own function), let,
--~> layer, kw (keyword) or member (after a dot).
+-~> layer, kw (keyword), pen (`pens.ink`, offered with the names) or member
+-~> (after a dot, with its "owner"). lower is what the typed letters match: for
+-~> a pen the part after `pens.`, which starts at "at" in the name.
 
 use "../draw/pens"
 use "doc_names"
@@ -322,6 +324,21 @@ function cmp_scan_keys(lines, from) {
   out
 }
 
+-~> The built-in pens as items `pens.ink`, ... (not `pens.list`, the list of them).
+function cmp_pen_items() {
+  let out = []
+  let names = list.sort(keys(pens))
+  for (let i = 0; i < len(names); i = i + 1) {
+    if (names[i] != "list") {
+      let it = cmp_item("pens." + names[i], "pen", "pens." + names[i], t(prefixed("pen.", names[i])), null, null)
+      it.lower = text.lower(names[i])
+      it.at = 5
+      push(out, it)
+    }
+  }
+  out
+}
+
 -~> The items after `owner.`: the builtin hashes, the pens, or a hash literal of the document.
 function cmp_member_items(m, owner) {
   let names = null
@@ -371,7 +388,7 @@ function cmp_candidates(m, owner, docs) {
       push(out, lib[i])
     }
   }
-  out + cmp_keyword_items()
+  out + cmp_keyword_items() + cmp_pen_items()
 }
 
 -~> == The call an accept inserts ==

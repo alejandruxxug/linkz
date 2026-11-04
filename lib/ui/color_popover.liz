@@ -35,6 +35,8 @@ let CP = {
   "open": false,
   "target": null,
   "anchor": null,
+  "keep": null,
+  "ring": null,
   "x": 0,
   "y": 0,
   "h": 0,
@@ -56,8 +58,11 @@ let cp_w = 172
 -~> == Opening ==
 
 -~> Opens the popover on a target (color_target.liz) next to the rectangle
--~> [x, y, w, h] that was clicked.
-function cp_open(tg, anchor) {
+-~> [x, y, w, h] that was clicked. `keep` is the rectangle it must not cover
+-~> when it goes beside the anchor (the literal the swatch edits; the anchor
+-~> when null), `ring` the one that gets the 1 px amber ring while it is open
+-~> (none when null).
+function cp_open(tg, anchor, keep = null, ring = null) {
   let c = ct_read(tg)
   if (c == null) {
     return false
@@ -65,6 +70,11 @@ function cp_open(tg, anchor) {
   CP.open = true
   CP.target = tg
   CP.anchor = anchor
+  CP.keep = keep
+  if (keep == null) {
+    CP.keep = anchor
+  }
+  CP.ring = ring
   CP.hsv = hsv_of(c)
   CP.old = c
   CP.focus = null
@@ -111,8 +121,11 @@ function cp_sync() {
   }
 }
 
--~> Puts the popover under its anchor, else over it, else beside it (right,
--~> then left), kept inside the window, the tail pointing at the anchor.
+-~> Puts the popover under its anchor, else over it, else beside what it
+-~> edits (right, then left: the `keep` rectangle stays readable), kept
+-~> inside the window, the tail pointing at the anchor. Its height never
+-~> changes while it is open ("Save as variable…" opens in place), so it
+-~> doesn't move.
 function cp_place() {
   CP.x = 0
   CP.y = 0
@@ -123,19 +136,20 @@ function cp_place() {
   let top = 18
   let bottom = gm.status_y - 3
   let x = math.max(2, math.min(a[0] + a[2] // 2 - 20, V.w - cp_w - 5))
-  let y = a[1] + a[3] + 6
+  let y = a[1] + a[3] + 5
   let side = "up"
   if (y + h > bottom) {
-    y = a[1] - h - 6
+    y = a[1] - h - 5
     side = "down"
   }
   if (y < top) {
+    let kp = CP.keep
     let mid = a[1] + a[3] // 2
     y = math.max(top, math.min(mid - 40, bottom - h))
-    x = a[0] + a[2] + 7
+    x = kp[0] + kp[2] + 7
     side = "left"
     if (x + cp_w + 4 > V.w) {
-      x = a[0] - cp_w - 7
+      x = kp[0] - cp_w - 7
       side = "right"
     }
     if (x < 2) {
@@ -223,22 +237,21 @@ function cp_layout() {
   let wy = lay.recent_y + 28
   lay.wheel = cpk_ring(x + 6, wy, 88, 7, 0)
   lay.right_x = x + 100
-  lay.rule_y = wy + 88 + 6
+  lay.rule_y = wy + 88 + 5
   lay.harm_y = lay.rule_y + 4
   lay.seg_y = lay.harm_y + 15
   lay.sw_y = lay.seg_y + 19
   lay.hint_y = lay.sw_y + 16
-  let yy = lay.hint_y + 14
+  -~> the "+ Save as variable…" row is 18 high, so the name field and Save
+  -~> take its place when it opens and the popover keeps its size
+  let yy = lay.hint_y + 16
   lay.save_y = null
   if (CP.target.kind != "var") {
-    lay.save_y = yy
-    yy = yy + 16
-    if (CP.save) {
-      yy = yy + 20
-    }
+    lay.save_y = lay.hint_y + 12
+    yy = lay.save_y + 18
   }
   lay.writes_y = yy
-  lay.h = yy + 16 - y
+  lay.h = yy + 15 - y
   lay
 }
 
@@ -276,12 +289,11 @@ function cp_parts(lay) {
   }
   let ax = x + 6 + len(hs) * (sw + 3) + 3
   push(out, {"id": "addall", "x": ax, "y": lay.sw_y, "w": g_text_w(t("color.add_all")) + 11, "h": 14})
-  if (lay.save_y != null) {
-    push(out, {"id": "save", "x": x + 6, "y": lay.save_y, "w": g_text_w(t("color.save_var")) + 11, "h": 14})
-    if (CP.save) {
-      push(out, {"id": "name", "x": x + 6, "y": lay.save_y + 16, "w": 104, "h": 16})
-      push(out, {"id": "savebtn", "x": x + 114, "y": lay.save_y + 16, "w": 52, "h": 16})
-    }
+  if (lay.save_y != null && !CP.save) {
+    push(out, {"id": "save", "x": x + 6, "y": lay.save_y + 2, "w": g_text_w(t("color.save_var")) + 11, "h": 14})
+  } elif (lay.save_y != null) {
+    push(out, {"id": "name", "x": x + 6, "y": lay.save_y + 1, "w": 104, "h": 16})
+    push(out, {"id": "savebtn", "x": x + 114, "y": lay.save_y + 1, "w": 52, "h": 16})
   }
   out
 }
@@ -302,7 +314,12 @@ function cp_popup_rects() {
   if (!CP.open) {
     return []
   }
-  [["color_popover", [CP.x - 1, CP.y - 6, cp_w + 5, CP.h + 13]]]
+  let out = [["color_popover", [CP.x - 1, CP.y - 6, cp_w + 5, CP.h + 13]]]
+  if (CP.ring != null) {
+    let r = CP.ring
+    push(out, ["color_ring", [r[0] - 1, r[1] - 1, r[2] + 2, r[3] + 2]])
+  }
+  out
 }
 
 function cp_content_key() {
@@ -727,6 +744,9 @@ function cp_draw() {
   g_frame(x, y, cp_w, h, P.void)
   g_rect(x + 1, y + 1, cp_w - 2, h - 2, P.row)
   g_rect(x + 1, y + 1, cp_w - 2, 1, P.bevel)
+  if (CP.ring != null) {
+    g_frame(CP.ring[0], CP.ring[1], CP.ring[2], CP.ring[3], P.amber)
+  }
   cp_draw_tail()
   cp_draw_vars(lay)
   cp_draw_recent(lay)
@@ -952,7 +972,7 @@ function cp_draw_harmony(lay) {
 
 function cp_draw_footer(lay) {
   let x = CP.x
-  if (lay.save_y != null) {
+  if (lay.save_y != null && !CP.save) {
     let sv = cp_part(lay, "save")
     let sc = P.lizard
     if (V.hover == "cp:save") {
@@ -960,12 +980,11 @@ function cp_draw_footer(lay) {
     }
     g_icon("plus", sv.x, sv.y + 3, sc)
     g_text(t("color.save_var"), sv.x + 10, sv.y, sc)
-    if (CP.save) {
-      let nm = cp_part(lay, "name")
-      cp_draw_field(nm, "text")
-      let b = cp_part(lay, "savebtn")
-      g_button(b.x, b.y, b.w, b.h, "", t("color.save"), cp_state("savebtn"))
-    }
+  } elif (lay.save_y != null) {
+    let nm = cp_part(lay, "name")
+    cp_draw_field(nm, "text")
+    let b = cp_part(lay, "savebtn")
+    g_button(b.x, b.y, b.w, b.h, "", t("color.save"), cp_state("savebtn"))
   }
   let wy = lay.writes_y
   let label = t("color.writes")

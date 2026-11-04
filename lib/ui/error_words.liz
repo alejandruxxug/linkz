@@ -1,0 +1,41 @@
+-~> error_words: the language's error messages in the interface's language.
+-~> lizard-script reports in English ("[line 3, column 5] runtime error:
+-~> wrong number of arguments: want 1, got 2"); the error row says it in the
+-~> words of the language picked, through t(). The kind and the commonest
+-~> phrases are translated; names, values and anything not in the table stay
+-~> as the language wrote them, so a message is never lost.
+
+use "i18n"
+
+-~> The phrases translated, longest first so a longer one wins: [English, key].
+let err_phrases = [
+  ["runtime error: ", "err.runtime"],
+  ["syntax error: ", "err.syntax"],
+  ["wrong number of arguments", "err.arguments"],
+  ["division by zero", "err.division"],
+  ["not a function", "err.not_function"],
+  ["identifier not found", "err.not_found"],
+  ["type mismatch", "err.mismatch"],
+  ["unknown operator", "err.operator"],
+  ["is never closed", "err.never_closed"],
+  ["expected an expression", "err.expression"],
+  ["index out of range", "err.index"],
+  ["stack overflow", "err.stack"],
+  [": want ", "err.want"],
+  [", got ", "err.got"]
+]
+
+-~> A message of the language in the interface's language (English as is).
+function err_words(msg) {
+  if (msg == null || lang_get() == "en") {
+    return msg
+  }
+  let out = msg
+  for (let i = 0; i < len(err_phrases); i = i + 1) {
+    let w = t(err_phrases[i][1])
+    if (w != err_phrases[i][1]) {
+      out = text.replace(out, err_phrases[i][0], w)
+    }
+  }
+  out
+}

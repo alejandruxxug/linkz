@@ -147,7 +147,7 @@ puts(n.TUT.step)
 click(mid(button("next")))
 puts(n.TUT.step, len(n.ed.shapes))
 
-puts("-- step 2: the coach-mark hides while the fill's popover is open; a new color moves on")
+puts("-- step 2: the coach-mark waits under the fill's popover; a new color moves on")
 click(fill_swatch())
 puts(n.color_popup_open(), n.TUT.lay.shown, n.tut_popup_rects())
 let cells = n.cp_layout().cells

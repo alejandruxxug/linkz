@@ -1,0 +1,120 @@
+-~> overlay_rules: which overlays show together, so that one never stays
+-~> over another that has taken over (style guide R002 / R003, the v1.1
+-~> design check's "overlays that stay or stack"):
+-~>   the signature hint and the suggestions wait while the color popover is
+-~>   open, and after a canvas tool or a swatch moved the caret, until the
+-~>   caret moves again (typing, a click in the code)
+-~>   the Select tool's size handles and turn ring, and a shape's anchors,
+-~>   give way to the gradient handles while the fill editor is open (the
+-~>   dashed box stays)
+-~>   a selected layer gets the dashed box around everything it draws
+
+use "color_popover"
+use "complete_state"
+use "complete_view"
+use "doc_cache"
+use "editor_state"
+use "editor_undo"
+use "fill_editor"
+use "select_edit"
+use "view_canvas"
+use "view_layout"
+
+let OV = {"quiet": null, "layer": {"key": "", "box": null}}
+
+-~> == The signature hint ==
+
+-~> Where the caret is, as a text: a quiet hint waits for this to change.
+function ov_caret_key() {
+  let m = ed_model()
+  str(doc_id(m)) + ":" + str(m.line) + ":" + str(m.col)
+}
+
+-~> The caret was put where it is by something other than typing (a canvas
+-~> tool, a swatch): the hint waits until it moves.
+function ov_quiet_here() {
+  OV.quiet = ov_caret_key()
+  null
+}
+
+-~> Whether the completion's popups wait now.
+function ov_cmp_quiet() {
+  if (CP.open) {
+    return true
+  }
+  OV.quiet != null && OV.quiet == ov_caret_key()
+}
+
+-~> The completion's popups as [kind, rect] for view_popups (cmp_popup_rects),
+-~> or none while they wait.
+function ov_cmp_rects() {
+  if (ov_cmp_quiet()) {
+    cmp.layout = null
+    return []
+  }
+  cmp_popup_rects()
+}
+
+-~> == The handles on a shape ==
+
+-~> Whether the Select tool's size handles and turn ring and the selected
+-~> shapes' anchors show (and take a press): not while the fill editor shows
+-~> its own handles on the shape.
+function ov_shape_handles() {
+  !FE.open
+}
+
+-~> == A selected layer ==
+
+-~> The box (drawing pixels, {"min", "max"}) of what the layer on the caret's
+-~> row draws, or null when the caret is not on a visible layer row. Kept per
+-~> run. A row that doesn't start with `layer` is passed over before the
+-~> rows are asked for (this is asked on every paint).
+function ov_layer_bounds() {
+  let m = ed_model()
+  if (m.sel != null || m.line < 1 || m.line > len(m.lines) || !text.starts(text.trim(m.lines[m.line - 1]), "layer")) {
+    return null
+  }
+  let rows = ed_rows()
+  if (m.line < 1 || m.line > len(rows)) {
+    return null
+  }
+  let r = rows[m.line - 1]
+  if (r.kind != "layer" || r.hidden) {
+    return null
+  }
+  let key = str(m.line) + ":" + str(r.end_line) + ":" + str(ed.shapes_ver)
+  if (OV.layer.key == key) {
+    return OV.layer.box
+  }
+  let shapes = []
+  for (let l = m.line + 1; l <= r.end_line; l = l + 1) {
+    let list = ed_shapes_of(l)
+    for (let i = 0; i < len(list); i = i + 1) {
+      push(shapes, list[i])
+    }
+  }
+  OV.layer = {"key": key, "box": shapes_bounds(shapes)}
+  OV.layer.box
+}
+
+-~> The window pixels [x0, y0, x1, y1] of the selected layer's dashed box
+-~> (4 pixels out), or null.
+function ov_layer_box(cl) {
+  let b = ov_layer_bounds()
+  if (b == null) {
+    return null
+  }
+  let lo = view_to_window(cl, b.min)
+  let hi = view_to_window(cl, b.max)
+  [lo.x - 4, lo.y - 4, hi.x + 4, hi.y + 4]
+}
+
+-~> Draws the selected layer's dashed box (the canvas buffer is the target).
+function ov_paint_layer_box(cl) {
+  let w = ov_layer_box(cl)
+  if (w != null) {
+    view_sel_box(w[0], w[1], w[2], w[3])
+  }
+  null
+}

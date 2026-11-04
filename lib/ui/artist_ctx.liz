@@ -8,6 +8,10 @@
 -~> In artist mode the labels that name a parameter are in the interface's
 -~> language when it has a word for them (`relleno`, `pluma`), and a shape
 -~> with a fill gets a `Fill` button that opens the fill editor.
+-~> A bar wider than the window never clips: the layer's name leaves the
+-~> title, then the Fill button keeps only its icon, then the parts that
+-~> still don't fit wait behind a » button at the right end, which shows
+-~> them in place of the first ones (and back).
 
 use "editor_props"
 use "editor_rows"
@@ -144,7 +148,15 @@ function art_ctx_wrap(lay) {
   ctx_translate(lay)
   ctx_fill_button(lay)
   let items = ctx_items(lay)
-  let x = ctx_title_w(tt) + 6
+  lay.ctx_end = ctx_place(items, ctx_title_w(tt) + 6)
+  ctx_fit(lay)
+  lay
+}
+
+-~> Lays the rows of items out one after the other from x, in one strip:
+-~> the title's row, the first row of fields, then the second. Returns where
+-~> the strip ends.
+function ctx_place(items, x) {
   for (let row = 0; row < 3; row = row + 1) {
     let x0 = null
     let right = 0
@@ -182,8 +194,123 @@ function art_ctx_wrap(lay) {
       x = right + dx + 12
     }
   }
-  lay.ctx_end = x
-  lay
+  x
+}
+
+-~> == Fitting the window ==
+
+-~> page: 1 while the » button shows the parts that didn't fit. title: the
+-~> bar's title when it was laid out (a new one starts at the first page).
+let CTX = {"page": 0, "title": ""}
+
+-~> Moves the items right of x (on the strip) by dx.
+function ctx_shift_after(lay, x, dx) {
+  let items = ctx_items(lay)
+  for (let i = 0; i < len(items); i = i + 1) {
+    if (items[i][1].x > x) {
+      items[i][1].x = items[i][1].x + dx
+    }
+  }
+  lay.ctx_end = lay.ctx_end + dx
+}
+
+-~> Makes the laid-out bar fit the window (see the top of the file).
+function ctx_fit(lay) {
+  let tt = lay.ctx_title
+  let key = str(tt)
+  if (key != CTX.title) {
+    CTX.title = key
+    CTX.page = 0
+  }
+  let limit = V.w - 4
+  if (lay.ctx_end > limit && tt[2] != "") {
+    let w0 = ctx_title_w(tt)
+    tt[2] = ""
+    ctx_shift_after(lay, 0, ctx_title_w(tt) - w0)
+  }
+  if (lay.ctx_end > limit && lay.own != null) {
+    for (let i = 0; i < len(lay.own); i = i + 1) {
+      let b = lay.own[i]
+      if (b.id == "art:fill" && b.label != "") {
+        let dx = 18 - b.w
+        b.label = ""
+        b.w = 18
+        ctx_shift_after(lay, b.x, dx)
+      }
+    }
+  }
+  if (lay.ctx_end > limit) {
+    ctx_overflow(lay, ctx_title_w(tt) + 6, V.w - 22)
+  }
+}
+
+-~> Hides what doesn't fit before x `limit` behind the » button; on the
+-~> second page the hidden parts move to `start` and the first ones hide.
+-~> A label goes with the field right after it.
+function ctx_overflow(lay, start, limit) {
+  let items = ctx_items(lay)
+  let order = ctx_by_x(items)
+  let cut = null
+  for (let i = 0; i < len(order); i = i + 1) {
+    let it = order[i]
+    if (cut == null && it[1].x + it[2] > limit) {
+      cut = it[1].x
+      if (i > 0 && order[i - 1][0] == "label" && order[i - 1][1].x + order[i - 1][2] + 8 >= it[1].x) {
+        cut = order[i - 1][1].x
+      }
+    }
+  }
+  if (cut == null) {
+    return null
+  }
+  let keep = []
+  for (let i = 0; i < len(items); i = i + 1) {
+    let it = items[i][1]
+    if (CTX.page == 0) {
+      if (it.x < cut) {
+        push(keep, it)
+      }
+    } else {
+      if (it.x >= cut) {
+        it.x = it.x - (cut - start)
+        if (it.x + items[i][2] <= limit) {
+          push(keep, it)
+        }
+      }
+    }
+  }
+  lay.labels = ctx_kept(lay.labels, keep)
+  lay.boxes = ctx_kept(lay.boxes, keep)
+  if (lay.own == null) {
+    lay.own = []
+  }
+  lay.own = ctx_kept(lay.own, keep)
+  push(lay.own, {"id": "art:more", "kind": "seg", "x": V.w - 18, "y": ctx_row_y + 1, "w": 14, "h": 14, "icon": "more", "label": "", "on": CTX.page == 1})
+  lay.ctx_end = V.w - 4
+}
+
+-~> The items in the order of their x (few: a plain insertion sort).
+function ctx_by_x(items) {
+  let out = []
+  for (let i = 0; i < len(items); i = i + 1) {
+    let at = len(out)
+    while (at > 0 && out[at - 1][1].x > items[i][1].x) {
+      at = at - 1
+    }
+    list.insert(out, at, items[i])
+  }
+  out
+}
+
+-~> The items of list that are in keep.
+function ctx_kept(items, keep) {
+  let out = []
+  for (let i = 0; i < len(items); i = i + 1) {
+    if (list.index(keep, items[i]) >= 0) {
+      push(out, items[i])
+    }
+  }
+  out
 }
 
 -~> A layer's name, hidden and locked are on its row in the layers panel:
@@ -246,18 +373,36 @@ function ctx_fill_button(lay) {
   if (f == null || f.missing) {
     return null
   }
+  -~> right after the fill field (on its row), else at the end of the first row
   let right = 0
+  let y = ctx_row_y + 1
+  let at = null
   for (let i = 0; i < len(lay.boxes); i = i + 1) {
     let b = lay.boxes[i]
-    if (ctx_row_of(b.y) == 1) {
+    if (b.field == "fill") {
+      at = b
+    } elif (ctx_row_of(b.y) == 1) {
       right = math.max(right, b.x + b.w)
     }
+  }
+  if (at != null) {
+    right = at.x + at.w
+    y = at.y + 1
   }
   if (lay.own == null) {
     lay.own = []
   }
   let label = t("artist.fill")
-  push(lay.own, {"id": "art:fill", "kind": "seg", "x": right + 6, "y": ctx_row_y + 1, "w": g_text_w(label) + 18, "h": 14, "icon": "fill", "label": label, "on": FE.open})
+  let bw = g_text_w(label) + 18
+  -~> what follows the fill field on its row makes room for the button
+  let items = ctx_items(lay)
+  for (let i = 0; i < len(items); i = i + 1) {
+    let it = items[i][1]
+    if (it.x >= right && ctx_row_of(it.y) == ctx_row_of(y)) {
+      it.x = it.x + bw + 6
+    }
+  }
+  push(lay.own, {"id": "art:fill", "kind": "seg", "x": right + 6, "y": y, "w": bw, "h": 14, "icon": "fill", "label": label, "on": FE.open})
 }
 
 -~> == Painting ==
@@ -298,6 +443,11 @@ function art_ctx_paint() {
 
 -~> A press on the bar's own button. True when it was one.
 function art_ctx_press(id) {
+  if (id == "art:more") {
+    CTX.page = 1 - CTX.page
+    view_touch()
+    return true
+  }
   if (id != "art:fill") {
     return false
   }

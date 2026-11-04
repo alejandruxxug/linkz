@@ -6,6 +6,7 @@ use "blend_props"
 use "budget_model"
 use "editor_doc"
 use "editor_undo"
+use "error_words"
 use "home_data"
 use "i18n"
 use "pen_props"
@@ -294,7 +295,7 @@ function view_paint_err(it, y) {
   g_rect(0, y, 2, 16, c)
   g_rect(cx - 9, y + 2, 1, 12, c)
   let room = (V.pw - 8 - cx) // 7
-  g_text(text.slice(it.row.error, 0, room), cx, y + 1, c)
+  g_text(text.slice(err_words(it.row.error), 0, room), cx, y + 1, c)
 }
 
 function view_paint_add(it, y) {
@@ -372,6 +373,9 @@ function view_paint_box(b) {
   let shown = b.text
   if (b.kind == "color") {
     let c = g_hex_color(b.text)
+    if (b.swatch != null) {
+      c = b.swatch
+    }
     g_rect(b.x + 3, b.y + 4, 10, 10, P.void)
     if (c != null) {
       g_rect(b.x + 4, b.y + 5, 8, 8, c)
@@ -437,7 +441,8 @@ function view_paint_props() {
     view_paint_box(lay.boxes[i])
   }
   route_props_paint(lay)
-  let hint = view_hint(lay)
+  -~> a hint too long for the panel ends at a word, with an ellipsis
+  let hint = g_fit_words(view_hint(lay), V.pw - 12)
   if (hint != "") {
     g_text(hint, 6, y + 45, P.mute)
   }
@@ -462,9 +467,11 @@ function view_status_parts() {
     push(left, ["check", t("state.saved"), "lizard"])
   }
   let right = []
-  if (V.pen_note != "") {
-    push(left, [V.tool, V.pen_note, "mute"])
-  } elif (ed_note_active()) {
+  -~> the object counter (budget_view.liz) took the place of "steps · ms"; it
+  -~> always follows the file's state, and a note comes after it. The tool's
+  -~> hint is in the properties (pen_props.liz).
+  push(left, budget_status_part(ed.canvas, ed.shapes))
+  if (ed_note_active()) {
     -~> a note may have its own icon and color (the faster-machine warning)
     let note = ["", ed.note.text, "lizard"]
     if (ed.note.icon != null) {
@@ -473,12 +480,8 @@ function view_status_parts() {
     push(left, note)
   } elif (ed.refusal != null) {
     push(left, ["", ed.refusal.message, "ember"])
-  } else {
-    -~> the object counter (budget_view.liz) took the place of "steps · ms"
-    push(left, budget_status_part(ed.canvas, ed.shapes))
-    if (V.mouse_draw != null && route_status() == "") {
-      push(right, ["", "x " + str(math.round(V.mouse_draw.x)) + " y " + str(math.round(V.mouse_draw.y)), "mute"])
-    }
+  } elif (V.mouse_draw != null && route_status() == "") {
+    push(right, ["", "x " + str(math.round(V.mouse_draw.x)) + " y " + str(math.round(V.mouse_draw.y)), "mute", "cursor"])
   }
   if (route_status() != "") {
     push(right, ["", route_status(), "mute"])
@@ -500,28 +503,53 @@ function status_width(parts) {
   w
 }
 
--~> Makes the left parts fit in `avail` pixels: the last one (hint, steps) gives
--~> way first, with an ellipsis, then disappears; then the one before it.
+-~> The parts of the status bar that never shorten: the file's state and
+-~> the object counter (style guide R002 17).
+let status_keep = 3
+
+-~> Makes the left parts fit in `avail` pixels: a note after the counter
+-~> gives way first, with an ellipsis, then disappears; then the file's name
+-~> shortens. The state and the counter never do.
 function status_fit(left, avail) {
   let parts = []
   for (let i = 0; i < len(left); i = i + 1) {
     push(parts, [left[i][0], left[i][1], left[i][2]])
   }
-  let k = len(parts) - 1
   while (status_width(parts) > avail) {
+    let k = len(parts) - 1
     let over = status_width(parts) - avail
+    if (k < status_keep) {
+      k = 0
+    }
     let chars = len(parts[k][1]) - (over + 6) // 7
     if (chars >= 3) {
       parts[k][1] = home_fit(parts[k][1], chars)
     } elif (k > 0) {
       pop(parts)
-      k = k - 1
     } else {
-      parts[0][1] = ""
+      parts[0][1] = home_fit(parts[0][1], 3)
       break
     }
   }
   parts
+}
+
+-~> The status bar's parts as painted, [left, right]: the cursor position
+-~> gives way before anything on the left shortens. Both sides' widths count
+-~> a gap after their last part, so the two sides keep 18 pixels apart.
+function view_status_fitted() {
+  let parts = view_status_parts()
+  let right = parts[1]
+  if (status_width(parts[0]) > V.w - 4 - status_width(right)) {
+    let kept = []
+    for (let i = 0; i < len(right); i = i + 1) {
+      if (len(right[i]) < 4 || right[i][3] != "cursor") {
+        push(kept, right[i])
+      }
+    }
+    right = kept
+  }
+  [status_fit(parts[0], V.w - 4 - status_width(right)), right]
 }
 
 function view_paint_status() {
@@ -529,10 +557,10 @@ function view_paint_status() {
   let y = gm.status_y
   g_rect(0, y, V.w, 16, P.panel)
   g_rect(0, y, V.w, 1, P.void)
-  let parts = view_status_parts()
-  let right = parts[1]
   -~> the readouts keep their place; the left side gets what is left
-  let left = status_fit(parts[0], V.w - 12 - status_width(right))
+  let parts = view_status_fitted()
+  let left = parts[0]
+  let right = parts[1]
   let x = 6
   for (let i = 0; i < len(left); i = i + 1) {
     let p = left[i]

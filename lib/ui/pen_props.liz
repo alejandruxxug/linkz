@@ -1,16 +1,21 @@
 -~> pen_props: the brush and pencil inspector, in the properties panel while
--~> one of the two tools is picked. With the brush, a row that is no shape
--~> shows the tool itself ("PROPERTIES · brush · pens.ink", the pen and its
--~> gear), and a brush row gets the gear next to its pen. Under them, for
--~> either tool, the stabilizer: Off / String / Average and its length (drag
--~> it sideways like a number). The gear opens the pen settings. The changes
--~> are the tool's settings for the session (tool_stabilizer.liz) and, while
--~> the pen settings are open on the same pen, its draft too.
+-~> one of the two tools is picked: the tool itself, not the selection (its
+-~> fields come back with another tool; style guide R003 frame 4). Two rows:
+-~>   1  the brush's pen and its gear ("PROPERTIES · brush · pens.ink"), then
+-~>      the tool's hint, cut at a word; the pencil has its hint only
+-~>   2  the stabilizer: Off / String / Average and its length (drag it
+-~>      sideways like a number); a narrow panel shortens the label
+-~> The context bar (artist mode) leaves the hint out. The gear opens the pen
+-~> settings. The changes are the tool's settings for the session
+-~> (tool_stabilizer.liz) and, while the pen settings are open on the same
+-~> pen, its draft too.
 
 use "../draw/pens"
 use "editor_undo"
 use "i18n"
+use "mode_state"
 use "pen_edit"
+use "pen_library"
 use "pen_route"
 use "tool_stabilizer"
 use "view_gfx"
@@ -24,7 +29,8 @@ function pen_props_key() {
   tool_stab_key(V.tool, ed.pen)
 }
 
--~> Adds the inspector to a layout of the panel (view_props_layout_build's).
+-~> The panel's layout (view_props_layout_build's) as the tool's inspector
+-~> while the brush or the pencil is picked.
 function pen_props_wrap(lay) {
   let key = pen_props_key()
   if (key == null) {
@@ -32,34 +38,38 @@ function pen_props_wrap(lay) {
   }
   let gm = view_geom()
   let y = gm.props_y + 22
-  let props = lay.props
-  if (V.tool == "brush" && props == null) {
-    lay.title = text.upper(t("panel.properties")) + " · " + text.lower(t("tool.brush")) + " · pens." + ed.pen
-    lay.msg = ""
-    lay.hint = ""
-    push(lay.labels, {"x": 6, "y": y + 2, "s": "pen"})
-    let txt = pens[ed.pen].name
+  let out = {
+    "title": text.upper(t("panel.properties")) + " · " + text.lower(t(prefixed("tool.", V.tool))),
+    "labels": [],
+    "boxes": [],
+    "msg": "",
+    "hint": "",
+    "props": null,
+    "pen_strip": true
+  }
+  let x = 6
+  if (V.tool == "brush") {
+    out.title = out.title + " · pens." + ed.pen
+    -~> the parameter's name, as the fields say it (the context bar translates it)
+    push(out.labels, {"x": x, "y": y + 2, "s": "pen"})
+    x = 34
+    let txt = pen_display_name(pens[ed.pen])
     let w = g_text_w(txt) + 20
-    push(lay.boxes, {"field": "pen", "sub": 0, "kind": "pen", "x": 34, "y": y, "w": w, "h": 18, "text": txt, "focus": V.picker})
-    push(lay.boxes, {"field": "pengear", "sub": 0, "kind": "pengear", "x": 34 + w + 4, "y": y + 2, "w": 14, "h": 14, "text": "", "focus": false})
-    push(lay.labels, {"x": 34 + w + 24, "y": y + 2, "s": t("pen.tool_hint")})
-  } elif (V.tool == "brush" && props.kind == "call" && props.callee == "brush") {
-    for (let i = 0; i < len(lay.boxes); i = i + 1) {
-      let b = lay.boxes[i]
-      if (b.kind == "pen") {
-        push(lay.boxes, {"field": "pengear", "sub": 0, "kind": "pengear", "x": b.x + b.w + 3, "y": b.y + 2, "w": 14, "h": 14, "text": "", "focus": false})
-        break
-      }
+    push(out.boxes, {"field": "pen", "sub": 0, "kind": "pen", "x": x, "y": y, "w": w, "h": 18, "text": txt, "focus": V.picker})
+    push(out.boxes, {"field": "pengear", "sub": 0, "kind": "pengear", "x": x + w + 4, "y": y + 2, "w": 14, "h": 14, "text": "", "focus": false})
+    x = x + w + 24
+  }
+  if (!mode_artist()) {
+    let hint = g_fit_words(t(prefixed("hint.", V.tool)), V.pw - x - 6)
+    if (hint != "") {
+      push(out.labels, {"x": x, "y": y + 2, "s": hint, "hint": true})
     }
   }
-  lay.pen_strip = true
-  lay
+  out
 }
 
--~> The stabilizer row of the inspector, under the last row of fields (view_props_cached
--~> runs it after the narrow panel wrapped them). Its length goes to a row of its own
--~> when the row does not fit the panel. props_extra says how many pixels the panel
--~> needs above its usual two rows so that nothing overlaps.
+-~> The stabilizer row of the inspector, under its first row. The panel keeps
+-~> its two rows (props_extra 0) unless the row can't fit even shortened.
 function pen_props_strip_wrap(lay) {
   let key = pen_props_key()
   lay.props_extra = 0
@@ -67,27 +77,32 @@ function pen_props_strip_wrap(lay) {
     return lay
   }
   let gm = view_geom()
-  let first = gm.props_y + 22
-  let last = 0
-  for (let i = 0; i < len(lay.boxes); i = i + 1) {
-    last = math.max(last, (lay.boxes[i].y - first) // 20)
-  }
-  for (let i = 0; i < len(lay.labels); i = i + 1) {
-    last = math.max(last, (lay.labels[i].y - first) // 20)
-  }
-  let rows = pen_props_strip(lay, first + 20 * (last + 1), key)
+  let rows = pen_props_strip(lay, gm.props_y + 42, key)
   if (gm.artist != true) {
-    lay.props_extra = 20 * math.max(0, last + rows - 1)
+    lay.props_extra = 20 * math.max(0, rows - 1)
   }
   lay
 }
 
--~> The stabilizer row at y: its label, the three modes and the length. What
--~> does not fit the panel's width goes on a row under (20 px lower). Returns
--~> how many rows it took.
+-~> How wide the stabilizer row is with this label.
+function pen_props_strip_w(label) {
+  let w = 6 + g_text_w(label) + 6
+  let modes = ["off", "string", "average"]
+  for (let i = 0; i < len(modes); i = i + 1) {
+    w = w + g_text_w(t(prefixed("stab.", modes[i]))) + 6
+  }
+  w + 6 + g_text_w("64 px") + 8
+}
+
+-~> The stabilizer row at y: its label, the three modes and the length. A
+-~> panel too narrow for the label takes its short form; what still does
+-~> not fit goes on a row under (20 px lower). Returns how many rows it took.
 function pen_props_strip(lay, y, key) {
   let s = tool_stab_get(key)
   let label = t("stab.label")
+  if (pen_props_strip_w(label) > V.pw - 4 && !mode_artist()) {
+    label = t("stab.short")
+  }
   let row = 0
   let x = 6
   push(lay.labels, {"x": x, "y": y + 1, "s": label})

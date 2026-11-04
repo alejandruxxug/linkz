@@ -44,7 +44,9 @@ let ed = {
   "shapes_rising": true,
   "shape_lines": null,
   "patch": null,
-  "ran": null
+  "ran": null,
+  "held": null,
+  "edit_key": null
 }
 
 -~> How many steps the history keeps, and how long a pause (ms) ends a typing step.
@@ -143,6 +145,8 @@ function ed_reset(code, file) {
   ed.saved = code
   ed.folded = {}
   ed.errors = []
+  ed.held = null
+  ed.edit_key = null
   ed.shapes = []
   ed.shapes_rising = true
   ed.shapes_ver += 1
@@ -180,6 +184,7 @@ function ed_apply(newm, key) {
     }
     ed.merge = key
     ed.merge_col = newm.col
+    ed.edit_key = key
   } elif (newm.line != old.line || newm.col != old.col) {
     ed.merge = null
   }
@@ -229,6 +234,7 @@ function ed_undo() {
   let prev = pop(ed.undo)
   ed.pending = true
   ed.merge = null
+  ed.edit_key = null
   ed.model = prev
   ed.note = {"text": t("undo.undone", {"what": ed_label_text(l)}), "at": ed_now()}
   true
@@ -244,6 +250,7 @@ function ed_redo() {
   let next = pop(ed.redo)
   ed.pending = true
   ed.merge = null
+  ed.edit_key = null
   ed.model = next
   ed.note = {"text": t("undo.redone", {"what": ed_label_text(l)}), "at": ed_now()}
   true

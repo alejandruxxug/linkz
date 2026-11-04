@@ -87,7 +87,7 @@ rig_frame(slow, [{"type": "key", "key": "N", "mods": cmd}])
 let st = slow.ed.app.debug_state()
 puts(st.screen, st.home.new_dialog.open, st.home.new_dialog.name, st.home.new_dialog.recommended)
 rig_frame(slow, [{"type": "type", "text": "dune"}])
-let preset = st.home.new_dialog.presets[2]
+let preset = st.home.new_dialog.presets[3]
 rig_frame(slow, [{"type": "down", "button": 0, "pos": (preset.rect[0] + 2, preset.rect[1] + 2), "mods": plain}])
 rig_frame(slow, [{"type": "key", "key": "Enter", "mods": plain}])
 st = slow.ed.app.debug_state()

@@ -172,9 +172,10 @@ function fe_shape_box() {
   path_bounds(shapes[0].path)
 }
 
--~> Puts the editor beside its shape: on the left when there is room (over the
--~> code when the canvas is narrow), else on the right, with the tail
--~> pointing at the shape's middle.
+-~> Puts the editor beside its shape: on the left when there is room, else on
+-~> the right, with the tail pointing at the shape's middle. When the canvas
+-~> is too narrow for it on the left, it goes over the code instead, its
+-~> right edge at the canvas's, so it covers neither the shape nor the canvas.
 function fe_place() {
   let lay = fe_layout()
   FE.h = lay.h
@@ -189,6 +190,9 @@ function fe_place() {
   let cy = (b[1] + b[3]) / 2
   let side = "right"
   let x = math.floor(b[0]) - fe_w - 7
+  if (x < gm.cx && gm.cx - fe_w - 7 >= 2) {
+    x = gm.cx - fe_w - 7
+  }
   if (x < 2) {
     x = math.ceil(b[2]) + 7
     side = "left"

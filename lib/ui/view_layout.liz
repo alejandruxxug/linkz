@@ -11,6 +11,7 @@ use "artist_layout"
 use "blend_props"
 use "color_route"
 use "color_state"
+use "complete_state"
 use "editor_state"
 use "editor_undo"
 use "i18n"
@@ -482,18 +483,30 @@ function view_strip(y, depth) {
 
 -~> == The canvas ==
 
+-~> The zooms the canvas picks from, largest first (window pixels per drawing
+-~> pixel). 1.25, 0.9, 0.75 and 0.55 are the style guide's R002 steps (62.5, 45,
+-~> 37.5 and 27.5% in UI pixels): a 480×320 drawing is at 90% beside the
+-~> palette rail, 55% beside the open palette, 125% in artist mode and 75%
+-~> over the code drawer.
+let view_zoom_steps = [4.0, 3.0, 2.0, 1.5, 1.25, 1.0, 0.9, 0.75, 0.55, 0.5, 0.25, 0.125]
+
+-~> The UI pixels the drawing leaves free across and down the canvas area.
+let view_zoom_room = 10
+
 -~> Where the drawing sits: the zoom, its rectangle in UI pixels and its place
--~> in the canvas buffer. The canvas buffer normally covers the canvas area; with
--~> the pen picker open it covers the whole window (the picker draws smooth
--~> strokes outside the area).
+-~> in the canvas buffer. The zoom is the largest step that leaves
+-~> view_zoom_room around the drawing. The canvas buffer normally covers the
+-~> canvas area; with the pen picker open it covers the whole window (the
+-~> picker draws smooth strokes outside the area).
 function view_canvas_layout() {
   let gm = view_geom()
   let size = ed_canvas_size()
   let zoom = 1.0
-  let steps = [4.0, 3.0, 2.0, 1.5, 1.0, 0.75, 0.5, 0.25]
+  let steps = view_zoom_steps
+  let room = view_zoom_room * 2
   for (let i = 0; i < len(steps); i = i + 1) {
     zoom = steps[i]
-    if (size.x * zoom <= gm.cw * 2 - 4 && size.y * zoom <= gm.ch * 2 - 4) {
+    if (size.x * zoom <= gm.cw * 2 - room && size.y * zoom <= gm.ch * 2 - room) {
       break
     }
   }
@@ -610,6 +623,9 @@ function view_props_layout_build() {
   if (own != null) {
     return own
   }
+  if (cmp_typing()) {
+    return cmp_props_typing(view_props_title(null, m.line), V.pw - 12)
+  }
   let props = ed_props()
   let y = gm.props_y + 22
   let out = {"title": view_props_title(props, m.line), "labels": [], "boxes": [], "msg": "", "hint": "", "props": props}
@@ -715,6 +731,10 @@ function view_props_layout_build() {
       let kind = f.kind
       let shown = ftxt
       let w = g_text_w(shown) + 8
+      let swatch = color_field_swatch(f)
+      if (swatch != null) {
+        kind = "color"
+      }
       if (kind == "color") {
         w = g_text_w(shown) + 22
       } elif (kind == "array") {
@@ -747,6 +767,7 @@ function view_props_layout_build() {
         "w": w,
         "h": 18,
         "text": shown,
+        "swatch": swatch,
         "focus": focused || (kind == "pen" && V.picker)
       })
       x = fx + w + 8

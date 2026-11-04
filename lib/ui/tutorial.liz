@@ -133,10 +133,14 @@ function tut_remember_lines() {
   }
 }
 
--~> Shows the tutorial at a step.
+-~> Shows the tutorial at a step. The palette sidebar opens (step 2 points
+-~> at its variables; the approved frames have it open from step 1).
 function tut_start(step) {
   TUT.on = true
   TUT.closed = false
+  if (!mode_artist() && !pal_is_open(V.w)) {
+    pal_set_open(true)
+  }
   tut_remember_lines()
   tut_go(step)
 }
@@ -178,6 +182,13 @@ function tut_finish() {
     art_toggle_drawer()
   }
   TUT.drawer = false
+  -~> the brush step's tool doesn't stay picked (the next drawing opens with
+  -~> nothing selected, R002 14)
+  if (V.tool == "brush") {
+    V.tool = ""
+    V.picker = false
+    view_touch()
+  }
   tut_store("tutorial_done", true)
   tut_store("tutorial_step", 1)
   view_force_all()

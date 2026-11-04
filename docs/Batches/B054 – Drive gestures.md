@@ -1,0 +1,5 @@
+# B054 – `lizardscript drive` gestures (Press / Move / Release / Path) (lizard-script)
+
+From the v1.1 design check: `drive` finishes a whole drag in one straight line, so nothing mid-gesture can be captured (move ghost + delta tooltip, lasso ants, the stabilizer string, live pressure) and a lasso loop can't be drawn. Also two quirks: a Click needs a hover first, and a programmatic tool switch didn't arm the brush (check whether that's the app's or drive's).
+
+In `terrarium/window/automation.go` + `drive.go` (and docs/TERRARIUM.md, guide chapter 17 automation part en + es): add `Press x y [--button b] [--pressure p]`, `Move x y [--pressure p]` (with pressure samples), `Release x y`, and `Path x1 y1 x2 y2 … [--pressure p1,p2,…] [--steps n]` (a polyline gesture, optionally closed with `--close`), all in UI pixels (`--full` for window pixels), each one or more real input events with samples, so the app sees exactly what a hand would make; `Click` sends the hover move first. Headless tests on both engines. Don't commit. Never mention any app in lizard-script.
