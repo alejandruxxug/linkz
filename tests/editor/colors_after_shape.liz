@@ -1,0 +1,51 @@
+-~> `let colors` written below a shape that uses it (B057): the drawing errors
+-~> (colors is not defined yet when the shape runs), but the palette still
+-~> lists the real variables, and never the keys of the canvas hash. The
+-~> parse after typing the line is a splice whose statements carry a shift.
+
+use "../../lib/app/editor"
+use "rig"
+
+let code = "-~> lzdraw 1
+
+canvas = {\"size\": (480, 320), \"background\": #f6d9a8}
+rect((0, 200), (480, 120), colors.sea)
+"
+
+let modules = rig_modules + ["ui/view_panels", "ui/view_canvas", "ui/palette_view", "ui/color_popover", "ui/color_state", "ui/color_route",
+  "ui/color_target", "ui/color_vars", "ui/color_hsv", "ui/color_wheel", "ui/fill_editor", "ui/shape_menu"]
+let rig = rig_open(fs.join(fs.home(), "colors-after-shape-test"), code, editor_size, modules)
+let n = rig.names
+
+function var_names() {
+  let vs = n.ct_vars()
+  let out = []
+  for (let i = 0; i < len(vs); i += 1) {
+    push(out, vs[i].name)
+  }
+  out
+}
+
+function typed(s) {
+  rig_frame(rig, [{"type": "type", "text": s}])
+}
+
+puts("-- no hash yet, and the shape errors")
+puts(n.colors_line(n.ed_model()), var_names(), len(n.ed.errors))
+
+puts("-- the hash typed under the shape: still erroring, the variables are the real ones")
+n.ed_set_caret(5, 0)
+rig_frame(rig)
+typed("let colors = {\"sea\": #2d6a8f, \"sky\": #f2a65a}")
+rig_frame(rig, [{"type": "key", "key": "enter"}])
+puts(n.ed_model().lines[4])
+puts(n.colors_line(n.ed_model()), var_names(), len(n.ed.errors))
+puts(n.colors_names(n.colors_find(n.ed_model())), n.ct_var("sea").text)
+
+puts("-- a line above the hash shifts it down: the lookup follows")
+n.ed_set_caret(3, 0)
+rig_frame(rig)
+typed("-~> a note")
+rig_frame(rig, [{"type": "key", "key": "enter"}])
+puts(n.colors_line(n.ed_model()), var_names())
+puts(n.ed_model().lines[n.colors_line(n.ed_model()) - 1])

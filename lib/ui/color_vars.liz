@@ -12,6 +12,7 @@
 -~> text and from/to the whole entry, as edit spans {"l1", "c1", "l2", "c2"}
 -~> (columns from 1, the end just after, like span_replace).
 
+use "doc_splice"
 use "editor_doc"
 use "editor_twoway"
 use "i18n"
@@ -22,15 +23,20 @@ let colors_name = "colors"
 -~> == Reading ==
 
 -~> The line (from 1) of the top-level `let colors = {`, or 0, from the
--~> top-level statements of the parse the editor keeps.
+-~> top-level statements of the parse the editor keeps. The parse after an edit
+-~> keeps a shift per statement (doc_splice.liz), so the line is the real one
+-~> (stmt_line), never the statement's own number. The lookup reads the text,
+-~> not the run: while the drawing errors, the palette still lists the
+-~> variables as written.
 function colors_line(m) {
-  let st = doc_parsed(m).statements
-  for (let i = 0; i < len(st); i = i + 1) {
-    let s = st[i]
+  let p = doc_parsed(m)
+  for (let i = 0; i < len(p.statements); i = i + 1) {
+    let s = p.statements[i]
     if (s.kind == "let" && s.name == colors_name) {
-      let at = text.find(m.lines[s.line - 1], "=")
-      if (at >= 0 && text.starts(text.trim(text.slice(m.lines[s.line - 1], at + 1, len(m.lines[s.line - 1]))), "{")) {
-        return s.line
+      let line = stmt_line(p, i)
+      let at = text.find(m.lines[line - 1], "=")
+      if (at >= 0 && text.starts(text.trim(text.slice(m.lines[line - 1], at + 1, len(m.lines[line - 1]))), "{")) {
+        return line
       }
     }
   }

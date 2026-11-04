@@ -1,0 +1,9 @@
+-- no hash yet, and the shape errors
+0 [] 1
+-- the hash typed under the shape: still erroring, the variables are the real ones
+let colors = {"sea": #2d6a8f, "sky": #f2a65a}
+5 ["sea", "sky"] 1
+["sea", "sky"] #2d6a8f
+-- a line above the hash shifts it down: the lookup follows
+6 ["sea", "sky"]
+let colors = {"sea": #2d6a8f, "sky": #f2a65a}
