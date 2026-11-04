@@ -14,6 +14,7 @@ use "editor_rows"
 use "editor_state"
 use "editor_undo"
 use "i18n"
+use "layer_iso"
 use "perf"
 use "tool_route"
 use "view_gfx"
@@ -273,7 +274,7 @@ function view_canvas_key() {
     anchor = str(V.hover_anchor.line) + "." + str(V.hover_anchor.i) + "." + str(V.hover_anchor.anchor)
   }
   str(V.run_id) + "|" + str(ed.runs) + "|" + sel + "|" + str(ed.stale) + "|" + str(len(ed.errors)) + "|" + anchor + "|" + str(cl.zoom) + "|" +
-    str(cl.crect) + "|" + str(V.live_n) + str(V.sel_anchor) + "|" + str(V.w) + "x" + str(V.h) + "|" + str(V.pw) + "|" + str(ed_canvas_size()) + "|" + route_canvas_key() + "|" + str(V.tool == "brush")
+    str(cl.crect) + "|" + str(V.live_n) + str(V.sel_anchor) + "|" + str(V.w) + "x" + str(V.h) + "|" + str(V.pw) + "|" + str(ed_canvas_size()) + "|" + route_canvas_key() + "|" + str(V.tool == "brush") + "|" + iso_key()
 }
 
 function view_paint_canvas_ui(cl) {
@@ -290,6 +291,7 @@ function view_paint_canvas_ui(cl) {
   g_rect(gm.cx, gm.cy, gm.cw, gm.ch, P.coal)
   g_spans(g_checker_spans(gm.cw, gm.ch), gm.cx, gm.cy, P.checker)
   let fr = cl.frame
+  let ix = fr[0]
   g_frame(fr[0], fr[1], fr[2], fr[3], P.void)
   if (ed.stale && len(ed.errors) > 0) {
     let label = t("badge.last_good")
@@ -300,7 +302,9 @@ function view_paint_canvas_ui(cl) {
     g_rect(bx + 1, by + 1, bw - 2, 14, P.row)
     g_icon("error", bx + 4, by + 4, P.ember)
     g_text(label, bx + 14, by + 1, P.ember)
+    ix = bx + bw + 4
   }
+  iso_chip(cl, ix)
 }
 
 -~> Paints the canvas panel. Returns the part of it that changed (UI pixels),
@@ -318,7 +322,7 @@ function view_paint_canvas(forced) {
 -~> selection: when it changes the whole panel is painted again.
 function view_canvas_layout_key(cl) {
   str(cl.zoom) + "|" + str(cl.crect) + "|" + str(cl.wx) + "," + str(cl.wy) + "|" + str(cl.sw) + "x" + str(cl.sh) +
-    "|" + str(ed.stale && len(ed.errors) > 0) + "|" + str(ed.canvas.background) + "|" + lang_get()
+    "|" + str(ed.stale && len(ed.errors) > 0) + "|" + str(ed.canvas.background) + "|" + lang_get() + "|" + iso_key()
 }
 
 -~> The part of the canvas buffer the selection and the anchors cover, as
@@ -395,6 +399,7 @@ function view_paint_canvas_all(cl) {
   let off = cl.offset
   fb.clip(off, (cl.sw, cl.sh))
   scene_paint(sc, off)
+  iso_paint(cl, off)
   view_tools_paint(cl, off)
   if (ed.stale && len(ed.errors) > 0) {
     fb.fill(off, (cl.sw, cl.sh), P.veil)
@@ -443,6 +448,7 @@ function view_paint_canvas_part(cl, was, now) {
   if (x1 > x0 && y1 > y0) {
     fb.clip((x0, y0), (x1 - x0, y1 - y0))
     tiles_blit(sc.tiles, off)
+    iso_paint(cl, off)
     if (ed.stale && len(ed.errors) > 0) {
       fb.fill(off, (cl.sw, cl.sh), P.veil)
     }

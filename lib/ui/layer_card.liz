@@ -226,6 +226,8 @@ function lc_tip(id, line) {
     "rec": rec,
     "parents": lc_parents(rows, row),
     "name": row.stmt.name,
+    "line": line,
+    "end": row.end_line,
     "count": count,
     "badge": badge,
     "hidden": hidden,

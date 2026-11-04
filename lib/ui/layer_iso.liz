@@ -1,0 +1,118 @@
+-~> layer_iso: isolating the hovered layer (style guide R004). While the
+-~> layer card is open and Alt is held, the drawing is dimmed (`void` at 70%)
+-~> and the layer under the pointer is drawn again on top of the dim, with a
+-~> chip under the canvas that names it. Releasing Alt, or leaving the row
+-~> (the card closing), puts the canvas back. A hidden layer isn't isolated:
+-~> its card is the only place it shows.
+-~>
+-~> Only the drawing's own pixels change, and only when Alt or the layer
+-~> changes (iso_key is part of the canvas key); the scene's tiles are never
+-~> touched, so a hover costs no repaint of the drawing itself.
+-~>
+-~>   iso_note(e)       keeps track of Alt from an event's mods
+-~>   iso_line()        the isolated layer's line, or 0
+-~>   iso_key()         what the canvas has to repaint for, as text
+-~>   iso_paint(cl, off) dim and layer, over the drawing at off (canvas buffer)
+-~>   iso_chip(cl, x)   the chip under the canvas frame
+
+use "../gfx/raster"
+use "app"
+use "editor_undo"
+use "layer_card"
+use "layer_thumbs"
+use "view_canvas"
+use "view_gfx"
+use "view_layout"
+
+-~> alt: whether Alt is held, as the last event said. cache: the layer's
+-~> shapes scaled to the zoom, kept while nothing they depend on changes.
+let ISO = {"alt": false, "cache": {"key": "", "shapes": []}}
+
+-~> The dim over the drawing: `void` at 70%.
+let iso_dim = #0b0c0bb3
+
+-~> Records Alt from an event that carries mods (and its end with the
+-~> pointer or the focus leaving the window). A change asks for a paint.
+function iso_note(e) {
+  let alt = ISO.alt
+  if (e.type == "leave" || (e.type == "focus" && e.focused == false)) {
+    alt = false
+  } elif (e.mods != null) {
+    alt = e.mods.alt == true
+  }
+  if (e.type == "key" && text.starts(text.lower(e.key), "alt")) {
+    alt = true
+  }
+  if (alt != ISO.alt) {
+    ISO.alt = alt
+    app.needs_paint = true
+  }
+}
+
+-~> Whether the key event is Alt itself (it only changes the isolation).
+function iso_is_alt_key(e) {
+  e.type == "key" && text.starts(text.lower(e.key), "alt")
+}
+
+-~> The line of the layer to isolate, or 0: Alt is held, a card is open (and
+-~> the pointer is still on its row) and the layer isn't hidden.
+function iso_line() {
+  if (!ISO.alt || !lc_open() || LC.hide_due > 0 || V.tip.card.hidden) {
+    return 0
+  }
+  V.tip.card.line
+}
+
+-~> What the canvas has to know to paint the isolation: the layer and what
+-~> it looks like (the shapes' version).
+function iso_key() {
+  let line = iso_line()
+  if (line == 0) {
+    return ""
+  }
+  str(line) + "|" + str(ed.shapes_ver)
+}
+
+-~> The isolated layer's shapes at the zoom of cl, made again only when the
+-~> layer, the shapes or the zoom change.
+function iso_shapes(cl) {
+  let key = iso_key() + "|" + str(cl.zoom)
+  if (ISO.cache.key != key) {
+    let c = V.tip.card
+    let shapes = []
+    let own = lt_shapes(c.line, c.end)
+    for (let i = 0; i < len(own); i += 1) {
+      push(shapes, view_scale_shape(own[i], cl.zoom))
+    }
+    ISO.cache = {"key": key, "shapes": shapes}
+  }
+  ISO.cache.shapes
+}
+
+-~> Dims the drawing at off (the part inside the current clip) and draws
+-~> the isolated layer over it. Nothing when no layer is isolated.
+function iso_paint(cl, off) {
+  if (iso_line() == 0) {
+    return null
+  }
+  fb.fill(off, (cl.sw, cl.sh), iso_dim)
+  raster.paint(iso_shapes(cl), off)
+}
+
+-~> The chip under the canvas frame at x: layer icon, `sun · 3 objects`.
+-~> Returns the chip's width, 0 when no layer is isolated.
+function iso_chip(cl, x) {
+  if (iso_line() == 0) {
+    return 0
+  }
+  let c = V.tip.card
+  let label = c.parents + c.name + " · " + c.count
+  let w = g_text_w(label) + 18
+  let y = cl.frame[1] + cl.frame[3] + 4
+  g_frame(x, y, w, 16, P.void)
+  g_rect(x + 1, y + 1, w - 2, 14, P.row)
+  g_rect(x + 1, y + 1, w - 2, 1, P.bevel)
+  g_icon("layer", x + 4, y + 4, P.lizard)
+  g_text(label, x + 14, y + 1, P.text)
+  w
+}

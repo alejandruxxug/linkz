@@ -12,6 +12,7 @@ use "editor_undo"
 use "home_view"
 use "i18n"
 use "layer_card"
+use "layer_iso"
 use "mode_state"
 use "view_canvas"
 use "view_gfx"
@@ -219,6 +220,11 @@ function view_clear_refusal() {
 
 function view_event(e) {
   let ty = e.type
+  iso_note(e)
+  if (iso_is_alt_key(e)) {
+    -~> Alt on its own only changes the isolation: it keeps the card open
+    return null
+  }
   if (ty == "down" || ty == "key") {
     view_clear_refusal()
   }

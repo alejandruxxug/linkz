@@ -1,0 +1,28 @@
+-- no Alt: the card opens, nothing is isolated
+true 0 true
+true
+-- Alt held: the drawing is dimmed, the layer stays, the chip shows
+true 3 3|2
+true
+-- the scene's tiles were not touched
+true
+-- a hidden layer is not isolated
+true true 0 true
+-- another layer under Alt swaps the isolation at once
+3
+8 true
+-- releasing Alt restores the canvas exactly
+false 0
+true
+-- Alt as a key of its own keeps the card and isolates
+true
+true 3
+true
+-- leaving the rows ends it after the card's delay
+0
+true 0
+-- the window leaving ends Alt
+3
+false 0
+-- editing under Alt paints the new layer: part repaint equals a full one
+true

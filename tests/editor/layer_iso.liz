@@ -1,0 +1,122 @@
+-~> The isolation of the hovered layer (R004): with the layer card open and
+-~> Alt held, the drawing is dimmed and the layer drawn again on top, with a
+-~> chip under the canvas; releasing Alt, leaving the row, a hidden layer or
+-~> a click puts the canvas back. Only the drawing's own pixels change.
+
+use "rig"
+
+let code = "-~> lzdraw 1
+canvas = {\"size\": (480, 320), \"background\": #f6d9a8}
+layer sun
+  circle((360, 90), 34, #fff3c4)
+  circle((360, 90), 56, #f2a65a66)
+layer boat -~> [hidden]
+  line((150, 214), (150, 170), #3b2a6b, 3)
+layer sky
+  rect((0, 0), (480, 200), #f2a65a)
+"
+
+let size = (640, 480)
+let modules = rig_modules + ["ui/view_panels", "ui/view_canvas", "ui/i18n", "ui/mode_state", "ui/layers_dock", "ui/artist_layout",
+  "ui/artist_route", "ui/artist_layers", "ui/layer_thumbs", "ui/palette_view", "ui/color_state", "ui/blend_menu", "ui/layer_blend",
+  "ui/view_popups", "ui/layer_card", "ui/layer_iso", "ui/view_scene"]
+let rig = rig_open(fs.join(fs.home(), "layer-iso-test"), code, size, modules)
+let n = rig.names
+let none = {"shift": false, "alt": false, "cmd": false, "ctrl": false}
+let alt = {"shift": false, "alt": true, "cmd": false, "ctrl": false}
+
+function on_code(line, dx) {
+  let vis = n.view_visible()
+  for (let i = 0; i < len(vis); i += 1) {
+    if (vis[i].item.t == "row" && vis[i].item.line == line) {
+      return (dx, vis[i].y + 9)
+    }
+  }
+  null
+}
+
+-~> Rests the pointer on p (with mods) until the card is due, then shows it.
+function rest(p, mods) {
+  rig_frame(rig, [{"type": "move", "pos": p, "mods": mods}])
+  n.V.tip_due = 1
+  rig_frame(rig)
+}
+
+-~> The whole window as it shows now.
+function shot() {
+  rig_shot(rig)
+}
+
+-~> The drawing's part of the window.
+function canvas_shot() {
+  rig_shot(rig)
+}
+
+let plain = shot()
+let plain_canvas = canvas_shot()
+
+puts("-- no Alt: the card opens, nothing is isolated")
+rest(on_code(3, 90), none)
+puts(n.V.tip != null, n.iso_line(), n.iso_key() == "")
+puts(shot() != plain)
+let carded = canvas_shot()
+
+puts("-- Alt held: the drawing is dimmed, the layer stays, the chip shows")
+rig_frame(rig, [{"type": "move", "pos": on_code(3, 90), "mods": alt}])
+puts(n.ISO.alt, n.iso_line(), n.iso_key())
+let isolated = canvas_shot()
+puts(isolated != carded)
+
+puts("-- the scene's tiles were not touched")
+puts(n.V.scene.tiles.box == null)
+
+puts("-- a hidden layer is not isolated")
+rig_frame(rig, [{"type": "move", "pos": on_code(6, 90), "mods": alt}])
+puts(n.V.tip != null, n.V.tip.card.hidden, n.iso_line(), n.iso_key() == "")
+
+puts("-- another layer under Alt swaps the isolation at once")
+rig_frame(rig, [{"type": "move", "pos": on_code(3, 90), "mods": alt}])
+puts(n.iso_line())
+let first = canvas_shot()
+rig_frame(rig, [{"type": "move", "pos": on_code(8, 90), "mods": alt}])
+puts(n.iso_line(), canvas_shot() != first)
+
+puts("-- releasing Alt restores the canvas exactly")
+rig_frame(rig, [{"type": "move", "pos": on_code(3, 90), "mods": alt}])
+rig_frame(rig, [{"type": "move", "pos": on_code(3, 90), "mods": none}])
+puts(n.ISO.alt, n.iso_line())
+puts(canvas_shot() == carded)
+
+puts("-- Alt as a key of its own keeps the card and isolates")
+puts(n.V.tip != null)
+rig_frame(rig, [{"type": "key", "key": "AltLeft", "mods": alt}])
+puts(n.V.tip != null, n.iso_line())
+puts(canvas_shot() != carded)
+
+puts("-- leaving the rows ends it after the card's delay")
+rig_frame(rig, [{"type": "move", "pos": (300, 5), "mods": alt}])
+puts(n.iso_line())
+n.LC.hide_due = 1
+rig_frame(rig)
+puts(n.V.tip == null, n.iso_line())
+rig_frame(rig, [{"type": "move", "pos": (300, 6), "mods": none}])
+rig_frame(rig)
+
+puts("-- the window leaving ends Alt")
+rest(on_code(3, 90), alt)
+puts(n.iso_line())
+rig_frame(rig, [{"type": "leave"}])
+puts(n.ISO.alt, n.iso_line())
+
+puts("-- editing under Alt paints the new layer: part repaint equals a full one")
+rest(on_code(3, 90), alt)
+let k = n.V.cl.crect
+n.ed_reset(text.replace(code, "(360, 90), 34", "(300, 90), 34"), rig.path)
+n.view_prepare()
+rig_frame(rig)
+let kept = canvas_shot()
+n.tiles_mark_all(n.V.scene.tiles)
+n.view_force_all()
+n.app.needs_paint = true
+rig_frame(rig)
+puts(kept == canvas_shot())
