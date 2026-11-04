@@ -44,10 +44,12 @@ Order: finish B007b (editor view) + B015 (home) → **B007c autocomplete (mandat
 
 | Batch | What | State |
 |---|---|---|
-| B060 | Stamped brushes (engine, headless) | building (Sonnet) |
-| B061 | Pen pressure on Windows and Linux (lizard-script `pen`) | building (Opus) |
-| B062 | Trace: belt outlines | building (Sonnet) |
-| R005 | Figma: brush creator, brush picker import/export, tooltip mini videos | designing, then the developer approves |
+| B060 | Stamped brushes (engine, headless) | ✅ cbfbbd2 |
+| B061 | Pen pressure on Windows and Linux (lizard-script `pen`) | ✅ lizard-script ed0f9a0; needs real tablets (PEN_CHECKS.md) |
+| B062 | Trace: belt outlines, then colored line art | ✅ ed557f4, adc7f3c |
+| B063 | Canvas zoom and pan, pinch, cursors; sideways code scroll; trace file picker | ✅ cbfbbd2, 3f97593 |
+| R006 | App icon | E2 picked-ish, waiting for the developer's OK |
+| R005 | Figma: brush creator, brush picker import/export, tooltip mini videos | waiting for the developer's approval (8 questions) |
 | next | `.lzbrush` export/import (sandboxed) → Procreate importer (ABR/SUT after) → brush creator UI and tooltip videos (after R005) → trace strokes along curves | queued |
 
 ## 🗃️ Later (parked ideas)
