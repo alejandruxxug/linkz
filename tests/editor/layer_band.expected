@@ -1,0 +1,15 @@
+-- a layer lights its block, header to last indented row
+[4, 5, 6, 7, 8]
+-- a nested layer lights only its own block
+[6, 7]
+-- a shape or the canvas row lights nothing
+[]
+[]
+-- the pick of the canvas: a layer in a pick lights too
+[10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]
+-- the last layer scrolls the code to its header
+[23] true
+-- artist mode's drawer scrolls and lights as well
+[4, 5, 6, 7, 8] true
+[23] true
+

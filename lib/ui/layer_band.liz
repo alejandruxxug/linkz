@@ -1,0 +1,35 @@
+-~> layer_band: the code of a selected layer is lit in the code panel.
+-~> A layer that is selected (in the layers panel, on its `layer` row or by
+-~> the pick of the canvas) lights its whole block, from the header to its
+-~> last indented row, with a light band: the row tone and a 2 px lizard bar.
+-~> The selected row itself keeps the stronger look, so the caret row stands
+-~> out. A nested layer lights only its own block.
+-~>   band_has(line)   whether a row is inside the block of a selected layer
+-~>   band_paint(y, w) the band on the row at y
+
+use "select_model"
+use "view_gfx"
+use "view_layout"
+
+-~> Whether a line is inside the block of a selected layer (and is not its header).
+function band_has(line) {
+  let rows = view_rows()
+  let picked = pick_lines()
+  for (let i = 0; i < len(picked); i += 1) {
+    let l = picked[i]
+    if (l < 1 || l > len(rows)) {
+      continue
+    }
+    let r = rows[l - 1]
+    if (r.kind == "layer" && line > r.line && line <= r.end_line) {
+      return true
+    }
+  }
+  false
+}
+
+-~> Paints the band on a row at y.
+function band_paint(y, w) {
+  g_rect(0, y, w, 18, P.row)
+  g_rect(0, y, 2, 18, P.lizard)
+}

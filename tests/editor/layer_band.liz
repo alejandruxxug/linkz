@@ -1,0 +1,77 @@
+-~> Selecting a layer lights its code: the rows from its header to its last
+-~> indented row (a nested layer only its own), in the code panel and in
+-~> artist mode's drawer, and the code scrolls so the header shows.
+
+use "../../lib/app/editor"
+use "rig"
+
+let body = ""
+for (let i = 0; i < 12; i += 1) {
+  body = body + "  circle((" + str(10 + i) + ", 20), 5, #fff3c4)\n"
+}
+let code = "-~> lzdraw 1
+canvas = {\"size\": (480, 320), \"background\": #f6d9a8}
+layer sun
+  circle((360, 90), 34, #fff3c4)
+  layer rays
+    line((0, 0), (9, 9), #fff3c4, 2)
+    line((1, 1), (8, 8), #fff3c4, 2)
+  circle((360, 90), 56, #f2a65a66)
+layer dots
+" + body + "layer sea
+  rect((0, 200), (480, 120), #2d6a8f)
+"
+
+let modules = rig_modules + ["ui/view_panels", "ui/layer_band", "ui/artist_layout", "ui/artist_route", "ui/artist_layers", "ui/select_model", "ui/view_canvas"]
+let rig = rig_open(fs.join(fs.home(), "band-test"), code, editor_size, modules)
+let n = rig.names
+
+-~> The lines lit by a band, as a list.
+function lit() {
+  let out = []
+  for (let l = 1; l <= len(n.ed_model().lines); l += 1) {
+    if (n.band_has(l)) {
+      push(out, l)
+    }
+  }
+  out
+}
+
+function top_line() {
+  n.view_visible()[0].item.line
+}
+
+puts("-- a layer lights its block, header to last indented row")
+n.view_select_line(3)
+rig_frame(rig)
+puts(lit())
+puts("-- a nested layer lights only its own block")
+n.view_select_line(5)
+rig_frame(rig)
+puts(lit())
+puts("-- a shape or the canvas row lights nothing")
+n.view_select_line(4)
+rig_frame(rig)
+puts(lit())
+n.view_select_line(2)
+rig_frame(rig)
+puts(lit())
+puts("-- the pick of the canvas: a layer in a pick lights too")
+n.pick_set([9, 8])
+rig_frame(rig)
+puts(lit())
+n.pick_clear()
+puts("-- the last layer scrolls the code to its header")
+n.view_select_line(22)
+rig_frame(rig)
+puts(lit(), top_line() > 3)
+puts("-- artist mode's drawer scrolls and lights as well")
+n.art_set_mode(true)
+n.art_toggle_drawer()
+n.view_select_line(3)
+rig_frame(rig)
+puts(lit(), top_line() <= 3)
+n.view_select_line(22)
+rig_frame(rig)
+puts(lit(), top_line() > 3)
+puts(rig.ed.error)

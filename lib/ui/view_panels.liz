@@ -9,6 +9,7 @@ use "editor_undo"
 use "error_words"
 use "home_data"
 use "i18n"
+use "layer_band"
 use "pen_props"
 use "select_model"
 use "tool_route"
@@ -156,6 +157,8 @@ function view_paint_row(r, y, pinned) {
   if (sel) {
     g_rect(0, y, pw, 18, P.moss)
     g_rect(0, y, 2, 18, P.lizard)
+  } elif (band_has(r.line)) {
+    band_paint(y, pw)
   } elif (hover) {
     g_rect(0, y, pw, 18, P.row)
   }
