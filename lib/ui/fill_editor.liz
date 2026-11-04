@@ -523,8 +523,7 @@ function fe_handles_rect() {
 function fe_handle_at(x, y) {
   let hs = fe_handles()
   let cl = view_canvas_layout()
-  let gm = view_geom()
-  if (x < gm.cx || y < 30 || y >= gm.status_y) {
+  if (!view_in_canvas(x, y)) {
     return null
   }
   for (let i = len(hs.list) - 1; i >= 0; i = i - 1) {

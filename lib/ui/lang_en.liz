@@ -399,5 +399,24 @@ lang_register("en", {
   "undo.color_add": "add colors.{name}",
   "undo.color_add_all": "add {n} colors",
   "undo.color_rename": "rename to colors.{name}",
-  "undo.color_remove": "remove colors.{name}"
+  "undo.color_remove": "remove colors.{name}",
+
+  "artist.code": "Code",
+  "artist.mode": "artist mode",
+  "artist.switch": "artist mode",
+  "artist.fill": "Fill",
+  "artist.canvas": "canvas",
+  "artist.refuse_move": "here a row moves within its layer: to put it in another layer, cut and paste its code",
+  "param.center": "center",
+  "param.fill": "fill",
+  "param.stroke": "stroke",
+  "param.width": "width",
+  "param.pen": "pen",
+  "param.color": "color",
+  "param.size": "size",
+  "param.points": "points",
+  "param.from": "from",
+  "param.to": "to",
+  "param.text": "text",
+  "param.radii": "radii"
 })

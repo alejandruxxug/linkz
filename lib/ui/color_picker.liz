@@ -36,6 +36,29 @@ function cpk_square(x, y, w, sh, sth) {
   }
 }
 
+-~> A square picker sw wide and h high with the hue and alpha strips
+-~> standing beside it, stw wide, 4 apart (artist mode's compact palette):
+-~> the hue from the top, the alpha opaque at the top.
+function cpk_square_v(x, y, sw, h, stw) {
+  {
+    "mode": "square",
+    "wheel": null,
+    "sq": [x, y, sw, h],
+    "hue": [x + sw + 4, y, stw, h],
+    "alpha": [x + sw + 4 + stw + 4, y, stw, h],
+    "h": h,
+    "vertical": true
+  }
+}
+
+-~> The place (0 to 1) of a point along a strip of the picker.
+function cpk_strip_t(pk, st, p) {
+  if (pk.vertical == true) {
+    return strip_t([st[1], st[0], st[3], st[2]], p.y)
+  }
+  strip_t(st, p.x)
+}
+
 -~> The part of the picker at a point: "ring", "triangle", "square", "hue",
 -~> "alpha" or "".
 function cpk_part_at(pk, hsv, p) {
@@ -70,9 +93,13 @@ function cpk_drag(pk, part, p, hsv) {
     out.s = sv[0]
     out.v = sv[1]
   } elif (part == "hue") {
-    out.h = hue_wrap(strip_t(pk.hue, p.x) * 359.999)
+    out.h = hue_wrap(cpk_strip_t(pk, pk.hue, p) * 359.999)
   } elif (part == "alpha") {
-    out.a = math.round(strip_t(pk.alpha, p.x) * 255)
+    let k = cpk_strip_t(pk, pk.alpha, p)
+    if (pk.vertical == true) {
+      k = 1 - k
+    }
+    out.a = math.round(k * 255)
   }
   out
 }
@@ -123,6 +150,15 @@ function cpk_draw(pk, hsv, marks = []) {
     }
     cd_ring_marker(wheel_hue_point(wh, hsv.h), P.bright)
     cd_ring_marker(wheel_point(wh, hsv), P.bright)
+  }
+  if (pk.vertical == true) {
+    cd_square(pk.sq, hsv.h)
+    cd_ring_marker(square_point(pk.sq, hsv), P.bright)
+    cd_hue_strip_v(pk.hue)
+    cd_strip_marker_v(pk.hue, hue_wrap(hsv.h) / 360.0)
+    cd_alpha_strip_v(pk.alpha, c)
+    cd_strip_marker_v(pk.alpha, 1 - hsv.a / 255.0)
+    return null
   }
   if (pk.sq != null) {
     cd_square(pk.sq, hsv.h)

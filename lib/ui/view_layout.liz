@@ -6,12 +6,15 @@
 
 use "app"
 use "app_screens"
+use "artist_ctx"
+use "artist_layout"
 use "blend_props"
 use "color_route"
 use "color_state"
 use "editor_state"
 use "editor_undo"
 use "i18n"
+use "mode_state"
 use "view_gfx"
 use "view_items"
 use "tool_route"
@@ -67,6 +70,12 @@ function view_touch() {
 }
 
 function view_geom() {
+  if (mode_artist()) {
+    -~> artist mode: the code panel is the drawer, as wide as the canvas column
+    let ag = art_geom(V.w, V.h)
+    V.pw = ag.pw
+    return ag
+  }
   let h = V.h
   let props_y = h - 78
   {
@@ -93,6 +102,9 @@ function view_in(x, y, rx, ry, rw, rh) {
 -~> The panels as [x, y, w, h], to know which ones a popup covers.
 function view_panel_rects() {
   let gm = view_geom()
+  if (gm.artist == true) {
+    return art_panel_rects(gm)
+  }
   {
     "toolbar": [0, 0, gm.w, 16],
     "tabs": [0, 16, gm.w, 14],
@@ -102,6 +114,31 @@ function view_panel_rects() {
     "canvas": [gm.pw, 30, gm.cx + gm.cw - gm.pw, gm.h - 46],
     "palette": [gm.cx + gm.cw, 30, gm.w - gm.cx - gm.cw, gm.h - 46]
   }
+}
+
+-~> The panels in the order they are painted; artist mode adds the tool
+-~> column and the layers.
+function view_panel_names() {
+  let names = ["toolbar", "tabs", "rows", "props", "status", "canvas", "palette"]
+  if (mode_artist()) {
+    names = names + ["tools", "layers"]
+  }
+  names
+}
+
+-~> Whether a UI point is on the properties panel (the context bar in artist mode).
+function view_in_props(x, y) {
+  let r = view_panel_rects().props
+  view_in(x, y, r[0], r[1], r[2], r[3])
+}
+
+-~> Whether a UI point is on the canvas panel (its splitter with it).
+function view_in_canvas(x, y) {
+  let gm = view_geom()
+  if (gm.artist == true) {
+    return view_in(x, y, gm.cx, gm.cy, gm.cw, gm.ch)
+  }
+  x >= gm.cx && y >= 30 && y < gm.status_y
 }
 
 -~> Marks every panel a rectangle touches to be painted again.
@@ -198,6 +235,11 @@ function view_visible() {
 
 -~> Scrolls so the item of this line is on screen.
 function view_reveal(line) {
+  let gm = view_geom()
+  if (gm.lim <= gm.rows_y) {
+    -~> no rows on screen (artist mode's drawer is closed)
+    return null
+  }
   let items = view_items()
   let at = -1
   for (let i = 0; i < len(items); i = i + 1) {
@@ -298,6 +340,9 @@ function tb_right(compact) {
 -~> "hidden"}. A narrow window drops the words of save and export first; a narrower
 -~> one moves the last tools into the » menu (shown in the tab row while open).
 function view_toolbar_layout() {
+  if (mode_artist()) {
+    return view_toolbar_artist()
+  }
   let tools = []
   for (let i = 0; i < len(view_tool_ids); i = i + 1) {
     push(tools, view_tool_ids[i])
@@ -350,8 +395,20 @@ function view_toolbar_layout() {
   if (len(hidden) > 0) {
     push(out, tb_button("more", "bar", x + 34, 1, 14, "more", ""))
   }
+  tb_place_right(out, right[0])
+  -~> the hidden tools sit in the tab row, right under the » button
+  if (V.overflow && len(hidden) > 0) {
+    for (let i = 0; i < len(hidden); i = i + 1) {
+      push(out, tb_button(hidden[i].id, "tool", 3 + i * 15, 16, 14, hidden[i].icon, ""))
+    }
+  }
+  {"buttons": out, "seps": seps, "hidden": hidden}
+}
+
+-~> Puts the right side's buttons (tb_right) on the toolbar, from the right
+-~> edge: export, save, language, then home.
+function tb_place_right(out, bs) {
   let rx = V.w - 3
-  let bs = right[0]
   for (let i = 0; i < len(bs); i = i + 1) {
     rx = rx - bs[i][2]
     push(out, tb_button(bs[i][0], "bar", rx, 1, bs[i][2], bs[i][3], bs[i][1]))
@@ -364,13 +421,18 @@ function view_toolbar_layout() {
   if (view_has_home()) {
     push(out, tb_button("home", "bar", rx - 20, 1, 14, "home", ""))
   }
-  -~> the hidden tools sit in the tab row, right under the » button
-  if (V.overflow && len(hidden) > 0) {
-    for (let i = 0; i < len(hidden); i = i + 1) {
-      push(out, tb_button(hidden[i].id, "tool", 3 + i * 15, 16, 14, hidden[i].icon, ""))
-    }
+}
+
+-~> The artist toolbar: `</> Code` and `artist mode` on the left, the right
+-~> side as in coder mode (its tools are in the column, art_column).
+function view_toolbar_artist() {
+  let out = art_bar_buttons()
+  let right = tb_right(false)
+  if (out[1].x + out[1].w + right[1] + 6 > V.w) {
+    right = tb_right(true)
   }
-  {"buttons": out, "seps": seps, "hidden": hidden}
+  tb_place_right(out, right[0])
+  {"buttons": out, "seps": [out[0].x + out[0].w + 2], "hidden": []}
 }
 
 -~> The buttons of the toolbar: [{"id", "x", "y", "w", "h", "icon", "label"}]. The
@@ -506,9 +568,9 @@ function view_shown_fields(props) {
 
 -~> The panel's layout, kept until the editor's state, the focus or the language change.
 function view_props_cached() {
-  let key = str(V.ver) + "|" + str(V.focus) + "|" + str(V.picker) + "|" + lang_get() + "|" + str(V.pw) + "|" + str(V.h)
+  let key = str(V.ver) + "|" + str(V.focus) + "|" + str(V.picker) + "|" + lang_get() + "|" + str(V.pw) + "|" + str(V.h) + "|" + str(mode_artist())
   if (V.pl == null || V.pl_key != key) {
-    V.pl = color_props_wrap(blend_props_wrap(pen_props_wrap(view_props_layout_build())))
+    V.pl = art_ctx_wrap(color_props_wrap(blend_props_wrap(pen_props_wrap(view_props_layout_build()))))
     V.pl_key = key
   }
   V.pl

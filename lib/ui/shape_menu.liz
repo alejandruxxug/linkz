@@ -12,6 +12,7 @@
 -~> step 12; it flips left and up at the window's edge.
 
 use "app"
+use "artist_route"
 use "blend_menu"
 use "color_route"
 use "editor_doc"
@@ -387,7 +388,11 @@ function sm_line_at(p) {
     }
     return 0
   }
-  if (p.x >= gm.cx && p.y >= 30 && p.y < gm.status_y) {
+  let art = art_line_at(p)
+  if (art > 0) {
+    return art
+  }
+  if (view_in_canvas(p.x, p.y)) {
     let cl = view_canvas_layout()
     let s = view_hit_shape(cl, view_to_drawing(cl, p.x, p.y))
     if (s != null && type(s.line) == "INTEGER") {

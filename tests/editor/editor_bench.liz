@@ -1,7 +1,8 @@
 -~> The editor's speed on big drawings (docs/Batches/fixtures, made by the
 -~> old Go host's perf test): a full repaint, a small edit, one frame of dragging
 -~> a shape, one keystroke, and the edits that add or take away lines, each
--~> timed as whole frames (events, run, paint). Run it alone to see the
+-~> timed as whole frames (events, run, paint); then artist mode's repaint,
+-~> drag, property scrub in the context bar and layer row reorder. Run it alone to see the
 -~> table: lizardscript tests/editor/editor_bench.liz [rounds]
 -~> (lizardscript test --bench runs it as part of the tests, once each).
 
@@ -54,13 +55,16 @@ function bench(rig, name, f, undo = null) {
   }
 }
 
+-~> The modules the artist cases reach into, besides the rig's.
+let bench_modules = rig_modules + ["ui/artist_route", "ui/artist_layers", "ui/view_panels", "ui/view_canvas"]
+
 let sizes = [2000, 10000]
 for (let s = 0; s < len(sizes); s += 1) {
   let count = sizes[s]
   let k = str(count // 1000) + "k/"
   let t0 = time.ms()
   let code = fs.read(fs.join(libs_root(), "docs", "Batches", "fixtures", "shapes-" + str(count // 1000) + "k.lzdraw"))
-  let rig = rig_open(fs.join(fs.home(), "bench-" + str(count)), code, (800, 500))
+  let rig = rig_open(fs.join(fs.home(), "bench-" + str(count)), code, (800, 500), bench_modules)
   let n = rig.names
   puts(k + "open", str(math.round(time.ms() - t0)) + " ms")
 
@@ -143,4 +147,65 @@ for (let s = 0; s < len(sizes); s += 1) {
     }
     [{"type": "type", "text": ")"}]
   })
+  if (rounds % 2 == 1) {
+    rig_frame(rig, [{"type": "type", "text": ")"}])
+  }
+
+  -~> artist mode: the same drag, a property scrubbed in the context bar
+  -~> (an edit per frame, like a keystroke) and a layer row dragged below
+  -~> the next one (the release is the frame)
+  n.art_set_mode(true)
+  n.ed_select(first_shape)
+  n.view_after()
+  rig_frame(rig)
+  bench(rig, k + "artist_repaint", function(_i) {
+    if (n.V.scene != null) {
+      n.tiles_mark_all(n.V.scene.tiles)
+    }
+    n.view_force_all()
+    n.app.needs_paint = true
+    []
+  })
+  at = n.view_to_window(n.view_canvas_layout(), (400, 300)) * 0.5
+  rig_frame(rig, [{"type": "down", "pos": at}])
+  bench(rig, k + "artist_drag_frame", function(i) {
+    let d = 2 + i % 8
+    [{"type": "move", "pos": at + (d, d / 2.0)}]
+  })
+  rig_frame(rig, [{"type": "up", "pos": at}])
+  n.ed_undo()
+  n.view_after()
+  n.ed_select(first_shape)
+  n.view_after()
+  rig_frame(rig)
+  let r_box = null
+  let lay = n.view_props_cached()
+  for (let i = 0; i < len(lay.boxes); i += 1) {
+    if (lay.boxes[i].field == "r") {
+      r_box = lay.boxes[i]
+    }
+  }
+  let rp = (r_box.x + 4, r_box.y + 8)
+  rig_frame(rig, [{"type": "down", "pos": rp}])
+  bench(rig, k + "artist_prop_edit", function(i) {
+    [{"type": "move", "pos": rp + (3 + i % 2, 0)}]
+  })
+  rig_frame(rig, [{"type": "up", "pos": rp}])
+  n.ed_undo()
+  n.view_after()
+  n.ed_toggle_fold(first_shape - 1)
+  n.view_select_line(first_shape - 1)
+  n.view_after()
+  rig_frame(rig)
+  let vis = n.la_visible()
+  let lx = n.la_rect()[0] + 80
+  let from = (lx, vis[0].y + 9)
+  let to = (lx, vis[1].y + 16)
+  bench(rig, k + "artist_reorder", function(_i) {
+    rig_frame(rig, [{"type": "down", "pos": from}])
+    rig_frame(rig, [{"type": "move", "pos": to}])
+    [{"type": "up", "pos": to}]
+  }, undo)
+  n.art_set_mode(false)
+  rig_frame(rig)
 }

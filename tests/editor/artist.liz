@@ -1,0 +1,352 @@
+-~> Artist mode in a headless editor: the switch (same document, caret and
+-~> history; remembered in settings.liz), the layout (tool column, context
+-~> bar, compact palette, layers panel, code drawer), the layers panel's
+-~> rows, eye, fold and drag to reorder (one undo step, a move into another
+-~> layer refused), its blend dropdown and opacity, the context bar's fields,
+-~> the drawer and the keys while it is closed, the thumbnails made again
+-~> only for the layer that changed, the compact palette, the pen picker and
+-~> the pen settings without their code, and the way back to coder mode.
+
+use "../../lib/app/editor"
+use "rig"
+
+let code = "-~> lzdraw 1
+canvas = {\"size\": (480, 320), \"background\": #f6d9a8}
+let horizon = 200
+layer sun
+  circle((360, 90), 34, #fff3c4)
+  circle((360, 90), 56, #f2a65a66)
+layer boat
+  polygon([(120, 214), (180, 214), (165, 232), (135, 232)], #3b2a6b)
+  line((150, 214), (150, 170), #3b2a6b, 3)
+layer sky
+  rect((0, 0), (480, horizon), #f2a65a)
+"
+
+let modules = rig_modules + ["ui/view_panels", "ui/view_canvas", "ui/i18n", "ui/mode_state", "ui/artist_layout", "ui/artist_route",
+  "ui/artist_layers", "ui/artist_ctx", "ui/artist_tools", "ui/layer_thumbs", "ui/palette_view", "ui/palette_compact", "ui/color_state",
+  "ui/blend_menu", "ui/layer_blend", "ui/pen_window", "ui/pen_route", "ui/view_popups", "ui/fill_editor", "ui/color_popover", "ui/blend_props", "ui/shape_menu"]
+let rig = rig_open(fs.join(fs.home(), "artist-test"), code, editor_size, modules)
+let n = rig.names
+let none = {"shift": false, "alt": false, "cmd": false, "ctrl": false}
+let cmd = {"shift": false, "alt": false, "cmd": true, "ctrl": false}
+
+function line_of(k) {
+  n.ed_model().lines[k - 1]
+}
+
+function steps() {
+  len(n.ed.undo)
+}
+
+function key(k, mods = none) {
+  rig_frame(rig, [{"type": "key", "key": k, "mods": mods}])
+}
+
+function typed(s) {
+  rig_frame(rig, [{"type": "type", "text": s}])
+}
+
+function click(p) {
+  rig_frame(rig, [{"type": "down", "pos": p}, {"type": "up", "pos": p}])
+}
+
+function drag(a, b) {
+  rig_frame(rig, [{"type": "down", "pos": a}])
+  rig_frame(rig, [{"type": "move", "pos": (a.x + (b.x - a.x) / 2, a.y + (b.y - a.y) / 2)}])
+  rig_frame(rig, [{"type": "move", "pos": b}])
+  rig_frame(rig, [{"type": "up", "pos": b}])
+}
+
+-~> The middle of a rectangle [x, y, w, h].
+function mid(r) {
+  (r[0] + r[2] // 2, r[1] + r[3] // 2)
+}
+
+-~> The layers panel's rows on screen as "line:kind@y".
+function layer_rows() {
+  let out = []
+  let rows = n.la_visible()
+  for (let i = 0; i < len(rows); i += 1) {
+    push(out, str(rows[i].row.line) + ":" + rows[i].row.kind + "@" + str(rows[i].y))
+  }
+  text.join(out, " ")
+}
+
+-~> The point on the layers panel's row of `line`, dx from its left.
+function on_layer(line, dx) {
+  let rows = n.la_visible()
+  for (let i = 0; i < len(rows); i += 1) {
+    if (rows[i].row.line == line) {
+      return (n.la_rect()[0] + dx, rows[i].y + 9)
+    }
+  }
+  null
+}
+
+-~> A box of the context bar by its field.
+function bar_box(field) {
+  let bar = n.view_props_cached()
+  for (let i = 0; i < len(bar.boxes); i += 1) {
+    if (bar.boxes[i].field == field) {
+      return bar.boxes[i]
+    }
+  }
+  null
+}
+
+function rect_of(b) {
+  [b.x, b.y, b.w, b.h]
+}
+
+-~> A toolbar button's rectangle by its hover id.
+function tb(id) {
+  let buttons = n.view_toolbar()
+  for (let i = 0; i < len(buttons); i += 1) {
+    if (buttons[i].group + ":" + buttons[i].id == id) {
+      return rect_of(buttons[i])
+    }
+  }
+  null
+}
+
+puts("-- coder mode first, as it was")
+n.view_select_line(5)
+n.view_after()
+rig_frame(rig)
+let coder_pw = n.V.pw
+puts(n.mode_artist(), n.view_geom().cx, n.view_panel_names())
+puts(n.view_hover_at(mid(n.art_switch_rect(512)).x, mid(n.art_switch_rect(512)).y))
+
+puts("-- the tab bar's button switches; the document, caret and history stay")
+n.ed_set_prop("r", "35")
+n.view_after()
+rig_frame(rig)
+let before = [n.ed_model().line, steps(), line_of(5)]
+click(mid(n.art_switch_rect(512)))
+puts(n.mode_artist(), [n.ed_model().line, steps(), line_of(5)] == before)
+puts(text.find(fs.read(n.settings_path()), "let mode = \"artist\"") >= 0)
+let gm = n.view_geom()
+puts("canvas", [gm.cx, gm.cy, gm.cw, gm.ch], "drawer", n.V.pw, "props_y", gm.props_y)
+puts(n.view_panel_rects())
+puts(n.view_panel_names())
+
+puts("-- the toolbar and the tool column")
+let bs = n.view_toolbar()
+let ids = []
+for (let i = 0; i < len(bs); i += 1) {
+  push(ids, bs[i].group + ":" + bs[i].id)
+}
+puts(ids)
+let col = n.art_column()
+let tools = []
+for (let i = 0; i < len(col.buttons); i += 1) {
+  push(tools, col.buttons[i].id + "@" + str(col.buttons[i].y))
+}
+puts(tools, n.art_column_end())
+puts(n.view_hover_at(10, 60), n.view_hover_at(10, 90), n.view_hit_rect("tool:brush"))
+click(mid(n.art_tools_rect("tool:select")))
+puts(n.V.tool)
+click(mid(n.art_tools_rect("tool:select")))
+puts(n.V.tool == "")
+
+puts("-- the layers panel: a row per layer and per shape in an open one")
+puts(layer_rows())
+puts(n.view_hover_at(on_layer(4, 6).x, on_layer(4, 6).y), n.view_hover_at(on_layer(4, 26).x, on_layer(4, 26).y),
+  n.view_hover_at(on_layer(4, 80).x, on_layer(4, 80).y))
+click(on_layer(7, 80))
+puts(n.ed_model().line, n.view_props_cached().ctx_title)
+click(on_layer(7, 26))
+puts(layer_rows())
+click(on_layer(7, 26))
+let s0 = steps()
+click(on_layer(8, 6))
+puts(line_of(8), steps() - s0)
+n.ed_undo()
+n.view_after()
+rig_frame(rig)
+
+puts("-- a right-click on a row opens the shape menu on it")
+let bp = on_layer(9, 80)
+rig_frame(rig, [{"type": "down", "pos": bp, "button": "right"}, {"type": "up", "pos": bp, "button": "right"}])
+puts(n.SM.open, n.SM.line)
+key("Escape")
+puts(n.SM.open)
+
+puts("-- a drag moves a row among its siblings: one undo step")
+s0 = steps()
+let sky = on_layer(10, 80)
+drag(sky, (sky.x, on_layer(4, 80).y - 6))
+puts(line_of(4), line_of(6), steps() - s0, n.ed_model().line)
+n.ed_undo()
+n.view_after()
+rig_frame(rig)
+puts(line_of(4), line_of(10))
+drag(on_layer(5, 80), on_layer(6, 80) + (0, 5))
+puts(line_of(5), line_of(6))
+n.ed_undo()
+n.view_after()
+rig_frame(rig)
+s0 = steps()
+drag(on_layer(5, 80), on_layer(8, 80))
+puts(steps() - s0, n.ed.refusal != null, line_of(5))
+
+puts("-- the context bar: the coder panel's fields in one strip")
+n.view_select_line(5)
+n.view_after()
+rig_frame(rig)
+let lay = n.view_props_cached()
+puts(lay.ctx_title)
+let boxes = []
+for (let i = 0; i < len(lay.boxes); i += 1) {
+  push(boxes, lay.boxes[i].field + ":" + str(lay.boxes[i].sub) + "@" + str(lay.boxes[i].x) + "," + str(lay.boxes[i].y) + "/" + str(lay.boxes[i].h))
+}
+puts(boxes)
+puts(n.view_hover_at(mid(rect_of(bar_box("r"))).x, mid(rect_of(bar_box("r"))).y), n.view_in_props(300, 40), n.view_in_props(300, 60))
+s0 = steps()
+let rb = mid(rect_of(bar_box("r")))
+drag(rb, rb + (6, 0))
+puts(line_of(5), steps() - s0)
+click(mid(rect_of(bar_box("r"))))
+typed("20")
+key("Enter")
+puts(line_of(5))
+let fr = n.view_hit_rect("field:fill:0")
+click((fr[0] + 6, fr[1] + 6))
+puts(n.CP.open)
+key("Escape")
+let fill_btn = null
+for (let i = 0; i < len(n.view_props_cached().own); i += 1) {
+  if (n.view_props_cached().own[i].id == "art:fill") {
+    fill_btn = n.view_props_cached().own[i]
+  }
+}
+click((fill_btn.x + 4, fill_btn.y + 4))
+puts(n.FE.open, n.FE.line)
+click((fill_btn.x + 4, fill_btn.y + 4))
+puts(n.FE.open)
+
+puts("-- a layer: its blend and opacity in the bar and in the panel's header")
+n.view_select_line(4)
+n.view_after()
+rig_frame(rig)
+lay = n.view_props_cached()
+let fields = []
+for (let i = 0; i < len(lay.boxes); i += 1) {
+  push(fields, lay.boxes[i].field + "@" + str(lay.boxes[i].x) + "," + str(lay.boxes[i].y))
+}
+puts(lay.ctx_title, fields)
+n.view_select_line(5)
+n.view_after()
+rig_frame(rig)
+click(mid(n.la_parts().blend))
+puts(n.BM.open, n.BM.line, n.ed_model().line)
+key("ArrowDown")
+key("Enter")
+puts(line_of(5), n.blend_badge_text(n.blend_row_style(n.view_rows()[3])))
+s0 = steps()
+let op = mid(n.la_parts().opacity)
+drag(op, op - (30, 0))
+puts(line_of(6), steps() - s0)
+click(op)
+puts(n.V.focus.field, n.V.focus.kind)
+typed("50")
+key("Enter")
+puts(line_of(6))
+n.ed_undo()
+n.ed_undo()
+n.ed_undo()
+n.view_after()
+rig_frame(rig)
+puts(line_of(5), line_of(6))
+
+puts("-- the drawer: Cmd+/ and the button; the rows under the canvas")
+key("/", cmd)
+gm = n.view_geom()
+puts(n.mode_drawer(), gm.main_y, gm.rows_y, gm.ch, n.view_panel_rects().rows, n.view_panel_rects().tools)
+let drawer_rows = n.view_visible()
+puts(drawer_rows[0].y >= gm.rows_y, n.view_hover_at(30, gm.main_y + 5), n.view_hover_at(gm.pw - 5, gm.main_y + 5))
+click((gm.pw - 20, gm.main_y + 5))
+puts(n.view_geom().main_y)
+click((gm.pw - 20, gm.main_y + 5))
+click((gm.pw - 5, n.view_geom().main_y + 5))
+puts(n.mode_drawer())
+click(mid(tb("mode:code")))
+puts(n.mode_drawer())
+key("/", cmd)
+puts(n.mode_drawer())
+
+puts("-- with the drawer closed the keys don't edit the code")
+n.view_select_line(5)
+n.view_after()
+rig_frame(rig)
+let text_before = n.ed_model().lines
+typed("x")
+key("ArrowLeft")
+puts(n.ed_model().lines == text_before)
+s0 = steps()
+key("Backspace")
+puts(line_of(5), steps() - s0)
+key("Z", cmd)
+puts(line_of(5))
+
+puts("-- thumbnails: made once, again only for the layer that changed")
+let r0 = n.LT.renders
+rig_frame(rig)
+n.view_force_all()
+rig_frame(rig)
+puts(n.LT.renders - r0)
+n.view_select_line(5)
+n.ed_set_prop("r", "30")
+n.view_after()
+rig_frame(rig)
+puts(n.LT.renders - r0, n.ed.patch != null)
+n.view_select_line(11)
+n.ed_set_prop("size", "(480, 190)")
+n.view_after()
+rig_frame(rig)
+puts(n.LT.renders - r0)
+
+puts("-- the compact palette")
+let pr = n.pal_rect()
+puts(pr, n.pal_layout().picker.hue, n.pal_layout().picker.alpha)
+let parts = n.pal_parts(n.pal_layout())
+let pids = []
+for (let i = 0; i < len(parts); i += 1) {
+  push(pids, parts[i].id)
+}
+puts(pids)
+n.view_select_line(2)
+n.view_after()
+rig_frame(rig)
+let chip = n.pal_part(n.pal_layout(), "recent:1")
+click((chip.x + 4, chip.y + 4))
+puts(n.ed.color)
+let hue = n.pal_layout().picker.hue
+click((hue[0] + 3, hue[1] + hue[3] // 2))
+puts(math.round(n.PAL.hsv.h))
+click(mid(rect_of(n.pal_part(n.pal_layout(), "dropper"))))
+puts(n.PAL.dropper)
+let sun = n.view_to_window(n.view_canvas_layout(), (360, 90)) * 0.5
+puts(n.view_hover_at(sun.x, sun.y))
+click(sun)
+puts(n.ed.color, n.PAL.dropper)
+click(mid(rect_of(n.pal_part(n.pal_layout(), "collapse"))))
+puts(n.view_panel_rects().palette, n.view_panel_rects().layers)
+click(mid(rect_of(n.pal_part(n.pal_layout(), "expand"))))
+puts(n.view_panel_rects().palette)
+
+puts("-- the pen picker beside the column's brush, the pen settings without code")
+click(mid(n.art_tools_rect("tool:brush")))
+puts(n.V.tool, n.V.picker, n.pick_rect())
+n.V.picker = false
+n.pen_route_show(n.ed.pen)
+rig_frame(rig)
+puts(n.pw_rect(), n.pw_layout().code)
+
+puts("-- back to coder mode: the code panel's width comes back")
+n.pen_route_command(["close"])
+click(mid(tb("mode:coder")))
+puts(n.mode_artist(), n.V.pw == coder_pw, n.view_geom().cx == coder_pw + 2, n.pw_rect()[3], n.pw_layout().code != null)
+puts(text.find(fs.read(n.settings_path()), "let mode = \"coder\"") >= 0)
+puts(rig.ed.error)

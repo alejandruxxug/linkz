@@ -24,6 +24,8 @@ use "fill_model"
 use "i18n"
 use "icons_color"
 use "icons_shape"
+use "mode_state"
+use "palette_compact"
 use "view_gfx"
 use "view_input"
 use "view_layout"
@@ -82,6 +84,9 @@ function pal_sel_var() {
 
 -~> The sidebar's box [x, y, w, h], its 2 px splitter not counted.
 function pal_rect() {
+  if (mode_artist()) {
+    return view_panel_rects().palette
+  }
   let gm = view_geom()
   let x = gm.cx + gm.cw + 2
   [x, 30, V.w - x, gm.status_y - 30]
@@ -91,6 +96,9 @@ function pal_rect() {
 -~> "hex_y", "recent_y", "vars_y", "cells", "more", "uses_y", "add_y"}. The
 -~> grid shows the rows that fit, scrolled so the selected variable is in them.
 function pal_layout() {
+  if (mode_artist()) {
+    return pal_compact_layout()
+  }
   let r = pal_rect()
   let x = r[0] + 5
   let y = r[1] + 15
@@ -146,6 +154,9 @@ function pal_layout() {
 
 -~> The buttons, fields and cells as [{"id", "x", "y", "w", "h"}].
 function pal_parts(lay) {
+  if (lay.compact == true) {
+    return pal_compact_parts(lay)
+  }
   let r = pal_rect()
   let x = lay.x
   let out = [{"id": "collapse", "x": r[0] + r[2] - 14, "y": r[1] + 1, "w": 12, "h": 12}]
@@ -247,11 +258,14 @@ function pal_panel_key() {
     uses = str(ed.shapes_ver)
   }
   str(pal_is_open(V.w)) + PAL.mode + str(PAL.sel) + str(PAL.stop) + str(PAL.hsv) + "|" + str(PAL.confirm) + h + f + fe + "|" + ed.color + "|" +
-    str(color_recent) + "|" + vars + "|" + uses + "|" + str(ct_shape_colors()) + "|" + str(V.h) + "|" + lang_get()
+    str(color_recent) + "|" + vars + "|" + uses + "|" + str(ct_shape_colors()) + "|" + str(V.h) + "|" + lang_get() + "|" + str(mode_artist()) + str(PAL.dropper)
 }
 
 -~> Paints the sidebar (open or the rail) and its splitter.
 function pal_paint() {
+  if (mode_artist()) {
+    return pal_compact_paint()
+  }
   let r = pal_rect()
   g_rect(r[0] - 2, 30, 1, r[3], P.void)
   g_rect(r[0] - 1, 30, 1, r[3], P.bevel)
@@ -453,11 +467,14 @@ function pal_paint_rail(_r) {
 -~> The hover id at a UI point on the sidebar: pal:<part>, pal:<picker
 -~> part>, pal:box; null off it.
 function pal_hover_at(x, y) {
+  if (PAL.dropper == true && mode_artist() && view_in_canvas(x, y)) {
+    return "pal:dropper_at"
+  }
   let r = pal_rect()
   if (!view_in(x, y, r[0], r[1], r[2], r[3])) {
     return null
   }
-  if (!pal_is_open(V.w)) {
+  if (!mode_artist() && !pal_is_open(V.w)) {
     let ps = pal_rail_parts()
     for (let i = 0; i < len(ps); i = i + 1) {
       if (view_in(x, y, ps[i].x - 1, ps[i].y - 1, ps[i].w + 2, ps[i].h + 2)) {
@@ -521,7 +538,7 @@ function pal_down(e) {
     PAL.stop = 0
     pal_set_open(true)
   } elif (what == "rrecent" || what == "recent") {
-    pal_set(pal_recent()[int(parts[2])], null)
+    pal_set(ct_recent(color_recent_max)[int(parts[2])], null)
     color_note_recent(hsv_color(PAL.hsv))
   } elif (what == "ring" || what == "triangle" || what == "square" || what == "hue" || what == "alpha") {
     if (tg.kind != "tool") {
@@ -548,6 +565,10 @@ function pal_down(e) {
     pal_add_var()
   } elif (what == "trash") {
     pal_remove_var()
+  } elif (what == "dropper") {
+    PAL.dropper = PAL.dropper != true
+  } elif (what == "dropper_at") {
+    pal_compact_eyedrop(e.pos)
   }
   view_prepare()
   view_after()

@@ -11,6 +11,7 @@ use "i18n"
 use "pen_props"
 use "select_model"
 use "tool_route"
+use "artist_route"
 use "view_code"
 use "view_gfx"
 use "view_layout"
@@ -33,8 +34,11 @@ function view_paint_toolbar() {
 }
 
 function view_paint_tool_button(b) {
+  if (art_paint_plain(b)) {
+    return null
+  }
   let state = "normal"
-  if (b.group == "tool" && V.tool == b.id) {
+  if ((b.group == "tool" && V.tool == b.id) || art_button_active(b)) {
     state = "active"
   } elif (b.id == "more" && V.overflow) {
     state = "active"
@@ -74,6 +78,7 @@ function view_paint_tabs() {
     pc = P.bright
   }
   g_text("+", tb.plus[0], tb.plus[1], pc)
+  art_paint_switch()
   -~> the open » menu covers the left of the tab row
   let bs = view_toolbar()
   let last = 0
@@ -304,14 +309,22 @@ function view_paint_add(it, y) {
 
 function view_paint_rows() {
   let gm = view_geom()
-  g_rect(0, 30, V.pw, gm.props_y - 30, P.panel)
-  g_rect(0, 30, V.pw, 13, P.raised)
-  g_rect(0, 43, V.pw, 1, P.void)
-  g_text(text.upper(t("panel.layers")), 6, 30, P.mute)
-  let fname = view_file_name()
-  -~> the file name only when it fits next to the title
-  if (6 + g_text_w(text.upper(t("panel.layers"))) + 12 + g_text_w(fname) + 6 <= V.pw) {
-    g_text(fname, V.pw - g_text_w(fname) - 6, 30, P.dim)
+  let pr = view_panel_rects().rows
+  if (pr[3] <= 0) {
+    return null
+  }
+  g_rect(0, pr[1], V.pw, pr[3], P.panel)
+  if (gm.artist == true) {
+    art_paint_drawer_header(pr)
+  } else {
+    g_rect(0, 30, V.pw, 13, P.raised)
+    g_rect(0, 43, V.pw, 1, P.void)
+    g_text(text.upper(t("panel.layers")), 6, 30, P.mute)
+    let fname = view_file_name()
+    -~> the file name only when it fits next to the title
+    if (6 + g_text_w(text.upper(t("panel.layers"))) + 12 + g_text_w(fname) + 6 <= V.pw) {
+      g_text(fname, V.pw - g_text_w(fname) - 6, 30, P.dim)
+    }
   }
   g_clip(0, gm.rows_y, V.pw, gm.lim - gm.rows_y)
   let vis = view_visible()
@@ -328,14 +341,14 @@ function view_paint_rows() {
       view_paint_add(it, y)
     }
   }
-  g_clip(0, 30, V.pw, gm.props_y - 30)
+  g_clip(pr[0], pr[1], pr[2], pr[3])
   let sb = view_scrollbar()
   if (sb != null) {
     g_rect(V.pw - 5, gm.rows_y, 4, gm.lim - 1 - gm.rows_y, P.coal)
     g_rect(V.pw - 5, sb[0], 4, sb[1], P.bevel)
   }
   let pin = view_pinned_row()
-  if (pin != null) {
+  if (pin != null && gm.pin_y >= 0) {
     g_rect(0, gm.pin_y - 1, V.pw, 1, P.void)
     g_rect(0, gm.pin_y, V.pw, 18, P.coal)
     view_paint_row(pin, gm.pin_y, true)

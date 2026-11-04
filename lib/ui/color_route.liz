@@ -83,7 +83,7 @@ function color_hover_at(x, y) {
       }
     }
   }
-  if (x < gm.pw && y >= gm.props_y && y < gm.status_y) {
+  if (view_in_props(x, y)) {
     let lay = view_props_cached()
     for (let i = 0; i < len(lay.boxes); i = i + 1) {
       let b = lay.boxes[i]

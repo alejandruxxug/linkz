@@ -1,0 +1,178 @@
+-~> layer_thumbs: the small picture of a layer on its row in artist mode
+-~> (style guide R002 "Layer row (artist)": 29×20, the layer on a 3 px
+-~> checker). A thumbnail is the layer's shapes (the shapes of its lines,
+-~> without their blend, so the picture is what the layer holds) scaled to
+-~> fit 27×18 and painted by raster.paint into an offscreen buffer, kept by
+-~> name and copied onto the panel (fb.keep, fb.blit).
+-~> It is made again only when the layer's shapes look different: a new
+-~> list of shapes is compared with the one it was made from, and an editor
+-~> patch of one shape outside the layer doesn't even compare. Only the
+-~> layers on screen ask, so a big drawing costs what its visible rows do.
+
+use "../draw/gradient"
+use "../draw/shapes"
+use "../gfx/raster"
+use "color_draw"
+use "editor_rerun"
+use "editor_state"
+use "editor_undo"
+use "view_gfx"
+
+-~> The inside of a thumbnail (its 1 px frame around it).
+let lt_size = (27, 18)
+
+-~> recs: key -> {"ver", "line", "end", "shapes", "kept", "size", "canvas"}.
+-~> claimed: the keys handed out in this paint (two layers of one name).
+-~> renders: how many were painted, for the tests.
+let LT = {"recs": {}, "claimed": {}, "renders": 0}
+
+-~> A new paint of the panel: every key is free again.
+function lt_begin() {
+  LT.claimed = {}
+}
+
+-~> The key of the layer on `line` called `name`: its name, unless another
+-~> layer of that name took it in this paint.
+function lt_key(name, depth, line) {
+  let key = name + "|" + str(depth)
+  let at = LT.claimed[key]
+  if (at != null && at != line) {
+    key = key + "|" + str(line)
+  }
+  LT.claimed[key] = line
+  key
+}
+
+-~> The shapes made by the lines first..last, in the order of ed.shapes.
+function lt_shapes(first, last) {
+  let shapes = ed.shapes
+  let out = []
+  if (ed.shapes_rising) {
+    for (let i = rerun_first_at(shapes, first); i < len(shapes) && shapes[i].line <= last; i += 1) {
+      push(out, shapes[i])
+    }
+    return out
+  }
+  let at = ed_shape_lines()
+  for (let l = first; l <= last; l += 1) {
+    let list = at[l]
+    if (list != null) {
+      for (let k = 0; k < len(list); k += 1) {
+        push(out, shapes[list[k]])
+      }
+    }
+  }
+  out
+}
+
+-~> Whether two lists of shapes paint the same.
+function lt_same(a, b) {
+  if (len(a) != len(b)) {
+    return false
+  }
+  for (let i = 0; i < len(a); i += 1) {
+    if (!same(a[i], b[i]) && !raster_same_look(a[i], b[i])) {
+      return false
+    }
+  }
+  true
+}
+
+-~> Whether a record still shows the layer of lines line..end, without
+-~> looking at its shapes when the last change was one shape elsewhere.
+function lt_fresh(rec, line, end) {
+  if (rec.canvas != ed_canvas_size()) {
+    return false
+  }
+  if (rec.ver == ed.shapes_ver) {
+    return true
+  }
+  let p = ed.patch
+  if (p != null && p.kind != "range" && p.ver == ed.shapes_ver && rec.ver == p.ver - 1 && rec.line == line && rec.end == end &&
+    p.new != null && type(p.new.line) == "INTEGER" && (p.new.line < line || p.new.line > end)) {
+      rec.ver = ed.shapes_ver
+      return true
+    }
+  let now = lt_shapes(line, end)
+  if (lt_same(rec.shapes, now)) {
+    rec.ver = ed.shapes_ver
+    rec.shapes = now
+    rec.end = end
+    return true
+  }
+  false
+}
+
+-~> A shape scaled by k for the thumbnail, without its layer's blend.
+function lt_scaled(s, k) {
+  let width = s.width
+  if (type(width) == "INTEGER" || type(width) == "FLOAT") {
+    width = width * k
+  }
+  let path = []
+  for (let i = 0; i < len(s.path); i += 1) {
+    let c = s.path[i]
+    let n = [c[0]]
+    for (let j = 1; j < len(c); j += 1) {
+      push(n, c[j] * k)
+    }
+    push(path, n)
+  }
+  {
+    "path": path,
+    "fill": scale_paint(s.fill, k),
+    "stroke": scale_paint(s.stroke, k),
+    "width": width,
+    "rule": s.rule,
+    "line": s.line,
+    "widths": null,
+    "styles": null,
+    "layer": null
+  }
+}
+
+-~> Paints the record's picture into a kept buffer.
+function lt_render(rec, key) {
+  LT.renders += 1
+  let cs = ed_canvas_size()
+  let k = math.min(lt_size.x / float(cs.x), lt_size.y / float(cs.y))
+  let size = (math.max(1, math.round(cs.x * k)), math.max(1, math.round(cs.y * k)))
+  let shapes = []
+  let ordered = paint_order(rec.shapes)
+  for (let i = 0; i < len(ordered); i += 1) {
+    push(shapes, lt_scaled(ordered[i], k))
+  }
+  fb.offscreen(size)
+  try {
+    raster.paint(shapes, (0, 0))
+  } catch (e) {
+    null
+  }
+  rec.kept = "lthumb:" + key
+  rec.size = size
+  fb.keep(rec.kept)
+}
+
+-~> The thumbnail of the layer on `line` (ending at `end`), made or kept:
+-~> {"kept", "size"}.
+function lt_get(name, depth, line, end) {
+  let key = lt_key(name, depth, line)
+  let rec = LT.recs[key]
+  if (rec != null && lt_fresh(rec, line, end)) {
+    rec.line = line
+    return rec
+  }
+  rec = {"ver": ed.shapes_ver, "line": line, "end": end, "shapes": lt_shapes(line, end), "kept": "", "size": (1, 1), "canvas": ed_canvas_size()}
+  lt_render(rec, key)
+  LT.recs[key] = rec
+  rec
+}
+
+-~> Draws a thumbnail box at (x, y): 1 px void frame, the checker, the picture.
+function lt_draw(rec, x, y) {
+  g_frame(x, y, 29, 20, P.void)
+  cd_checker(x + 1, y + 1, 27, 18, 3)
+  if (rec != null && rec.kept != "") {
+    fb.blit(rec.kept, (x + 1 + (27 - rec.size.x) // 2, y + 1 + (18 - rec.size.y) // 2))
+  }
+}

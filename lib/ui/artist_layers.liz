@@ -1,0 +1,733 @@
+-~> artist_layers: the layers panel of artist mode, under the compact
+-~> palette (style guide R002 "Artist mode", "Layer row (artist)"):
+-~>   header      `LAYERS`, + (a new layer) and the trash (the selected row)
+-~>   blend row   the current layer's blend dropdown (82×16) and its opacity
+-~>               field: drag it sideways, or click and type
+-~>   rows        a 22 high row per layer (eye, lock, chevron, thumbnail,
+-~>               name, blend badge) and an 18 high row per shape inside an
+-~>               open one (kind icon, name), in the order of the code, which
+-~>               is front to back; a drag moves a row among its siblings,
+-~>               which moves its lines in the code (one undo step)
+-~>   canvas      the canvas row pinned at the bottom
+-~> The rows are the code's rows (ed_rows): folding, hiding, locking and
+-~> selecting are the same edits as in the code panel. Only the rows on
+-~> screen are worked out, walking from the first one shown (LA.top, a line),
+-~> so a drawing of any size costs the same.
+
+use "blend_menu"
+use "artist_layout"
+use "blend_props"
+use "editor_doc"
+use "editor_edit"
+use "editor_rows"
+use "editor_shape_ops"
+use "editor_state"
+use "editor_undo"
+use "i18n"
+use "layer_blend"
+use "layer_thumbs"
+use "tool_route"
+use "view_canvas"
+use "view_gfx"
+use "view_input"
+use "view_layout"
+use "view_panels"
+
+-~> top: the line of the first row shown (0: from the start). seen: the
+-~> caret's line the panel last followed. drop: where a dragged row would go,
+-~> {"line", "after"}, or null.
+let LA = {"top": 0, "seen": 0, "drop": null, "vis": null, "vis_key": ""}
+
+let la_layer_h = 22
+let la_object_h = 18
+
+-~> == Where its parts are ==
+
+function la_rect() {
+  view_panel_rects().layers
+}
+
+-~> The parts of the header and the blend row: {"add", "trash", "blend",
+-~> "opicon", "opacity"} as [x, y, w, h].
+function la_parts() {
+  let r = la_rect()
+  let x = r[0]
+  let y = r[1]
+  {
+    "add": [x + r[2] - 24, y + 1, 11, 11],
+    "trash": [x + r[2] - 13, y + 1, 11, 11],
+    "blend": [x + 5, y + 16, 82, 16],
+    "opicon": [x + 91, y + 20, 8, 8],
+    "opacity": [x + 103, y + 16, 42, 16]
+  }
+}
+
+-~> The rows' area [x, y, w, h] and the pinned canvas row's y.
+function la_rows_box() {
+  let r = la_rect()
+  let gm = view_geom()
+  let pin = gm.status_y - 22
+  [r[0], r[1] + 36, r[2], pin - 1 - (r[1] + 36)]
+}
+
+function la_pin_y() {
+  view_geom().status_y - 22
+}
+
+-~> A drawing was opened: the panel starts from its top.
+function art_layers_reset() {
+  LA.top = 0
+  LA.seen = 0
+  LA.drop = null
+  LA.vis = null
+}
+
+-~> == Which rows it lists ==
+
+-~> Whether a row has a row in the panel: layers, shapes and texts.
+function la_listed(r) {
+  r.visible && (r.kind == "layer" || r.kind == "shape" || (r.kind == "call" && r.callee == "text"))
+}
+
+-~> The first listed line at or after l, or 0.
+function la_next(rows, l) {
+  while (l >= 1 && l <= len(rows)) {
+    let r = rows[l - 1]
+    if (la_listed(r)) {
+      return l
+    }
+    if (r.collapsed) {
+      l = r.end_line + 1
+    } else {
+      l = l + 1
+    }
+  }
+  0
+}
+
+-~> The listed line after the row on l (past a folded layer's inside), or 0.
+function la_after(rows, l) {
+  let r = rows[l - 1]
+  if (r.collapsed) {
+    return la_next(rows, r.end_line + 1)
+  }
+  la_next(rows, l + 1)
+}
+
+-~> The last listed line before l, or 0. A row folded away jumps to the row
+-~> around it.
+function la_before(rows, l) {
+  l = l - 1
+  while (l >= 1) {
+    let r = rows[l - 1]
+    if (!r.visible) {
+      if (r.parent > 0 && r.parent < l) {
+        l = r.parent
+      } else {
+        l = l - 1
+      }
+    } elif (la_listed(r)) {
+      return l
+    } else {
+      l = l - 1
+    }
+  }
+  0
+}
+
+-~> The row's height in the panel.
+function la_h(r) {
+  if (r.kind == "layer") {
+    return la_layer_h
+  }
+  la_object_h
+}
+
+-~> The rows on screen: [{"row", "y"}], from LA.top down.
+function la_visible() {
+  let rows = view_rows()
+  let box = la_rows_box()
+  let key = str(V.ver) + "|" + str(LA.top) + "|" + str(box) + "|" + str(len(rows))
+  if (LA.vis != null && LA.vis_key == key) {
+    return LA.vis
+  }
+  la_follow(rows, box)
+  let out = []
+  let l = la_next(rows, math.max(1, LA.top))
+  if (l == 0) {
+    l = la_before(rows, len(rows) + 1)
+  }
+  LA.top = l
+  let y = box[1]
+  while (l > 0) {
+    let r = rows[l - 1]
+    let h = la_h(r)
+    if (y + h > box[1] + box[3]) {
+      break
+    }
+    push(out, {"row": r, "y": y})
+    y = y + h
+    l = la_after(rows, l)
+  }
+  LA.vis = out
+  LA.vis_key = str(V.ver) + "|" + str(LA.top) + "|" + str(box) + "|" + str(len(rows))
+  out
+}
+
+-~> Keeps the caret's row on screen when it changed (a click on the canvas,
+-~> an undo): scrolled up to it, or down until it is the last one shown.
+function la_follow(rows, box) {
+  let line = ed_model().line
+  if (line == LA.seen || line < 1 || line > len(rows)) {
+    return null
+  }
+  LA.seen = line
+  if (!la_listed(rows[line - 1])) {
+    return null
+  }
+  let first = la_next(rows, math.max(1, LA.top))
+  if (first == 0 || line < first) {
+    LA.top = line
+    return null
+  }
+  -~> the rows from the top to the line, as long as they fit
+  let room = box[3]
+  let l = first
+  let used = 0
+  while (l > 0 && l <= line) {
+    used = used + la_h(rows[l - 1])
+    l = la_after(rows, l)
+  }
+  let top = first
+  while (used > room && top > 0 && top < line) {
+    used = used - la_h(rows[top - 1])
+    top = la_after(rows, top)
+  }
+  LA.top = top
+}
+
+-~> Scrolls the rows by n (up when negative).
+function la_scroll(n) {
+  let rows = view_rows()
+  let l = la_next(rows, math.max(1, LA.top))
+  for (let i = 0; i < math.abs(n) && l > 0; i = i + 1) {
+    let next = 0
+    if (n > 0) {
+      next = la_after(rows, l)
+    } else {
+      next = la_before(rows, l)
+    }
+    if (next == 0) {
+      break
+    }
+    -~> down only while the last row is not shown yet
+    if (n > 0) {
+      let vis = la_visible()
+      if (len(vis) > 0 && la_after(rows, vis[len(vis) - 1].row.line) == 0) {
+        break
+      }
+    }
+    l = next
+    LA.top = l
+    LA.vis = null
+  }
+  view_touch()
+}
+
+-~> == The pointer ==
+
+-~> The hover id at a UI point of the panel ("al:..."), or null off it.
+function art_layers_hover(x, y) {
+  let r = la_rect()
+  if (!view_in(x, y, r[0], r[1], r[2], r[3])) {
+    return null
+  }
+  let ps = la_parts()
+  let names = ["add", "trash", "blend", "opacity"]
+  for (let i = 0; i < len(names); i = i + 1) {
+    let p = ps[names[i]]
+    if (view_in(x, y, p[0] - 1, p[1] - 1, p[2] + 2, p[3] + 2)) {
+      return "al:" + names[i]
+    }
+  }
+  let pin = la_pin_y()
+  if (y >= pin) {
+    let row = view_pinned_row()
+    if (row != null) {
+      return "al:row:" + str(row.line)
+    }
+    return "al:box"
+  }
+  let vis = la_visible()
+  for (let i = 0; i < len(vis); i = i + 1) {
+    let row = vis[i].row
+    if (y >= vis[i].y && y < vis[i].y + la_h(row)) {
+      return la_hover_row(row, x - r[0])
+    }
+  }
+  "al:box"
+}
+
+-~> The hover id over a row at dx from the panel's left.
+function la_hover_row(row, dx) {
+  let line = str(row.line)
+  if (dx >= 2 && dx < 13) {
+    return "al:eye:" + line
+  }
+  if (dx >= 13 && dx < 23) {
+    return "al:lock:" + line
+  }
+  let cx = 24 + row.depth * 10
+  if (row.foldable && row.kind == "layer" && dx >= cx - 1 && dx < cx + 10) {
+    return "al:fold:" + line
+  }
+  "al:row:" + line
+}
+
+-~> The line of the layer the panel's blend row is about: the caret's
+-~> layer (or the layer row itself), 0 for none.
+function la_current_layer() {
+  let m = ed_model()
+  blend_layer_of(m, m.line)
+}
+
+-~> A press on the panel (its id from art_layers_hover).
+function art_layers_press(id, e) {
+  let parts = text.split(id, ":")
+  let what = parts[1]
+  let rows = view_rows()
+  if (what == "eye" || what == "lock" || what == "fold") {
+    let line = int(parts[2])
+    let r = rows[line - 1]
+    if (what == "eye") {
+      ed_set_hidden(line, !r.hidden)
+    } elif (what == "lock") {
+      ed_set_locked(line, !r.locked)
+    } else {
+      ed_toggle_fold(line)
+    }
+    view_prepare()
+    view_after()
+  } elif (what == "row") {
+    let line = int(parts[2])
+    view_select_line(line)
+    view_prepare()
+    view_after()
+    LA.seen = ed_model().line
+    V.drag = {"kind": "artist", "what": "row", "line": line, "y0": e.pos.y, "moved": false}
+  } elif (what == "add") {
+    view_add("layer")
+  } elif (what == "trash") {
+    let m = ed_model()
+    let r = rows[m.line - 1]
+    if (r.stmt != null && (r.kind == "layer" || r.kind == "shape" || r.kind == "call")) {
+      ed_shape_remove(m.line)
+      view_prepare()
+      view_after()
+    }
+  } elif (what == "blend" || what == "opacity") {
+    let layer = la_current_layer()
+    if (layer == 0) {
+      ed_try_at({"refused": t("refuse.blend_no_layer")}, null, ed_model().line)
+      view_after()
+      return null
+    }
+    if (ed_model().line != layer) {
+      view_select_line(layer)
+      view_prepare()
+      view_after()
+    }
+    let p = la_parts()[what]
+    if (what == "blend") {
+      if (BM.open) {
+        blend_menu_close()
+      } else {
+        blend_menu_open(layer, p, false)
+      }
+      view_after()
+    } else {
+      let st = layer_style_of(ed_model(), layer)
+      if (st == null || !st.readable) {
+        ed_try_at({"refused": t("refuse.blend_code")}, null, layer)
+        view_after()
+        return null
+      }
+      V.drag = {"kind": "artist", "what": "opacity", "line": layer, "x0": e.pos.x, "v0": st.opacity, "moved": false}
+    }
+  }
+}
+
+-~> A move of a drag the panel started: the opacity scrubbed, or where a
+-~> dragged row would land.
+function art_layers_drag(e) {
+  let d = V.drag
+  if (d.what == "opacity") {
+    let dx = e.pos.x - d.x0
+    if (!d.moved && math.abs(dx) < 2) {
+      return null
+    }
+    if (!d.moved) {
+      d.moved = true
+      ed_begin_gesture("opacity")
+    }
+    let v = math.round(math.max(0, math.min(1, d.v0 + dx / 100.0)) * 100) / 100.0
+    ed_set_opacity(d.line, v)
+    view_prepare()
+    view_after()
+    return null
+  }
+  if (!d.moved && math.abs(e.pos.y - d.y0) < 4) {
+    return null
+  }
+  d.moved = true
+  LA.drop = la_drop_at(e.pos.y)
+  view_touch()
+}
+
+-~> Where a row dropped at y lands: {"line", "after"} or null.
+function la_drop_at(y) {
+  let vis = la_visible()
+  for (let i = 0; i < len(vis); i = i + 1) {
+    let h = la_h(vis[i].row)
+    if (y >= vis[i].y && y < vis[i].y + h) {
+      return {"line": vis[i].row.line, "after": y >= vis[i].y + h // 2}
+    }
+  }
+  if (len(vis) > 0 && y >= vis[len(vis) - 1].y) {
+    return {"line": vis[len(vis) - 1].row.line, "after": true}
+  }
+  null
+}
+
+-~> The release of a drag: the opacity's one step, or the row moved.
+function art_layers_up(_e, d) {
+  if (d.what == "opacity") {
+    if (d.moved) {
+      ed_end_gesture()
+      view_after()
+    } else {
+      let st = layer_style_of(ed_model(), d.line)
+      view_focus_box({"field": "opacity", "sub": 0, "kind": "opfield", "text": str(blend_percent(st.opacity))})
+    }
+    return null
+  }
+  let drop = LA.drop
+  LA.drop = null
+  if (d.moved && drop != null) {
+    art_layers_move(d.line, drop.line, drop.after)
+  }
+  view_touch()
+}
+
+-~> Moves the statement on `line` before (or after) the row on `target`, or
+-~> the row around it that is its sibling: one undo step. A row can't leave
+-~> its layer this way (the code would move between layers: refused).
+function art_layers_move(line, target, after) {
+  let m = ed_model()
+  let rows = doc_rows(m, null, null)
+  let r = rows[line - 1]
+  let tr = rows[target - 1]
+  while (tr.parent != r.parent && tr.parent > 0) {
+    tr = rows[tr.parent - 1]
+    after = false
+  }
+  if (tr.parent != r.parent) {
+    ed_try_at({"refused": t("artist.refuse_move")}, null, line)
+    view_after()
+    return false
+  }
+  if (tr.line == line || (tr.line >= line && tr.line <= r.end_line)) {
+    return false
+  }
+  let sibs = []
+  for (let i = 0; i < len(rows); i = i + 1) {
+    let s = rows[i]
+    if (s.stmt != null && s.parent == r.parent && s.line != line && s.kind != "empty") {
+      push(sibs, s.line)
+    }
+  }
+  -~> how many siblings it passes on the way
+  let k = 0
+  for (let i = 0; i < len(sibs); i = i + 1) {
+    let l = sibs[i]
+    if (tr.line < line && (l > tr.line || (l == tr.line && !after)) && l < line) {
+      k = k - 1
+    } elif (tr.line > line && l > line && (l < tr.line || (l == tr.line && after))) {
+      k = k + 1
+    }
+  }
+  if (k == 0) {
+    return false
+  }
+  let dir = "down"
+  if (k < 0) {
+    dir = "up"
+  }
+  let cur = doc_at(m, line, 0)
+  cur.sel = null
+  for (let i = 0; i < math.abs(k); i = i + 1) {
+    cur = ed_move_rows(cur, dir)
+  }
+  ed_try_as("order", null, cur)
+  view_prepare()
+  view_after()
+  true
+}
+
+-~> == Painting ==
+
+-~> What the panel shows, as a text.
+function art_layers_key() {
+  let h = ""
+  if (text.starts(V.hover, "al:")) {
+    h = V.hover
+  }
+  let focus = ""
+  if (V.focus != null && V.focus.field == "opacity") {
+    focus = V.focus.text + str(V.focus.caret)
+  }
+  str(V.ver) + "|" + str(LA.top) + "|" + h + "|" + str(LA.drop) + "|" + focus + "|" + str(BM.open) + "|" + str(ed.shapes_ver) + "|" +
+    str(art_pal_height()) + "|" + lang_get() + "|" + route_rows_key()
+}
+
+function art_layers_paint() {
+  let r = la_rect()
+  let x = r[0]
+  let y = r[1]
+  g_rect(x, y, r[2], r[3], P.panel)
+  g_rect(x, y, r[2], 13, P.raised)
+  g_rect(x, y + 13, r[2], 1, P.void)
+  g_text(text.upper(t("panel.layers")), x + 5, y, P.mute)
+  let ps = la_parts()
+  let ac = P.lizard
+  if (V.hover == "al:add") {
+    ac = P.bright
+  }
+  g_icon("plus", ps.add[0] + 1, ps.add[1] + 2, ac)
+  let tc = P.mute
+  if (V.hover == "al:trash") {
+    tc = P.ember
+  }
+  g_icon("trash", ps.trash[0] + 1, ps.trash[1] + 2, tc)
+  la_paint_blend(ps)
+  lt_begin()
+  let box = la_rows_box()
+  g_clip(box[0], box[1], box[2], box[3])
+  let vis = la_visible()
+  let m = ed_model()
+  for (let i = 0; i < len(vis); i = i + 1) {
+    la_paint_row(vis[i].row, vis[i].y, m)
+  }
+  la_paint_drop(vis)
+  g_clip(r[0], r[1], r[2], r[3])
+  let pin = view_pinned_row()
+  let py = la_pin_y()
+  g_rect(x, py - 1, r[2], 1, P.void)
+  g_rect(x, py, r[2], 22, P.coal)
+  if (pin != null) {
+    la_paint_canvas_row(pin, py, m)
+  }
+}
+
+-~> The blend dropdown and the opacity field of the current layer.
+function la_paint_blend(ps) {
+  let layer = la_current_layer()
+  let st = null
+  if (layer > 0) {
+    st = layer_style_of(ed_model(), layer)
+  }
+  let b = ps.blend
+  let mode = "normal"
+  let op = 1.0
+  if (st != null) {
+    mode = st.mode
+    op = st.opacity
+  }
+  g_field(b[0], b[1], b[2], b[3], BM.open || V.hover == "al:blend")
+  let tc = P.text
+  if (st == null) {
+    tc = P.dim
+  }
+  let label = blend_label(mode)
+  if (st != null && !st.readable) {
+    label = t("blend.code")
+  }
+  g_text(label, b[0] + 4, b[1] + 2, tc)
+  g_icon("chevron-down", b[0] + b[2] - 12, b[1] + 4, P.mute)
+  g_icon("opacity", ps.opicon[0], ps.opicon[1], P.mute)
+  let o = ps.opacity
+  let focused = V.focus != null && V.focus.field == "opacity"
+  let txt = str(blend_percent(op)) + "%"
+  if (focused) {
+    txt = V.focus.text
+  }
+  g_field(o[0], o[1], o[2], o[3], focused || V.hover == "al:opacity")
+  let oc = P.amber
+  if (st == null) {
+    oc = P.dim
+  }
+  g_text(txt, o[0] + 4, o[1] + 2, oc)
+  if (focused) {
+    g_rect(o[0] + 4 + V.focus.caret * 7, o[1] + 2, 1, 12, P.amber)
+  }
+}
+
+-~> The row's eye and lock at y (dy: their offset in the row).
+function la_paint_flags(row, x, y, dy, sel) {
+  let ec = P.mute
+  if (sel) {
+    ec = P.text
+  }
+  let eye = "eye"
+  if (row.hidden) {
+    eye = "eye-off"
+    ec = P.dim
+  }
+  if (V.hover == "al:eye:" + str(row.line)) {
+    ec = P.bright
+  }
+  g_icon(eye, x + 4, y + dy, ec)
+  let lc = P.dim
+  if (row.locked) {
+    lc = P.text
+  }
+  if (V.hover == "al:lock:" + str(row.line)) {
+    lc = P.bright
+  }
+  g_icon("lock", x + 14, y + dy, lc)
+}
+
+-~> One row: a layer (22 high, thumbnail) or a shape inside one (18 high).
+function la_paint_row(row, y, m) {
+  let r = la_rect()
+  let x = r[0]
+  let w = r[2]
+  let h = la_h(row)
+  let sel = view_selected(m, row.line)
+  if (sel) {
+    g_rect(x, y, w, h, P.moss)
+    g_rect(x, y, 2, h, P.lizard)
+  } elif (V.hover == "al:row:" + str(row.line)) {
+    g_rect(x, y, w, h, P.row)
+  }
+  let d = row.depth * 10
+  let tc = P.text
+  if (sel) {
+    tc = P.bright
+  }
+  if (row.kind == "layer") {
+    la_paint_flags(row, x, y, 7, sel)
+    if (row.foldable) {
+      let chev = "chevron-down"
+      if (row.collapsed) {
+        chev = "chevron-right"
+      }
+      let cc = P.mute
+      if (V.hover == "al:fold:" + str(row.line)) {
+        cc = P.bright
+      }
+      g_icon(chev, x + 24 + d, y + 7, cc)
+    }
+    let rec = lt_get(row.stmt.name, row.depth, row.line, row.end_line)
+    lt_draw(rec, x + 34 + d, y + 1)
+    let badge = blend_badge_text(blend_row_style(row))
+    let room = w - 67 - d - 6
+    if (badge != "") {
+      room = room - g_text_w(badge) - 6
+      g_text(badge, x + w - 6 - g_text_w(badge), y + 4, P.mute)
+    }
+    g_text(la_fit(row.stmt.name, room), x + 67 + d, y + 4, tc)
+    return null
+  }
+  la_paint_flags(row, x, y, 5, sel)
+  for (let k = 0; k < row.depth; k = k + 1) {
+    g_rect(x + 27 + k * 10, y, 1, h, P.bevel)
+  }
+  let icon = view_row_icon(row)
+  if (row.callee == "text") {
+    icon = "text"
+  }
+  let ic = P.text
+  if (sel) {
+    ic = P.lizard
+  }
+  g_icon(icon, x + 34 + d, y + 5, ic)
+  g_text(la_fit(la_object_name(row), w - 46 - d - 4), x + 46 + d, y + 3, tc)
+}
+
+-~> A shape row's name: its own (`-~> name: sun core`), else its kind.
+function la_object_name(row) {
+  if (row.name != null && row.name != "" && row.name != row.callee) {
+    return row.name
+  }
+  row.callee
+}
+
+-~> A text cut to fit `w` pixels, with an ellipsis.
+function la_fit(s, w) {
+  let n = w // 7
+  if (len(s) <= n) {
+    return s
+  }
+  if (n < 2) {
+    return ""
+  }
+  text.slice(s, 0, n - 1) + "…"
+}
+
+-~> The canvas row pinned at the bottom: its background as the thumbnail.
+function la_paint_canvas_row(row, y, m) {
+  let r = la_rect()
+  let x = r[0]
+  let sel = view_selected(m, row.line)
+  if (sel) {
+    g_rect(x, y, r[2], 22, P.moss)
+    g_rect(x, y, 2, 22, P.lizard)
+  }
+  la_paint_flags(row, x, y, 7, sel)
+  g_frame(x + 34, y + 1, 29, 20, P.void)
+  let bg = ed.canvas.background
+  if (type(bg) != "COLOR") {
+    bg = #ffffff
+  }
+  g_rect(x + 35, y + 2, 27, 18, bg)
+  let tc = P.text
+  if (sel) {
+    tc = P.bright
+  }
+  g_text(t("artist.canvas"), x + 67, y + 4, tc)
+}
+
+-~> Where a dragged row would land: a lizard line between the rows.
+function la_paint_drop(vis) {
+  let d = LA.drop
+  if (d == null) {
+    return null
+  }
+  let r = la_rect()
+  for (let i = 0; i < len(vis); i = i + 1) {
+    if (vis[i].row.line == d.line) {
+      let y = vis[i].y
+      if (d.after) {
+        y = y + la_h(vis[i].row)
+      }
+      g_rect(r[0] + 2, y - 1, r[2] - 4, 2, P.lizard)
+    }
+  }
+}
+
+-~> The line of the row at a UI point of the panel, or 0 (the shape menu).
+function art_layers_line_at(p) {
+  let id = art_layers_hover(p.x, p.y)
+  if (id == null) {
+    return 0
+  }
+  let parts = text.split(id, ":")
+  if (len(parts) == 3 && parts[1] != "fold") {
+    let r = view_rows()[int(parts[2]) - 1]
+    if (r.stmt != null) {
+      return r.line
+    }
+  }
+  0
+}

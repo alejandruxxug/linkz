@@ -1,0 +1,73 @@
+-~> mode_state: which layout the editor shows. Coder mode is the code panel
+-~> beside the canvas; artist mode (style guide R002 "Artist mode") is a tool
+-~> column, the canvas, a compact palette and a layers panel with
+-~> thumbnails, the properties in a context bar and the code in a drawer
+-~> under the canvas. Both show the same document, selection and undo
+-~> history: a mode is only where things are and who gets the pointer.
+-~> The mode is remembered in settings.liz as `let mode = "artist"` (or
+-~> "coder"); the drawer starts closed. It uses nothing of the editor, so the
+-~> layout can ask it.
+
+use "i18n"
+
+-~> artist: the mode now. drawer: whether the code drawer is open; low:
+-~> lowered to a quarter of the height. loaded: whether the setting was
+-~> read. coder_pw: the code panel's width to go back to.
+let MODE = {"artist": false, "drawer": false, "low": false, "loaded": false, "coder_pw": null}
+
+-~> Whether the editor shows the artist layout.
+function mode_artist() {
+  if (!MODE.loaded) {
+    MODE.loaded = true
+    MODE.artist = settings.mode == "artist"
+  }
+  MODE.artist
+}
+
+-~> Whether the code drawer is open (only ever in artist mode).
+function mode_drawer() {
+  mode_artist() && MODE.drawer
+}
+
+-~> The settings text with `let <name> = <code>` set: that line replaced
+-~> when the file has one, else added at the end.
+function mode_settings_with(body, name, code) {
+  let line = "let " + name + " = " + code
+  if (body == null || text.trim(body) == "") {
+    return "-~> Linkz settings\n" + line + "\n"
+  }
+  let lines = text.split(body, "\n")
+  for (let i = 0; i < len(lines); i = i + 1) {
+    let words = text.split(text.trim(lines[i]), " ")
+    if (len(words) > 1 && words[0] == "let" && words[1] == name) {
+      lines[i] = line
+      return text.join(lines, "\n")
+    }
+  }
+  if (!text.ends(body, "\n")) {
+    body = body + "\n"
+  }
+  body + line + "\n"
+}
+
+-~> Sets the mode and remembers it in settings.liz (a file that can't be
+-~> written only loses the memory, not the switch).
+function mode_store(artist) {
+  mode_artist()
+  MODE.artist = artist
+  let word = "coder"
+  if (artist) {
+    word = "artist"
+  }
+  settings.mode = word
+  try {
+    let path = settings_path()
+    let body = null
+    if (fs.exists(path)) {
+      body = fs.read(path)
+    }
+    fs.write(path, mode_settings_with(body, "mode", "\"" + word + "\""))
+  } catch (e) {
+    null
+  }
+}

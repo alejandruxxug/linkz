@@ -1,0 +1,171 @@
+-~> artist_layout: where everything is in artist mode (style guide R002
+-~> "Artist mode", "Layer row (artist)", "Code drawer"), in UI pixels:
+-~>   toolbar 0–16    `</> Code` (the drawer), `artist mode` (back to coder),
+-~>                   then the right side as in coder mode
+-~>   tabs 16–30      as in coder mode
+-~>   context bar     y 30–50, the whole width: the properties in one strip
+-~>   tool column     x 0–20 from y 50: tools 14×14 step 15 from y 53, the
+-~>                   fill / stroke chips at the bottom
+-~>   canvas          x 20 to the right column, y 50 to the drawer (or the
+-~>                   status bar); a 2 px splitter on its right
+-~>   right column    the last 150: the compact palette, then the layers
+-~>   code drawer     under the canvas from the middle (y 196 in 512×360),
+-~>                   the width of the canvas column: the coder rows
+-~> view_geom gives these numbers in artist mode, so the code that paints
+-~> and hits the rows, the properties and the canvas works unchanged.
+
+use "color_state"
+use "i18n"
+use "mode_state"
+use "view_gfx"
+
+let art_right_w = 150
+let art_tools_w = 20
+let art_bar_y = 30
+let art_bar_h = 20
+let art_top = 50
+
+-~> The compact palette's height when open and when folded to its header.
+let art_pal_h = 95
+let art_pal_rail_h = 14
+
+-~> The tools of the column, top to bottom; "" is a separator.
+let art_tool_ids = ["select", "lasso", "", "circle", "rect", "line", "polygon", "stroke", "", "pencil", "brush", "", "text", "layer"]
+
+-~> The x where the right column starts in a window w wide.
+function art_right_x(w) {
+  w - art_right_w
+}
+
+-~> The top of the code drawer between y0 and the status bar at sy.
+-~> The drawer opens from the middle, but never over the tool column's
+-~> tools (R003 put select and lasso in the column after R002 was drawn:
+-~> eleven tools reach y 230). The lowered drawer (its chevron) leaves the
+-~> canvas three quarters.
+function art_drawer_top(sy) {
+  let top = art_top + (sy - art_top) // 2 - 1
+  if (MODE.low == true) {
+    top = art_top + (sy - art_top) * 3 // 4 - 1
+  }
+  math.min(sy - 40, math.max(top, art_column_end() + 2))
+}
+
+-~> The y under the column's last tool.
+function art_column_end() {
+  let n = 0
+  let seps = 0
+  for (let i = 0; i < len(art_tool_ids); i = i + 1) {
+    if (art_tool_ids[i] == "") {
+      seps = seps + 1
+    } else {
+      n = n + 1
+    }
+  }
+  art_top + 3 + n * 15 + seps * 4
+}
+
+-~> The geometry view_geom gives in artist mode (same keys as coder mode):
+-~> the "rows" are the drawer's, the "props" the context bar's (their first
+-~> row of fields lands at y 32), and the code panel is the drawer, as wide
+-~> as the canvas column (V.pw follows it).
+function art_geom(w, h) {
+  let sy = h - 16
+  let rx = art_right_x(w)
+  let pw = rx - 2
+  let top = sy
+  if (mode_drawer()) {
+    top = art_drawer_top(sy)
+  }
+  let rows_y = math.min(sy, top + 15)
+  {
+    "w": w,
+    "h": h,
+    "pw": pw,
+    "props_y": art_bar_y + 2 - 22,
+    "status_y": sy,
+    "lim": sy,
+    "pin_y": -100,
+    "main_y": top,
+    "rows_y": rows_y,
+    "cx": art_tools_w,
+    "cy": art_top,
+    "cw": pw - art_tools_w,
+    "ch": top - art_top,
+    "artist": true
+  }
+}
+
+-~> The compact palette's height now.
+function art_pal_height() {
+  if (PAL.open == false) {
+    return art_pal_rail_h
+  }
+  art_pal_h
+}
+
+-~> The panels as [x, y, w, h] in artist mode (view_panel_rects).
+function art_panel_rects(gm) {
+  let rx = art_right_x(gm.w)
+  let ph = art_pal_height()
+  {
+    "toolbar": [0, 0, gm.w, 16],
+    "tabs": [0, 16, gm.w, 14],
+    "props": [0, art_bar_y, gm.w, art_bar_h],
+    "tools": [0, art_top, art_tools_w, gm.main_y - art_top],
+    "canvas": [gm.cx, art_top, gm.cw + 2, gm.ch],
+    "rows": [0, gm.main_y, gm.pw, gm.status_y - gm.main_y],
+    "palette": [rx, art_top, art_right_w, ph],
+    "layers": [rx, art_top + ph, art_right_w, gm.status_y - art_top - ph],
+    "status": [0, gm.status_y, gm.w, 16]
+  }
+}
+
+-~> == The toolbar and the tool column ==
+
+-~> The left of the toolbar: the drawer toggle and the mode label, as
+-~> buttons of the group "mode" ({"id", "x", "y", "w", "h", "icon", "label"}).
+function art_bar_buttons() {
+  let code = t("artist.code")
+  let cw = g_text_w(code) + 18
+  let label = t("artist.mode")
+  [
+    {"id": "code", "group": "mode", "x": 3, "y": 1, "w": cw, "h": 14, "icon": "code", "label": code},
+    {"id": "coder", "group": "mode", "x": 3 + cw + 6, "y": 1, "w": g_text_w(label) + 4, "h": 14, "icon": "", "label": label, "plain": true}
+  ]
+}
+
+-~> The tool column's buttons (group "tool") and the y of its separators.
+function art_column() {
+  let out = []
+  let seps = []
+  let y = art_top + 3
+  for (let i = 0; i < len(art_tool_ids); i = i + 1) {
+    let id = art_tool_ids[i]
+    if (id == "") {
+      push(seps, y + 1)
+      y = y + 4
+    } else {
+      push(out, {"id": id, "group": "tool", "x": 3, "y": y, "w": 14, "h": 14, "icon": id, "label": ""})
+      y = y + 15
+    }
+  }
+  {"buttons": out, "seps": seps}
+}
+
+-~> The fill and stroke chips at the bottom of the column: [x, y, w, h]
+-~> each, or null when the drawer leaves no room under the tools.
+function art_chips(gm) {
+  let y = gm.main_y - 26
+  if (y < art_column_end() + 4) {
+    return null
+  }
+  {"fill": [3, y, 10, 10], "stroke": [7, y + 4, 10, 10]}
+}
+
+-~> The coder mode's way into artist mode: a text button at the right end
+-~> of the tab bar, [x, y, w, h].
+function art_switch_rect(w) {
+  let label = t("artist.switch")
+  let bw = g_text_w(label) + 18
+  [w - bw - 3, 17, bw, 12]
+}

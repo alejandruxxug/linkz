@@ -1,0 +1,366 @@
+-~> artist_route: where the editor's view hands artist mode what is its own,
+-~> one line each in view_main, view_input, view_panels and view_popups: the
+-~> mode switch, the tool column, the layers panel, the context bar, the
+-~> code drawer's header and its keys. Everything else (the canvas, the
+-~> rows in the drawer, the popups, the palette) is the coder mode's own
+-~> code on artist mode's geometry (artist_layout.liz).
+
+use "artist_ctx"
+use "artist_layers"
+use "artist_layout"
+use "artist_tools"
+use "blend_menu"
+use "color_popover"
+use "editor_shape_ops"
+use "editor_undo"
+use "fill_editor"
+use "i18n"
+use "mode_state"
+use "shape_menu"
+use "view_gfx"
+use "view_input"
+use "view_layout"
+use "view_main"
+
+-~> == Switching ==
+
+-~> Shows artist mode (true) or coder mode (false) on the same document,
+-~> selection and history: what floats over the old layout closes, the
+-~> code panel gets back the width it had.
+function art_set_mode(artist) {
+  if (artist == mode_artist()) {
+    return null
+  }
+  view_commit_focus()
+  cp_close()
+  fe_close()
+  blend_menu_close()
+  sm_close()
+  V.picker = false
+  V.overflow = false
+  if (artist) {
+    MODE.coder_pw = V.pw
+  }
+  mode_store(artist)
+  if (!artist && MODE.coder_pw != null) {
+    V.pw = MODE.coder_pw
+  }
+  view_fit_split()
+  art_layers_reset()
+  V.top = 0
+  view_touch()
+  view_force_all()
+}
+
+-~> A drawing was opened: the layers panel starts from its top.
+function art_enter() {
+  art_layers_reset()
+}
+
+-~> Opens or closes the code drawer.
+function art_toggle_drawer() {
+  MODE.drawer = !MODE.drawer
+  if (MODE.drawer) {
+    view_reveal(ed_model().line)
+  }
+  view_touch()
+  view_force_all()
+}
+
+-~> A press on a button of the group "mode" (view_press).
+function art_press(what) {
+  if (what == "code") {
+    art_toggle_drawer()
+  } elif (what == "coder") {
+    art_set_mode(false)
+  } elif (what == "artist") {
+    art_set_mode(true)
+  }
+}
+
+-~> == Panels ==
+
+-~> Whether a panel is painted by artist mode's own code.
+function art_owns_panel(name) {
+  mode_artist() && (name == "tools" || name == "layers" || name == "props")
+}
+
+function art_panel_key(name) {
+  let common = str(V.w) + "x" + str(V.h) + "|" + lang_get() + "|"
+  if (name == "tools") {
+    return common + art_tools_key()
+  }
+  if (name == "layers") {
+    return common + art_layers_key()
+  }
+  common + str(V.ver) + "|" + str(V.focus) + "|" + view_hover_is(["field", "lasso", "art"]) + "|" + str(V.picker) + "|" + str(FE.open)
+}
+
+function art_panel_paint(name) {
+  if (name == "tools") {
+    art_tools_paint()
+  } elif (name == "layers") {
+    art_layers_paint()
+  } else {
+    art_ctx_paint()
+  }
+}
+
+-~> What the toolbar's and the tab bar's look also depend on.
+function art_bar_key() {
+  str(mode_artist()) + str(mode_drawer())
+}
+
+-~> Paints a toolbar button that is only a label (`artist mode`). True when it was one.
+function art_paint_plain(b) {
+  if (b.plain != true) {
+    return false
+  }
+  let c = P.mute
+  if (V.hover == b.group + ":" + b.id) {
+    c = P.bright
+  }
+  g_text(b.label, b.x + 2, b.y, c)
+  true
+}
+
+-~> The state the `</> Code` button shows: active while the drawer is open.
+function art_button_active(b) {
+  b.group == "mode" && b.id == "code" && mode_drawer()
+}
+
+-~> Coder mode's `artist mode` button at the right end of the tab bar.
+function art_paint_switch() {
+  if (mode_artist()) {
+    return null
+  }
+  let r = art_switch_rect(V.w)
+  let tb = view_tabs()
+  if (r[0] < tb.plus[0] + 14) {
+    return null
+  }
+  let c = P.mute
+  if (V.hover == "mode:artist") {
+    c = P.bright
+  }
+  g_icon("brush", r[0] + 3, r[1] + 2, c)
+  g_text(t("artist.switch"), r[0] + 14, r[1] - 1, c)
+}
+
+-~> The drawer's header (artist mode): `</> CODE · file`, lower and close.
+function art_paint_drawer_header(pr) {
+  let y = pr[1]
+  let w = pr[2]
+  g_rect(0, y, w, 13, P.raised)
+  g_rect(0, y + 13, w, 1, P.void)
+  g_rect(0, y - 1, w, 1, P.void)
+  g_icon("code", 5, y + 3, P.mute)
+  let title = text.upper(t("artist.code")) + " · " + view_file_name()
+  g_text(title, 16, y, P.mute)
+  let lc = P.mute
+  if (V.hover == "dr:low") {
+    lc = P.bright
+  }
+  let icon = "chevron-down"
+  if (MODE.low) {
+    icon = "up"
+  }
+  g_icon(icon, w - 24, y + 3, lc)
+  let cc = P.mute
+  if (V.hover == "dr:close") {
+    cc = P.bright
+  }
+  g_icon("close", w - 12, y + 3, cc)
+}
+
+-~> == The pointer ==
+
+-~> The hover id of what artist mode owns at a UI point, or null: the tool
+-~> column, the layers panel, the drawer's header, coder mode's switch.
+function art_hover_at(x, y) {
+  if (!mode_artist()) {
+    let r = art_switch_rect(V.w)
+    if (y >= 16 && y < 30 && view_in(x, y, r[0], r[1], r[2], r[3]) && r[0] >= view_tabs().plus[0] + 14) {
+      return "mode:artist"
+    }
+    return null
+  }
+  let id = art_tools_hover(x, y)
+  if (id != null) {
+    return id
+  }
+  id = art_layers_hover(x, y)
+  if (id != null) {
+    return id
+  }
+  let gm = view_geom()
+  if (mode_drawer() && x < gm.pw && y >= gm.main_y && y < gm.main_y + 14) {
+    if (x >= gm.pw - 27 && x < gm.pw - 15) {
+      return "dr:low"
+    }
+    if (x >= gm.pw - 15) {
+      return "dr:close"
+    }
+    return "dr:head"
+  }
+  null
+}
+
+-~> A press on what artist mode owns. True when it took it.
+function art_down(id, e) {
+  let kind = text.split(id, ":")[0]
+  if (kind == "al") {
+    art_layers_press(id, e)
+    return true
+  }
+  if (kind == "dr") {
+    if (id == "dr:close") {
+      art_toggle_drawer()
+    } elif (id == "dr:low") {
+      MODE.low = MODE.low != true
+      view_touch()
+      view_force_all()
+    }
+    return true
+  }
+  if (kind == "art") {
+    if (id == "art:chip") {
+      art_tools_chip()
+    } else {
+      art_ctx_press(id)
+    }
+    return true
+  }
+  false
+}
+
+-~> A move of a drag artist mode started (V.drag.kind "artist").
+function art_drag(e) {
+  art_layers_drag(e)
+}
+
+function art_up(e, d) {
+  art_layers_up(e, d)
+}
+
+-~> The wheel over the layers panel scrolls it; over the drawer, the rows.
+-~> True when it was there.
+function art_wheel(e) {
+  if (!mode_artist()) {
+    return false
+  }
+  let p = e.pos
+  let r = view_panel_rects().layers
+  if (view_in(p.x, p.y, r[0], r[1], r[2], r[3])) {
+    let n = math.max(1, math.round(math.abs(e.dy)))
+    if (e.dy > 0) {
+      n = -n
+    }
+    la_scroll(n)
+    return true
+  }
+  false
+}
+
+-~> The rows' area for the wheel: [x, y, w, h] (the drawer in artist mode).
+function art_rows_wheel_rect() {
+  let gm = view_geom()
+  if (gm.artist == true) {
+    return [0, gm.rows_y, gm.pw, gm.lim - gm.rows_y]
+  }
+  [0, 30, gm.pw, gm.props_y - 30]
+}
+
+-~> The line of the row under a UI point of the layers panel, or 0.
+function art_line_at(p) {
+  if (!mode_artist()) {
+    return 0
+  }
+  art_layers_line_at(p)
+}
+
+-~> The tooltip's anchor for a column tool, or null.
+function art_hit_rect(id) {
+  if (!mode_artist()) {
+    return null
+  }
+  art_tools_rect(id)
+}
+
+-~> Where the pen picker opens: beside the column's brush in artist mode,
+-~> else null (under the toolbar's brush).
+function art_pick_origin(h) {
+  if (!mode_artist()) {
+    return null
+  }
+  let r = art_tools_rect("tool:brush")
+  [r[0] + r[2] + 4, math.max(17, math.min(r[1], V.h - 18 - h))]
+}
+
+-~> == The keyboard ==
+
+-~> Cmd+/ opens or closes the drawer. True when it used the key.
+function art_key_global(e) {
+  let k = text.lower(e.key)
+  let mods = e.mods
+  if (!mode_artist() || mods == null || !(mods.cmd == true || mods.ctrl == true)) {
+    return false
+  }
+  if (k == "/" || k == "slash") {
+    art_toggle_drawer()
+    return true
+  }
+  false
+}
+
+-~> With the drawer closed the code is out of sight, so keys don't edit it:
+-~> Delete and Backspace remove the selected row's shape or layer, other
+-~> plain keys do nothing. Shortcuts (undo, copy, paste) still work. True
+-~> when it used the key.
+function art_key_closed(e) {
+  if (!mode_artist() || mode_drawer()) {
+    return false
+  }
+  let mods = e.mods
+  if (mods != null && (mods.cmd == true || mods.ctrl == true)) {
+    return false
+  }
+  let k = text.lower(e.key)
+  if (k == "delete" || k == "backspace") {
+    let m = ed_model()
+    let r = view_rows()[m.line - 1]
+    if (r.stmt != null && (r.kind == "layer" || r.kind == "shape" || r.kind == "call")) {
+      ed_shape_remove(m.line)
+      view_prepare()
+      view_after()
+    }
+  }
+  true
+}
+
+-~> Typed text goes nowhere while the drawer is closed (true: swallowed).
+function art_text_closed() {
+  mode_artist() && !mode_drawer()
+}
+
+-~> == The backdoor ==
+
+-~> The mode in the debug state: {"mode", "drawer", "tools", "layers"}.
+function art_debug() {
+  if (!mode_artist()) {
+    return {"mode": "coder", "drawer": false}
+  }
+  let col = art_column()
+  let tools = []
+  for (let i = 0; i < len(col.buttons); i = i + 1) {
+    let b = col.buttons[i]
+    push(tools, {"id": "tool:" + b.id, "x": b.x, "y": b.y, "w": b.w, "h": b.h})
+  }
+  let rows = []
+  let vis = la_visible()
+  let r = la_rect()
+  for (let i = 0; i < len(vis); i = i + 1) {
+    push(rows, {"line": vis[i].row.line, "kind": vis[i].row.kind, "x": r[0], "y": vis[i].y, "w": r[2], "h": la_h(vis[i].row)})
+  }
+  {"mode": "artist", "drawer": mode_drawer(), "tools": tools, "layers": rows}
+}

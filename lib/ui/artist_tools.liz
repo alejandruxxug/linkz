@@ -1,0 +1,118 @@
+-~> artist_tools: the tool column of artist mode (style guide R002 "Artist
+-~> mode": 20 wide, tools 14×14 step 15 from y 53, the fill / stroke chips
+-~> at the bottom). The buttons are the toolbar's tools ("tool:<id>"), so a
+-~> click does what the toolbar's does. The fill chip is the color new
+-~> shapes get (a click opens the color popover on it); the stroke chip
+-~> behind it is the selected shape's stroke color.
+
+use "artist_layout"
+use "color_popover"
+use "editor_props"
+use "editor_state"
+use "editor_undo"
+use "mode_state"
+use "view_gfx"
+use "view_layout"
+use "view_panels"
+
+-~> The hover id at a UI point of the column, or null off it.
+function art_tools_hover(x, y) {
+  let gm = view_geom()
+  if (!view_in(x, y, 0, art_top, art_tools_w, gm.main_y - art_top)) {
+    return null
+  }
+  let col = art_column()
+  for (let i = 0; i < len(col.buttons); i = i + 1) {
+    let b = col.buttons[i]
+    if (view_in(x, y, b.x, b.y, b.w, b.h)) {
+      return "tool:" + b.id
+    }
+  }
+  let chips = art_chips(gm)
+  if (chips != null) {
+    let ch = chips.fill
+    if (view_in(x, y, ch[0] - 1, ch[1] - 1, ch[2] + 6, ch[3] + 6)) {
+      return "art:chip"
+    }
+  }
+  "art:column"
+}
+
+-~> The rectangle of a column tool ("tool:<id>"), or null.
+function art_tools_rect(id) {
+  let col = art_column()
+  for (let i = 0; i < len(col.buttons); i = i + 1) {
+    let b = col.buttons[i]
+    if ("tool:" + b.id == id) {
+      return [b.x, b.y, b.w, b.h]
+    }
+  }
+  null
+}
+
+-~> The stroke color of the selected shape, or null.
+function art_stroke_color() {
+  let props = ed_props()
+  if (props == null || props.kind != "call") {
+    return null
+  }
+  let f = props_field_named(props, "stroke")
+  if (f == null || f.missing) {
+    f = props_field_named(props, "color")
+  }
+  if (f == null || f.missing) {
+    return null
+  }
+  g_hex_color(f.text)
+}
+
+function art_tools_key() {
+  let press = ""
+  if (V.drag != null && V.drag.kind == "press") {
+    press = V.drag.id
+  }
+  str(V.h) + "|" + str(mode_drawer()) + str(MODE.low) + "|" + V.tool + "|" + V.hover + "|" + press + "|" + ed.color + "|" + str(art_stroke_color()) + "|" + str(V.picker)
+}
+
+function art_tools_paint() {
+  let gm = view_geom()
+  let h = gm.main_y - art_top
+  g_rect(0, art_top, art_tools_w, h, P.panel)
+  g_rect(art_tools_w - 1, art_top, 1, h, P.void)
+  let col = art_column()
+  for (let i = 0; i < len(col.seps); i = i + 1) {
+    g_rect(4, col.seps[i], 12, 1, P.bevel)
+  }
+  for (let i = 0; i < len(col.buttons); i = i + 1) {
+    view_paint_tool_button(col.buttons[i])
+  }
+  let chips = art_chips(gm)
+  if (chips == null) {
+    return null
+  }
+  let s = chips.stroke
+  g_frame(s[0], s[1], s[2], s[3], P.void)
+  let sc = art_stroke_color()
+  if (sc == null) {
+    g_rect(s[0] + 1, s[1] + 1, s[2] - 2, s[3] - 2, P.coal)
+  } else {
+    g_rect(s[0] + 1, s[1] + 1, s[2] - 2, s[3] - 2, sc)
+  }
+  let f = chips.fill
+  let fc = g_hex_color(ed.color)
+  g_frame(f[0], f[1], f[2], f[3], P.void)
+  if (fc != null) {
+    g_rect(f[0] + 1, f[1] + 1, f[2] - 2, f[3] - 2, fc)
+  }
+  if (V.hover == "art:chip") {
+    g_frame(f[0] - 1, f[1] - 1, f[2] + 2, f[3] + 2, P.bright)
+  }
+}
+
+-~> A press on the fill chip: the color popover on the color new shapes get.
+function art_tools_chip() {
+  let chips = art_chips(view_geom())
+  if (chips != null) {
+    cp_open({"kind": "tool"}, chips.fill)
+  }
+}

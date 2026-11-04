@@ -6,6 +6,7 @@ use "../draw/gradient"
 use "../draw/pens"
 use "../gfx/raster"
 use "app"
+use "artist_route"
 use "blend_props"
 use "budget_view"
 use "pen_library"
@@ -68,6 +69,10 @@ function view_hover_at(x, y) {
       return ""
     }
   }
+  let art_id = art_hover_at(x, y)
+  if (art_id != null) {
+    return art_id
+  }
   let color_id = color_hover_at(x, y)
   if (color_id != null) {
     return color_id
@@ -117,7 +122,7 @@ function view_hover_at(x, y) {
     }
     return ""
   }
-  if (x < gm.pw && y >= gm.props_y && y < gm.status_y) {
+  if (view_in_props(x, y)) {
     let own = route_props_hit(x, y)
     if (own != "") {
       return own
@@ -196,6 +201,7 @@ function view_hit_rect(id) {
         return [bs[i].x, bs[i].y, bs[i].w, bs[i].h]
       }
     }
+    return art_hit_rect(id)
   } elif (kind == "strip") {
     let vis = view_visible()
     for (let i = 0; i < len(vis); i = i + 1) {
@@ -505,6 +511,8 @@ function view_press(id) {
     }
   } elif (kind == "dialog") {
     view_dialog_choose(what)
+  } elif (kind == "mode") {
+    art_press(what)
   }
 }
 
@@ -855,7 +863,7 @@ function view_down(e) {
     return null
   }
   let kind = text.split(id, ":")[0]
-  if (kind == "tool" || kind == "bar" || kind == "tab" || kind == "strip") {
+  if (kind == "tool" || kind == "bar" || kind == "tab" || kind == "strip" || kind == "mode") {
     V.drag = {"kind": "press", "id": id}
     app.needs_paint = true
     return null
@@ -870,6 +878,9 @@ function view_down(e) {
   }
   if (kind == "blendbadge") {
     blend_badge_press(id)
+    return null
+  }
+  if (art_down(id, e)) {
     return null
   }
   if (kind == "field") {
@@ -894,11 +905,11 @@ function view_down(e) {
     }
     return null
   }
-  if (p.x >= gm.pw - 1 && p.x <= gm.pw + 2 && p.y >= 30 && p.y < gm.status_y) {
+  if (gm.artist != true && p.x >= gm.pw - 1 && p.x <= gm.pw + 2 && p.y >= 30 && p.y < gm.status_y) {
     V.drag = {"kind": "split"}
     return null
   }
-  if (p.x >= gm.cx && p.y >= 30 && p.y < gm.status_y) {
+  if (view_in_canvas(p.x, p.y)) {
     view_canvas_down(e)
   }
 }
@@ -938,6 +949,8 @@ function view_move(e) {
       blend_props_drag(e)
     } elif (k == "color") {
       color_move(e)
+    } elif (k == "artist") {
+      art_drag(e)
     }
     return null
   }
@@ -949,11 +962,10 @@ function view_move(e) {
 function view_update_hover(p) {
   let id = view_hover_at(p.x, p.y)
   pen_route_hover_move(p)
-  let gm = view_geom()
   let cl = view_canvas_layout()
   let anchor = null
   let draw_pos = null
-  if (V.dialog == null && !V.picker && p.x >= gm.cx && p.y >= 30 && p.y < gm.status_y) {
+  if (V.dialog == null && !V.picker && view_in_canvas(p.x, p.y)) {
     anchor = view_anchor_at(cl, p.x, p.y)
     if (view_in(p.x, p.y, cl.frame[0] + 1, cl.frame[1] + 1, cl.frame[2] - 2, cl.frame[3] - 2)) {
       draw_pos = view_to_drawing(cl, p.x, p.y)
@@ -1018,6 +1030,8 @@ function view_up(e) {
     blend_props_up(e)
   } elif (d.kind == "color") {
     color_up(e)
+  } elif (d.kind == "artist") {
+    art_up(e, d)
   }
   V.ver = V.ver + 1
   app.needs_paint = true
@@ -1027,9 +1041,12 @@ function view_wheel(e) {
   if (pen_route_wheel(e)) {
     return null
   }
+  if (art_wheel(e)) {
+    return null
+  }
   let p = e.pos
-  let gm = view_geom()
-  if (p.x < gm.pw && p.y >= 30 && p.y < gm.props_y) {
+  let wr = art_rows_wheel_rect()
+  if (view_in(p.x, p.y, wr[0], wr[1], wr[2], wr[3])) {
     let n = math.max(1, math.round(math.abs(e.dy)))
     if (e.dy > 0) {
       V.top = math.max(0, V.top - n)
@@ -1143,6 +1160,9 @@ function view_key(e) {
     view_confirm(function() { show_screen("home", {"new": true}) })
     return null
   }
+  if (art_key_global(e)) {
+    return null
+  }
   if (shape_global_key(e)) {
     return null
   }
@@ -1163,6 +1183,9 @@ function view_key(e) {
     return null
   }
   if (view_tools_key(e)) {
+    return null
+  }
+  if (art_key_closed(e)) {
     return null
   }
   cmp_ed_key(name, mods)
@@ -1192,7 +1215,7 @@ function view_text(e) {
     view_field_text_in(e.text)
     return null
   }
-  if (route_text(e.text)) {
+  if (route_text(e.text) || art_text_closed()) {
     return null
   }
   cmp_ed_type(e.text)

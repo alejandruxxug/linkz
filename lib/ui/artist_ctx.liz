@@ -1,0 +1,311 @@
+-~> artist_ctx: the context bar of artist mode (style guide R002 "Artist
+-~> mode": y 30–50, fields 16 high), Aseprite style. It shows what the
+-~> properties panel shows, in one strip: the same layout (view_props_cached,
+-~> with the pen, blend and color additions) laid out again from left to
+-~> right after a title like `○ circle · sun |`. So painting, clicking,
+-~> scrubbing and typing go through the coder panel's own code, and every
+-~> change is the same code change.
+-~> In artist mode the labels that name a parameter are in the interface's
+-~> language when it has a word for them (`relleno`, `pluma`), and a shape
+-~> with a fill gets a `Fill` button that opens the fill editor.
+
+use "editor_props"
+use "editor_rows"
+use "editor_state"
+use "editor_undo"
+use "fill_editor"
+use "i18n"
+use "mode_state"
+use "tool_props"
+use "view_gfx"
+use "view_layout"
+use "view_panels"
+
+-~> The bar's first row of fields (where view_props_layout_build puts them).
+let ctx_row_y = 32
+
+-~> The word for a name in the interface's language, or null.
+function ctx_word(key) {
+  let table = i18n.tables[lang_get()]
+  if (table == null || table[key] == null) {
+    return null
+  }
+  table[key]
+}
+
+-~> A tool's or shape's name as the bar says it: `circle`, `círculo`.
+function ctx_kind_name(id) {
+  let key = id
+  if (id == "function") {
+    key = "value"
+  }
+  let w = ctx_word("tool." + key)
+  if (w == null) {
+    w = t("tool." + key)
+  }
+  if (w == "tool." + key) {
+    return id
+  }
+  text.lower(w)
+}
+
+-~> The name of the layer a row is in, or "".
+function ctx_layer_name(line) {
+  let rows = ed_rows()
+  if (line == null || line < 1 || line > len(rows)) {
+    return ""
+  }
+  let r = rows[line - 1]
+  if (r.kind == "layer") {
+    return r.stmt.name
+  }
+  if (r.layer > 0 && rows[r.layer - 1].stmt != null) {
+    return rows[r.layer - 1].stmt.name
+  }
+  ""
+}
+
+-~> The bar's title for a layout: [icon, kind, layer name] (empty strings
+-~> when there is nothing to name).
+function ctx_title(lay) {
+  let props = lay.props
+  let m = ed_model()
+  if (props != null && props.kind == "layer") {
+    return ["layer", ctx_kind_name("layer"), props.name]
+  }
+  if (props != null && props.kind == "call") {
+    let icon = props.callee
+    if (icon == "ellipse") {
+      icon = "circle"
+    }
+    return [icon, ctx_kind_name(props.callee), ctx_layer_name(m.line)]
+  }
+  if (V.tool != "") {
+    let layer = doc_current_layer(m)
+    return [V.tool, ctx_kind_name(V.tool), ctx_layer_name(layer)]
+  }
+  ["", "", ""]
+}
+
+-~> How wide the title is, its separator with it.
+function ctx_title_w(tt) {
+  if (tt[1] == "") {
+    return 0
+  }
+  let w = 6 + 10 + g_text_w(tt[1])
+  if (tt[2] != "") {
+    w = w + g_text_w(" · " + tt[2])
+  }
+  w + 6
+}
+
+-~> The row an item of the layout is on: 0 the title's, 1 the first row of
+-~> fields, 2 the second.
+function ctx_row_of(y) {
+  if (y < ctx_row_y - 2) {
+    return 0
+  }
+  if (y < ctx_row_y + 18) {
+    return 1
+  }
+  2
+}
+
+-~> Every item of a layout as [kind, item, w]: labels, boxes and the tool's own.
+function ctx_items(lay) {
+  let out = []
+  for (let i = 0; i < len(lay.labels); i = i + 1) {
+    push(out, ["label", lay.labels[i], g_text_w(lay.labels[i].s)])
+  }
+  for (let i = 0; i < len(lay.boxes); i = i + 1) {
+    push(out, ["box", lay.boxes[i], lay.boxes[i].w])
+  }
+  if (lay.own != null) {
+    for (let i = 0; i < len(lay.own); i = i + 1) {
+      let w = lay.own[i].w
+      if (w == null) {
+        w = g_text_w(lay.own[i].s)
+      }
+      push(out, ["own", lay.own[i], w])
+    }
+  }
+  out
+}
+
+-~> The layout of the properties laid out again as the context bar (artist
+-~> mode); in coder mode the layout as it is.
+function art_ctx_wrap(lay) {
+  if (!mode_artist()) {
+    return lay
+  }
+  let tt = ctx_title(lay)
+  lay.ctx_title = tt
+  ctx_drop_layer_row(lay)
+  ctx_translate(lay)
+  ctx_fill_button(lay)
+  let items = ctx_items(lay)
+  let x = ctx_title_w(tt) + 6
+  for (let row = 0; row < 3; row = row + 1) {
+    let x0 = null
+    let right = 0
+    let top = null
+    for (let i = 0; i < len(items); i = i + 1) {
+      let it = items[i][1]
+      if (ctx_row_of(it.y) == row) {
+        if (x0 == null || it.x < x0) {
+          x0 = it.x
+        }
+        right = math.max(right, it.x + items[i][2])
+        if (items[i][0] != "label" && (top == null || it.y < top)) {
+          top = it.y
+        }
+      }
+    }
+    if (x0 != null) {
+      let dy = 0
+      if (row == 0) {
+        dy = ctx_row_y + 4 - top
+      } elif (row == 2 && top != null) {
+        dy = ctx_row_y - top
+      }
+      let dx = x - x0
+      for (let i = 0; i < len(items); i = i + 1) {
+        let it = items[i][1]
+        if (ctx_row_of(it.y) == row) {
+          it.x = it.x + dx
+          it.y = it.y + dy
+          if (items[i][0] == "box" && it.h == 18) {
+            it.h = 16
+          }
+        }
+      }
+      x = right + dx + 12
+    }
+  }
+  lay.ctx_end = x
+  lay
+}
+
+-~> A layer's name, hidden and locked are on its row in the layers panel:
+-~> the bar keeps its blend and opacity (style guide R002 frame 8).
+function ctx_drop_layer_row(lay) {
+  let props = lay.props
+  if (props == null || props.kind != "layer") {
+    return null
+  }
+  let labels = []
+  for (let i = 0; i < len(lay.labels); i = i + 1) {
+    if (ctx_row_of(lay.labels[i].y) != 1) {
+      push(labels, lay.labels[i])
+    }
+  }
+  let boxes = []
+  for (let i = 0; i < len(lay.boxes); i = i + 1) {
+    if (ctx_row_of(lay.boxes[i].y) != 1) {
+      push(boxes, lay.boxes[i])
+    }
+  }
+  lay.labels = labels
+  lay.boxes = boxes
+}
+
+-~> The labels that name a parameter, in the interface's language; what
+-~> follows a longer (or shorter) word on its row moves along.
+function ctx_translate(lay) {
+  let names = {}
+  for (let i = 0; i < len(lay.boxes); i = i + 1) {
+    names[lay.boxes[i].field] = true
+  }
+  for (let i = 0; i < len(lay.labels); i = i + 1) {
+    let l = lay.labels[i]
+    let w = null
+    if (names[l.s] == true) {
+      w = ctx_word("param." + l.s)
+    }
+    if (w != null && w != l.s) {
+      let d = g_text_w(w) - g_text_w(l.s)
+      let items = ctx_items(lay)
+      for (let k = 0; k < len(items); k = k + 1) {
+        let it = items[k][1]
+        if (it.x > l.x && ctx_row_of(it.y) == ctx_row_of(l.y)) {
+          it.x = it.x + d
+        }
+      }
+      l.s = w
+    }
+  }
+}
+
+-~> A shape with a fill gets the `Fill` button (it opens the fill editor).
+function ctx_fill_button(lay) {
+  let props = lay.props
+  if (props == null || props.kind != "call") {
+    return null
+  }
+  let f = props_field_named(props, "fill")
+  if (f == null || f.missing) {
+    return null
+  }
+  let right = 0
+  for (let i = 0; i < len(lay.boxes); i = i + 1) {
+    let b = lay.boxes[i]
+    if (ctx_row_of(b.y) == 1) {
+      right = math.max(right, b.x + b.w)
+    }
+  }
+  if (lay.own == null) {
+    lay.own = []
+  }
+  let label = t("artist.fill")
+  push(lay.own, {"id": "art:fill", "kind": "seg", "x": right + 6, "y": ctx_row_y + 1, "w": g_text_w(label) + 18, "h": 14, "icon": "fill", "label": label, "on": FE.open})
+}
+
+-~> == Painting ==
+
+-~> Paints the context bar.
+function art_ctx_paint() {
+  let w = V.w
+  let lay = view_props_cached()
+  g_rect(0, 30, w, 20, P.panel)
+  g_rect(0, 49, w, 1, P.void)
+  let tt = lay.ctx_title
+  if (tt != null && tt[1] != "") {
+    g_icon(tt[0], 6, 36, P.lizard)
+    g_text(tt[1], 16, 33, P.text)
+    let x = 16 + g_text_w(tt[1])
+    if (tt[2] != "") {
+      g_text(" · " + tt[2], x, 33, P.mute)
+      x = x + g_text_w(" · " + tt[2])
+    }
+    g_rect(x + 5, 35, 1, 10, P.bevel)
+  }
+  for (let i = 0; i < len(lay.labels); i = i + 1) {
+    let l = lay.labels[i]
+    g_text(l.s, l.x, l.y, P.mute)
+  }
+  for (let i = 0; i < len(lay.boxes); i = i + 1) {
+    view_paint_box(lay.boxes[i])
+  }
+  tool_props_paint(lay)
+  if (lay.msg != "") {
+    let x = 6
+    if (tt != null) {
+      x = ctx_title_w(tt) + 6
+    }
+    g_text(lay.msg, x, 33, P.mute)
+  }
+}
+
+-~> A press on the bar's own button. True when it was one.
+function art_ctx_press(id) {
+  if (id != "art:fill") {
+    return false
+  }
+  if (FE.open) {
+    fe_close()
+  } else {
+    fe_open(ed_model().line, "fill")
+  }
+  view_touch()
+  true
+}

@@ -1,0 +1,78 @@
+-- coder mode first, as it was
+false 258 ["toolbar", "tabs", "rows", "props", "status", "canvas", "palette"]
+mode:artist
+-- the tab bar's button switches; the document, caret and history stay
+true true
+true
+canvas [20, 50, 340, 294] drawer 360 props_y 10
+{"toolbar": [0, 0, 512, 16], "tabs": [0, 16, 512, 14], "props": [0, 30, 512, 20], "tools": [0, 50, 20, 294], "canvas": [20, 50, 342, 294], "rows": [0, 344, 360, 0], "palette": [362, 50, 150, 95], "layers": [362, 145, 150, 199], "status": [0, 344, 512, 16]}
+["toolbar", "tabs", "rows", "props", "status", "canvas", "palette", "tools", "layers"]
+-- the toolbar and the tool column
+["mode:code", "mode:coder", "bar:export", "bar:save", "bar:lang", "bar:home"]
+["select@53", "lasso@68", "circle@87", "rect@102", "line@117", "polygon@132", "stroke@147", "pencil@166", "brush@181", "text@200", "layer@215"] 230
+tool:select tool:circle [3, 181, 14, 14]
+select
+true
+-- the layers panel: a row per layer and per shape in an open one
+4:layer@181 5:shape@203 6:shape@221 7:layer@239 8:shape@261 9:shape@279 10:layer@297
+al:eye:4 al:fold:4 al:row:4
+7 ["layer", "layer", "boat"]
+4:layer@181 5:shape@203 6:shape@221 7:layer@239 10:layer@261 11:shape@283
+  polygon([(120, 214), (180, 214), (165, 232), (135, 232)], #3b2a6b) -~> [hidden] 1
+-- a right-click on a row opens the shape menu on it
+true 9
+false
+-- a drag moves a row among its siblings: one undo step
+layer sky layer sun 1 4
+layer sun layer sky
+  circle((360, 90), 56, #f2a65a66)   circle((360, 90), 35, #fff3c4)
+0 true   circle((360, 90), 35, #fff3c4)
+-- the context bar: the coder panel's fields in one strip
+["circle", "circle", "sun"]
+["center:0@166,32/16", "center:1@203,32/16", "r:0@249,32/16", "fill:0@311,32/16"]
+field:r:0 true false
+  circle((360, 90), 41, #fff3c4) 1
+  circle((360, 90), 20, #fff3c4)
+true
+true 5
+false
+-- a layer: its blend and opacity in the bar and in the panel's header
+["layer", "layer", "sun"] ["blend@144,32", "opslider@298,32", "opacity@417,32"]
+true 4 4
+  blend("multiply") MUL
+  opacity(0.7) 1
+opacity opfield
+  opacity(0.5)
+  circle((360, 90), 20, #fff3c4)   circle((360, 90), 56, #f2a65a66)
+-- the drawer: Cmd+/ and the button; the rows under the canvas
+true 232 247 182 [0, 232, 360, 112] [0, 50, 20, 182]
+true dr:head dr:close
+269
+false
+true
+false
+-- with the drawer closed the keys don't edit the code
+true
+  circle((360, 90), 56, #f2a65a66) 1
+  circle((360, 90), 20, #fff3c4)
+-- thumbnails: made once, again only for the layer that changed
+0
+1 false
+2
+-- the compact palette
+[362, 50, 150, 95] [487, 67, 8, 40] [499, 67, 8, 40]
+["collapse", "hex", "alpha", "dropper", "recent:0", "recent:1", "recent:2", "recent:3"]
+#f2a65a66
+185
+true
+pal:dropper_at
+#fff3c4 false
+[362, 50, 150, 14] [362, 64, 150, 280]
+[362, 50, 150, 95]
+-- the pen picker beside the column's brush, the pen settings without code
+brush true [21, 181, 230, 133]
+[16, 51, 480, 220] null
+-- back to coder mode: the code panel's width comes back
+false true true 285 true
+true
+

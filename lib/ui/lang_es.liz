@@ -399,5 +399,24 @@ lang_register("es", {
   "undo.color_add": "añadir colors.{name}",
   "undo.color_add_all": "añadir {n} colores",
   "undo.color_rename": "renombrar a colors.{name}",
-  "undo.color_remove": "eliminar colors.{name}"
+  "undo.color_remove": "eliminar colors.{name}",
+
+  "artist.code": "Código",
+  "artist.mode": "modo artista",
+  "artist.switch": "modo artista",
+  "artist.fill": "Relleno",
+  "artist.canvas": "lienzo",
+  "artist.refuse_move": "aquí una fila se mueve dentro de su capa: para pasarla a otra capa, corta y pega su código",
+  "param.center": "centro",
+  "param.fill": "relleno",
+  "param.stroke": "trazo",
+  "param.width": "grosor",
+  "param.pen": "pluma",
+  "param.color": "color",
+  "param.size": "tamaño",
+  "param.points": "puntos",
+  "param.from": "desde",
+  "param.to": "hasta",
+  "param.text": "texto",
+  "param.radii": "radios"
 })

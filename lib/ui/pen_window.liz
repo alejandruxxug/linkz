@@ -12,6 +12,7 @@
 
 use "../draw/pens"
 use "i18n"
+use "mode_state"
 use "pen_code"
 use "pen_edit"
 use "pen_library"
@@ -24,11 +25,30 @@ let pw_w = 480
 let pw_h = 285
 let pw_code_lines = 4
 
+-~> Artist mode's window has no code block (style guide R002 19b): 220
+-~> high, and stays under the context bar.
+let pw_h_artist = 220
+
+function pw_height() {
+  if (mode_artist()) {
+    return pw_h_artist
+  }
+  pw_h
+}
+
+function pw_top() {
+  if (mode_artist()) {
+    return 51
+  }
+  16
+}
+
 -~> The window's box [x, y, w, h], kept inside the editor's window.
 function pw_rect() {
+  let h = pw_height()
   let x = math.max(0, math.min(pw.x, V.w - pw_w))
-  let y = math.max(16, math.min(pw.y, V.h - pw_h))
-  return [x, y, pw_w, pw_h]
+  let y = math.max(pw_top(), math.min(pw.y, V.h - h))
+  return [x, y, pw_w, h]
 }
 
 -~> Moves the window so it stays inside the editor's window.
@@ -78,6 +98,10 @@ function pw_layout() {
   let ot = ox + 310 + math.max(35, g_text_w(t(prefixed("pen.", pw_override_name())))) + 6
   let nx = ox + 310 + g_text_w(t("props.name")) + 5
   let sw = g_text_w(t("pen.save_new")) + 20
+  let code = [ox + 5, oy + 222, 470, pw_code_lines * 13 + 4]
+  if (mode_artist()) {
+    code = null
+  }
   {
     "win": r,
     "title": [ox, oy, pw_w, 14],
@@ -96,7 +120,7 @@ function pw_layout() {
     "trash": [ox + 290, oy + 151, 13, 13],
     "name": [nx, oy + 150, ox + 474 - nx, 16],
     "save": [ox + 474 - sw, oy + 171, sw, 16],
-    "code": [ox + 5, oy + 222, 470, pw_code_lines * 13 + 4]
+    "code": code
   }
 }
 
@@ -400,6 +424,9 @@ function pw_code_follow() {
 
 function pw_draw_code(lay) {
   let cr = lay.code
+  if (cr == null) {
+    return null
+  }
   g_rect(cr[0], cr[1], cr[2], cr[3], P.coal)
   g_frame(cr[0], cr[1], cr[2], cr[3], P.void)
   let v = pw_code_view()

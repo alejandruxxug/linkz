@@ -152,6 +152,42 @@ function cd_strip_marker(st, t) {
   g_rect(x - 1, st[1] - 1, 3, st[3] + 2, P.bright)
 }
 
+-~> Fills the rectangle (UI pixels) with a gradient running top to bottom.
+function cd_vgrad(x, y, w, h, stops) {
+  let y0 = cd_by(y)
+  let y1 = cd_by(y + h)
+  let gr = linear((0, y0), (0, y1), stops)
+  let rows = []
+  for (let yy = y0; yy < y1; yy = yy + 1) {
+    push(rows, [yy, cd_bx(x), cd_bx(x + w)])
+  }
+  fb.spans_gradient(rows, (0, 0), gr)
+}
+
+-~> The hue strip standing: every hue from the top down.
+function cd_hue_strip_v(st) {
+  g_frame(st[0] - 1, st[1] - 1, st[2] + 2, st[3] + 2, P.void)
+  let stops = []
+  for (let i = 0; i <= 6; i = i + 1) {
+    push(stops, [i / 6.0, hsv_color({"h": i * 60.0, "s": 1, "v": 1, "a": 255})])
+  }
+  cd_vgrad(st[0], st[1], st[2], st[3], stops)
+}
+
+-~> The alpha strip standing: opaque at the top, clear at the bottom.
+function cd_alpha_strip_v(st, c) {
+  g_frame(st[0] - 1, st[1] - 1, st[2] + 2, st[3] + 2, P.void)
+  cd_checker(st[0], st[1], st[2], st[3], 3)
+  cd_vgrad(st[0], st[1], st[2], st[3], [[0.0, color_with_alpha(c, 255)], [1.0, color_with_alpha(c, 0)]])
+}
+
+-~> A marker on a standing strip at y: a 3 high bright bar in a void frame.
+function cd_strip_marker_v(st, t) {
+  let y = st[1] + math.round(t * (st[3] - 1))
+  g_frame(st[0] - 2, y - 2, st[2] + 4, 5, P.void)
+  g_rect(st[0] - 1, y - 1, st[2] + 2, 3, P.bright)
+}
+
 -~> A 5x5 ring marker (bright, void outside and in) centered on p.
 function cd_ring_marker(p, c) {
   let x = math.round(p.x)

@@ -4,12 +4,14 @@
 
 use "app"
 use "app_screens"
+use "artist_route"
 use "budget_view"
 use "editor_commands"
 use "editor_state"
 use "editor_undo"
 use "home_view"
 use "i18n"
+use "mode_state"
 use "view_canvas"
 use "view_gfx"
 use "view_input"
@@ -35,18 +37,21 @@ function view_hover_is(prefixes) {
 -~> What a panel shows, as a text: when it changes the panel is painted again.
 function view_panel_key(name) {
   let common = str(V.w) + "x" + str(V.h) + "|" + str(V.pw) + "|" + lang_get() + "|"
+  if (art_owns_panel(name)) {
+    return art_panel_key(name)
+  }
   if (name == "toolbar") {
     let press = ""
     if (V.drag != null && V.drag.kind == "press") {
       press = V.drag.id
     }
-    return common + str(len(ed.undo) > 0) + str(len(ed.redo) > 0) + V.tool + "|" + view_hover_is(["tool", "bar"]) + "|" + str(V.picker) + "|" + str(view_has_home()) + "|" + press + "|" + str(V.overflow)
+    return common + str(len(ed.undo) > 0) + str(len(ed.redo) > 0) + V.tool + "|" + view_hover_is(["tool", "bar", "mode"]) + "|" + str(V.picker) + "|" + str(view_has_home()) + "|" + press + "|" + str(V.overflow) + art_bar_key()
   }
   if (name == "tabs") {
-    return common + view_file_name() + "|" + str(ed_dirty()) + "|" + view_hover_is(["tab", "tool", "bar"]) + "|" + str(V.overflow)
+    return common + view_file_name() + "|" + str(ed_dirty()) + "|" + view_hover_is(["tab", "tool", "bar", "mode"]) + "|" + str(V.overflow) + art_bar_key()
   }
   if (name == "rows") {
-    return common + str(V.ver) + "|" + str(V.top) + "|" + view_hover_is(["row", "eye", "lock", "fold", "callee", "add", "strip"]) + "|" + str(V.focus != null) + "|" + route_rows_key()
+    return common + str(V.ver) + "|" + str(V.top) + "|" + view_hover_is(["row", "eye", "lock", "fold", "callee", "add", "strip", "dr"]) + "|" + str(V.focus != null) + "|" + route_rows_key() + art_bar_key()
   }
   if (name == "props") {
     return common + str(V.ver) + "|" + str(V.focus) + "|" + view_hover_is(["field"]) + "|" + str(V.picker) + "|" + str(V.hover_anchor)
@@ -63,7 +68,9 @@ function view_panel_key(name) {
 -~> Paints a panel; `forced` when it must be painted whole. Returns the part
 -~> that changed (UI pixels), or null for all of it (only the canvas tells).
 function view_panel_paint(name, forced) {
-  if (name == "toolbar") {
+  if (art_owns_panel(name)) {
+    art_panel_paint(name)
+  } elif (name == "toolbar") {
     view_paint_toolbar()
   } elif (name == "tabs") {
     view_paint_tabs()
@@ -118,7 +125,7 @@ function view_paint() {
     V.popup_shape = shape_key
   }
   let panels = view_panel_rects()
-  let names = ["toolbar", "tabs", "rows", "props", "status", "canvas", "palette"]
+  let names = view_panel_names()
   let painted = false
   for (let i = 0; i < len(names); i = i + 1) {
     let name = names[i]
@@ -174,6 +181,11 @@ function view_auto_split(w) {
 }
 
 function view_fit_split() {
+  if (mode_artist()) {
+    -~> the drawer is as wide as the canvas column (view_geom sets it)
+    view_geom()
+    return null
+  }
   let lo = math.min(160, V.w * 5 // 8)
   if (V.pw_user) {
     V.pw = math.max(lo, math.min(V.pw, V.w - 120 - color_reserved()))
@@ -269,6 +281,7 @@ function view_enter(args) {
     V.focus = null
   }
   V.keys = {}
+  art_enter()
   V.popup_shape = null
   V.popup_rects = null
   V.tip = null
@@ -357,6 +370,7 @@ function view_debug_state() {
     "dialog": V.dialog != null,
     "pen": ed.pen,
     "pen_window": pen_route_debug(),
+    "artist": art_debug(),
     "paint_ms": V.painted_ms,
     "paints": V.paints
   }

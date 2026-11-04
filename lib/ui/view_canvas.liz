@@ -253,9 +253,15 @@ function view_canvas_key() {
 
 function view_paint_canvas_ui(cl) {
   let gm = view_geom()
-  g_clip(gm.pw, 30, gm.cx + gm.cw - gm.pw, gm.h - 46)
-  g_rect(gm.pw, 30, 1, gm.h - 46, P.void)
-  g_rect(gm.pw + 1, 30, 1, gm.h - 46, P.bevel)
+  let pr = view_panel_rects().canvas
+  g_clip(pr[0], pr[1], pr[2], pr[3])
+  -~> the splitter: left of the canvas, or right of it in artist mode
+  let sx = gm.pw
+  if (gm.artist == true) {
+    sx = gm.cx + gm.cw
+  }
+  g_rect(sx, pr[1], 1, pr[3], P.void)
+  g_rect(sx + 1, pr[1], 1, pr[3], P.bevel)
   g_rect(gm.cx, gm.cy, gm.cw, gm.ch, P.coal)
   g_spans(g_checker_spans(gm.cw, gm.ch), gm.cx, gm.cy, P.checker)
   let fr = cl.frame

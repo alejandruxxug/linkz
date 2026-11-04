@@ -7,6 +7,7 @@ use "../draw/gradient"
 use "../draw/pens"
 use "../draw/shapes"
 use "../gfx/raster"
+use "artist_route"
 use "budget_view"
 use "complete_state"
 use "complete_view"
@@ -228,6 +229,11 @@ let pick_row = 20
 -~> The picker's box: [x, y, w, h], under the brush button: a header, a row
 -~> per pen (built-in ones, then saved ones) and a footer.
 function pick_rect() {
+  let h = len(pens.list) * pick_row + 18 + picker_footer_h
+  let at = art_pick_origin(h)
+  if (at != null) {
+    return [at[0], at[1], pick_w, h]
+  }
   let bx = 3
   let bs = view_toolbar()
   for (let i = 0; i < len(bs); i = i + 1) {

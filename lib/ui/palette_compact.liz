@@ -1,0 +1,147 @@
+-~> palette_compact: the palette sidebar in its compact form, at the top of
+-~> artist mode's right column (style guide R002 "Artist mode": header, SV
+-~> 116×40 with the hue and alpha strips standing beside it 8×40, hex,
+-~> alpha and the eyedropper, one row of variable chips and recent colors).
+-~> It edits what the sidebar edits (palette_view.liz: the color new shapes
+-~> get, a selected variable, the fill editor's stop) with the sidebar's own
+-~> parts and ids, laid out smaller; folded it is its header.
+
+use "color_draw"
+use "color_picker"
+use "color_state"
+use "color_target"
+use "palette_view"
+use "view_canvas"
+use "view_gfx"
+use "view_layout"
+
+-~> Where everything sits: the sidebar's layout keys that the compact form
+-~> has, plus "compact" and "chips" ([{"id", "x", "y", "v"}]).
+function pal_compact_layout() {
+  let r = pal_rect()
+  let x = r[0] + 5
+  let lay = {"x": x, "compact": true, "tabs_y": null, "bar": null, "cells": [], "more": 0, "chips": []}
+  lay.picker = cpk_square_v(x, r[1] + 17, 116, 40, 8)
+  lay.hex_y = r[1] + 62
+  let cy = r[1] + 82
+  let cx = x
+  let end = r[0] + r[2] - 5
+  let vs = ct_vars()
+  for (let i = 0; i < len(vs) && cx + 10 <= end; i = i + 1) {
+    push(lay.chips, {"id": "var:" + str(i), "x": cx, "y": cy, "v": vs[i].value})
+    cx = cx + 12
+  }
+  if (len(lay.chips) > 0) {
+    cx = cx + 4
+  }
+  lay.mark = cx - 3
+  let rc = ct_recent(14)
+  for (let i = 0; i < len(rc) && cx + 10 <= end; i = i + 1) {
+    push(lay.chips, {"id": "recent:" + str(i), "x": cx, "y": cy, "v": rc[i]})
+    cx = cx + 12
+  }
+  lay
+}
+
+-~> The parts as [{"id", "x", "y", "w", "h"}]: folded, only the chevron.
+function pal_compact_parts(lay) {
+  let r = pal_rect()
+  if (PAL.open == false) {
+    return [{"id": "expand", "x": r[0] + r[2] - 14, "y": r[1] + 1, "w": 12, "h": 12}]
+  }
+  let x = lay.x
+  let out = [{"id": "collapse", "x": r[0] + r[2] - 14, "y": r[1] + 1, "w": 12, "h": 12}]
+  push(out, {"id": "hex", "x": x, "y": lay.hex_y, "w": 57, "h": 16})
+  push(out, {"id": "alpha", "x": x + 59, "y": lay.hex_y, "w": 37, "h": 16})
+  push(out, {"id": "dropper", "x": x + 99, "y": lay.hex_y + 1, "w": 14, "h": 14})
+  for (let i = 0; i < len(lay.chips); i = i + 1) {
+    let c = lay.chips[i]
+    push(out, {"id": c.id, "x": c.x, "y": c.y, "w": 11, "h": 11})
+  }
+  if (pal_sel_var() != null) {
+    push(out, {"id": "name", "x": r[0] + 2, "y": r[1], "w": r[2] - 31, "h": 13})
+  }
+  out
+}
+
+-~> Paints the compact palette.
+function pal_compact_paint() {
+  let r = pal_rect()
+  g_rect(r[0] - 2, r[1], 1, r[3], P.void)
+  g_rect(r[0] - 1, r[1], 1, r[3], P.bevel)
+  g_rect(r[0], r[1], r[2], r[3], P.panel)
+  g_rect(r[0], r[1], r[2], 13, P.raised)
+  g_rect(r[0], r[1] + 13, r[2], 1, P.void)
+  let lay = pal_layout()
+  let title = pal_title(pal_target())
+  if (g_text_w(title) > r[2] - 22) {
+    title = text.slice(title, 0, (r[2] - 22) // 7 - 1) + "…"
+  }
+  let tcol = P.mute
+  if (V.hover == "pal:name") {
+    tcol = P.bright
+  }
+  g_text(title, r[0] + 5, r[1], tcol)
+  let folded = PAL.open == false
+  let cc = P.mute
+  if (V.hover == "pal:collapse" || V.hover == "pal:expand") {
+    cc = P.bright
+  }
+  let chev = "chevron-down"
+  if (folded) {
+    chev = "chevron-left"
+  }
+  g_icon(chev, r[0] + r[2] - 12, r[1] + 3, cc)
+  if (folded) {
+    return null
+  }
+  cpk_draw(lay.picker, PAL.hsv)
+  pal_paint_field(pal_part(lay, "hex"), "text")
+  pal_paint_field(pal_part(lay, "alpha"), "amber")
+  let dp = pal_part(lay, "dropper")
+  let st = pal_state("dropper")
+  if (PAL.dropper == true) {
+    st = "active"
+  }
+  g_button(dp.x, dp.y, dp.w, dp.h, "eyedropper", "", st)
+  let vs_n = 0
+  for (let i = 0; i < len(lay.chips); i = i + 1) {
+    let c = lay.chips[i]
+    cd_chip(c.x, c.y, 10, 10, c.v)
+    if (text.starts(c.id, "var:")) {
+      vs_n = vs_n + 1
+      if (ct_vars()[int(text.split(c.id, ":")[1])].name == PAL.sel) {
+        g_frame(c.x - 1, c.y - 1, 12, 12, P.lizard)
+      }
+    }
+    if (V.hover == "pal:" + c.id) {
+      g_frame(c.x - 1, c.y - 1, 12, 12, P.bright)
+    }
+  }
+  if (vs_n > 0 && vs_n < len(lay.chips)) {
+    g_rect(lay.mark, lay.chips[0].y + 1, 1, 8, P.bevel)
+  }
+}
+
+-~> The eyedropper's click on the canvas: the color of the frontmost shape
+-~> there, written to what the palette edits.
+function pal_compact_eyedrop(p) {
+  PAL.dropper = false
+  if (!view_in_canvas(p.x, p.y)) {
+    return null
+  }
+  let cl = view_canvas_layout()
+  let s = view_hit_shape(cl, view_to_drawing(cl, p.x, p.y))
+  if (s == null) {
+    return null
+  }
+  let v = s.fill
+  if (v == null) {
+    v = s.stroke
+  }
+  let c = ct_color_of(v)
+  if (c != null) {
+    pal_set(c, null)
+    color_note_recent(c)
+  }
+}
