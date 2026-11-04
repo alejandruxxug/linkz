@@ -1,0 +1,395 @@
+-~> layer_card: the preview card of a layer (style guide R004). After the
+-~> pointer rests 400 ms on a layer row (in the code panel or the layers
+-~> panel, in both modes) a card opens beside the row: only that layer's
+-~> shapes on the drawing's background (a checker when it has none), the
+-~> layer's name (`sun/rays` when nested), how many shapes it draws, its
+-~> blend badge when it isn't Normal 100%, and a `hidden` chip when the layer
+-~> is hidden (the card is the only place a hidden layer shows).
+-~>
+-~> It rides on the tooltip: the card is a V.tip with a `card` field, so the
+-~> timer, the popup rectangles and the repaint rules are the tooltip's. What
+-~> is its own: moving to another layer row swaps the card at once, leaving
+-~> the rows hides it 150 ms later (lc_tick), and it never opens while
+-~> something is being dragged. A click, a key or the wheel hide it at once
+-~> like any tooltip. The picture is painted once into a kept buffer (twice
+-~> the size it shows, so it is sharp on the canvas buffer too) and made
+-~> again only when the layer's shapes or the background look different.
+
+use "../draw/shapes"
+use "../gfx/raster"
+use "app"
+use "artist_layers"
+use "blend_props"
+use "color_draw"
+use "editor_state"
+use "editor_undo"
+use "i18n"
+use "layer_blend"
+use "layer_thumbs"
+use "view_gfx"
+use "view_input"
+use "view_layout"
+use "view_panels"
+
+-~> The card's width, the preview box (frame included) and the inside of it.
+let lc_w = 152
+let lc_box = (140, 93)
+let lc_inner = (138, 91)
+
+-~> How long the card stays after the pointer left the rows (ms).
+let lc_hide_ms = 150
+
+-~> recs: line -> the picture's record, as layer_thumbs keeps them (plus
+-~> "bg"). hide_due: when to hide the open card, 0 for never. renders: how
+-~> many pictures were painted, for the tests.
+let LC = {"recs": {}, "hide_due": 0, "renders": 0}
+
+-~> == Which rows ==
+
+-~> The line of the layer row the hover id is on (the code panel's "row:N",
+-~> the layers panel's "al:row:N"), or 0: not a layer row, or something is
+-~> being dragged or a dialog or the pen picker is open.
+function lc_line_of(id) {
+  if (V.drag != null || V.dialog != null || V.picker) {
+    return 0
+  }
+  let parts = text.split(id, ":")
+  let line = 0
+  if (parts[0] == "row" && len(parts) == 2) {
+    line = int(parts[1])
+  } elif (parts[0] == "al" && len(parts) == 3 && parts[1] == "row") {
+    line = int(parts[2])
+  }
+  let rows = view_rows()
+  if (line < 1 || line > len(rows) || rows[line - 1].kind != "layer") {
+    return 0
+  }
+  line
+}
+
+-~> Whether the open tooltip is a layer card.
+function lc_open() {
+  V.tip != null && V.tip.card != null
+}
+
+-~> == Where it goes ==
+
+-~> The row of `line` in the panel the id names: {"rect", "side", "text_x"},
+-~> side "right" (the card opens to the right of the row's text) for the
+-~> code panel, "left" (to the left of the panel) for the layers panel. Null
+-~> when the row isn't on screen.
+function lc_anchor(id, line) {
+  let rows = view_rows()
+  let row = rows[line - 1]
+  if (text.starts(id, "al:")) {
+    let vis = la_visible()
+    let r = la_rect()
+    for (let i = 0; i < len(vis); i += 1) {
+      if (vis[i].row.line == line) {
+        return {"rect": [r[0], vis[i].y, r[2], la_h(row)], "side": "left", "text_x": r[0]}
+      }
+    }
+    return null
+  }
+  let vis = view_visible()
+  for (let i = 0; i < len(vis); i += 1) {
+    let it = vis[i].item
+    if (it.t == "row" && it.line == line) {
+      let end = view_code_x(row) + 7 * len("layer " + row.stmt.name)
+      return {"rect": [0, vis[i].y, V.pw, 18], "side": "right", "text_x": end}
+    }
+  }
+  null
+}
+
+-~> Where a card of height h goes for an anchor: [x, y]. It sits 6 above the
+-~> row; near the bottom edge it flips up so it ends 6 under the row.
+function lc_place(a, h) {
+  let r = a.rect
+  let x = 0
+  if (a.side == "right") {
+    x = math.min(a.text_x + 22, V.w - lc_w - 2)
+  } else {
+    x = r[0] - 7 - lc_w
+  }
+  let y = r[1] - 6
+  if (y + h + 2 > view_geom().status_y) {
+    y = r[1] + r[3] + 6 - h
+  }
+  [math.max(0, x), math.max(0, y)]
+}
+
+-~> == What it says ==
+
+-~> The parent layers of a layer row, outermost first, as a path: "sun/" for
+-~> `rays` inside `sun`, "" for a top layer.
+function lc_parents(rows, row) {
+  let names = []
+  let depth = row.depth
+  for (let l = row.line - 1; l >= 1; l -= 1) {
+    let r = rows[l - 1]
+    if (r.kind == "layer" && r.depth < depth && r.end_line >= row.line) {
+      list.insert(names, 0, r.stmt.name)
+      depth = r.depth
+    }
+  }
+  if (len(names) == 0) {
+    return ""
+  }
+  text.join(names, "/") + "/"
+}
+
+-~> The size the drawing takes in the preview's inside (the canvas scaled to
+-~> fit, in UI pixels).
+function lc_fit() {
+  let cs = ed_canvas_size()
+  let k = math.min(lc_inner.x / float(cs.x), lc_inner.y / float(cs.y))
+  (math.max(1, math.round(cs.x * k)), math.max(1, math.round(cs.y * k)))
+}
+
+-~> Paints the record's picture: the background, then the layer's shapes, at
+-~> twice the size it shows.
+function lc_render(rec, key) {
+  LC.renders += 1
+  let size = lc_fit()
+  let k = 2.0 * size.x / ed_canvas_size().x
+  let shapes = []
+  let ordered = paint_order(rec.shapes)
+  for (let i = 0; i < len(ordered); i += 1) {
+    push(shapes, lt_scaled(ordered[i], k))
+  }
+  fb.offscreen((size.x * 2, size.y * 2))
+  try {
+    let bg = ed.canvas.background
+    if (type(bg) == "COLOR") {
+      fb.fill((0, 0), (size.x * 2, size.y * 2), bg)
+    }
+    raster.paint(shapes, (0, 0))
+  } catch (e) {
+    null
+  }
+  rec.kept = "lcard:" + key
+  rec.size = size
+  fb.keep(rec.kept)
+  g_ui()
+  fb.unclip()
+}
+
+-~> The picture of the layer on `line` (ending at `end`), made or kept.
+function lc_picture(line, end) {
+  let key = str(line)
+  let rec = LC.recs[key]
+  let bg = str(ed.canvas.background)
+  if (rec != null && rec.bg == bg && lt_fresh(rec, line, end)) {
+    rec.line = line
+    return rec
+  }
+  rec = {
+    "ver": ed.shapes_ver,
+    "line": line,
+    "end": end,
+    "shapes": lt_shapes(line, end),
+    "kept": "",
+    "size": (1, 1),
+    "canvas": ed_canvas_size(),
+    "bg": bg
+  }
+  lc_render(rec, key)
+  LC.recs[key] = rec
+  rec
+}
+
+-~> The card for the layer row of `line` the id is on, shaped like a tooltip
+-~> ({"x", "y", "w", "h", "key", "lines"}) with a "card" of what it shows, or
+-~> null when the row is off screen.
+function lc_tip(id, line) {
+  let a = lc_anchor(id, line)
+  if (a == null) {
+    return null
+  }
+  let rows = view_rows()
+  let row = rows[line - 1]
+  let rec = lc_picture(line, row.end_line)
+  let badge = blend_badge_text(blend_row_style(row))
+  let h = 134
+  if (badge != "") {
+    h = 149
+  }
+  let at = lc_place(a, h)
+  let n = len(lt_shapes(line, row.end_line))
+  let count = t("card.objects", {"n": n})
+  if (n == 1) {
+    count = t("card.object")
+  }
+  let hidden = row.hidden == true
+  let card = {
+    "rec": rec,
+    "parents": lc_parents(rows, row),
+    "name": row.stmt.name,
+    "count": count,
+    "badge": badge,
+    "hidden": hidden,
+    "side": a.side,
+    "cy": a.rect[1] + a.rect[3] // 2
+  }
+  {
+    "card": card,
+    "lines": [],
+    "x": at[0],
+    "y": at[1],
+    "w": lc_w,
+    "h": h,
+    "key": "card:" + str(line) + "|" + str(ed.shapes_ver) + "|" + str(hidden) + "|" + badge + "|" + lang_get() + "|" + str(at)
+  }
+}
+
+-~> The rectangle a tip takes on screen with its shadow and, for a card,
+-~> its tail on either side.
+function lc_rect(tip) {
+  if (tip.card == null) {
+    return [tip.x, tip.y, tip.w + 2, tip.h + 2]
+  }
+  [tip.x - 5, tip.y, tip.w + 12, tip.h + 2]
+}
+
+-~> == Drawing ==
+
+-~> The 5-step tail that points at the row: void edge, row fill.
+function lc_tail(tip) {
+  let c = tip.card
+  let cy = math.max(tip.y + 6, math.min(tip.y + tip.h - 7, c.cy))
+  let dir = -1
+  let edge = tip.x
+  if (c.side == "left") {
+    dir = 1
+    edge = tip.x + tip.w - 1
+  }
+  for (let j = 0; j < 5; j += 1) {
+    let x = edge + dir * (5 - j)
+    g_rect(x, cy - j, 1, 2 * j + 1, P.void)
+    if (j >= 2) {
+      g_rect(x, cy - j + 1, 1, 2 * j - 1, P.row)
+    }
+  }
+  g_rect(edge, cy - 3, 1, 7, P.row)
+}
+
+-~> The `hidden` chip in the preview's top left.
+function lc_hidden_chip(x, y) {
+  let label = t("card.hidden")
+  let w = 3 + 8 + 3 + g_text_w(label) + 3
+  g_frame(x, y, w, 13, P.void)
+  g_rect(x + 1, y + 1, w - 2, 11, P.raised)
+  g_icon("eye-off", x + 3, y + 3, P.amber)
+  g_text(label, x + 14, y + 1, P.amber)
+}
+
+-~> Draws a card (a tooltip with a "card").
+function lc_draw(tip) {
+  let c = tip.card
+  let x = tip.x
+  let y = tip.y
+  g_box(x, y, tip.w, tip.h)
+  let fx = x + 6
+  let fy = y + 6
+  g_frame(fx, fy, lc_box.x, lc_box.y, P.void)
+  g_rect(fx + 1, fy + 1, lc_inner.x, lc_inner.y, P.coal)
+  let s = c.rec.size
+  let px = fx + 1 + (lc_inner.x - s.x) // 2
+  let py = fy + 1 + (lc_inner.y - s.y) // 2
+  cd_checker(px, py, s.x, s.y, 3)
+  if (c.rec.kept != "") {
+    fb.blit(c.rec.kept, (cd_bx(px), cd_by(py)), (s.x * g.s, s.y * g.s))
+  }
+  if (c.hidden) {
+    lc_hidden_chip(fx + 3, fy + 3)
+  }
+  let ly = y + 103
+  g_icon("layer", x + 6, ly + 1, P.lizard)
+  let room = tip.w - 12 - 11 - g_text_w(c.count) - 6
+  let name = g_fit_words(c.parents + c.name, room)
+  let tx = x + 17
+  if (c.parents != "" && len(name) >= len(c.parents)) {
+    g_text(c.parents, tx, ly, P.mute)
+    g_text(text.slice(name, len(c.parents), len(name)), tx + g_text_w(c.parents), ly, P.bright)
+  } else {
+    g_text(name, tx, ly, P.bright)
+  }
+  g_text(c.count, x + tip.w - 6 - g_text_w(c.count), ly, P.mute)
+  let hy = ly + 15
+  if (c.badge != "") {
+    let bw = g_text_w(c.badge) + 6
+    g_rect(x + 6, hy - 1, bw, 13, P.raised)
+    g_text(c.badge, x + 9, hy, P.text)
+    hy += 15
+  }
+  let hint = t("card.hint")
+  if (c.hidden) {
+    hint = t("card.hidden_hint")
+  }
+  g_text(hint, x + 6, hy, P.mute)
+  lc_tail(tip)
+}
+
+-~> == The pointer ==
+
+-~> The hover changed to `id`: swaps, keeps or schedules the end of an open
+-~> card. True when the card handled the change (the caller then leaves the
+-~> tooltip and its timer alone), false for the usual tooltip rules.
+function lc_hover(id) {
+  let open = lc_open()
+  let line = lc_line_of(id)
+  if (line > 0) {
+    LC.hide_due = 0
+    if (open) {
+      V.tip = lc_tip(id, line)
+      V.tip_due = 0
+      if (V.tip == null) {
+        return false
+      }
+      app.needs_paint = true
+      return true
+    }
+    return false
+  }
+  if (open && !view_tippable(id)) {
+    LC.hide_due = time.ms() + lc_hide_ms
+    app.needs_paint = true
+    return true
+  }
+  LC.hide_due = 0
+  false
+}
+
+-~> Each frame: hides the card once its time is up.
+function lc_tick() {
+  if (LC.hide_due == 0) {
+    return null
+  }
+  if (!lc_open()) {
+    LC.hide_due = 0
+    return null
+  }
+  if (time.ms() >= LC.hide_due) {
+    LC.hide_due = 0
+    V.tip = null
+  }
+  app.needs_paint = true
+}
+
+-~> Hides the card now (the wheel, the pointer leaving the window).
+function lc_hide() {
+  LC.hide_due = 0
+  if (lc_open()) {
+    V.tip = null
+    app.needs_paint = true
+  }
+}
+
+-~> The pointer left the window: the card goes after its short delay.
+function lc_leave() {
+  if (lc_open()) {
+    LC.hide_due = time.ms() + lc_hide_ms
+    app.needs_paint = true
+  }
+}

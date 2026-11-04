@@ -1,0 +1,49 @@
+-- the hover ids that can open a card
+3 0 0 6 0 3 0 0
+-- the card waits for the tooltip delay, on a code row
+row:3 true true
+131,61 152x134 [|sun|10 objects||false|right]
+0
+-- the same layer again is not painted again
+0
+-- moving to another layer row swaps the card at once
+138,251 152x134 [|boat|1 object||true|right]
+148,119 152x149 [sun/|rays|8 objects|SCR 70%|false|right]
+0
+-- a hidden layer says so; a nested one shows its path
+true boat
+148,119 152x149 [sun/|rays|8 objects|SCR 70%|false|right]
+-- the count is the shapes the layer draws (a loop makes eight)
+8 objects 10 objects 1 object
+-- leaving hides it after 150 ms, not before
+true true
+true
+true 0
+-- coming back before it ends keeps it
+0 131,301 152x134 [|sky|1 object||false|right]
+-- a click hides it at once
+true
+-- the wheel hides it
+true
+true
+-- Esc hides it
+true
+-- never while something is dragged
+0 false
+3
+-- the layers panel (coder mode, under the palette): the card opens to its left
+al:row:12 373,264 152x134 [|boat|1 object||true|left]
+true
+3
+373,304 152x134 [|sky|1 object||false|left]
+-- editing the layer paints its picture again
+1
+-- Spanish
+es true
+373,264 152x134 [|boat|1 objeto||true|left]
+373,304 152x134 [|sky|1 objeto||false|left]
+en
+-- artist mode: the layers panel
+4 12
+al:row:12 331,175 152x134 [|boat|1 object||true|left]
+true

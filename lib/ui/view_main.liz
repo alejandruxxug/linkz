@@ -11,6 +11,7 @@ use "editor_state"
 use "editor_undo"
 use "home_view"
 use "i18n"
+use "layer_card"
 use "mode_state"
 use "view_canvas"
 use "view_gfx"
@@ -105,6 +106,7 @@ function view_tick() {
       app.needs_paint = true
     }
   }
+  lc_tick()
 }
 
 function view_paint() {
@@ -170,7 +172,7 @@ function view_paint() {
   fb.unclip()
   V.paints = V.paints + 1
   V.painted_ms = time.ms() - t0
-  if (V.tip_due == 0 && !ed_note_active() && !route_wants_tick()) {
+  if (V.tip_due == 0 && LC.hide_due == 0 && !ed_note_active() && !route_wants_tick()) {
     app.needs_paint = false
   }
 }
@@ -252,6 +254,7 @@ function view_event(e) {
 -~> The pointer left the window (or the window lost focus): the mouse readout
 -~> in the status bar goes away until the next move.
 function view_cursor_gone() {
+  lc_leave()
   if (V.mouse_draw != null) {
     V.mouse_draw = null
     app.needs_paint = true

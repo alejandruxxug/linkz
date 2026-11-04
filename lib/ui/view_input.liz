@@ -20,6 +20,7 @@ use "editor_state"
 use "editor_undo"
 use "home_view"
 use "i18n"
+use "layer_card"
 use "view_canvas"
 use "view_code"
 use "view_items"
@@ -247,7 +248,7 @@ function view_hit_rect(id) {
 function view_tippable(id) {
   let k = text.split(id, ":")[0]
   k == "tool" || k == "bar" || k == "strip" || k == "pen" || k == "callee" || k == "field" || k == "pengear" ||
-    k == "status" || color_tippable(id)
+    k == "status" || color_tippable(id) || lc_line_of(id) > 0
 }
 
 -~> == Actions ==
@@ -991,10 +992,12 @@ function view_update_hover(p) {
   }
   if (id != V.hover) {
     V.hover = id
-    V.tip = null
-    V.tip_due = 0
-    if (view_tippable(id)) {
-      V.tip_due = time.ms() + tip_delay
+    if (!lc_hover(id)) {
+      V.tip = null
+      V.tip_due = 0
+      if (view_tippable(id)) {
+        V.tip_due = time.ms() + tip_delay
+      }
     }
     if (V.picker) {
       let i = pick_at(p.x, p.y)
@@ -1047,6 +1050,7 @@ function view_up(e) {
 }
 
 function view_wheel(e) {
+  lc_hide()
   if (pen_route_wheel(e)) {
     return null
   }

@@ -1,0 +1,192 @@
+-~> The hover preview card of a layer (R004): after the tooltip delay on a
+-~> layer row (code panel or layers panel) a card opens beside it with the
+-~> layer's name, shape count, blend badge and `hidden` chip; moving to
+-~> another layer row swaps it at once, leaving hides it after a short
+-~> delay, a click, the wheel or a drag hide or stop it; its picture is made
+-~> once and kept.
+
+use "rig"
+
+let code = "-~> lzdraw 1
+canvas = {\"size\": (480, 320), \"background\": #f6d9a8}
+layer sun
+  circle((360, 90), 34, #fff3c4)
+  circle((360, 90), 56, #f2a65a66)
+  layer rays
+    blend(\"screen\")
+    opacity(0.7)
+    for (let i = 0; i < 8; i += 1) {
+      line((360, 90), (360, 20 + i), #e8707a, 2)
+    }
+layer boat -~> [hidden]
+  line((150, 214), (150, 170), #3b2a6b, 3)
+layer sky
+  rect((0, 0), (480, 200), #f2a65a)
+"
+
+let size = (640, 480)
+let modules = rig_modules + ["ui/view_panels", "ui/view_canvas", "ui/i18n", "ui/mode_state", "ui/layers_dock", "ui/artist_layout",
+  "ui/artist_route", "ui/artist_layers", "ui/layer_thumbs", "ui/palette_view", "ui/color_state", "ui/blend_menu", "ui/layer_blend",
+  "ui/view_popups", "ui/layer_card"]
+let rig = rig_open(fs.join(fs.home(), "layer-card-test"), code, size, modules)
+let n = rig.names
+let none = {"shift": false, "alt": false, "cmd": false, "ctrl": false}
+
+function move(p) {
+  rig_frame(rig, [{"type": "move", "pos": p}])
+}
+
+-~> The point on the code panel's row of `line`, dx from its left.
+function on_code(line, dx) {
+  let vis = n.view_visible()
+  for (let i = 0; i < len(vis); i += 1) {
+    if (vis[i].item.t == "row" && vis[i].item.line == line) {
+      return (dx, vis[i].y + 9)
+    }
+  }
+  null
+}
+
+-~> The point on the layers panel's row of `line`.
+function on_panel(line, dx) {
+  let rows = n.la_visible()
+  for (let i = 0; i < len(rows); i += 1) {
+    if (rows[i].row.line == line) {
+      return (n.la_rect()[0] + dx, rows[i].y + 9)
+    }
+  }
+  null
+}
+
+-~> What the open card says: its place and its words.
+function card_text() {
+  let tip = n.V.tip
+  if (tip == null || tip.card == null) {
+    return "no card"
+  }
+  let c = tip.card
+  str(tip.x) + "," + str(tip.y) + " " + str(tip.w) + "x" + str(tip.h) + " [" + c.parents + "|" + c.name + "|" + c.count + "|" +
+    c.badge + "|" + str(c.hidden) + "|" + c.side + "]"
+}
+
+-~> Rests the pointer on p until the card is due, then shows it.
+function rest(p) {
+  move(p)
+  n.V.tip_due = 1
+  rig_frame(rig)
+}
+
+puts("-- the hover ids that can open a card")
+puts(n.lc_line_of("row:3"), n.lc_line_of("row:4"), n.lc_line_of("row:7"), n.lc_line_of("row:6"), n.lc_line_of("fold:3"),
+  n.lc_line_of("al:row:3"), n.lc_line_of("tool:pen"), n.lc_line_of(""))
+
+puts("-- the card waits for the tooltip delay, on a code row")
+let p = on_code(3, 90)
+move(p)
+puts(n.V.hover, n.V.tip == null, n.V.tip_due > 0)
+n.V.tip_due = 1
+rig_frame(rig)
+puts(card_text())
+puts(n.V.tip_due)
+
+puts("-- the same layer again is not painted again")
+let renders = n.LC.renders
+move((p.x + 3, p.y))
+move(p)
+puts(n.LC.renders - renders)
+
+puts("-- moving to another layer row swaps the card at once")
+move(on_code(12, 90))
+puts(card_text())
+move(on_code(6, 150))
+puts(card_text())
+puts(n.V.tip_due)
+
+puts("-- a hidden layer says so; a nested one shows its path")
+move(on_code(12, 70))
+puts(n.V.tip.card.hidden, n.V.tip.card.name)
+move(on_code(6, 90))
+puts(card_text())
+
+puts("-- the count is the shapes the layer draws (a loop makes eight)")
+puts(n.lc_tip("row:6", 6).card.count, n.lc_tip("row:3", 3).card.count, n.lc_tip("row:14", 14).card.count)
+
+puts("-- leaving hides it after 150 ms, not before")
+move((300, 5))
+puts(n.V.tip != null, n.LC.hide_due > 0)
+n.LC.hide_due = time.ms() + 10000
+rig_frame(rig)
+puts(n.V.tip != null)
+n.LC.hide_due = 1
+rig_frame(rig)
+puts(n.V.tip == null, n.LC.hide_due)
+
+puts("-- coming back before it ends keeps it")
+rest(on_code(3, 90))
+move((300, 5))
+n.LC.hide_due = time.ms() + 10000
+move(on_code(14, 90))
+puts(n.LC.hide_due, card_text())
+
+puts("-- a click hides it at once")
+rig_frame(rig, [{"type": "down", "pos": on_code(14, 90)}, {"type": "up", "pos": on_code(14, 90)}])
+puts(n.V.tip == null)
+
+puts("-- the wheel hides it")
+rest(on_code(3, 90))
+puts(n.V.tip != null)
+rig_frame(rig, [{"type": "scroll", "pos": on_code(3, 90), "dy": 1}])
+puts(n.V.tip == null)
+
+puts("-- Esc hides it")
+rest(on_code(3, 90))
+rig_frame(rig, [{"type": "key", "key": "Escape", "mods": none}])
+puts(n.V.tip == null)
+
+puts("-- never while something is dragged")
+n.V.drag = {"kind": "rows", "anchor": 3}
+puts(n.lc_line_of("row:3"), n.view_tippable("row:3"))
+n.V.drag = null
+puts(n.lc_line_of("row:3"))
+
+puts("-- the layers panel (coder mode, under the palette): the card opens to its left")
+n.pal_set_open(true)
+rig_frame(rig)
+let q = on_panel(12, 80)
+rest(q)
+puts(n.V.hover, card_text())
+let r = n.la_rect()
+puts(n.V.tip.x + n.V.tip.w < r[0])
+puts(len(n.la_visible()))
+move(on_panel(14, 80))
+puts(card_text())
+
+puts("-- editing the layer paints its picture again")
+renders = n.LC.renders
+n.ed_reset(text.replace(code, "(150, 214)", "(160, 214)"), rig.path)
+n.view_prepare()
+rig_frame(rig)
+move(on_panel(12, 80))
+puts(n.LC.renders - renders)
+
+puts("-- Spanish")
+n.view_cycle_language()
+puts(n.lang_get(), n.V.tip == null)
+rig_frame(rig)
+move((300, 5))
+rest(on_panel(12, 80))
+puts(card_text())
+move(on_panel(14, 80))
+puts(card_text())
+n.view_cycle_language()
+puts(n.lang_get())
+
+puts("-- artist mode: the layers panel")
+n.mode_store(true)
+n.view_touch()
+n.view_force_all()
+rig_frame(rig)
+puts(len(n.la_visible()), n.la_visible()[0].row.line)
+rest(on_panel(n.la_visible()[0].row.line, 80))
+puts(n.V.hover, card_text())
+puts(n.V.tip.x + n.V.tip.w < n.la_rect()[0])

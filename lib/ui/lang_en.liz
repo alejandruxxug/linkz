@@ -504,5 +504,11 @@ lang_register("en", {
   "tut.4.title": "Peek at the code you made",
   "tut.4.body": "Every shape you made is a line here. Change the code and the drawing follows.",
   "tut.4.body_artist": "Every shape you made is a line of this code. Change the code and the drawing follows.",
-  "tut.home": "Show tutorial again"
+  "tut.home": "Show tutorial again",
+
+  "card.object": "1 object",
+  "card.objects": "{n} objects",
+  "card.hint": "click: select layer",
+  "card.hidden": "hidden",
+  "card.hidden_hint": "only shown here"
 })

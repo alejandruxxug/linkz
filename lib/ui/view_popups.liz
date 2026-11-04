@@ -16,6 +16,7 @@ use "editor_props"
 use "editor_state"
 use "editor_undo"
 use "i18n"
+use "layer_card"
 use "pen_library"
 use "pen_route"
 use "view_canvas"
@@ -134,6 +135,10 @@ function tip_for(hover) {
   if (color_tip_owned(hover)) {
     return color_tip(hover)
   }
+  let card = lc_line_of(hover)
+  if (card > 0) {
+    return lc_tip(hover, card)
+  }
   let parts = text.split(hover, ":")
   let kind = parts[0]
   let lines = null
@@ -189,6 +194,9 @@ function tip_for(hover) {
 }
 
 function tip_draw(tip) {
+  if (tip.card != null) {
+    return lc_draw(tip)
+  }
   g_box(tip.x, tip.y, tip.w, tip.h)
   for (let i = 0; i < len(tip.lines); i = i + 1) {
     let y = tip.y + 4 + i * 15
@@ -417,7 +425,7 @@ function popup_list() {
     push(out, ["picker", [r[0], r[1], r[2] + 2, r[3] + 2]])
   }
   if (V.tip != null) {
-    push(out, ["tip", [V.tip.x, V.tip.y, V.tip.w + 2, V.tip.h + 2]])
+    push(out, ["tip", lc_rect(V.tip)])
   }
   if (V.anchor_tip != null) {
     push(out, ["anchor", [V.anchor_tip.x, V.anchor_tip.y, V.anchor_tip.w + 2, V.anchor_tip.h + 2]])
