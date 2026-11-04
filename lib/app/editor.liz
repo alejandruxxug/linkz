@@ -86,7 +86,8 @@ function editor_load(win, path, settings, machine, modules = editor_modules, sta
     "error": "",
     "stats": stats,
     "force": true,
-    "hover": null
+    "hover": null,
+    "cursor": "default"
   }
 }
 
@@ -149,6 +150,10 @@ function editor_tick(ed, events) {
   if (hover != ed.hover) {
     window.set(ed.win, {"hover": hover})
     ed.hover = hover
+  }
+  if (ed.app.cursor != null && ed.app.cursor != ed.cursor) {
+    window.cursor(ed.win, ed.app.cursor)
+    ed.cursor = ed.app.cursor
   }
   if (ed.app.needs_paint == true) {
     window.needs_paint(ed.win)

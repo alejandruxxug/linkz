@@ -8,6 +8,7 @@
 -~>   enter(args)       optional: called when the screen is shown (paint everything: the
 -~>                     buffers still hold the screen that was there before)
 -~>   wants_hover       optional: true to get moves while no button is held
+-~>   cursor            optional: the name of the mouse cursor (window.cursor), a value or a function
 -~>   debug_state()     optional: a hash for the backdoor's Dump
 -~>   debug_commands    optional: a hash of name -> function(args), merged into the backdoor commands
 -~> show_screen(name, args) makes a registered screen the current one.
@@ -33,6 +34,15 @@ function screen_sync() {
   let s = screens[screen_state.current]
   if (s != null) {
     app.wants_hover = screen_value(s.wants_hover) == true
+  }
+}
+
+-~> The current screen decides app.cursor; "default" when it has none.
+function screen_sync_cursor() {
+  let s = screens[screen_state.current]
+  app.cursor = "default"
+  if (s != null && s.cursor != null) {
+    app.cursor = screen_value(s.cursor)
   }
 }
 

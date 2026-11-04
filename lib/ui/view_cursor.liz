@@ -1,0 +1,45 @@
+-~> view_cursor: the mouse cursor the editor asks the window for. The editor screen
+-~> gives view_cursor_name as its `cursor`; the host sets the window's cursor
+-~> (window.cursor) when the name changes.
+-~>
+-~>   grab        panning (a pan drag), or Space held over the canvas
+-~>   crosshair   a drawing tool over the canvas
+-~>   text        over the code
+-~>   default     everything else, and while a dialog or the picker is open
+
+use "artist_route"
+use "canvas_zoom"
+use "view_layout"
+
+-~> The tools that draw: the cursor over the canvas is a crosshair.
+let cursor_draw_tools = ["circle", "rect", "line", "polygon", "stroke", "pencil", "brush", "text"]
+
+-~> Whether the pointer is over the code panel's rows.
+function cursor_in_code(p) {
+  let r = art_rows_wheel_rect()
+  view_in(p.x, p.y, r[0], r[1], r[2], r[3])
+}
+
+-~> The cursor for the pointer now: a name window.cursor takes.
+function view_cursor_name() {
+  if (CZ.pan !== null) {
+    return "grab"
+  }
+  let p = V.mouse
+  if (p == null || V.dialog != null || V.picker) {
+    return "default"
+  }
+  if (view_in_canvas(p.x, p.y)) {
+    if (canvas_space_held()) {
+      return "grab"
+    }
+    if (list.index(cursor_draw_tools, V.tool) >= 0) {
+      return "crosshair"
+    }
+    return "default"
+  }
+  if (cursor_in_code(p)) {
+    return "text"
+  }
+  "default"
+}

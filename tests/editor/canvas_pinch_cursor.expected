@@ -1,0 +1,26 @@
+-- a pinch zooms around the pointer, the drawing point under it stays
+true true true
+true true
+-- a pinch over the code does nothing
+true
+-- Space is held until its key goes up, however long
+false
+true
+true
+false
+-- Space and the left button pan
+true
+true
+true false
+-- losing the pointer ends Space too
+false
+-- the cursor
+default
+crosshair
+text
+crosshair
+grab
+crosshair
+grab
+crosshair
+default

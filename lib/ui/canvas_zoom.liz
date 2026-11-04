@@ -7,7 +7,7 @@
 -~> drawing starts fitted (canvas_zoom_reset); it is not saved in the file.
 -~>
 -~>   canvas_zoom_at(factor, ui_point)   zoom by a factor, the drawing point under the
--~>                                      point staying where it is (the pinch will call it)
+-~>                                      point staying where it is (a pinch calls it)
 -~>   canvas_zoom_set(zoom, ui_point)    the same to an exact zoom
 -~>   canvas_zoom_step(dir)              the next step up (1) or down (-1), around the centre
 -~>   canvas_zoom_fit()  canvas_zoom_100()   Cmd+0 and Cmd+1
@@ -19,7 +19,7 @@ use "app"
 use "editor_state"
 use "view_layout"
 
-let CZ = {"user": null, "px": 0, "py": 0, "space_at": -10000, "pan": null}
+let CZ = {"user": null, "px": 0, "py": 0, "space": false, "pan": null}
 
 -~> The zooms Cmd+plus and Cmd+minus go through (window pixels per drawing pixel).
 let canvas_zoom_steps = [0.05, 0.0625, 0.125, 0.25, 0.33, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 12.0, 16.0, 24.0, 32.0]
@@ -28,9 +28,6 @@ let canvas_zoom_max = 32.0
 
 -~> The drawing keeps at least this much (window pixels, 32 UI pixels) in view.
 let canvas_zoom_keep = 64
-
--~> How long after a Space key it counts as held (the host sends no key release).
-let canvas_space_ms = 650
 
 -~> Back to fitting: a new drawing, or Cmd+0.
 function canvas_zoom_reset() {
@@ -196,14 +193,30 @@ function canvas_wheel(e) {
   true
 }
 
--~> A Space key was seen at time ms.
-function canvas_space_seen() {
-  CZ.space_at = time.ms()
+-~> Space went down over the canvas: it is held until its key goes up.
+function canvas_space_down() {
+  CZ.space = true
 }
 
--~> Whether Space is being held (it repeats while held).
+-~> Space was released, or the window lost the pointer or the focus (a key up may
+-~> never come then).
+function canvas_space_up() {
+  CZ.space = false
+}
+
+-~> Whether Space is being held.
 function canvas_space_held() {
-  time.ms() - CZ.space_at < canvas_space_ms
+  CZ.space
+}
+
+-~> A pinch over the canvas: zooms by its scale around the pointer. True when the
+-~> pointer was over the canvas.
+function canvas_pinch(e) {
+  if (e.scale == null || e.scale <= 0 || !view_in_canvas(e.pos.x, e.pos.y)) {
+    return false
+  }
+  canvas_zoom_at(e.scale, e.pos)
+  true
 }
 
 -~> Starts a pan drag (middle button, or Space and the left button) at an event.
@@ -248,7 +261,7 @@ function canvas_zoom_key(e) {
       return false
     }
     if (V.mouse != null && view_in_canvas(V.mouse.x, V.mouse.y)) {
-      canvas_space_seen()
+      canvas_space_down()
       return true
     }
     return false

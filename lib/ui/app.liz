@@ -1,6 +1,6 @@
 -~> app: what the host calls. It hands every event and every paint to the
 -~> current screen (see app_screens.liz); the editor is the screen "editor".
--~> The host reads these keys of `app`: needs_paint, wants_hover, start, event,
+-~> The host reads these keys of `app`: needs_paint, wants_hover, cursor, start, event,
 -~> paint, debug_state, debug_commands.
 
 use "app_screens"
@@ -13,6 +13,7 @@ use "lang_es"
 let app = {
   "needs_paint": true,
   "wants_hover": true,
+  "cursor": "default",
   "path": ""
 }
 
@@ -34,6 +35,7 @@ function app_event(e) {
     s.event(e)
   }
   screen_sync()
+  screen_sync_cursor()
   if (s != null && screen_value(s.needs_paint) == true) {
     app.needs_paint = true
   }

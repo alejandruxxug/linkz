@@ -16,6 +16,7 @@ use "layer_card"
 use "layer_iso"
 use "mode_state"
 use "view_canvas"
+use "view_cursor"
 use "view_gfx"
 use "view_input"
 use "view_layout"
@@ -231,6 +232,13 @@ function view_event(e) {
     -~> Alt on its own only changes the isolation: it keeps the card open
     return null
   }
+  if (ty == "keyup") {
+    -~> Space let go ends the pan key, whatever is open
+    if (text.lower(e.key) == "space") {
+      canvas_space_up()
+    }
+    return null
+  }
   if (tr_is_open() && ty != "resize") {
     -~> the Trace image dialog is modal: it gets every event
     tr_editor_event(e)
@@ -270,6 +278,10 @@ function view_event(e) {
     view_move(e)
   } elif (ty == "wheel") {
     view_wheel(e)
+  } elif (ty == "pinch") {
+    if (V.dialog == null && !V.picker) {
+      canvas_pinch(e)
+    }
   } elif (ty == "key") {
     view_key(e)
   } elif (ty == "text") {
@@ -305,6 +317,7 @@ function view_drop(e) {
 -~> in the status bar goes away until the next move.
 function view_cursor_gone() {
   lc_leave()
+  canvas_space_up()
   if (V.mouse_draw != null) {
     V.mouse_draw = null
     app.needs_paint = true
@@ -564,6 +577,7 @@ function view_commands() {
 
 let editor_screen = {
   "wants_hover": true,
+  "cursor": view_cursor_name,
   "enter": view_enter,
   "event": view_event,
   "paint": view_paint,

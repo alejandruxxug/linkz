@@ -3,6 +3,8 @@
 -~>   type        down, up, move, wheel (the window's scroll), key, text (type),
 -~>               resize, focus, leave, enter, drop (pos, paths),
 -~>               chosen (paths: what window.choose_file picked; none on cancel)
+-~>               pinch (pos, scale: the trackpad's pinch, a factor for the zoom),
+-~>               keyup (key: a key was released)
 -~>   pos         the pointer in ui pixels
 -~>   canvas_pos  the pointer in the canvas's own (full resolution) pixels, when it is
 -~>               over the canvas
@@ -70,8 +72,11 @@ function events_app(e) {
         h.dx = e.dx
       }
     }
-  } elif (type == "key") {
+  } elif (type == "key" || type == "keyup") {
     h.key = e.key
+  } elif (type == "pinch") {
+    h.pos = e.pos
+    h.scale = e.scale
   } elif (type == "text") {
     h.text = e.text
   } elif (type == "resize") {

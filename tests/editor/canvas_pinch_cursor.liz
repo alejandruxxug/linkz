@@ -1,0 +1,112 @@
+-~> The trackpad pinch zooms the canvas around the pointer; Space held pans until
+-~> its key goes up (no timer); the window's cursor says what the pointer does:
+-~> grab while panning or with Space held over the canvas, crosshair for a drawing
+-~> tool over the canvas, text over the code, default elsewhere.
+
+use "../../lib/app/libs"
+use "rig"
+
+let dir = fs.join(fs.home(), "canvas-pinch-cursor-test")
+let code = fs.read(fs.join(libs_root(), "examples", "layers.lzdraw"))
+let rig = rig_open(dir, code, (900, 640), rig_modules + ["ui/view_panels", "ui/canvas_zoom", "ui/zoom_menu", "ui/view_scene", "ui/view_canvas", "ui/view_cursor", "ui/artist_route"])
+let n = rig.names
+
+let plain = {"shift": false, "alt": false, "cmd": false, "ctrl": false}
+
+function layout() {
+  n.view_canvas_layout()
+}
+
+function pct() {
+  math.round(layout().zoom * 100)
+}
+
+function frame(events) {
+  rig_frame(rig, events)
+}
+
+function move(p) {
+  frame([{"type": "move", "pos": p, "mods": plain}])
+}
+
+function pinch(scale, p) {
+  frame([{"type": "pinch", "pos": p, "scale": scale, "mods": plain}])
+}
+
+function key(type, k) {
+  frame([{"type": type, "key": k, "mods": plain}])
+}
+
+-~> The cursor the window was last given.
+function cursor() {
+  rig.ed.cursor
+}
+
+let c = n.canvas_zoom_centre() + (37, -21)
+let code_p = point(40, 100)
+
+puts("-- a pinch zooms around the pointer, the drawing point under it stays")
+let fit = pct()
+let before = n.view_to_drawing(layout(), c.x, c.y)
+pinch(2.0, c)
+puts(pct() > fit, n.canvas_zoom_is_user(), math.dist(n.view_to_drawing(layout(), c.x, c.y), before) < 1)
+let big = pct()
+pinch(0.5, c)
+puts(pct() < big, math.dist(n.view_to_drawing(layout(), c.x, c.y), before) < 2)
+
+puts("-- a pinch over the code does nothing")
+let now = pct()
+pinch(3.0, code_p)
+puts(pct() == now)
+
+puts("-- Space is held until its key goes up, however long")
+move(c)
+puts(n.canvas_space_held())
+key("key", "Space")
+for (let i = 0; i < 5; i += 1) {
+  frame([])
+}
+puts(n.canvas_space_held())
+frame([{"type": "key", "key": "Space", "mods": plain}])
+puts(n.canvas_space_held())
+key("keyup", "Space")
+puts(n.canvas_space_held())
+
+puts("-- Space and the left button pan")
+let px = n.CZ.px
+key("key", "Space")
+frame([{"type": "down", "pos": c, "button": "left", "mods": plain}])
+puts(n.V.drag != null && n.V.drag.kind == "pan")
+move(c + (12, 0))
+puts(n.CZ.px != px)
+frame([{"type": "up", "pos": c + (12, 0), "button": "left", "mods": plain}])
+key("keyup", "Space")
+puts(n.V.drag == null, n.canvas_space_held())
+
+puts("-- losing the pointer ends Space too")
+key("key", "Space")
+frame([{"type": "leave"}])
+puts(n.canvas_space_held())
+
+puts("-- the cursor")
+n.V.tool = ""
+move(c)
+puts(cursor())
+n.V.tool = "pencil"
+move(c + (1, 0))
+puts(cursor())
+move(code_p)
+puts(cursor())
+move(c)
+puts(cursor())
+key("key", "Space")
+puts(cursor())
+key("keyup", "Space")
+puts(cursor())
+frame([{"type": "down", "pos": c, "button": "middle", "mods": plain}])
+puts(cursor())
+frame([{"type": "up", "pos": c, "button": "middle", "mods": plain}])
+puts(cursor())
+n.V.tool = ""
+move(c + (2, 0))
+puts(cursor())
