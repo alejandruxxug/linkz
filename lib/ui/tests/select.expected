@@ -1,0 +1,15 @@
+  circle((105, 95), 20, #fff) |   rect((15, 15), (30, 40), #000) |   polygon([(5, -5), (15, -5), (15, 5)], #f00) |   line((10, 0), (30, 0), #000, 2)
+  circle((200, 50), 25, #fff) |   rect((20, 10), (60, 20), #000)
+  circle((-100, 100), 20, #fff) |   polygon([(0, 0), (0, 10), (-10, 10)], #f00) |   line((-5, 5), (-5, 25), #000, 2)
+a rect can't turn: it has no angle to write 3
+position comes from `x` 3
+{"min": (0, 0), "max": (25, 10)}
+7 6 true true
+2 true
+the loop is too small to fill
+true false
+[2, 4] 2 false
+[3, 4]
+[5]
+[]
+[5]

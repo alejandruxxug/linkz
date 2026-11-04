@@ -1,0 +1,66 @@
+-- right-click on a row
+true 5 circle · line 5 5 
+rename duplicate (front) (forward) backward back hide lock fill (stroke) (blend) copy show remove
+false
+-- right-click on a shape of the canvas, Ctrl+click too
+true 5
+true 8
+false
+-- the keyboard: down, down, enter = duplicate
+false 12   circle((360, 90), 34, #fff3c4)   circle((360, 90), 34, #fff3c4) 1 duplicate
+11
+-- paint order
+true
+  circle((360, 90), 56, #f2a65a66) |   circle((360, 90), 34, #fff3c4) change order
+  circle((360, 90), 34, #fff3c4) |   circle((360, 90), 56, #f2a65a66)
+  line((10, 300), (200, 300), #3b2a6b, 3) |   circle((60, 60), 20, warm)
+-- hide, lock and their keys
+  circle((360, 90), 34, #fff3c4) -~> [hidden]
+rename duplicate (front) (forward) backward back hide lock fill (stroke) (blend) copy show remove
+  circle((360, 90), 34, #fff3c4) -~> [locked]
+  circle((360, 90), 34, #fff3c4)
+-- rename
+  circle((360, 90), 34, #fff3c4) -~> core rename
+-- copy code, show in code, remove
+true
+5
+true remove
+-- the fill submenu: kinds and swatches
+true
+5 true true
+  rect((0, 0), (480, horizon), #fff3c4)
+  rect((0, 0), (480, horizon), gradient([#f2a65a, #fadbbd], 90deg)) true linear
+-- the fill editor: one undo step per gesture
+true false linear 3 1
+  rect((0, 0), (480, horizon), gradient([#3b2a6b, [0.3, #8c4572], [0.5, #e0607a], #f2a65a], 90deg)) 1 change fill
+  rect((0, 0), (480, horizon), gradient([#3b2a6b, [0.5, #e0607a], [0.53, #8c4572], #f2a65a], 90deg)) 1
+  rect((0, 0), (480, horizon), gradient([#3b2a6b, #e0607a, #f2a65a], 90deg)) 1
+  rect((0, 0), (480, horizon), gradient([#3b2a6b, hard(#e0607a), #f2a65a], 90deg))
+  rect((0, 0), (480, horizon), gradient([#3b2a6b, hard(#e0607a), #f2a65a], 90deg, 3))
+  rect((0, 0), (480, horizon), gradient([#3b2a6b, hard(#e0607a), #f2a65a], 90deg))
+  rect((0, 0), (480, horizon), gradient([#3b2a6b, hard(#e0607a), #f2a65a], 105deg))
+  rect((0, 0), (480, horizon), gradient([#3b2a6b, hard(#e0607a), #f2a65a], 45deg))
+  rect((0, 0), (480, horizon), gradient([#3b2a6b, [0.7, #e0607a, "hard"], #f2a65a], 45deg))
+  rect((0, 0), (480, horizon), gradient([#3b2a6b, [0.7, #00ff0080, "hard"], #f2a65a], 45deg))
+  rect((0, 0), (480, horizon), gradient([#3b2a6b, #f2a65a], 45deg))
+  rect((0, 0), (480, horizon), gradient([#3b2a6b, #f2a65a], 45deg))
+-- the canvas handles
+2 from to
+  rect((0, 0), (480, horizon), gradient([#3b2a6b, #f2a65a], 0deg)) 1
+  rect((0, 0), (480, horizon), radial_gradient([#3b2a6b, #f2a65a]))
+  rect((0, 0), (480, horizon), radial_gradient([#3b2a6b, #f2a65a], (0.5, 0.5), 0.25))
+  rect((0, 0), (480, horizon), radial_gradient([#3b2a6b, #f2a65a], (0.25, 0.24), 0.25))
+  rect((0, 0), (480, horizon), #3b2a6b) 0
+-- undo while it is open reads the row again
+true radial true
+false
+-- a fill written as code
+true true warm
+  circle((60, 60), 20, #ff8800) false
+-- the stroke of a line
+rename duplicate front forward (backward) (back) hide lock (fill) stroke (blend) copy show remove
+true stroke solid
+  line((10, 300), (200, 300), gradient([#3b2a6b, #b1aac4], 90deg), 3)
+-- Spanish
+Renombrar Relleno circle · línea 5
+

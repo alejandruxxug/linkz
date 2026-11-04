@@ -1,0 +1,113 @@
+-~> editor_shape_ops: what the shape menu does to a row, as code edits. The
+-~> pure functions take a model and a row's line and return a new model (or a
+-~> refusal); the ed_shape_* ones apply them as one undo step each.
+-~>   duplicate        the statement again, just above (in front of) itself
+-~>   order            forward / backward = one sibling up / down, front / back = all the way
+-~>   remove           the statement with its body
+-~>   rename           the row's name, in its trailing comment
+-~>   paint            the fill (or stroke color) argument rewritten
+
+use "editor_doc"
+use "editor_edit"
+use "editor_props"
+use "editor_rows"
+use "editor_twoway"
+use "editor_undo"
+use "fill_model"
+use "i18n"
+
+-~> The first and last line of the statement on `line`.
+function shape_ops_span(m, line) {
+  let r = doc_row(m, line, null, null)
+  [line, r.end_line]
+}
+
+-~> The statement on `line` copied just above itself; the caret stays on the
+-~> copy, which is the one in front.
+function duplicate_row(m, line) {
+  let sp = shape_ops_span(m, line)
+  let block = list.slice(m.lines, sp[0] - 1, sp[1])
+  let lines = list.slice(m.lines, 0, sp[0] - 1) + block + list.slice(m.lines, sp[0] - 1, len(m.lines))
+  doc_with(m, lines, line, 0)
+}
+
+-~> The statement on `line` moved among its siblings: "forward" (one up, in
+-~> front), "backward" (one down), "front" (first) or "back" (last). The
+-~> model comes back unchanged when it is already there.
+function order_row(m, line, where) {
+  let dir = "up"
+  if (where == "backward" || where == "back") {
+    dir = "down"
+  }
+  let cur = doc_at(m, line, 0)
+  cur.sel = null
+  let all = where == "front" || where == "back"
+  while (true) {
+    let next = ed_move_rows(cur, dir)
+    if (doc_same_text(next, cur)) {
+      break
+    }
+    cur = next
+    if (!all) {
+      break
+    }
+  }
+  cur
+}
+
+-~> Whether the statement on `line` can move that way (forward: it is not the
+-~> first in its layer).
+function can_order_row(m, line, where) {
+  !doc_same_text(order_row(m, line, where), m)
+}
+
+-~> Without the statement on `line` (and its body).
+function remove_row(m, line) {
+  let sp = shape_ops_span(m, line)
+  ed_delete_rows(m, sp[0], sp[1])
+}
+
+-~> The row's name set to `name` (its trailing comment); "" takes the name away.
+function rename_row(m, line, name) {
+  row_comment_set(m, line, {"name": name, "hidden": null, "locked": null})
+}
+
+-~> The paint argument of the call on `line` ("fill" or "stroke") written as the
+-~> fill f, or a refusal. A caret at the end of the row stays at its end, so it
+-~> does not land inside the new code.
+function paint_row(m, line, docs, which, f) {
+  let fld = fill_field(m, line, docs, which)
+  if (fld == null) {
+    return {"refused": t("refuse.no_paint")}
+  }
+  let out = set_prop(m, line, fld.name, fill_literal(f), docs)
+  if (!is_refusal(out) && m.line == line && m.col >= len(m.lines[line - 1])) {
+    out = doc_with(m, out.lines, line, len(out.lines[line - 1]))
+  }
+  out
+}
+
+-~> == As undo steps ==
+
+function ed_shape_duplicate(line) {
+  ed_try_as("duplicate", null, duplicate_row(ed_model(), line))
+}
+
+function ed_shape_order(line, where) {
+  ed_try_as("order", null, order_row(ed_model(), line, where))
+}
+
+function ed_shape_remove(line) {
+  ed_try_as("remove", null, remove_row(ed_model(), line))
+}
+
+function ed_shape_rename(line, name) {
+  ed_try_as("rename", null, rename_row(ed_model(), line, name))
+}
+
+-~> Writes a fill. Inside a gesture (a drag of the fill editor) it joins the
+-~> gesture's one step; else it is a step of its own.
+function ed_shape_paint(line, docs, which, f) {
+  ed_label("fill")
+  ed_try_at(paint_row(ed_model(), line, docs, which, f), null, line)
+}

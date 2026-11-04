@@ -1,0 +1,198 @@
+-~> tool_route: where the editor's view hands the Select and Lasso tools what
+-~> is theirs: canvas presses, moves and releases, keys, painting, the
+-~> properties panel and the rows. Each function says whether it took the
+-~> event (or what to paint), so the view's own code runs otherwise.
+
+use "select_model"
+use "tool_lasso"
+use "tool_props"
+use "tool_select"
+use "view_layout"
+
+-~> The tools' keys: V and L choose them while the canvas has the keyboard.
+let route_keys = {"v": "select", "l": "lasso"}
+
+function route_owns(tool) {
+  tool == "select" || tool == "lasso"
+}
+
+-~> == The canvas ==
+
+-~> A press on the canvas: true when one of the tools took it.
+function route_down(e, cl) {
+  if (V.tool == "select") {
+    select_down(e, cl)
+    return true
+  }
+  if (V.tool == "lasso") {
+    lasso_down(e, cl)
+    return true
+  }
+  false
+}
+
+-~> A move of a gesture of the tools (g.owner says whose).
+function route_move(g, e, cl) {
+  if (g.owner == "lasso") {
+    return lasso_move(g, e, cl)
+  }
+  if (g.owner == "strip") {
+    return strip_slide(e.pos.x)
+  }
+  select_move(g, e, cl)
+}
+
+function route_up(g, cl) {
+  if (g.owner == "lasso") {
+    return lasso_up(g, cl)
+  }
+  if (g.owner == "select") {
+    return select_up(g)
+  }
+  null
+}
+
+-~> Any press: the canvas has the keyboard only after a press on it.
+function route_press_anywhere() {
+  pick_set_canvas_keys(false)
+}
+
+-~> == The keyboard ==
+
+-~> Esc clears the selection; the arrows nudge it, and V and L choose the
+-~> tools, while the canvas has the keyboard. True when the key was used.
+function route_key(e) {
+  let k = text.lower(e.key)
+  let mods = e.mods
+  if (mods != null && (mods.cmd == true || mods.ctrl == true || mods.alt == true)) {
+    return false
+  }
+  if (k == "escape" && route_owns(V.tool) && len(select_shapes()) > 0) {
+    pick_set([])
+    view_touch()
+    return true
+  }
+  if (!pick_canvas_keys()) {
+    return false
+  }
+  if (route_keys[k] != null) {
+    route_choose(route_keys[k])
+    return true
+  }
+  if (route_owns(V.tool)) {
+    return select_key(e)
+  }
+  false
+}
+
+-~> The text a tool key also types is not typed into the code.
+function route_text(s) {
+  pick_canvas_keys() && route_keys[text.lower(s)] != null
+}
+
+-~> Chooses a tool (from its key): the same as its toolbar button.
+function route_choose(tool) {
+  if (V.tool != tool) {
+    V.tool = tool
+    V.picker = false
+    V.pen_note = ""
+  }
+  view_touch()
+}
+
+-~> After the toolbar changed the tool: the other tools drop the pick.
+function route_tool_changed() {
+  if (!route_owns(V.tool)) {
+    pick_clear()
+  }
+}
+
+-~> == Painting ==
+
+-~> Paints the tools' overlay instead of the usual selection: true when it did.
+function route_paint(cl) {
+  if (!route_owns(V.tool)) {
+    return false
+  }
+  select_paint(cl)
+  lasso_paint(cl)
+  true
+}
+
+-~> The part of the window the overlay covers (full pixels), or null.
+function route_overlay_win(cl) {
+  if (!route_owns(V.tool)) {
+    return null
+  }
+  select_union(select_overlay_win(cl), lasso_overlay_win(cl))
+}
+
+function route_canvas_key() {
+  if (!route_owns(V.tool)) {
+    return ""
+  }
+  select_canvas_key() + "|" + lasso_canvas_key()
+}
+
+-~> Whether a row is lit as one the gesture would select.
+function route_row_hot(line) {
+  select_row_hot(line)
+}
+
+-~> Whether a row shows the `new` badge of a lasso fill.
+function route_badge(line) {
+  lasso_badge_on(line)
+}
+
+-~> Paints the `new` badge on a row at y when it has one.
+function route_paint_badge(line, y) {
+  if (lasso_badge_on(line)) {
+    lasso_paint_badge(y)
+  }
+}
+
+-~> Whether the view must keep painting (a badge is counting down).
+function route_wants_tick() {
+  lasso_badge_live()
+}
+
+-~> A text that changes when the rows' look does.
+function route_rows_key() {
+  pick_key() + "|" + str(sel_ui.hot) + "|" + str(lasso_badge_live())
+}
+
+-~> == The properties panel and the rows ==
+
+function route_props_layout(gm) {
+  tool_props_layout(gm)
+}
+
+function route_props_paint(lay) {
+  tool_props_paint(lay)
+}
+
+function route_props_hit(x, y) {
+  tool_props_hit(x, y)
+}
+
+function route_props_press(id, e) {
+  tool_props_press(id, e)
+}
+
+-~> A click on a row with Shift while a tool selects: adds or takes away
+-~> that row (true), like Shift-click on the canvas. A plain click on a row
+-~> drops the pick, so the caret's row is the selection again.
+function route_row_click(line, shift) {
+  if (shift && route_owns(V.tool)) {
+    pick_toggle(line)
+    view_touch()
+    return true
+  }
+  pick_clear()
+  false
+}
+
+-~> The status bar's note while a lasso is drawn, or "".
+function route_status() {
+  tool_status_note()
+}

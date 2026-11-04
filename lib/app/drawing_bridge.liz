@@ -5,9 +5,43 @@
 -~> drawing_run_hooks, a hash the host puts around the run:
 -~>   {"here": f}   in;  "results" is set to a function that gives
 -~>                 {"drawing", "canvas"} once the run is over
+-~>   "pens"        in, optional: the saved pens [{"key", "pen"}] (pen_files.liz),
+-~>                 added after the built-in ones; a key that is already a
+-~>                 pen keeps the built-in
 
 use "../draw/here"
+use "../draw/pens"
 use "../draw/shapes"
 
+-~> A copy of a pen's value, all the way down, so a drawing that changes its
+-~> pens changes only its own.
+function bridge_copy(v) {
+  if (type(v) == "ARRAY") {
+    let out = []
+    for (let i = 0; i < len(v); i += 1) {
+      push(out, bridge_copy(v[i]))
+    }
+    return out
+  }
+  if (type(v) == "HASH") {
+    let out = {}
+    let ks = keys(v)
+    for (let i = 0; i < len(ks); i += 1) {
+      out[ks[i]] = bridge_copy(v[ks[i]])
+    }
+    return out
+  }
+  v
+}
+
 here = drawing_run_hooks.here
+if (type(drawing_run_hooks.pens) == "ARRAY") {
+  for (let i = 0; i < len(drawing_run_hooks.pens); i += 1) {
+    let saved = drawing_run_hooks.pens[i]
+    if (pens[saved.key] == null) {
+      pens[saved.key] = bridge_copy(saved.pen)
+      push(pens.list, pens[saved.key])
+    }
+  }
+}
 drawing_run_hooks.results = function() { {"drawing": drawing, "canvas": canvas} }

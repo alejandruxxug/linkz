@@ -1,0 +1,71 @@
+-~> The pure parts of the Select and Lasso tools: moving, scaling and turning
+-~> several shapes rewrites their literals, all or nothing; the lasso's loop
+-~> becomes a polygon row at the end of the layer; the pick of rows stands
+-~> while the caret stays where it put it.
+use "../editor_doc"
+use "../editor_state"
+use "../editor_undo"
+use "../select_edit"
+use "../select_model"
+use "../tool_lasso"
+use "../lang_en"
+use "../lang_es"
+
+let code = "layer a\n  circle((100, 100), 20, #fff)\n  rect((10, 20), (30, 40), #000)\n  polygon([(0, 0), (10, 0), (10, 10)], #f00)\n  line((5, 5), (25, 5), #000, 2)\n"
+ed_reset(code, "/d.lzdraw")
+ed_run()
+let s = ed.shapes
+
+-~> Moving: every row in one model, the caret where it was.
+let moved = move_many(ed_model(), s, (5, -5))
+puts(text.join(list.slice(moved.lines, 1, 5), " | "))
+
+-~> Scaling around a pivot: points map, a radius and a size grow.
+let scaled = scale_many(ed_model(), [s[0], s[1]], (0, 0), 2.0, 0.5)
+puts(text.join(list.slice(scaled.lines, 1, 3), " | "))
+
+-~> Turning a quarter around the origin: points turn, a circle's center turns.
+let turned = turn_many(ed_model(), [s[0], s[2], s[3]], (0, 0), math.pi / 2)
+puts(turned.lines[1], "|", turned.lines[3], "|", turned.lines[4])
+
+-~> A rect has no angle: turning it is refused, and so is all of the turn.
+let r = turn_many(ed_model(), [s[0], s[1]], (0, 0), 0.5)
+puts(r.refused, r.line)
+
+-~> An expression among the literals refuses the whole move, naming its row.
+ed_reset("let x = 3\ncircle((10, 10), 5, #fff)\ncircle((x, 10), 5, #fff)\n", "/d.lzdraw")
+ed_run()
+let refused = move_many(ed_model(), ed.shapes, (1, 1))
+puts(refused.refused, refused.line)
+
+-~> The box around shapes.
+ed_reset(code, "/d.lzdraw")
+ed_run()
+puts(shapes_bounds([ed.shapes[2], ed.shapes[3]]))
+
+-~> A loop becomes a polygon row at the end of its layer, simplified, in the
+-~> color given; a loop with no area is refused.
+let loop = []
+for (let i = 0; i <= 40; i += 1) {
+  let a = math.tau * i / 40
+  push(loop, (50 + math.cos(a) * 20.3, 60 + math.sin(a) * 10.2))
+}
+let filled = lasso_insert(ed_model(), loop, 1, "#8a6fb0")
+puts(len(filled.lines), filled.line, text.starts(filled.lines[5], "  polygon([("), text.ends(filled.lines[5], "], #8a6fb0)"))
+let loose = lasso_insert(doc_new("-~> lzdraw 1\ncircle((1, 1), 1, #000)\n"), loop, null, "#000")
+puts(loose.line, text.starts(loose.lines[1], "polygon("))
+puts(lasso_insert(ed_model(), [(0, 0), (10, 0), (20, 0)], 1, "#000").refused)
+puts(lasso_holds(loop, (50, 60)), lasso_holds(loop, (75, 60)))
+
+-~> The pick: rows that are not next to each other, until the caret moves.
+pick_set([4, 2])
+puts(pick_lines(), ed_model().line, pick_has(3))
+pick_toggle(3)
+pick_toggle(2)
+puts(pick_lines())
+ed_set_caret(5, 0)
+puts(pick_lines())
+pick_set([])
+puts(pick_lines())
+pick_clear()
+puts(pick_lines())

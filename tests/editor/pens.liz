@@ -1,0 +1,147 @@
+-~> The pen settings window and the stabilizer, driven like real input: the
+-~> window opens from a picker gear, its sliders and its curve change a draft
+-~> (never the built-in pen), test pad strokes never reach the drawing, Save
+-~> as new pen writes ~/.linkz/pens/<key>.liz (the test HOME) and the pen
+-~> joins the picker and the drawing's pens, and the string stabilizer steadies
+-~> a stroke on the canvas live.
+
+use "../../lib/app/drawing"
+use "../../lib/app/editor"
+use "../../lib/app/libs"
+use "rig"
+
+let dir = fs.join(fs.home(), "pens-test")
+let pens_dir = fs.join(fs.home(), ".linkz", "pens")
+let code = fs.read(fs.join(libs_root(), "examples", "hello.lzdraw"))
+let modules = rig_modules + ["ui/view_popups", "ui/pen_edit", "ui/pen_window", "ui/pen_pad", "ui/tool_stabilizer", "ui/pen_route",
+  "draw/pens"]
+let rig = rig_open(dir, code, editor_size, modules)
+let n = rig.names
+let cmds = rig.ed.app.debug_commands
+
+function click(p) {
+  rig_frame(rig, [{"type": "down", "pos": p}, {"type": "up", "pos": p}])
+}
+
+function drag(points) {
+  rig_frame(rig, [{"type": "down", "pos": points[0]}])
+  for (let i = 1; i < len(points); i += 1) {
+    rig_frame(rig, [{"type": "move", "pos": points[i]}])
+  }
+  rig_frame(rig, [{"type": "up", "pos": points[len(points) - 1]}])
+}
+
+function mid(r) {
+  (r[0] + r[2] // 2, r[1] + r[3] // 2)
+}
+
+function win() {
+  editor_dump(rig.ed).app.view.pen_window
+}
+
+puts("-- the picker has a gear on every row and a footer")
+cmds.Tool(["brush"])
+rig_frame(rig)
+let gear = n.picker_gear_rect(1)
+rig_frame(rig, [{"type": "move", "pos": mid(gear)}])
+puts(n.V.hover, len(n.pens.list), n.pick_rect()[3])
+click(mid(gear))
+let w = win()
+puts(w.open, w.key, w.name, n.V.picker, rig.ed.error)
+
+puts("-- a slider changes the draft, never the built-in pen")
+let tr = w.rects.tracks.smoothing
+click((tr[0] + tr[2] - 1, tr[1] + 2))
+puts(win().draft.pressure.smoothing, n.pens.pencil.pressure.smoothing, win().changed)
+click(mid(win().rects.preset))
+puts(n.pw_preset_name(), win().draft.pressure.curve)
+
+puts("-- the curve: press on the graph adds a point, dragging it off takes it out")
+let gr = win().rects.graph
+click((gr[0] + 60, gr[1] + 20))
+puts(len(win().draft.pressure.curve))
+let at = n.pw_graph_xy(gr, win().draft.pressure.curve[1])
+drag([(at[0], at[1]), (at[0], at[1] + 30), (at[0], gr[1] + gr[3] + 30)])
+puts(len(win().draft.pressure.curve))
+
+puts("-- the test pad: strokes stay in the pad")
+let before = text.join(n.ed_model().lines, "\n")
+let pad = win().rects.pad
+drag([(pad[0] + 20, pad[1] + 30), (pad[0] + 60, pad[1] + 20), (pad[0] + 100, pad[1] + 40), (pad[0] + 140, pad[1] + 30)])
+puts(win().pad_strokes, text.join(n.ed_model().lines, "\n") == before, n.ed_dirty(), len(n.pad_shapes()))
+click(mid(win().rects.trash))
+puts(win().pad_strokes)
+
+puts("-- a built-in's name is refused; a name of its own saves the pen")
+n.pw.name = "pencil"
+click(mid(win().rects.save))
+puts(win().note, fs.exists(fs.join(pens_dir, "pencil.liz")))
+n.pw.name = "Soft Ink"
+click(mid(win().rects.save))
+let file = fs.join(pens_dir, "soft_ink.liz")
+puts(fs.exists(file), win().key, n.ed.pen, len(n.pens.list), n.pens.list[5].name)
+let saved = lizard.run(fs.read(file), {"name": file}).globals.pen
+puts(saved.name, saved.pressure.smoothing, saved.key == null, n.pens.pencil.name)
+
+puts("-- the picker lists the saved pen after the built-in ones, \"yours\"")
+n.pw_close()
+cmds.Picker([])
+rig_frame(rig)
+puts(n.picker_desc(n.pens.list[5]), n.pick_rect()[3])
+cmds.Picker([])
+rig_frame(rig)
+
+puts("-- a drawing that uses the saved pen runs")
+let r = drawing_run("brush([(10, 10), (60, 40)], [0.5, 0.8], #000, pens.soft_ink)\n")
+puts(r.errors, len(r.shapes))
+
+puts("-- Esc closes the window; a double-click on the brush button opens it")
+cmds.PenSettings(["ink"])
+rig_frame(rig)
+rig_frame(rig, [{"type": "key", "key": "Escape"}])
+puts(win().open)
+cmds.Tool([""])
+let bb = null
+let tools = editor_dump(rig.ed).app.view.tools
+for (let i = 0; i < len(tools); i += 1) {
+  if (tools[i].id == "tool:brush") {
+    bb = (tools[i].x + 4, tools[i].y + 4)
+  }
+}
+-~> (the last press of the brush button, by the Tool command, was a moment ago)
+n.pen_route_state.brush_at = -100000
+click(bb)
+puts(win().open, n.V.tool)
+click(bb)
+puts(win().open, win().key, n.V.tool)
+cmds.PenSettings(["close"])
+rig_frame(rig)
+
+puts("-- the string stabilizer steadies a stroke live, and catches up at the end")
+n.tool_stab_set("ink", {"mode": "string", "length": 40, "catch_up": true})
+cmds.Pen(["ink"])
+cmds.SelectRow([1])
+rig_frame(rig)
+let cl = n.view_canvas_layout()
+let p0 = n.view_to_window(cl, (100, 200)) * 0.5
+let shaky = [p0]
+for (let i = 1; i <= 30; i += 1) {
+  push(shaky, p0 + (i * 4, (i % 2) * 6))
+}
+drag(shaky)
+let row = n.ed_model().lines[n.ed_model().line - 1]
+puts(text.starts(text.trim(row), "brush("), text.find(row, "pens.ink") > 0, rig.ed.error)
+let shape = n.ed_shapes_of(n.ed_model().line)[0]
+let pts = shape.args[0]
+let last = pts[len(pts) - 1]
+let want = n.view_to_drawing(cl, shaky[30].x, shaky[30].y)
+puts(math.dist(last, want) < 3)
+-~> the string keeps the tip off the zigzag: the line stays within its middle
+let wobble = 0
+for (let i = 0; i < len(pts); i += 1) {
+  wobble = math.max(wobble, math.abs(pts[i].y - pts[0].y))
+}
+puts(wobble < 12)
+
+-~> the other tests of this HOME start with no saved pens
+fs.remove(file)

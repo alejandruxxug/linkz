@@ -3,11 +3,19 @@
 -~>   parse(code)            lines, statements and errors (see scan.liz)
 -~>   run(code)              runs a drawing (see drawing.liz)
 -~>   library_docs(lang)     the drawing functions' docs (see docs.liz)
+-~>   saved_pens()           the pens saved in ~/.linkz/pens, [{"key", "pen", "path"}]
+-~>                          (see pen_files.liz); copy a pen before changing it
 
 use "docs"
 use "drawing"
+use "pen_files"
 use "scan"
 
 function host_src() {
-  {"parse": scan_parse, "run": function(code) { drawing_run(code) }, "library_docs": docs_library}
+  {
+    "parse": scan_parse,
+    "run": function(code) { drawing_run(code) },
+    "library_docs": docs_library,
+    "saved_pens": function() { pen_files_load() }
+  }
 }

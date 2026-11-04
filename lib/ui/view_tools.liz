@@ -17,6 +17,8 @@ use "editor_rows"
 use "editor_state"
 use "editor_twoway"
 use "editor_undo"
+use "tool_route"
+use "tools_stroke_stab"
 use "view_canvas"
 use "view_input"
 use "view_layout"
@@ -74,6 +76,9 @@ function tools_canvas_down(e) {
   V.last_down = {"ms": now, "pos": e.pos}
   V.sel_anchor = null
   V.gest = null
+  if (route_down(e, cl)) {
+    return null
+  }
   if (V.tool == "pencil" || V.tool == "brush") {
     return tools_stroke_begin(e, cl)
   }
@@ -148,6 +153,9 @@ function tools_canvas_move(e) {
     return null
   }
   let cl = view_canvas_layout()
+  if (g.owner != null) {
+    return route_move(g, e, cl)
+  }
   if (g.mode == "stroke") {
     return tools_stroke_move(g, e, cl)
   }
@@ -189,7 +197,12 @@ function tools_canvas_up(_e) {
   if (g == null) {
     return null
   }
+  if (g.owner != null) {
+    route_up(g, view_canvas_layout())
+    return tools_done()
+  }
   if (g.mode == "stroke") {
+    tools_stab_finish(g, view_canvas_layout())
     tools_stroke_commit(g)
     return tools_done()
   }
@@ -219,6 +232,7 @@ function tools_stroke_begin(e, cl) {
     "tail_p": [],
     "first": {"pos": e.pos, "canvas_pos": cp, "pressure": null, "t": null}
   }
+  tools_stab_begin(V.gest)
   V.live = V.gest
   V.live_n = 0
   view_touch()
@@ -240,12 +254,14 @@ function tools_stroke_move(g, e, cl) {
       -~> the press itself starts the stroke; it borrows the first move's pressure and time
       g.first.pressure = s.pressure
       g.first.t = s.t - 0.008
-      tools_stroke_add(g, cl, g.first)
+      tools_stab_feed(g, cl, g.first)
       g.first = null
     }
-    tools_stroke_add(g, cl, {"pos": s.pos, "canvas_pos": cp, "pressure": s.pressure, "t": s.t})
+    tools_stab_feed(g, cl, {"pos": s.pos, "canvas_pos": cp, "pressure": s.pressure, "t": s.t})
   }
-  V.live_n = len(g.samples)
+  -~> a move that the stabilizer kept back still moves the string: count moves too
+  g.ticks += 1
+  V.live_n = len(g.samples) * 100000 + g.ticks
   view_touch()
 }
 
@@ -365,8 +381,9 @@ function view_tools_lite(s, off) {
   true
 }
 
--~> The selected anchor, drawn like a hovered one.
+-~> The selected anchor, drawn like a hovered one (and the stabilizer's string).
 function view_tools_paint_ui(cl) {
+  tools_stab_paint(cl)
   let a = V.sel_anchor
   if (a == null) {
     return null

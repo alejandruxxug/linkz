@@ -1,0 +1,576 @@
+-~> tool_select: the Select tool (V). On the canvas:
+-~>   click            selects the shape under the pointer (its row highlights);
+-~>                    Shift-click adds it, or takes it away
+-~>   drag on nothing  a marquee: the shapes inside it are selected (with Alt,
+-~>                    the ones it touches); Shift adds them to the selection
+-~>   drag a shape     moves every selected shape, the old place shown as a
+-~>                    dotted ghost and the move in a tooltip
+-~>   a handle         the 8 squares of the box scale the selection (Shift keeps
+-~>                    the ratio), the ring above it turns it (Shift: 15° steps)
+-~>   arrow keys       nudge the selection 1 px (Shift: 10)
+-~> Every change rewrites the literals of all the selected shapes and is one
+-~> undo step; a shape whose numbers are not literals refuses it, with the
+-~> reason. The gesture lives in V.gest ({"owner": "select", "mode": ...}).
+
+use "../draw/geometry"
+use "editor_rows"
+use "editor_state"
+use "editor_twoway"
+use "editor_undo"
+use "i18n"
+use "select_edit"
+use "select_model"
+use "view_canvas"
+use "view_gfx"
+use "view_layout"
+use "view_scene"
+use "view_tools"
+
+-~> What the overlay shows besides the selection: the rows a marquee or a
+-~> lasso would select ("hot"), and the last move, for the properties panel.
+let sel_ui = {"hot": [], "move": null}
+
+-~> How far (UI pixels) a press can be from a handle and still take it.
+let sel_grab = 4
+
+-~> == The selection ==
+
+-~> The shapes of the selected rows, each with its line.
+function select_shapes() {
+  let lines = pick_lines()
+  let out = []
+  for (let i = 0; i < len(lines); i += 1) {
+    let list = ed_shapes_of(lines[i])
+    for (let k = 0; k < len(list); k += 1) {
+      push(out, list[k])
+    }
+  }
+  out
+}
+
+-~> The selection's box in UI pixels, [x0, y0, x1, y1], or null.
+function select_ui_box(cl, shapes) {
+  let b = shapes_bounds(shapes)
+  if (b == null) {
+    return null
+  }
+  let lo = view_to_window(cl, b.min)
+  let hi = view_to_window(cl, b.max)
+  [math.floor(lo.x / 2), math.floor(lo.y / 2), math.ceil(hi.x / 2), math.ceil(hi.y / 2)]
+}
+
+-~> The handles of a box (UI pixels): eight size handles and the turn ring,
+-~> as [{"id", "x", "y"}]. A handle's id says which sides it moves.
+function select_handles(box) {
+  let x0 = box[0]
+  let y0 = box[1]
+  let x1 = box[2] - 1
+  let y1 = box[3] - 1
+  let mx = (x0 + x1) // 2
+  let my = (y0 + y1) // 2
+  [
+    {"id": "nw", "x": x0, "y": y0}, {"id": "n", "x": mx, "y": y0}, {"id": "ne", "x": x1, "y": y0},
+    {"id": "w", "x": x0, "y": my}, {"id": "e", "x": x1, "y": my},
+    {"id": "sw", "x": x0, "y": y1}, {"id": "s", "x": mx, "y": y1}, {"id": "se", "x": x1, "y": y1},
+    {"id": "turn", "x": mx, "y": y0 - 9}
+  ]
+}
+
+-~> The handle under a UI point, or null.
+function select_handle_at(cl, ux, uy) {
+  let box = select_ui_box(cl, select_shapes())
+  if (box == null) {
+    return null
+  }
+  let hs = select_handles(box)
+  for (let i = 0; i < len(hs); i += 1) {
+    if (math.abs(hs[i].x - ux) <= sel_grab && math.abs(hs[i].y - uy) <= sel_grab) {
+      return hs[i]
+    }
+  }
+  null
+}
+
+-~> The shapes of the drawing (visible, unlocked, made by a row) whose boxes
+-~> are inside a drawing box (`touch`: that touch it). Returns their lines.
+function select_lines_in(cl, lo, hi, touch) {
+  let sc = scene_sync(cl)
+  let k = cl.zoom
+  let found = scene_entries_in(sc, [lo.x * k, lo.y * k, hi.x * k, hi.y * k])
+  let rows = view_rows()
+  let seen = {}
+  let out = []
+  for (let i = 0; i < len(found); i += 1) {
+    let s = found[i].src
+    if (type(s.line) == "INTEGER" && seen[s.line] == null && s.line >= 1 && s.line <= len(rows) && !row_has_flag(rows, s.line, "locked")) {
+      let b = path_bounds(s.path)
+      if (b != null) {
+        let inside = b.min.x >= lo.x && b.min.y >= lo.y && b.max.x <= hi.x && b.max.y <= hi.y
+        if (touch) {
+          inside = b.min.x <= hi.x && lo.x <= b.max.x && b.min.y <= hi.y && lo.y <= b.max.y
+        }
+        if (inside) {
+          seen[s.line] = true
+          push(out, s.line)
+        }
+      }
+    }
+  }
+  list.sort(out)
+}
+
+-~> == The press ==
+
+function select_down(e, cl) {
+  pick_set_canvas_keys(true)
+  V.drag = {"kind": "canvas"}
+  let shift = e.mods != null && e.mods.shift == true
+  let h = select_handle_at(cl, e.pos.x, e.pos.y)
+  if (h != null) {
+    return select_begin_handle(e, cl, h)
+  }
+  let p = view_to_drawing(cl, e.pos.x, e.pos.y)
+  let s = view_hit_shape(cl, p)
+  if (s != null && type(s.line) == "INTEGER") {
+    if (shift) {
+      pick_toggle(s.line)
+      V.gest = {"owner": "select", "mode": "click"}
+      view_touch()
+      return null
+    }
+    let again = pick_has(s.line)
+    if (!again) {
+      pick_set([s.line])
+      view_reveal(s.line)
+    }
+    select_begin_move(e, cl, s.line, again)
+    return null
+  }
+  let alt = e.mods != null && e.mods.alt == true
+  let base = []
+  if (shift) {
+    base = pick_lines()
+  }
+  V.gest = {"owner": "select", "mode": "marquee", "a": p, "b": p, "touch": alt, "base": base, "ui0": e.pos, "moved": false}
+  sel_ui.hot = []
+  view_touch()
+}
+
+-~> A drag of the selection starts (it moves once the pointer goes 2 pixels).
+function select_begin_move(e, cl, line, again) {
+  V.gest = {
+    "owner": "select",
+    "mode": "move",
+    "line": line,
+    "again": again,
+    "m0": ed_model(),
+    "shapes": select_shapes(),
+    "start": tools_pointer(cl, e),
+    "ui0": e.pos,
+    "moved": false
+  }
+  sel_ui.move = (0, 0)
+  view_touch()
+}
+
+-~> A drag of a size handle or the turn ring starts.
+function select_begin_handle(e, cl, h) {
+  let shapes = select_shapes()
+  let b = shapes_bounds(shapes)
+  let mode = "scale"
+  if (h.id == "turn") {
+    mode = "turn"
+  }
+  V.gest = {
+    "owner": "select",
+    "mode": mode,
+    "handle": h.id,
+    "box": b,
+    "m0": ed_model(),
+    "shapes": shapes,
+    "start": tools_pointer(cl, e),
+    "ui0": e.pos,
+    "moved": false
+  }
+  view_touch()
+}
+
+-~> == Moves ==
+
+function select_move(g, e, cl) {
+  if (g.mode == "click") {
+    return null
+  }
+  let p = tools_pointer(cl, e)
+  if (g.mode == "marquee") {
+    g.b = view_to_drawing(cl, e.pos.x, e.pos.y)
+    g.moved = true
+    let box = select_norm(g.a, g.b)
+    sel_ui.hot = select_lines_in(cl, box[0], box[1], g.touch)
+    view_touch()
+    return null
+  }
+  if (!g.moved) {
+    if (math.max(math.abs(e.pos.x - g.ui0.x), math.abs(e.pos.y - g.ui0.y)) < 2) {
+      return null
+    }
+    g.moved = true
+    select_begin_step(g)
+  }
+  let shift = e.mods != null && e.mods.shift == true
+  let result = null
+  if (g.mode == "move") {
+    let d = p - g.start
+    let delta = (math.round(d.x), math.round(d.y))
+    sel_ui.move = delta
+    result = move_many(g.m0, g.shapes, delta)
+  } elif (g.mode == "scale") {
+    result = select_scale_result(g, p, shift)
+  } else {
+    result = select_turn_result(g, p, shift)
+  }
+  select_apply(result)
+}
+
+-~> The gesture's undo step: "move 2 objects", or "move circle" for one shape.
+function select_begin_step(g) {
+  let names = {"move": "move", "scale": "scale", "turn": "turn"}
+  let what = names[g.mode]
+  let lines = {}
+  for (let i = 0; i < len(g.shapes); i += 1) {
+    lines[g.shapes[i].line] = true
+  }
+  if (len(lines) == 1) {
+    return ed_begin_gesture(what + "_kind", {"kind": g.shapes[0].kind})
+  }
+  ed_begin_gesture(what + "_objects", {"n": len(lines)})
+}
+
+-~> Applies a model from a change of the selection, or shows its refusal.
+function select_apply(result) {
+  let line = ed_model().line
+  if (is_refusal(result) && result.line != null) {
+    line = result.line
+  }
+  let ok = ed_try_at(result, null, line)
+  V.flash = 0
+  if (!ok) {
+    V.flash = 1
+  }
+  view_touch()
+  ok
+}
+
+-~> The two corners of the box between two points, smallest first.
+function select_norm(a, b) {
+  [(math.min(a.x, b.x), math.min(a.y, b.y)), (math.max(a.x, b.x), math.max(a.y, b.y))]
+}
+
+-~> Scaling by a handle: the opposite side (or corner) stays put.
+function select_scale_result(g, p, keep) {
+  let b = g.box
+  let id = g.handle
+  let pivot = ((b.min.x + b.max.x) / 2.0, (b.min.y + b.max.y) / 2.0)
+  let px = pivot.x
+  let py = pivot.y
+  let hx = px
+  let hy = py
+  if (text.find(id, "w") >= 0) {
+    px = b.max.x
+    hx = b.min.x
+  } elif (text.find(id, "e") >= 0) {
+    px = b.min.x
+    hx = b.max.x
+  }
+  if (text.find(id, "n") >= 0) {
+    py = b.max.y
+    hy = b.min.y
+  } elif (text.find(id, "s") >= 0) {
+    py = b.min.y
+    hy = b.max.y
+  }
+  let sx = 1.0
+  let sy = 1.0
+  if (hx != px) {
+    sx = select_factor((p.x - px) / (hx - px))
+  }
+  if (hy != py) {
+    sy = select_factor((p.y - py) / (hy - py))
+  }
+  if (keep) {
+    let k = sx
+    if (hx == px) {
+      k = sy
+    } elif (hy != py && math.abs(sy - 1) > math.abs(sx - 1)) {
+      k = sy
+    }
+    sx = k
+    sy = k
+  }
+  scale_many(g.m0, g.shapes, (px, py), sx, sy)
+}
+
+-~> A scale factor that never flips or flattens the shapes.
+function select_factor(k) {
+  math.max(0.02, k)
+}
+
+-~> Turning by the ring: the angle the pointer went around the box's middle.
+function select_turn_result(g, p, snap) {
+  let b = g.box
+  let c = ((b.min.x + b.max.x) / 2.0, (b.min.y + b.max.y) / 2.0)
+  let a = math.atan2(p.y - c.y, p.x - c.x) - math.atan2(g.start.y - c.y, g.start.x - c.x)
+  if (snap) {
+    let step = math.pi / 12
+    a = math.round(a / step) * step
+  }
+  turn_many(g.m0, g.shapes, c, a)
+}
+
+-~> == Release ==
+
+function select_up(g) {
+  if (g.mode == "marquee") {
+    let lines = sel_ui.hot
+    if (!g.moved) {
+      lines = []
+    }
+    pick_set(g.base + lines)
+    sel_ui.hot = []
+  } elif (g.mode == "move" && !g.moved && g.again && len(pick_lines()) > 1) {
+    -~> a click on a shape of a bigger selection keeps just that one
+    pick_set([g.line])
+  } elif (g.moved) {
+    ed_end_gesture()
+  }
+  sel_ui.move = null
+  view_touch()
+}
+
+-~> == The keyboard ==
+
+-~> The arrow keys nudge the selection while the canvas has the keyboard.
+-~> True when the key was used.
+function select_key(e) {
+  let k = text.lower(e.key)
+  let d = null
+  if (k == "arrowleft" || k == "left") {
+    d = (-1, 0)
+  } elif (k == "arrowright" || k == "right") {
+    d = (1, 0)
+  } elif (k == "arrowup" || k == "up") {
+    d = (0, -1)
+  } elif (k == "arrowdown" || k == "down") {
+    d = (0, 1)
+  }
+  if (d == null) {
+    return false
+  }
+  if (e.mods != null && e.mods.shift == true) {
+    d = d * 10
+  }
+  let shapes = select_shapes()
+  if (len(shapes) == 0) {
+    return true
+  }
+  ed_label("nudge")
+  select_apply(move_many(ed_model(), shapes, d))
+  true
+}
+
+-~> == Painting ==
+
+-~> Whether a row is one a marquee or a lasso would select now.
+function select_row_hot(line) {
+  len(sel_ui.hot) > 0 && list.index(sel_ui.hot, line) >= 0
+}
+
+-~> One UI pixel in the canvas buffer.
+function sel_dot(x, y, c) {
+  g_rect(x, y, 1, 1, c)
+}
+
+-~> A 5x5 bright handle with a void outline, centered at a UI pixel.
+function select_handle(x, y) {
+  g_rect(x - 3, y - 3, 7, 7, P.void)
+  g_rect(x - 2, y - 2, 5, 5, P.bright)
+}
+
+-~> The turn ring: a 6 px lizard stalk up from the box and a ring of radius 2.
+function select_turn_ring(x, y, top) {
+  g_rect(x, y + 3, 1, top - y - 3, P.lizard)
+  g_rect(x - 1, y - 2, 3, 1, P.lizard)
+  g_rect(x - 1, y + 2, 3, 1, P.lizard)
+  g_rect(x - 2, y - 1, 1, 3, P.lizard)
+  g_rect(x + 2, y - 1, 1, 3, P.lizard)
+}
+
+-~> A shape's outline as a dotted mute line (where it was before the drag).
+function select_ghost(cl, s) {
+  let subs = flatten_path(s.path, 1.0)
+  let n = 0
+  for (let i = 0; i < len(subs); i += 1) {
+    let pts = subs[i].points
+    let last = len(pts) - 1
+    if (subs[i].closed) {
+      last = len(pts)
+    }
+    for (let j = 0; j < last; j += 1) {
+      let a = view_to_window(cl, pts[j]) / 2
+      let b = view_to_window(cl, pts[(j + 1) % len(pts)]) / 2
+      n = sel_line(a, b, n, function(x, y, k) {
+        if (k % 3 == 0) {
+          sel_dot(x, y, P.mute)
+        }
+      })
+    }
+  }
+}
+
+-~> Steps along a line of UI pixels from a to b, calling dot(x, y, k) with a
+-~> running count k (for dashes); returns the count where it ended.
+function sel_line(a, b, k, dot) {
+  let x0 = math.round(a.x)
+  let y0 = math.round(a.y)
+  let x1 = math.round(b.x)
+  let y1 = math.round(b.y)
+  let n = math.max(math.abs(x1 - x0), math.abs(y1 - y0))
+  if (n == 0) {
+    return k
+  }
+  for (let i = 0; i < n; i += 1) {
+    dot(x0 + math.round((x1 - x0) * i / n), y0 + math.round((y1 - y0) * i / n), k)
+    k += 1
+  }
+  k
+}
+
+-~> The tooltip of a move: "move -30, +40" with the numbers amber.
+function select_move_tip(dx, dy, ux, uy, cl) {
+  let word = t("select.move") + " "
+  let nums = select_signed(dx) + ", " + select_signed(dy)
+  let w = g_text_w(word + nums) + 12
+  let cr = cl.crect
+  let x = math.max(cr[0] + 2, math.min(ux - 40, cr[0] + cr[2] - w - 4))
+  let y = math.min(uy + 16, cr[1] + cr[3] - 25)
+  g_box(x, y, w, 21)
+  g_text(word, x + 6, y + 4, P.text)
+  g_text(nums, x + 6 + g_text_w(word), y + 4, P.amber)
+}
+
+function select_signed(n) {
+  if (n > 0) {
+    return "+" + str(n)
+  }
+  str(n)
+}
+
+-~> The Select tool's overlay (the canvas buffer is the target): the ghost
+-~> and the tooltip of a move, the marquee, the box of the rows it would take,
+-~> and the selection's box with its handles.
+function select_paint(cl) {
+  let g = V.gest
+  if (g != null && g.owner == "select" && g.mode == "move" && g.moved) {
+    for (let i = 0; i < len(g.shapes); i += 1) {
+      select_ghost(cl, g.shapes[i])
+    }
+  }
+  select_paint_hot(cl)
+  if (g != null && g.owner == "select" && g.mode == "marquee" && g.moved) {
+    let a = view_to_window(cl, g.a)
+    let b = view_to_window(cl, g.b)
+    view_sel_box(math.min(a.x, b.x), math.min(a.y, b.y), math.max(a.x, b.x), math.max(a.y, b.y))
+  }
+  let shapes = select_shapes()
+  let box = select_ui_box(cl, shapes)
+  if (box != null) {
+    view_sel_box(box[0] * 2, box[1] * 2, box[2] * 2, box[3] * 2)
+    let hs = select_handles(box)
+    for (let i = 0; i < len(hs); i += 1) {
+      if (hs[i].id == "turn") {
+        select_turn_ring(hs[i].x, hs[i].y, box[1])
+      } else {
+        select_handle(hs[i].x, hs[i].y)
+      }
+    }
+  }
+  if (g != null && g.owner == "select" && g.mode == "move" && g.moved && sel_ui.move != null) {
+    select_move_tip(sel_ui.move.x, sel_ui.move.y, V.mouse.x, V.mouse.y, cl)
+  }
+}
+
+-~> The dashed box around the shapes a marquee or lasso would take.
+function select_paint_hot(cl) {
+  if (len(sel_ui.hot) == 0) {
+    return null
+  }
+  let shapes = []
+  for (let i = 0; i < len(sel_ui.hot); i += 1) {
+    shapes = shapes + ed_shapes_of(sel_ui.hot[i])
+  }
+  let box = select_ui_box(cl, shapes)
+  if (box != null) {
+    view_sel_box(box[0] * 2 - 2, box[1] * 2 - 2, box[2] * 2 + 2, box[3] * 2 + 2)
+  }
+}
+
+-~> The part of the window (full pixels) the overlay covers, or null: the
+-~> selection with its handles, the ghost, the marquee and the tooltip.
+function select_overlay_win(cl) {
+  let box = select_ui_box(cl, select_shapes())
+  let out = null
+  if (box != null) {
+    out = [box[0] * 2 - 8, (box[1] - 13) * 2, box[2] * 2 + 8, box[3] * 2 + 8]
+  }
+  if (len(sel_ui.hot) > 0) {
+    let shapes = []
+    for (let i = 0; i < len(sel_ui.hot); i += 1) {
+      shapes = shapes + ed_shapes_of(sel_ui.hot[i])
+    }
+    let hb = select_ui_box(cl, shapes)
+    if (hb != null) {
+      out = select_union(out, [hb[0] * 2 - 4, hb[1] * 2 - 4, hb[2] * 2 + 4, hb[3] * 2 + 4])
+    }
+  }
+  let g = V.gest
+  if (g != null && g.owner == "select") {
+    if (g.mode == "marquee") {
+      let a = view_to_window(cl, g.a)
+      let b = view_to_window(cl, g.b)
+      out = select_union(out, [math.min(a.x, b.x) - 2, math.min(a.y, b.y) - 2, math.max(a.x, b.x) + 2, math.max(a.y, b.y) + 2])
+    } elif (g.mode == "move" || g.mode == "scale" || g.mode == "turn") {
+      let gb = select_ui_box(cl, g.shapes)
+      if (gb != null) {
+        out = select_union(out, [gb[0] * 2 - 8, (gb[1] - 13) * 2, gb[2] * 2 + 8, gb[3] * 2 + 8])
+      }
+      -~> the tooltip, under the pointer
+      let mx = V.mouse.x * 2
+      let my = V.mouse.y * 2
+      out = select_union(out, [mx - 100, my, mx + 260, my + 84])
+    }
+  }
+  out
+}
+
+function select_union(a, b) {
+  if (a == null) {
+    return b
+  }
+  if (b == null) {
+    return a
+  }
+  [math.min(a[0], b[0]), math.min(a[1], b[1]), math.max(a[2], b[2]), math.max(a[3], b[3])]
+}
+
+-~> A text that changes when the overlay does (for the canvas panel's key).
+function select_canvas_key() {
+  let g = V.gest
+  let s = str(V.tool) + "|" + pick_key() + "|" + str(sel_ui.hot)
+  if (g != null && g.owner == "select" && g.mode == "marquee") {
+    s += "|" + str(g.b)
+  }
+  if (g != null && g.owner == "select" && g.mode == "move") {
+    s += "|" + str(g.moved) + str(V.mouse)
+  }
+  s
+}

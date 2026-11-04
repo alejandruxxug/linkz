@@ -6,6 +6,9 @@ use "../draw/gradient"
 use "../draw/pens"
 use "../gfx/raster"
 use "app"
+use "pen_library"
+use "pen_props"
+use "pen_route"
 use "app_screens"
 use "complete_state"
 use "editor_doc"
@@ -21,6 +24,8 @@ use "view_layout"
 use "view_panels"
 use "view_popups"
 use "view_tools"
+use "shape_popups"
+use "tool_route"
 
 -~> == What is under the pointer ==
 
@@ -37,6 +42,14 @@ function view_hover_at(x, y) {
       }
     }
     return ""
+  }
+  let pen_id = pen_route_hover(x, y)
+  if (pen_id != null) {
+    return pen_id
+  }
+  let shape_id = shape_hover_at(x, y)
+  if (shape_id != null) {
+    return shape_id
   }
   if (V.picker) {
     let i = pick_at(x, y)
@@ -94,6 +107,10 @@ function view_hover_at(x, y) {
     return ""
   }
   if (x < gm.pw && y >= gm.props_y && y < gm.status_y) {
+    let own = route_props_hit(x, y)
+    if (own != "") {
+      return own
+    }
     let lay = view_props_cached()
     for (let i = 0; i < len(lay.boxes); i = i + 1) {
       let b = lay.boxes[i]
@@ -198,7 +215,7 @@ function view_hit_rect(id) {
 -~> Whether a hover id is something a tooltip can say more about.
 function view_tippable(id) {
   let k = text.split(id, ":")[0]
-  k == "tool" || k == "bar" || k == "strip" || k == "pen" || k == "callee" || k == "field"
+  k == "tool" || k == "bar" || k == "strip" || k == "pen" || k == "callee" || k == "field" || k == "pengear"
 }
 
 -~> == Actions ==
@@ -269,6 +286,7 @@ function view_select_tool(id) {
   } elif (V.tool == "brush") {
     V.pen_note = t("hint.brush")
   }
+  route_tool_changed()
   V.ver = V.ver + 1
   app.needs_paint = true
 }
@@ -434,7 +452,10 @@ function view_press(id) {
   if (kind == "strip") {
     view_add(what)
   } elif (kind == "tool") {
-    if (what == "pencil" || what == "brush") {
+    if (what == "brush" && pen_route_brush_press()) {
+      V.ver = V.ver + 1
+      app.needs_paint = true
+    } elif (what == "pencil" || what == "brush" || what == "select" || what == "lasso") {
       view_select_tool(what)
     } else {
       view_add(what)
@@ -646,6 +667,9 @@ function view_number_text(v, whole) {
 
 -~> The click on a box of the properties panel (a press: scrub or focus on release).
 function view_press_box(b, e) {
+  if (pen_props_press(b, e)) {
+    return null
+  }
   if (b.kind == "bool") {
     let line = ed_model().line
     if (b.field == "hidden") {
@@ -714,6 +738,10 @@ function view_scrub(e) {
 
 -~> Puts the caret in a row where it was clicked.
 function view_click_row(r, x, shift) {
+  if (route_row_click(r.line, shift)) {
+    view_after()
+    return null
+  }
   let cd = view_row_code(r)
   let rendered = view_row_render(r)
   let idx = code_index_at(rendered[0], x - rendered[1])
@@ -759,16 +787,23 @@ function view_down(e) {
   view_prepare()
   V.tip = null
   V.tip_due = 0
+  route_press_anywhere()
   let id = view_hover_at(p.x, p.y)
   if (V.dialog != null) {
     V.drag = {"kind": "press", "id": id}
     app.needs_paint = true
     return null
   }
+  if (pen_route_down(e)) {
+    return null
+  }
+  if (shape_down(e)) {
+    return null
+  }
   if (V.picker) {
     let kind = text.split(id, ":")[0]
     if (kind == "pen") {
-      view_choose_pen(pens.list[int(text.split(id, ":")[1])].name)
+      view_choose_pen(pen_key_of(pens.list[int(text.split(id, ":")[1])]))
       return null
     }
     if (id != "tool:brush" && !(kind == "field" && id == "field:pen:0")) {
@@ -796,6 +831,10 @@ function view_down(e) {
   }
   if (kind == "eye" || kind == "lock" || kind == "fold" || kind == "add" || kind == "row" || kind == "callee") {
     view_press_row(id, e)
+    return null
+  }
+  if (kind == "lasso") {
+    route_props_press(id, e)
     return null
   }
   if (kind == "field") {
@@ -832,6 +871,9 @@ function view_down(e) {
 function view_move(e) {
   let p = e.pos
   V.mouse = p
+  if (pen_route_move(e)) {
+    return null
+  }
   if (V.drag != null) {
     let k = V.drag.kind
     if (k == "scrub") {
@@ -855,6 +897,8 @@ function view_move(e) {
       app.needs_paint = true
     } elif (k == "canvas") {
       view_canvas_move(e)
+    } elif (k == "fill_editor") {
+      shape_move(e)
     }
     return null
   }
@@ -865,6 +909,7 @@ function view_move(e) {
 -~> under it, the pointer's place on the drawing, and the tooltip timer.
 function view_update_hover(p) {
   let id = view_hover_at(p.x, p.y)
+  pen_route_hover_move(p)
   let gm = view_geom()
   let cl = view_canvas_layout()
   let anchor = null
@@ -909,6 +954,10 @@ function view_up(e) {
   if (d == null) {
     return null
   }
+  if (pen_route_up(e, d)) {
+    app.needs_paint = true
+    return null
+  }
   if (d.kind == "press") {
     let id = view_hover_at(p.x, p.y)
     if (id == d.id) {
@@ -924,12 +973,17 @@ function view_up(e) {
     }
   } elif (d.kind == "canvas") {
     view_canvas_up(e)
+  } elif (d.kind == "fill_editor") {
+    shape_up(e)
   }
   V.ver = V.ver + 1
   app.needs_paint = true
 }
 
 function view_wheel(e) {
+  if (pen_route_wheel(e)) {
+    return null
+  }
   let p = e.pos
   let gm = view_geom()
   if (p.x < gm.pw && p.y >= 30 && p.y < gm.props_y) {
@@ -994,6 +1048,12 @@ function view_key(e) {
     }
     return null
   }
+  if (pen_route_key(e)) {
+    return null
+  }
+  if (shape_keydown(e)) {
+    return null
+  }
   if (V.picker && k == "escape") {
     V.picker = false
     V.ver = V.ver + 1
@@ -1037,9 +1097,13 @@ function view_key(e) {
     view_after()
     return null
   }
+  if (route_key(e)) {
+    return null
+  }
   if (k == "escape") {
     V.tool = ""
     V.pen_note = ""
+    route_tool_changed()
     V.ver = V.ver + 1
     app.needs_paint = true
     return null
@@ -1059,10 +1123,19 @@ function view_text(e) {
   if (V.dialog != null) {
     return null
   }
+  if (pen_route_text(e.text)) {
+    return null
+  }
+  if (shape_text(e.text)) {
+    return null
+  }
   V.tip = null
   V.tip_due = 0
   if (V.focus != null) {
     view_field_text_in(e.text)
+    return null
+  }
+  if (route_text(e.text)) {
     return null
   }
   cmp_ed_type(e.text)

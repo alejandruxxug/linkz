@@ -1,0 +1,311 @@
+-~> The shape menu and the fill editor in a headless editor: a right-click on
+-~> a row or a shape opens the menu, its choices and its keys edit the code
+-~> (one undo step each), and the fill editor rewrites the fill as a literal:
+-~> kinds, stops added, dragged and dragged off, hard stops, steps, the angle,
+-~> the canvas handles, and a fill written as code that it can inline.
+
+use "../../lib/app/editor"
+use "rig"
+
+let code = "canvas = {\"size\": (480, 320), \"background\": #f6d9a8}
+let horizon = 200
+let warm = #ff8800
+layer sun
+  circle((360, 90), 34, #fff3c4)
+  circle((360, 90), 56, #f2a65a66)
+layer sky
+  rect((0, 0), (480, horizon), #f2a65a)
+  circle((60, 60), 20, warm)
+  line((10, 300), (200, 300), #3b2a6b, 3)
+"
+
+let modules = rig_modules + ["ui/view_panels", "ui/view_canvas", "ui/editor_state", "ui/i18n", "ui/shape_menu", "ui/fill_editor", "ui/fill_model", "ui/shape_popups"]
+let rig = rig_open(fs.join(fs.home(), "shape-menu-test"), code, editor_size, modules)
+let n = rig.names
+
+function line_of(k) {
+  n.ed_model().lines[k - 1]
+}
+
+function steps() {
+  len(n.ed.undo)
+}
+
+function key(k, mods = null) {
+  let e = {"type": "key", "key": k}
+  if (mods != null) {
+    e.mods = mods
+  }
+  rig_frame(rig, [e])
+}
+
+-~> A UI point of the drawing point p.
+function on_canvas(p) {
+  n.view_to_window(n.view_canvas_layout(), p) * 0.5
+}
+
+-~> The UI point in the middle of the row on `line`.
+function on_row(line) {
+  let vis = n.view_visible()
+  for (let i = 0; i < len(vis); i += 1) {
+    if (vis[i].item.t == "row" && vis[i].item.line == line) {
+      return (n.view_code_x(vis[i].item.row) + 20, vis[i].y + 9)
+    }
+  }
+  null
+}
+
+function right_click(p) {
+  rig_frame(rig, [{"type": "down", "pos": p, "button": "right"}, {"type": "up", "pos": p, "button": "right"}])
+}
+
+function click(p) {
+  rig_frame(rig, [{"type": "down", "pos": p}, {"type": "up", "pos": p}])
+}
+
+function drag(a, b, through = []) {
+  let evs = [{"type": "down", "pos": a}]
+  for (let i = 0; i < len(through); i += 1) {
+    push(evs, {"type": "move", "pos": through[i]})
+  }
+  push(evs, {"type": "move", "pos": b})
+  push(evs, {"type": "up", "pos": b})
+  for (let i = 0; i < len(evs); i += 1) {
+    rig_frame(rig, [evs[i]])
+  }
+}
+
+-~> The middle of a part of the fill editor.
+function part(id) {
+  let ps = n.fe_parts(n.fe_layout())
+  for (let i = 0; i < len(ps); i += 1) {
+    if (ps[i].id == id) {
+      return (ps[i].x + ps[i].w // 2, ps[i].y + ps[i].h // 2)
+    }
+  }
+  null
+}
+
+-~> A point of the gradient bar at t, and the stops' row under it.
+function bar_at(t) {
+  let lay = n.fe_layout()
+  (n.fe_bar_x(lay, t), lay.bar[1] + 7)
+}
+
+function stop_at(i) {
+  let lay = n.fe_layout()
+  (n.fe_bar_x(lay, n.FE.f.stops[i].t), lay.bar[1] + lay.bar[3] + 5)
+}
+
+function menu_ids() {
+  let out = []
+  for (let i = 0; i < len(n.SM.items); i += 1) {
+    let it = n.SM.items[i]
+    if (it.id != "-") {
+      let s = it.id
+      if (!it.on) {
+        s = "(" + s + ")"
+      }
+      push(out, s)
+    }
+  }
+  text.join(out, " ")
+}
+
+puts("-- right-click on a row")
+right_click(on_row(5))
+puts(n.SM.open, n.SM.line, n.SM.title, n.ed_model().line, rig.ed.error)
+puts(menu_ids())
+key("Escape")
+puts(n.SM.open)
+
+puts("-- right-click on a shape of the canvas, Ctrl+click too")
+right_click(on_canvas((360, 90)))
+puts(n.SM.open, n.SM.line)
+key("Escape")
+rig_frame(rig, [{"type": "down", "pos": on_canvas((240, 150)), "mods": {"ctrl": true}}, {"type": "up", "pos": on_canvas((240, 150))}])
+puts(n.SM.open, n.SM.line)
+key("Escape")
+right_click(on_canvas((470, 20)) + (40, 0))
+puts(n.SM.open)
+
+puts("-- the keyboard: down, down, enter = duplicate")
+let before = steps()
+right_click(on_row(5))
+key("ArrowDown")
+key("ArrowDown")
+key("Enter")
+puts(n.SM.open, len(n.ed_model().lines), line_of(5), line_of(6), steps() - before, n.ed_undo_text())
+n.view_undo()
+rig_frame(rig)
+puts(len(n.ed_model().lines))
+
+puts("-- paint order")
+right_click(on_row(5))
+key("Cmd+[")
+key("]", {"cmd": true})
+puts(n.SM.open)
+right_click(on_row(5))
+key("[", {"cmd": true})
+puts(line_of(5), "|", line_of(6), n.ed_undo_text())
+right_click(on_row(6))
+n.sm_choose("front")
+rig_frame(rig)
+puts(line_of(5), "|", line_of(6))
+right_click(on_row(9))
+n.sm_choose("back")
+rig_frame(rig)
+puts(line_of(9), "|", line_of(10))
+n.view_undo()
+rig_frame(rig)
+
+puts("-- hide, lock and their keys")
+right_click(on_row(5))
+key("h")
+puts(line_of(5))
+right_click(on_row(5))
+puts(menu_ids())
+key("h")
+right_click(on_row(5))
+key("l")
+puts(line_of(5))
+right_click(on_row(5))
+key("l")
+puts(line_of(5))
+
+puts("-- rename")
+right_click(on_row(5))
+key("F2")
+rig_frame(rig, [{"type": "type", "text": "core"}])
+key("Enter")
+puts(line_of(5), n.ed_undo_text())
+
+puts("-- copy code, show in code, remove")
+right_click(on_row(6))
+n.sm_choose("copy")
+puts(rig_clip_text.text == line_of(6) + "\n")
+right_click(on_canvas((360, 90)))
+n.sm_choose("show")
+puts(n.ed_model().line)
+let lines_before = len(n.ed_model().lines)
+right_click(on_row(6))
+key("Delete")
+puts(len(n.ed_model().lines) == lines_before - 1, n.ed_undo_text())
+n.view_undo()
+rig_frame(rig)
+
+puts("-- the fill submenu: kinds and swatches")
+right_click(on_row(8))
+key("ArrowDown")
+puts(n.SM.sub == null)
+n.sm_open_sub()
+rig_frame(rig)
+let sub = n.sm_sub_box()
+puts(len(sub.items), len(sub.swatches) > 0, n.SM.sub.items[0].check)
+click((sub.x + 6 + 5, sub.y + sub.h - 16 + 8))
+puts(line_of(8))
+n.view_undo()
+rig_frame(rig)
+right_click(on_row(8))
+n.sm_open_sub()
+n.sm_choose("linear")
+rig_frame(rig)
+puts(line_of(8), n.FE.open, n.FE.f.kind)
+
+puts("-- the fill editor: one undo step per gesture")
+n.fe_close()
+n.sm_close()
+n.ed_set_prop("fill", "gradient([#3b2a6b, #e0607a, #f2a65a], 90deg)")
+n.view_prepare()
+right_click(on_row(8))
+key("f")
+puts(n.FE.open, n.FE.code, n.FE.f.kind, len(n.FE.f.stops), n.FE.sel)
+before = steps()
+drag(bar_at(0.25), bar_at(0.3), [bar_at(0.27)])
+puts(line_of(8), steps() - before, n.ed_undo_text())
+before = steps()
+drag(stop_at(n.FE.sel), stop_at(n.FE.sel) + (40, 0), [stop_at(n.FE.sel) + (10, 0)])
+puts(line_of(8), steps() - before)
+before = steps()
+let held = stop_at(n.FE.sel)
+drag(held, held + (0, 60), [held + (0, 30)])
+puts(line_of(8), steps() - before)
+click(stop_at(1))
+click(part("hard"))
+puts(line_of(8))
+click(part("plus"))
+click(part("plus"))
+puts(line_of(8))
+click(part("minus"))
+click(part("minus"))
+click(part("minus"))
+puts(line_of(8))
+click(part("aplus"))
+puts(line_of(8))
+click(part("angle"))
+rig_frame(rig, [{"type": "type", "text": "45"}])
+key("Enter")
+puts(line_of(8))
+click(part("at"))
+rig_frame(rig, [{"type": "type", "text": "70"}])
+key("Enter")
+puts(line_of(8))
+click(part("hex"))
+rig_frame(rig, [{"type": "type", "text": "00ff0080"}])
+key("Enter")
+puts(line_of(8))
+click(stop_at(1))
+key("Delete")
+puts(line_of(8))
+key("Delete")
+puts(line_of(8))
+
+puts("-- the canvas handles")
+let hs = n.fe_handles()
+puts(len(hs.list), hs.list[0].id, hs.list[1].id)
+before = steps()
+let end = on_canvas(hs.list[1].pos)
+drag(end, on_canvas((480, 100)), [on_canvas((400, 150))])
+puts(line_of(8), steps() - before)
+click(part("tab:radial"))
+puts(line_of(8))
+hs = n.fe_handles()
+drag(on_canvas(hs.list[1].pos), on_canvas((360, 100)))
+puts(line_of(8))
+drag(on_canvas(hs.list[0].pos), on_canvas((120, 50)))
+puts(line_of(8))
+click(part("tab:solid"))
+puts(line_of(8), len(n.fe_handles().list))
+
+puts("-- undo while it is open reads the row again")
+n.view_undo()
+rig_frame(rig)
+puts(n.FE.open, n.FE.f.kind, n.FE.text == n.fill_field(n.ed_model(), 8, n.ed_docs(), "fill").text)
+key("Escape")
+puts(n.FE.open)
+
+puts("-- a fill written as code")
+right_click(on_row(9))
+key("f")
+puts(n.FE.open, n.FE.code, n.FE.text)
+click(part("inline"))
+puts(line_of(9), n.FE.code)
+key("Escape")
+
+puts("-- the stroke of a line")
+right_click(on_row(10))
+puts(menu_ids())
+n.sm_choose("stroke")
+rig_frame(rig)
+puts(n.FE.open, n.FE.which, n.FE.f.kind)
+click(part("tab:linear"))
+puts(line_of(10))
+key("Escape")
+
+puts("-- Spanish")
+n.set_language("es")
+right_click(on_row(5))
+puts(n.SM.items[0].label, n.SM.items[10].label, n.SM.title)
+key("Escape")
+n.set_language("en")
+puts(rig.ed.error)

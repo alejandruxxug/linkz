@@ -1,0 +1,69 @@
+-~> tools_stroke_stab: the stabilizer of the pencil and the brush on the
+-~> canvas (stabilize.liz), applied live: every sample of the drag goes
+-~> through it, and only what it lets out is kept and previewed, so the row
+-~> written on release is the steadied line. The settings are the tool's
+-~> (tool_stabilizer.liz), their length in screen pixels, which the drawing's
+-~> zoom turns into drawing units. While the string is in use its tip,
+-~> string and circle are drawn over the canvas.
+
+use "editor_undo"
+use "pen_edit"
+use "stabilize"
+use "stabilize_view"
+use "tool_stabilizer"
+use "view_layout"
+use "view_tools"
+
+-~> The stabilizer of a new stroke for the current tool and pen.
+function tools_stab_begin(g) {
+  g.stab = tool_stab_get(tool_stab_key(g.tool, ed.pen))
+  g.stab_state = stabilize_new()
+  g.ticks = 0
+}
+
+-~> The settings with the length in drawing units at a zoom.
+function tools_stab_scaled(g, zoom) {
+  {"mode": g.stab.mode, "length": g.stab.length / zoom, "catch_up": g.stab.catch_up}
+}
+
+-~> One sample of the drag: through the stabilizer, then kept (tools_stroke_add).
+-~> A sample off the canvas is kept as it is (it is skipped on release).
+function tools_stab_feed(g, cl, s) {
+  if (pw.open) {
+    pw.live_p = s.pressure
+    pw.live_src = g.source
+  }
+  if (g.stab == null || g.stab.mode == "off" || s.canvas_pos == null) {
+    return tools_stroke_add(g, cl, s)
+  }
+  let out = stabilize(g.stab_state, {"pos": s.canvas_pos, "ui": s.pos, "pressure": s.pressure, "t": s.t}, tools_stab_scaled(g, cl.zoom))
+  for (let i = 0; i < len(out); i = i + 1) {
+    tools_stroke_add(g, cl, {"pos": out[i].ui, "canvas_pos": out[i].pos, "pressure": out[i].pressure, "t": out[i].t})
+  }
+}
+
+-~> The drag is over: with catch up, the tip runs to the cursor.
+function tools_stab_finish(g, cl) {
+  if (pw.open) {
+    pw.live_p = null
+    pw.live_src = null
+  }
+  if (g.stab == null || g.stab.mode == "off") {
+    return null
+  }
+  let out = stabilize_end(g.stab_state, tools_stab_scaled(g, cl.zoom))
+  for (let i = 0; i < len(out); i = i + 1) {
+    tools_stroke_add(g, cl, {"pos": out[i].ui, "canvas_pos": out[i].pos, "pressure": out[i].pressure, "t": out[i].t})
+  }
+}
+
+-~> The tip, the string and the circle of the stroke being drawn, in the
+-~> canvas buffer.
+function tools_stab_paint(cl) {
+  let g = V.live
+  if (g == null || g.stab == null || g.stab.mode != "string" || g.stab_state == null || g.stab_state.tip == null) {
+    return null
+  }
+  let st = g.stab_state
+  stab_paint(cl.offset + st.tip * cl.zoom, cl.offset + st.cursor * cl.zoom, g.stab.length)
+}

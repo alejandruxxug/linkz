@@ -1,0 +1,226 @@
+-~> pen_route: where the pen settings window and the picker's gears meet
+-~> the editor's view. view_input, view_popups and view_main call these
+-~> hooks (one line each) so the window's own code stays in its files:
+-~> pen_window.liz (places, painting), pen_window_input.liz (the pointer and
+-~> keys), pen_pad.liz (the test pad).
+
+use "../draw/pens"
+use "editor_undo"
+use "pen_edit"
+use "pen_library"
+use "pen_pad"
+use "pen_props"
+use "pen_window"
+use "pen_window_input"
+use "view_popups"
+use "view_gfx"
+use "view_layout"
+
+let pen_route_double_ms = 450
+let pen_route_state = {"brush_at": -100000}
+
+-~> == The pointer ==
+
+-~> What is under a point when it is the window's or a picker gear's: an id,
+-~> "" (the window's face), or null when it is neither.
+function pen_route_hover(x, y) {
+  if (pw.open) {
+    let id = pw_hit(x, y)
+    if (id != null) {
+      return id
+    }
+  }
+  if (V.picker) {
+    let i = picker_gear_at(x, y)
+    if (i >= 0) {
+      return "pengear:" + str(i)
+    }
+  }
+  null
+}
+
+-~> A press: in the window, or on a gear of the picker (opens the window on
+-~> that pen). True when it was used.
+function pen_route_down(e) {
+  if (V.picker) {
+    let i = picker_gear_at(e.pos.x, e.pos.y)
+    if (i >= 0) {
+      pen_route_show(pen_key_of(pens.list[i]))
+      return true
+    }
+  }
+  if (pw.open) {
+    return pw_down(e)
+  }
+  false
+}
+
+-~> A drag that started in the window. True when it was the window's.
+function pen_route_move(e) {
+  if (V.drag != null && V.drag.kind == "pw") {
+    pw_move(e)
+    return true
+  }
+  if (V.drag != null && V.drag.kind == "pen_props") {
+    pen_props_drag(e)
+    return true
+  }
+  false
+}
+
+function pen_route_up(e, d) {
+  if (d != null && d.kind == "pen_props") {
+    return true
+  }
+  if (d != null && d.kind == "pw") {
+    V.drag = d
+    pw_up(e)
+    V.drag = null
+    return true
+  }
+  false
+}
+
+-~> The pointer moved without a button: the curve point under it.
+function pen_route_hover_move(p) {
+  if (pw.open) {
+    pw_hover(p.x, p.y)
+  }
+}
+
+function pen_route_wheel(e) {
+  pw.open && pw_wheel(e)
+}
+
+-~> == Keys ==
+
+function pen_route_key(e) {
+  pw.open && pw_key(e)
+}
+
+function pen_route_text(s) {
+  pw_text(s)
+}
+
+-~> == Opening ==
+
+-~> Opens the window on a pen key.
+function pen_route_show(key) {
+  pen_lib_load()
+  pw_show(key)
+}
+
+-~> A press of the brush button: a second one soon after the first is a
+-~> double-click, which opens the brush pen's settings. True when it was one.
+function pen_route_brush_press() {
+  let now = time.ms()
+  let double = now - pen_route_state.brush_at < pen_route_double_ms
+  pen_route_state.brush_at = now
+  if (!double) {
+    return false
+  }
+  pen_route_state.brush_at = -100000
+  V.tool = "brush"
+  pen_route_show(ed.pen)
+  true
+}
+
+-~> == Painting ==
+
+function pen_route_popup_open() {
+  pw.open
+}
+
+-~> The window's box with its 3 pixel shadow, as a popup.
+function pen_route_popup_rects() {
+  if (!pw.open) {
+    return []
+  }
+  let r = pw_rect()
+  [["pen", [r[0], r[1], r[2] + 3, r[3] + 3]]]
+}
+
+-~> A text that changes when what the window shows changes.
+function pen_route_popup_key() {
+  if (!pw.open) {
+    return ""
+  }
+  let hover = ""
+  if (text.starts(V.hover, "pw:")) {
+    hover = V.hover
+  }
+  "|pw" + str(pw.ver) + hover + ed.color
+}
+
+function pen_route_popup_draw() {
+  pw_draw()
+}
+
+-~> The test pad's strokes at full resolution, into the canvas buffer.
+function pen_route_paint_full(cl) {
+  if (!pw.open) {
+    return null
+  }
+  let cr = cl.crect
+  g_canvas((cr[0], cr[1]))
+  fb.unclip()
+  pad_paint(pw_layout().pad, (cr[0], cr[1]))
+  g_ui()
+}
+
+-~> == The backdoor ==
+
+-~> The window as the backdoor's Dump shows it: open, the pen, where its parts are.
+function pen_route_debug() {
+  if (!pw.open) {
+    return {"open": false}
+  }
+  let lay = pw_layout()
+  let rows = {}
+  for (let i = 0; i < len(lay.sliders); i = i + 1) {
+    rows[lay.sliders[i].id] = lay.sliders[i].track
+  }
+  rows.length = lay.length.track
+  rows.override = lay.override.track
+  {
+    "open": true,
+    "key": pw.key,
+    "name": pw.name,
+    "draft": pw.draft,
+    "source": pw.source,
+    "pad_strokes": len(pw.pad),
+    "changed": pw.changed,
+    "note": pw.note,
+    "rects": {
+      "win": lay.win,
+      "title": lay.title,
+      "close": lay.close,
+      "reset": lay.reset,
+      "graph": lay.graph,
+      "preset": lay.preset,
+      "pad": lay.pad,
+      "trash": lay.trash,
+      "name": lay.name,
+      "save": lay.save,
+      "code": lay.code,
+      "catch": lay.catch,
+      "tracks": rows
+    }
+  }
+}
+
+-~> The backdoor's command PenSettings [key]: opens the window (on the brush's
+-~> pen when no key is given); PenSettings close closes it.
+function pen_route_command(args) {
+  let key = ed.pen
+  if (len(args) > 0) {
+    key = str(args[0])
+  }
+  if (key == "close") {
+    pw_close()
+    pw_force_all()
+    view_touch()
+    return {"ok": true, "open": false}
+  }
+  {"ok": pen_route_show(key), "open": pw.open, "key": pw.key}
+}

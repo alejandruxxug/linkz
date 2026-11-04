@@ -1,0 +1,113 @@
+-~> select_model: which shapes are selected, shared by the canvas and the rows.
+-~> The selection is a set of row lines. Most of the time it is just the rows
+-~> the caret selects (the caret's row, or the rows of a range); a click on
+-~> the canvas with the Select or Lasso tool can pick rows that are not next to
+-~> each other (Shift-click adds and takes away), and that pick wins while the
+-~> caret stays where the pick left it and no row was added or taken away.
+-~>   pick_lines()          the selected lines, top to bottom
+-~>   pick_has(line)        whether a line is selected
+-~>   pick_set(lines)       selects these lines (the caret goes to the first)
+-~>   pick_toggle(line)     adds a line, or takes it away
+-~>   pick_clear()          back to the caret's rows
+-~> It also knows whether the canvas has the keyboard (the last press was on
+-~> it): the tool keys V and L and the arrow nudges only work then.
+
+use "editor_state"
+use "editor_undo"
+
+let pick = {"lines": null, "line": 0, "count": 0, "canvas_keys": false}
+
+-~> Whether the pick still stands: the caret is on the row it put it on,
+-~> with no range, and the file has as many lines as it had.
+function pick_valid() {
+  let m = ed_model()
+  pick.lines != null && m.line == pick.line && m.sel == null && len(m.lines) == pick.count
+}
+
+-~> The lines the caret selects: its row, or every row of its range.
+function pick_caret_lines() {
+  let m = ed_model()
+  if (m.sel == null) {
+    return [m.line]
+  }
+  range(m.sel.from, m.sel.to + 1)
+}
+
+function pick_lines() {
+  if (pick_valid()) {
+    return pick.lines
+  }
+  pick_caret_lines()
+}
+
+function pick_has(line) {
+  list.index(pick_lines(), line) >= 0
+}
+
+-~> True when the pick (not the caret) says what is selected.
+function pick_active() {
+  pick_valid()
+}
+
+-~> Selects exactly these lines. The caret goes to the end of the first one;
+-~> an empty list selects nothing and leaves the caret where it is.
+function pick_set(lines) {
+  let sorted = list.sort(lines)
+  let out = []
+  for (let i = 0; i < len(sorted); i += 1) {
+    if (len(out) == 0 || out[len(out) - 1] != sorted[i]) {
+      push(out, sorted[i])
+    }
+  }
+  if (len(out) > 0) {
+    ed_select(out[0])
+  } elif (ed_model().sel != null) {
+    let m = ed_model()
+    ed_set_caret(m.line, m.col)
+  }
+  let m = ed_model()
+  pick.lines = out
+  pick.line = m.line
+  pick.count = len(m.lines)
+  null
+}
+
+-~> Adds a line to the selection, or takes it away when it is there.
+function pick_toggle(line) {
+  let now = list.copy(pick_lines())
+  let at = list.index(now, line)
+  if (at >= 0) {
+    list.remove(now, at)
+  } else {
+    push(now, line)
+  }
+  pick_set(now)
+}
+
+function pick_clear() {
+  pick.lines = null
+}
+
+-~> The pick again after an edit that kept the caret but added or took away
+-~> lines (a new row from the lasso): it follows the caret's model.
+function pick_refresh() {
+  if (pick.lines != null) {
+    let m = ed_model()
+    pick.line = m.line
+    pick.count = len(m.lines)
+  }
+}
+
+-~> Whether the canvas has the keyboard, and setting it.
+function pick_canvas_keys() {
+  pick.canvas_keys
+}
+
+function pick_set_canvas_keys(on) {
+  pick.canvas_keys = on
+}
+
+-~> A text that changes when the selection does (for the panels' keys).
+function pick_key() {
+  str(pick_lines())
+}

@@ -1,0 +1,58 @@
+-~> The stabilizer, sample by sample: off passes everything, the string keeps
+-~> the tip a string's length behind the cursor and inks nothing while it is
+-~> slack, the average follows the mean of the last positions, and catching
+-~> up runs the tip to the cursor at the end.
+use "../../draw/pens"
+use "../stabilize"
+
+function s(x, y) {
+  {"pos": (x, y), "pressure": 0.5, "t": 0}
+}
+
+function feed(settings, points) {
+  let st = stabilize_new()
+  let out = []
+  for (let i = 0; i < len(points); i = i + 1) {
+    out = out + stabilize(st, points[i], settings)
+  }
+  {"state": st, "out": out}
+}
+
+function places(list_in) {
+  let out = []
+  for (let i = 0; i < len(list_in); i = i + 1) {
+    push(out, (math.round(list_in[i].pos.x * 10) / 10.0, math.round(list_in[i].pos.y * 10) / 10.0))
+  }
+  out
+}
+
+-~> The settings of a pen: the defaults fill what it leaves out.
+puts(stabilize_settings(pens.ink))
+puts(stabilize_settings({"stabilizer": {"mode": "string", "length": 10}}))
+puts(stabilize_settings({"stabilizer": {"mode": "wobbly", "length": -3, "catch_up": false}}))
+
+let line = [s(0, 0), s(5, 0), s(10, 0), s(20, 0), s(30, 0)]
+
+puts("-- off")
+puts(places(feed({"mode": "off", "length": 10, "catch_up": true}, line).out))
+
+puts("-- string")
+let r = feed({"mode": "string", "length": 10, "catch_up": true}, line)
+puts(places(r.out), r.state.tip, r.state.cursor)
+-~> the samples that come out keep the rest of what went in
+puts(r.out[1].pressure, r.out[1].t)
+puts(places(stabilize_end(r.state, {"mode": "string", "length": 10, "catch_up": true})), r.state.tip)
+let r2 = feed({"mode": "string", "length": 10, "catch_up": false}, line)
+puts(stabilize_end(r2.state, {"mode": "string", "length": 10, "catch_up": false}), r2.state.tip)
+
+puts("-- a shaky hand: the tip stays put while the cursor shakes inside the string")
+let shaky = [s(0, 0)]
+for (let i = 0; i < 20; i = i + 1) {
+  push(shaky, s((i % 2) * 6, (i % 3) * 4))
+}
+puts(len(feed({"mode": "string", "length": 10, "catch_up": true}, shaky).out))
+
+puts("-- average")
+let a = feed({"mode": "average", "length": 9, "catch_up": true}, line)
+puts(stabilize_window(9), places(a.out))
+puts(places(stabilize_end(a.state, {"mode": "average", "length": 9, "catch_up": true})))

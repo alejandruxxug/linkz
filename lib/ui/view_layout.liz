@@ -11,6 +11,9 @@ use "editor_undo"
 use "i18n"
 use "view_gfx"
 use "view_items"
+use "tool_route"
+use "pen_edit"
+use "pen_props"
 
 let V = {
   "w": 512,
@@ -254,7 +257,7 @@ function view_has_home() {
 }
 
 -~> The tool buttons in the order of the toolbar; "" is a separator.
-let view_tool_ids = ["circle", "rect", "line", "polygon", "stroke", "", "pencil", "brush", "", "text", "function", "layer"]
+let view_tool_ids = ["select", "lasso", "", "circle", "rect", "line", "polygon", "stroke", "", "pencil", "brush", "", "text", "function", "layer"]
 
 -~> One button of the toolbar.
 function tb_button(id, group, x, y, w, icon, label) {
@@ -424,7 +427,7 @@ function view_canvas_layout() {
   let wx = gm.cx * 2 + dx
   let wy = gm.cy * 2 + dy
   let crect = [gm.cx, gm.cy, gm.cw, gm.ch]
-  if (V.picker) {
+  if (V.picker || pw.open) {
     crect = [0, 0, gm.w, gm.h]
   }
   {
@@ -498,7 +501,7 @@ function view_shown_fields(props) {
 function view_props_cached() {
   let key = str(V.ver) + "|" + str(V.focus) + "|" + str(V.picker) + "|" + lang_get() + "|" + str(V.pw) + "|" + str(V.h)
   if (V.pl == null || V.pl_key != key) {
-    V.pl = view_props_layout_build()
+    V.pl = pen_props_wrap(view_props_layout_build())
     V.pl_key = key
   }
   V.pl
@@ -509,6 +512,10 @@ function view_props_cached() {
 function view_props_layout_build() {
   let gm = view_geom()
   let m = ed_model()
+  let own = route_props_layout(gm)
+  if (own != null) {
+    return own
+  }
   let props = ed_props()
   let y = gm.props_y + 22
   let out = {"title": view_props_title(props, m.line), "labels": [], "boxes": [], "msg": "", "hint": "", "props": props}

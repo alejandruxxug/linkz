@@ -15,6 +15,10 @@ use "view_input"
 use "view_layout"
 use "view_panels"
 use "view_popups"
+use "shape_popups"
+use "tool_route"
+use "pen_library"
+use "pen_route"
 
 -~> == Painting ==
 
@@ -40,7 +44,7 @@ function view_panel_key(name) {
     return common + view_file_name() + "|" + str(ed_dirty()) + "|" + view_hover_is(["tab", "tool", "bar"]) + "|" + str(V.overflow)
   }
   if (name == "rows") {
-    return common + str(V.ver) + "|" + str(V.top) + "|" + view_hover_is(["row", "eye", "lock", "fold", "callee", "add", "strip"]) + "|" + str(V.focus != null)
+    return common + str(V.ver) + "|" + str(V.top) + "|" + view_hover_is(["row", "eye", "lock", "fold", "callee", "add", "strip"]) + "|" + str(V.focus != null) + "|" + route_rows_key()
   }
   if (name == "props") {
     return common + str(V.ver) + "|" + str(V.focus) + "|" + view_hover_is(["field"]) + "|" + str(V.picker) + "|" + str(V.hover_anchor)
@@ -145,7 +149,7 @@ function view_paint() {
   fb.unclip()
   V.paints = V.paints + 1
   V.painted_ms = time.ms() - t0
-  if (V.tip_due == 0 && !ed_note_active()) {
+  if (V.tip_due == 0 && !ed_note_active() && !route_wants_tick()) {
     app.needs_paint = false
   }
 }
@@ -197,7 +201,9 @@ function view_event(e) {
     view_touch()
     view_force_all()
   } elif (ty == "down") {
-    if (e.button == 0) {
+    if (e.button == 1 || (e.button == 0 && e.mods != null && e.mods.ctrl == true)) {
+      shape_context(e)
+    } elif (e.button == 0) {
       view_down(e)
     }
   } elif (ty == "up") {
@@ -260,6 +266,7 @@ function view_enter(args) {
   V.tip = null
   V.hover = ""
   ed.pending = true
+  pen_lib_load()
   view_touch()
   view_force_all()
 }
@@ -341,6 +348,7 @@ function view_debug_state() {
     "focus": focus,
     "dialog": V.dialog != null,
     "pen": ed.pen,
+    "pen_window": pen_route_debug(),
     "paint_ms": V.painted_ms,
     "paints": V.paints
   }
@@ -462,6 +470,8 @@ function view_commands() {
     }
     {"ok": false}
   }
+  -~> PenSettings [key | close]: opens the pen settings (see pen_route.liz)
+  cmds["PenSettings"] = function(args) { pen_route_command(args) }
   cmds
 }
 

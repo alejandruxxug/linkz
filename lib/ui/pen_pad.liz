@@ -1,0 +1,147 @@
+-~> pen_pad: the pen settings' test pad, a strip of paper to try the draft
+-~> pen on. A stroke there goes through the same steps as one on the canvas
+-~> (the stabilizer, the pressures from the device or a mouse's speed,
+-~> stroke_simplify, brush()) but stays in pw.pad: it never reaches the
+-~> drawing, and it is drawn again with the draft every time the draft
+-~> changes. Points are in the pad's own full-resolution pixels.
+
+use "../draw/pens"
+use "../draw/shapes"
+use "../gfx/raster"
+use "editor_twoway"
+use "editor_undo"
+use "pen_edit"
+use "stabilize"
+use "stabilize_view"
+use "view_gfx"
+
+-~> Starts a stroke at a pad point (full-resolution pixels from its top left).
+function pad_begin(pos, pressure, source, t) {
+  let s = stabilize_settings(pw.draft)
+  pw.pad_live = {"source": source, "samples": [], "state": stabilize_new(), "settings": s}
+  pad_add(pos, pressure, t)
+  pw.ver += 1
+}
+
+-~> One more sample of the stroke being drawn; the readout follows its pressure.
+function pad_add(pos, pressure, t) {
+  let g = pw.pad_live
+  if (g == null) {
+    return null
+  }
+  let out = stabilize(g.state, {"pos": pos, "canvas_pos": pos, "pressure": pressure, "t": t}, g.settings)
+  for (let i = 0; i < len(out); i = i + 1) {
+    out[i].canvas_pos = out[i].pos
+    push(g.samples, out[i])
+  }
+  if (g.source != "mouse" && pressure != null) {
+    pw.live_p = pressure
+  }
+  pw.live_src = g.source
+  pw.ver += 1
+}
+
+-~> The stroke is over: it is kept when it has two points or more.
+function pad_end() {
+  let g = pw.pad_live
+  pw.pad_live = null
+  pw.live_p = null
+  if (g == null) {
+    return null
+  }
+  let tail = stabilize_end(g.state, g.settings)
+  for (let i = 0; i < len(tail); i = i + 1) {
+    tail[i].canvas_pos = tail[i].pos
+    push(g.samples, tail[i])
+  }
+  if (len(g.samples) >= 2) {
+    push(pw.pad, {"source": g.source, "samples": g.samples})
+  }
+  pw.ver += 1
+}
+
+function pad_clear() {
+  pw.pad = []
+  pw.pad_live = null
+  pw.ver += 1
+}
+
+-~> The brush shape of a pad stroke with the draft pen, or null (too short):
+-~> the steps brush_insert takes, without the row.
+function pad_shape(stroke, color) {
+  let pts = samples_points(stroke.samples)
+  if (len(pts) < 2) {
+    return null
+  }
+  let pressures = []
+  if (stroke.source == "mouse") {
+    pressures = speed_pressures(pts, pen_mouse_speed(pw.draft))
+  } else {
+    for (let i = 0; i < len(pts); i = i + 1) {
+      let p = pts[i].pressure
+      if (p == null) {
+        p = 0.7
+      }
+      push(pressures, p)
+    }
+  }
+  let simple = stroke_simplify(pts, pressures, 1.5)
+  if (len(simple[0]) < 2) {
+    return null
+  }
+  if (stroke.source == "mouse") {
+    pen_set_input(null)
+  } else {
+    pen_set_input(stroke.source)
+  }
+  let s = brush(simple[0], simple[1], color, pw.draft)
+  pop(drawing)
+  s
+}
+
+-~> The shapes of every pad stroke, made again when the draft or the strokes change.
+let pad_cache = {"key": "", "shapes": []}
+
+function pad_shapes() {
+  let key = str(pw.ver) + "|" + ed.color
+  if (pad_cache.key == key) {
+    return pad_cache.shapes
+  }
+  let color = g_hex_color(ed.color)
+  if (color == null) {
+    color = P.void
+  }
+  let list_ = list.copy(pw.pad)
+  if (pw.pad_live != null) {
+    push(list_, pw.pad_live)
+  }
+  let out = []
+  for (let i = 0; i < len(list_); i = i + 1) {
+    let s = pad_shape(list_[i], color)
+    if (s != null) {
+      push(out, s)
+    }
+  }
+  pad_cache.key = key
+  pad_cache.shapes = out
+  out
+}
+
+-~> Paints the pad's strokes into the canvas buffer, inside the paper. `pad` is
+-~> the pad's rect in UI pixels, `origin` the buffer's top left.
+function pad_paint(pad, origin) {
+  let off = ((pad[0] + 1 - origin.x) * 2, (pad[1] + 1 - origin.y) * 2)
+  fb.clip(off, ((pad[2] - 2) * 2, (pad[3] - 2) * 2))
+  let shapes = pad_shapes()
+  for (let i = 0; i < len(shapes); i = i + 1) {
+    let sp = raster.shape(shapes[i])
+    if (sp.fill !== null) {
+      raster.draw(sp.fill, off, shapes[i].fill)
+    }
+  }
+  let g = pw.pad_live
+  if (g != null && g.settings.mode == "string" && g.state.tip != null) {
+    stab_paint(off + g.state.tip, off + g.state.cursor, g.settings.length)
+  }
+  fb.unclip()
+}

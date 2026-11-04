@@ -14,11 +14,14 @@ use "editor_props"
 use "editor_state"
 use "editor_undo"
 use "i18n"
+use "pen_library"
+use "pen_route"
 use "view_canvas"
 use "view_code"
 use "view_gfx"
 use "view_input"
 use "view_layout"
+use "shape_popups"
 
 let tip_delay = 400
 
@@ -89,16 +92,22 @@ function tip_tool_lines(id) {
     return [[tip_piece(id, 0, "bright"), tip_piece(" · " + tip_signature(id, info), g_text_w(id), "mute")]]
   }
   let lines = [[tip_piece(t(prefixed("tool.", key)), 0, "bright")]]
-  if (id == "pencil" || id == "brush") {
+  if (id == "pencil" || id == "brush" || id == "select" || id == "lasso") {
     push(lines, [tip_piece(t(prefixed("hint.", id)), 0, "mute")])
   }
   lines
 }
 
 -~> The tooltip lines of a pen in the picker.
-function tip_pen_lines(name) {
-  return [[tip_piece(name, 0, "bright"), tip_piece(" · pens." + name, g_text_w(name), "mute")],
-    [tip_piece(t(prefixed("pen.", name)), 0, "text")]]
+function tip_pen_lines(pen) {
+  let name = pen.name
+  return [[tip_piece(name, 0, "bright"), tip_piece(" · pens." + pen_key_of(pen), g_text_w(name), "mute")],
+    [tip_piece(picker_desc(pen), 0, "text")]]
+}
+
+-~> The tooltip of a pen row's gear: what it opens.
+function tip_gear_lines(pen) {
+  return [[tip_piece(t("pen.gear_tip"), 0, "bright")], [tip_piece(t("pen.gear_opens", {"name": pen.name}), 0, "mute")]]
 }
 
 -~> Where a tooltip of size [w, h] goes for a thing at rect [x, y, w, h]: just below it,
@@ -138,13 +147,21 @@ function tip_for(hover) {
     lines = [[tip_piece(title, 0, "bright")]]
     anchor = view_hit_rect(hover)
   } elif (kind == "pen") {
-    lines = tip_pen_lines(pens.list[int(parts[1])].name)
+    lines = tip_pen_lines(pens.list[int(parts[1])])
     anchor = view_hit_rect(hover)
+  } elif (kind == "pengear") {
+    lines = tip_gear_lines(pens.list[int(parts[1])])
+    anchor = picker_gear_rect(int(parts[1]))
   } elif (kind == "callee") {
     let r = view_rows()[int(parts[1]) - 1]
     lines = tip_doc_lines(r.callee, "")
     anchor = view_hit_rect(hover)
     dx = 4
+  } elif (kind == "field" && (parts[1] == "pengear" || parts[1] == "stab" || parts[1] == "stablen")) {
+    if (parts[1] == "pengear") {
+      lines = tip_gear_lines(pens[ed.pen])
+      anchor = view_hit_rect(hover)
+    }
   } elif (kind == "field") {
     let props = ed_props()
     if (props != null && props.kind == "call") {
@@ -200,7 +217,8 @@ function tip_anchor(cl) {
 let pick_w = 230
 let pick_row = 20
 
--~> The picker's box: [x, y, w, h], under the brush button.
+-~> The picker's box: [x, y, w, h], under the brush button: a header, a row
+-~> per pen (built-in ones, then saved ones) and a footer.
 function pick_rect() {
   let bx = 3
   let bs = view_toolbar()
@@ -209,7 +227,35 @@ function pick_rect() {
       bx = bs[i].x
     }
   }
-  return [bx, 17, pick_w, len(pens.list) * pick_row + 18]
+  return [bx, 17, pick_w, len(pens.list) * pick_row + 18 + picker_footer_h]
+}
+
+let picker_footer_h = 15
+
+-~> The gear button of pen row i: 14x14, its icon 18 from the right edge.
+function picker_gear_rect(i) {
+  let r = pick_rect()
+  let ry = r[1] + 16 + i * pick_row
+  return [r[0] + r[2] - 21, ry + 3, 14, 14]
+}
+
+-~> Which pen row's gear a UI point is on, or -1.
+function picker_gear_at(x, y) {
+  for (let i = 0; i < len(pens.list); i = i + 1) {
+    let g = picker_gear_rect(i)
+    if (view_in(x, y, g[0], g[1], g[2], g[3])) {
+      return i
+    }
+  }
+  -1
+}
+
+-~> What the picker says of a pen: the built-in's own words, "yours" for a saved one.
+function picker_desc(pen) {
+  if (pen.key != null) {
+    return t("pen.yours")
+  }
+  t(prefixed("pen.", pen.name))
 }
 
 -~> Which pen row a UI point is on (0 up), or -1.
@@ -255,7 +301,7 @@ function pick_draw(current) {
     let pen = pens.list[i]
     let ry = py + 16 + i * pick_row
     let tc = P.text
-    if (pen.name == current) {
+    if (pen_key_of(pen) == current) {
       g_rect(px + 1, ry, r[2] - 2, pick_row, P.moss)
       g_rect(px + 1, ry, 2, pick_row, P.lizard)
       tc = P.bright
@@ -265,11 +311,24 @@ function pick_draw(current) {
     g_frame(px + 5, ry + 1, 52, 18, P.void)
     g_rect(px + 6, ry + 2, 50, 16, P.coal)
     g_text(pen.name, px + 62, ry + 1, tc)
-    let desc = t(prefixed("pen.", pen.name))
-    if (g_text_w(pen.name) + g_text_w(desc) + 7 < r[2] - 66) {
+    let desc = picker_desc(pen)
+    if (g_text_w(pen.name) + g_text_w(desc) + 7 < r[2] - 86) {
       g_text(desc, px + 62 + g_text_w(pen.name) + 7, ry + 1, P.mute)
     }
+    let gr = picker_gear_rect(i)
+    let gc = P.dim
+    if (pen_key_of(pen) == current) {
+      gc = P.text
+    }
+    if (V.hover == "pengear:" + str(i)) {
+      g_button(gr[0], gr[1], gr[2], gr[3], "settings", "", "hover")
+    } else {
+      g_icon("settings", gr[0] + 3, gr[1] + 3, gc)
+    }
   }
+  let fy = py + r[3] - picker_footer_h
+  g_rect(px + 1, fy, r[2] - 2, 1, P.bevel)
+  g_text(t("pen.footer"), px + 5, fy + 1, P.mute)
 }
 
 -~> The strokes of the previews, at full resolution, into the canvas buffer.
@@ -334,7 +393,7 @@ function dialog_draw(d) {
 
 -~> The popups now open as a list of [kind, rect], the rectangles with their shadow.
 function popup_list() {
-  let out = []
+  let out = pen_route_popup_rects()
   if (V.picker) {
     let r = pick_rect()
     push(out, ["picker", [r[0], r[1], r[2] + 2, r[3] + 2]])
@@ -348,6 +407,7 @@ function popup_list() {
   if (V.dialog != null) {
     push(out, ["dialog", [V.dialog.x, V.dialog.y, V.dialog.w + 2, V.dialog.h + 2]])
   }
+  out = out + shape_popup_rects()
   if (V.dialog == null) {
     out = out + cmp_popup_rects()
   }
@@ -367,12 +427,15 @@ function popup_content_key() {
   if (V.dialog != null) {
     k = k + V.hover
   }
-  k + ed.pen + cmp_content_key()
+  k + ed.pen + cmp_content_key() + shape_popup_key() + pen_route_popup_key()
 }
 
 -~> Draws every open popup over the panels, into both buffers.
 function popup_paint() {
   let both = []
+  if (pen_route_popup_open()) {
+    push(both, "pen")
+  }
   if (V.picker) {
     push(both, "picker")
   }
@@ -381,6 +444,9 @@ function popup_paint() {
   }
   if (V.anchor_tip != null) {
     push(both, "anchor")
+  }
+  if (shape_popup_open()) {
+    push(both, "shape")
   }
   if (V.dialog != null) {
     push(both, "dialog")
@@ -408,6 +474,10 @@ function popup_paint() {
         tip_draw(V.anchor_tip)
       } elif (k == "cmp") {
         cmp_draw()
+      } elif (k == "shape") {
+        shape_popup_draw()
+      } elif (k == "pen") {
+        pen_route_popup_draw()
       } else {
         dialog_draw(V.dialog)
       }
@@ -416,5 +486,8 @@ function popup_paint() {
   g_ui()
   if (V.picker && V.cl != null) {
     pick_draw_strokes()
+  }
+  if (V.cl != null) {
+    pen_route_paint_full(V.cl)
   }
 }

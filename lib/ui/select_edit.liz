@@ -1,0 +1,176 @@
+-~> select_edit: moving, scaling and turning several shapes at once. Pure
+-~> helpers like editor_twoway's: they take a model and shapes of the last
+-~> run, and return the new model or a refusal {"refused", "line"} (the row
+-~> that could not follow, to flash). All or nothing: one literal that is
+-~> really an expression refuses the whole change. Each shape is changed by
+-~> a transform {"map": point -> point, "scale": (sx, sy) or null, "turn":
+-~> angle in radians or null}:
+-~>   a shape with a "move" anchor (circle, ellipse, rect) moves that anchor
+-~>   with map; its radius or size grows with scale and stays when turned
+-~>   (a rect or an ellipse can't turn: it has no angle to write)
+-~>   any other shape (line, polygon, stroke, brush) maps every point
+
+use "../draw/geometry"
+use "editor_rows"
+use "editor_twoway"
+use "i18n"
+
+-~> The literal an anchor stands for in its row, or a refusal.
+function xf_target(row, anchor) {
+  let args = row_stmt(row).args
+  if (anchor.arg >= len(args)) {
+    return {"refused": t("refuse.no_arg")}
+  }
+  let target = args[anchor.arg]
+  if (anchor.item != null) {
+    if (anchor.item >= len(target.items)) {
+      return {"refused": t("refuse.no_arg")}
+    }
+    target = target.items[anchor.item]
+  }
+  target
+}
+
+-~> Whether a shape moves by its "move" anchor (and keeps its other ones relative).
+function xf_has_move(shape) {
+  for (let i = 0; i < len(shape.anchors); i += 1) {
+    if (shape.anchors[i].role == "move") {
+      return true
+    }
+  }
+  false
+}
+
+-~> Whether a shape has a size that is not a radius (a rect, an ellipse).
+function xf_has_corner(shape) {
+  for (let i = 0; i < len(shape.anchors); i += 1) {
+    if (shape.anchors[i].role == "corner") {
+      return true
+    }
+  }
+  false
+}
+
+-~> The edits one anchor needs for a transform, or a refusal.
+function xf_anchor_edits(row, shape, a, xf) {
+  let target = xf_target(row, a)
+  if (is_refusal(target)) {
+    return target
+  }
+  if (a.role == "radius") {
+    if (xf.scale == null) {
+      return []
+    }
+    let r = math.dist(shape.args[0], a.pos)
+    let k = (math.abs(xf.scale.x) + math.abs(xf.scale.y)) / 2.0
+    return twoway_number_edits(target, math.max(0, math.round(r * k)))
+  }
+  if (a.role == "corner") {
+    if (xf.turn != null && xf.turn != 0) {
+      return {"refused": t("refuse.turn", {"kind": shape.kind})}
+    }
+    if (xf.scale == null) {
+      return []
+    }
+    let size = a.pos - shape.args[0]
+    return twoway_point_edits(target, (math.abs(size.x * xf.scale.x), math.abs(size.y * xf.scale.y)))
+  }
+  twoway_point_edits(target, xf.map(a.pos))
+}
+
+-~> The edits that transform one shape, or a refusal.
+function xf_shape_edits(m, shape, xf) {
+  let row = twoway_shape_row(m, shape)
+  if (is_refusal(row)) {
+    return row
+  }
+  let moving = xf_has_move(shape)
+  if (moving && xf.turn != null && xf.turn != 0 && xf_has_corner(shape)) {
+    return {"refused": t("refuse.turn", {"kind": shape.kind})}
+  }
+  let edits = []
+  for (let i = 0; i < len(shape.anchors); i += 1) {
+    let a = shape.anchors[i]
+    let want = a.role == "point"
+    if (moving) {
+      want = a.role == "move" || a.role == "radius" || a.role == "corner"
+    }
+    if (want) {
+      let e = xf_anchor_edits(row, shape, a, xf)
+      if (is_refusal(e)) {
+        return e
+      }
+      edits = edits + e
+    }
+  }
+  edits
+}
+
+-~> Applies a transform to every shape (one per line: a second shape of the
+-~> same row would write the same literals). Returns the model or a refusal.
+function xf_shapes(m, shapes, xf) {
+  let seen = {}
+  let edits = []
+  for (let i = 0; i < len(shapes); i += 1) {
+    let s = shapes[i]
+    if (seen[s.line] == null) {
+      seen[s.line] = true
+      let e = xf_shape_edits(m, s, xf)
+      if (is_refusal(e)) {
+        return {"refused": e.refused, "line": s.line}
+      }
+      edits = edits + e
+    }
+  }
+  twoway_apply(m, edits)
+}
+
+-~> Moves every shape by delta.
+function move_many(m, shapes, delta) {
+  xf_shapes(m, shapes, {"map": function(p) { p + delta }, "scale": null, "turn": null})
+}
+
+-~> Scales every shape by (sx, sy) around pivot. A rect's corner stays its
+-~> top left when the scale is not negative.
+function scale_many(m, shapes, pivot, sx, sy) {
+  let k = (sx, sy)
+  xf_shapes(m, shapes, {"map": function(p) { xf_scaled(p, pivot, k) }, "scale": k, "turn": null})
+}
+
+function xf_scaled(p, pivot, k) {
+  (pivot.x + (p.x - pivot.x) * k.x, pivot.y + (p.y - pivot.y) * k.y)
+}
+
+-~> Turns every shape by angle (radians, clockwise on the screen) around center.
+function turn_many(m, shapes, center, angle) {
+  xf_shapes(m, shapes, {"map": function(p) { xf_turned(p, center, angle) }, "scale": null, "turn": angle})
+}
+
+function xf_turned(p, center, angle) {
+  let c = math.cos(angle)
+  let s = math.sin(angle)
+  let d = p - center
+  (center.x + d.x * c - d.y * s, center.y + d.x * s + d.y * c)
+}
+
+-~> The box around shapes' paths, as {"min", "max"} (drawing pixels), or null.
+function shapes_bounds(shapes) {
+  let lo = null
+  let hi = null
+  for (let i = 0; i < len(shapes); i += 1) {
+    let b = path_bounds(shapes[i].path)
+    if (b != null) {
+      if (lo == null) {
+        lo = b.min
+        hi = b.max
+      } else {
+        lo = (math.min(lo.x, b.min.x), math.min(lo.y, b.min.y))
+        hi = (math.max(hi.x, b.max.x), math.max(hi.y, b.max.y))
+      }
+    }
+  }
+  if (lo == null) {
+    return null
+  }
+  {"min": lo, "max": hi}
+}

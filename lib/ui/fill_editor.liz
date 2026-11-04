@@ -1,0 +1,1324 @@
+-~> fill_editor: the floating editor of a shape's fill (or of a line's stroke
+-~> color), beside the shape. Kind tabs (solid, linear, radial), the gradient
+-~> bar with its stops (click the bar to add one, drag one along to move it,
+-~> drag it off or press Delete to remove it), the selected stop's color and
+-~> place, soft or hard, the number of flat bands, the angle (linear) or the
+-~> reach (radial), handles on the canvas, and the code it writes.
+-~> Everything it changes is the fill argument of the row, rewritten as a
+-~> literal (fill_model.liz): the canvas shows each change as it is made, and
+-~> each click, field or drag is one undo step. A fill written as code (a
+-~> variable, a computed value) is shown, not edited: "inline as literal"
+-~> writes the value it has now in its place.
+-~> Metrics (style guide, R002 "Fill editor", "Color stop", "Gradient
+-~> handles"): 186 wide, header 13, tabs 3 x 59, bar 174 x 14, stops 9 x 9
+-~> under it, then the stop row, soft/hard and steps, the code (13 px lines,
+-~> wrapped at 166), two hints, a 3 px hard shadow, a 5-step tail.
+
+use "../draw/geometry"
+use "../draw/gradient"
+use "editor_doc"
+use "editor_shape_ops"
+use "editor_state"
+use "editor_undo"
+use "fill_model"
+use "i18n"
+use "icons_shape"
+use "view_code"
+use "view_gfx"
+use "view_input"
+use "view_layout"
+
+let FE = {
+  "open": false,
+  "line": 0,
+  "which": "fill",
+  "callee": "",
+  "f": null,
+  "sel": 0,
+  "text": "",
+  "code": false,
+  "value": null,
+  "x": 0,
+  "y": 0,
+  "h": 0,
+  "tail": null,
+  "focus": null,
+  "drag": null,
+  "ghost": null,
+  "active": false,
+  "hist": null
+}
+
+let fe_w = 186
+let fe_bar_w = 174
+let fe_bar_h = 14
+let fe_wrap_w = 166
+
+-~> == Reading the row ==
+
+-~> The paint value of the row's fill (or stroke): a literal is worked out on
+-~> its own, code is read from the shape the last run made. Null when there is none.
+function fe_value_of(line, which) {
+  let fld = fill_field(ed_model(), line, ed_docs(), which)
+  if (fld == null) {
+    return null
+  }
+  if (fill_is_literal(fld.text)) {
+    let r = src.run("rect((0, 0), (1, 1), " + text.replace(fld.text, "\n", " ") + ")")
+    if (len(r.errors) == 0 && len(r.shapes) == 1) {
+      return r.shapes[0].args[2]
+    }
+  }
+  let shapes = ed_shapes_of(line)
+  if (len(shapes) > 0 && shapes[0].kind == view_rows()[line - 1].callee && fld.index < len(shapes[0].args)) {
+    return shapes[0].args[fld.index]
+  }
+  null
+}
+
+-~> The editor's fill for the row's paint (fill_model.liz), or null.
+function fe_fill_of(line, which) {
+  let v = fe_value_of(line, which)
+  if (v == null) {
+    return null
+  }
+  fill_from_value(v)
+}
+
+-~> Reads the row again when its code changed under the editor (an undo, typing
+-~> in the row); closes the editor when its row or its paint is gone.
+function fe_sync() {
+  if (!FE.open) {
+    return null
+  }
+  let m = ed_model()
+  if (FE.hist !== ed.undo || FE.line > len(m.lines) || m.line != FE.line) {
+    return fe_close()
+  }
+  let fld = fill_field(m, FE.line, ed_docs(), FE.which)
+  if (fld == null) {
+    return fe_close()
+  }
+  if (fld.text == FE.text) {
+    return null
+  }
+  FE.text = fld.text
+  FE.code = !fill_is_literal(fld.text)
+  FE.value = fe_value_of(FE.line, FE.which)
+  FE.f = null
+  if (FE.value != null) {
+    FE.f = fill_from_value(FE.value)
+  }
+  if (FE.f != null && FE.f.kind != "solid") {
+    FE.sel = math.max(0, math.min(FE.sel, len(FE.f.stops) - 1))
+  }
+  fe_place_again()
+}
+
+-~> == Opening ==
+
+-~> Opens the editor on the fill ("fill") or the stroke color ("stroke") of
+-~> the call on `line`.
+function fe_open(line, which) {
+  FE.open = true
+  FE.line = line
+  FE.which = which
+  FE.callee = view_rows()[line - 1].callee
+  FE.text = null
+  FE.sel = 1
+  FE.focus = null
+  FE.drag = null
+  FE.ghost = null
+  FE.active = true
+  FE.hist = ed.undo
+  FE.tail = null
+  FE.x = -1
+  fe_sync()
+  if (FE.open) {
+    fe_place()
+  }
+  view_touch()
+}
+
+function fe_close() {
+  if (FE.open) {
+    FE.open = false
+    FE.focus = null
+    FE.drag = null
+    view_touch()
+  }
+  null
+}
+
+-~> The box of the row's first shape in UI pixels [x0, y0, x1, y1], or null.
+function fe_shape_ui_box() {
+  let b = fe_shape_box()
+  if (b == null) {
+    return null
+  }
+  let cl = view_canvas_layout()
+  let lo = view_to_window(cl, b.min)
+  let hi = view_to_window(cl, b.max)
+  [lo.x / 2, lo.y / 2, hi.x / 2, hi.y / 2]
+}
+
+-~> The bounds of the row's first shape on the drawing, or null.
+function fe_shape_box() {
+  let shapes = ed_shapes_of(FE.line)
+  if (len(shapes) == 0) {
+    return null
+  }
+  path_bounds(shapes[0].path)
+}
+
+-~> Puts the editor beside its shape: on the left when there is room (over the
+-~> code when the canvas is narrow), else on the right, with the tail
+-~> pointing at the shape's middle.
+function fe_place() {
+  let lay = fe_layout()
+  FE.h = lay.h
+  let gm = view_geom()
+  let b = fe_shape_ui_box()
+  if (b == null) {
+    FE.x = math.max(2, gm.cx - fe_w // 2)
+    FE.y = 34
+    FE.tail = null
+    return null
+  }
+  let cy = (b[1] + b[3]) / 2
+  let side = "right"
+  let x = math.floor(b[0]) - fe_w - 7
+  if (x < 2) {
+    x = math.ceil(b[2]) + 7
+    side = "left"
+    if (x + fe_w + 4 > V.w) {
+      x = math.max(2, V.w - fe_w - 4)
+      side = ""
+    }
+  }
+  FE.x = x
+  FE.y = math.max(32, math.min(math.round(cy) - FE.h // 2, gm.status_y - FE.h - 4))
+  FE.tail = null
+  if (side != "") {
+    FE.tail = {"side": side, "y": math.max(FE.y + 20, math.min(math.round(cy), FE.y + FE.h - 10))}
+  }
+}
+
+-~> After the kind changed the editor's height: the same place, kept on screen.
+function fe_place_again() {
+  if (FE.x < 0) {
+    return null
+  }
+  let lay = fe_layout()
+  FE.h = lay.h
+  let gm = view_geom()
+  FE.y = math.max(32, math.min(FE.y, gm.status_y - FE.h - 4))
+  if (FE.tail != null) {
+    FE.tail.y = math.max(FE.y + 20, math.min(FE.tail.y, FE.y + FE.h - 10))
+  }
+}
+
+-~> == Where its parts are ==
+
+-~> The kinds the paint can take: a brush's color is a plain color.
+function fe_kinds() {
+  if (FE.callee == "brush") {
+    return ["solid"]
+  }
+  ["solid", "linear", "radial"]
+}
+
+-~> The code it writes now, as lines of at most fe_wrap_w pixels.
+function fe_code_lines() {
+  let s = FE.text
+  if (s == null) {
+    s = ""
+  }
+  fe_wrap(text.replace(s, "\n", " "), fe_wrap_w)
+}
+
+-~> A line of code cut after its commas (and before a list of stops) so each piece fits in w pixels;
+-~> the pieces after the first are indented by 2.
+function fe_wrap(s, w) {
+  let pieces = []
+  let cur = ""
+  for (let i = 0; i < len(s); i = i + 1) {
+    cur = cur + s[i]
+    let next = s[i + 1]
+    if ((s[i] == "," && next == " ") || (s[i] == "(" && next == "[")) {
+      push(pieces, cur)
+      cur = ""
+    }
+  }
+  if (cur != "") {
+    push(pieces, cur)
+  }
+  let lines = []
+  let line = ""
+  for (let i = 0; i < len(pieces); i = i + 1) {
+    let p = pieces[i]
+    if (line != "" && code_render(rtrim(line + p), 0, false).w > w) {
+      push(lines, rtrim(line))
+      line = "  " + fe_ltrim(p)
+    } else {
+      line = line + p
+    }
+  }
+  if (line != "") {
+    push(lines, rtrim(line))
+  }
+  lines
+}
+
+-~> A text without the spaces it starts with.
+function fe_ltrim(s) {
+  let i = 0
+  while (i < len(s) && s[i] == " ") {
+    i = i + 1
+  }
+  text.slice(s, i, len(s))
+}
+
+-~> Where everything sits, from FE.x and FE.y: a hash of the parts' y and the
+-~> editor's height h.
+function fe_layout() {
+  let x = FE.x
+  let y = FE.y
+  let lay = {"h": 0, "code_y": 0, "lines": fe_code_lines(), "bar": null}
+  if (FE.code || FE.f == null) {
+    let msg = fe_wrap_text(t("fill.is_code"), fe_w - 12)
+    lay.msg = msg
+    lay.code_y = y + 18 + len(msg) * 12 + 2
+    let ch = len(lay.lines) * 13 + 6
+    lay.inline_y = lay.code_y + ch + 4
+    lay.h = lay.inline_y + 14 + 6 - y
+    return lay
+  }
+  lay.tabs_y = y + 18
+  if (FE.f.kind == "solid") {
+    lay.row1 = y + 38
+    lay.code_y = y + 58
+  } else {
+    lay.bar = [x + 6, y + 38, fe_bar_w, fe_bar_h]
+    lay.row1 = y + 66
+    lay.row2 = y + 86
+    lay.row3 = y + 106
+    lay.code_y = y + 126
+  }
+  let ch = len(lay.lines) * 13 + 6
+  lay.hint_y = lay.code_y + ch + 3
+  if (FE.f.kind == "solid") {
+    lay.save_y = lay.hint_y
+  } else {
+    lay.save_y = lay.hint_y + 26
+  }
+  lay.h = lay.save_y + 16 - y
+  lay
+}
+
+-~> Words cut into lines of at most w pixels.
+function fe_wrap_text(s, w) {
+  let words = text.split(s, " ")
+  let out = []
+  let line = ""
+  for (let i = 0; i < len(words); i = i + 1) {
+    let next = words[i]
+    if (line != "") {
+      next = line + " " + words[i]
+    }
+    if (line != "" && g_text_w(next) > w) {
+      push(out, line)
+      line = words[i]
+    } else {
+      line = next
+    }
+  }
+  if (line != "") {
+    push(out, line)
+  }
+  out
+}
+
+-~> The x of a place t (0 to 1) on the bar.
+function fe_bar_x(lay, t) {
+  lay.bar[0] + 1 + math.floor((fe_bar_w - 3) * t)
+}
+
+-~> The place on the bar of a UI x.
+function fe_bar_t(lay, x) {
+  math.max(0.0, math.min(1.0, (x - lay.bar[0] - 1) / float(fe_bar_w - 3)))
+}
+
+-~> The tabs as [{"id", "x", "w"}].
+function fe_tabs() {
+  let ids = ["solid", "linear", "radial"]
+  let out = []
+  let tw = (fe_w - 12 + 2) // 3
+  for (let i = 0; i < 3; i = i + 1) {
+    push(out, {"id": ids[i], "x": FE.x + 6 + i * (tw - 1), "w": tw})
+  }
+  out
+}
+
+-~> The buttons and fields as [{"id", "x", "y", "w", "h"}], from the layout.
+function fe_parts(lay) {
+  let x = FE.x
+  let y = FE.y
+  let out = [{"id": "close", "x": x + fe_w - 14, "y": y + 2, "w": 12, "h": 11}]
+  if (FE.code || FE.f == null) {
+    if (FE.value != null) {
+      push(out, {"id": "inline", "x": x + 6, "y": lay.inline_y, "w": g_text_w(t("fill.inline")) + 18, "h": 14})
+    }
+    return out
+  }
+  let tabs = fe_tabs()
+  for (let i = 0; i < len(tabs); i = i + 1) {
+    push(out, {"id": "tab:" + tabs[i].id, "x": tabs[i].x, "y": lay.tabs_y, "w": tabs[i].w, "h": 14})
+  }
+  push(out, {"id": "hex", "x": x + 6, "y": lay.row1, "w": 71, "h": 16})
+  if (FE.f.kind == "solid") {
+    return out
+  }
+  let ax = x + 83 + g_text_w(t("fill.at")) + 4
+  push(out, {"id": "at", "x": ax, "y": lay.row1, "w": 36, "h": 16})
+  push(out, {"id": "trash", "x": x + fe_w - 20, "y": lay.row1 + 1, "w": 14, "h": 14})
+  let sw = g_text_w(t("fill.soft")) + 8
+  let hw = g_text_w(t("fill.hard")) + 8
+  push(out, {"id": "soft", "x": x + 6, "y": lay.row2, "w": sw, "h": 14})
+  push(out, {"id": "hard", "x": x + 6 + sw - 1, "y": lay.row2, "w": hw, "h": 14})
+  let stx = x + 6 + sw + hw - 1 + 6
+  let fx = stx + 12 + g_text_w(t("fill.steps"))
+  -~> the field is narrower when the labels are longer (Spanish)
+  let fw = math.min(29, x + fe_w - 3 - 24 - fx)
+  push(out, {"id": "steps", "x": fx, "y": lay.row2 - 1, "w": fw, "h": 16})
+  push(out, {"id": "minus", "x": fx + fw + 1, "y": lay.row2, "w": 12, "h": 14})
+  push(out, {"id": "plus", "x": fx + fw + 12, "y": lay.row2, "w": 12, "h": 14})
+  if (FE.f.pinned == null) {
+    let label = t("fill.angle")
+    if (FE.f.kind == "radial") {
+      label = t("fill.reach")
+    }
+    let rx = x + 6 + g_text_w(label) + 4
+    push(out, {"id": "angle", "x": rx, "y": lay.row3, "w": 36, "h": 16})
+    push(out, {"id": "aminus", "x": rx + 37, "y": lay.row3 + 1, "w": 12, "h": 14})
+    push(out, {"id": "aplus", "x": rx + 48, "y": lay.row3 + 1, "w": 12, "h": 14})
+  }
+  out
+}
+
+-~> The text a field shows (or "" for a part that is not a field).
+function fe_field_text(id) {
+  let f = FE.f
+  if (FE.focus != null && FE.focus.field == id) {
+    return FE.focus.text
+  }
+  if (id == "hex") {
+    return fe_hex(fe_sel_color())
+  }
+  if (id == "at") {
+    return str(math.round(f.stops[FE.sel].t * 100)) + "%"
+  }
+  if (id == "steps") {
+    if (f.steps < 2) {
+      return t("fill.off")
+    }
+    return str(f.steps)
+  }
+  if (id == "angle") {
+    if (f.kind == "radial") {
+      return str(math.round(f.r * 100)) + "%"
+    }
+    return str(f.angle) + "°"
+  }
+  ""
+}
+
+-~> A color as it is written: #rrggbb, with the alpha only when it is not full.
+function fe_hex(c) {
+  str(c)
+}
+
+-~> The color the hex field edits: the selected stop's, or the solid color.
+function fe_sel_color() {
+  if (FE.f.kind == "solid") {
+    return FE.f.color
+  }
+  FE.f.stops[FE.sel].color
+}
+
+-~> A color from a field's text: 3, 6 or 8 hex digits, with or without the #.
+function fe_parse_hex(s) {
+  let d = text.lower(text.replace(text.trim(s), "#", ""))
+  if (len(d) == 3) {
+    d = d[0] + d[0] + d[1] + d[1] + d[2] + d[2]
+  }
+  if (len(d) == 6) {
+    d = d + "ff"
+  }
+  if (len(d) != 8) {
+    return null
+  }
+  let v = []
+  for (let i = 0; i < 8; i = i + 1) {
+    let n = text.find("0123456789abcdef", d[i])
+    if (n < 0) {
+      return null
+    }
+    push(v, n)
+  }
+  rgba(v[0] * 16 + v[1], v[2] * 16 + v[3], v[4] * 16 + v[5], v[6] * 16 + v[7])
+}
+
+-~> == The canvas handles ==
+
+-~> The handles of a gradient on its shape: [{"id", "pos" (drawing pixels),
+-~> "role"}], and the geometry they come from. Empty for a solid color or code.
+function fe_handles() {
+  if (!FE.open || FE.code || FE.f == null || FE.f.kind == "solid") {
+    return {"list": [], "geo": null, "box": null}
+  }
+  let box = fe_shape_box()
+  if (box == null) {
+    return {"list": [], "geo": null, "box": null}
+  }
+  let geo = fill_geometry(FE.f, box)
+  if (FE.f.kind == "linear") {
+    return {"list": [{"id": "from", "pos": geo.from, "role": "start"}, {"id": "to", "pos": geo.to, "role": "end"}], "geo": geo, "box": box}
+  }
+  {"list": [{"id": "center", "pos": geo.center, "role": "start"}, {"id": "radius", "pos": geo.center + (geo.r, 0), "role": "end"}], "geo": geo, "box": box}
+}
+
+-~> The UI pixel of a drawing point.
+function fe_ui(cl, p) {
+  let w = view_to_window(cl, p)
+  [math.round(w.x / 2), math.round(w.y / 2)]
+}
+
+-~> The part of the window the handles cover: [x, y, w, h], or null.
+function fe_handles_rect() {
+  let hs = fe_handles()
+  if (len(hs.list) == 0) {
+    return null
+  }
+  let cl = view_canvas_layout()
+  let pts = []
+  for (let i = 0; i < len(hs.list); i = i + 1) {
+    push(pts, fe_ui(cl, hs.list[i].pos))
+  }
+  if (FE.f.kind == "radial") {
+    let c = pts[0]
+    let rr = pts[1][0] - c[0]
+    pts = [[c[0] - rr, c[1] - rr], [c[0] + rr, c[1] + rr]]
+  }
+  let x0 = math.min(pts[0][0], pts[1][0]) - 6
+  let y0 = math.min(pts[0][1], pts[1][1]) - 6
+  let x1 = math.max(pts[0][0], pts[1][0]) + 7
+  let y1 = math.max(pts[0][1], pts[1][1]) + 7
+  [x0, y0, x1 - x0, y1 - y0]
+}
+
+-~> The handle within 4 UI pixels of (x, y), or null.
+function fe_handle_at(x, y) {
+  let hs = fe_handles()
+  let cl = view_canvas_layout()
+  let gm = view_geom()
+  if (x < gm.cx || y < 30 || y >= gm.status_y) {
+    return null
+  }
+  for (let i = len(hs.list) - 1; i >= 0; i = i - 1) {
+    let u = fe_ui(cl, hs.list[i].pos)
+    if (math.abs(u[0] - x) <= 4 && math.abs(u[1] - y) <= 4) {
+      return hs.list[i].id
+    }
+  }
+  null
+}
+
+-~> == What it covers ==
+
+function fe_popup_rects() {
+  if (!FE.open) {
+    return []
+  }
+  let out = [["fill_editor", [FE.x - 6, FE.y, fe_w + 12 + 3, FE.h + 3]]]
+  let hr = fe_handles_rect()
+  if (hr != null) {
+    push(out, ["fill_handles", hr])
+  }
+  out
+}
+
+function fe_content_key() {
+  if (!FE.open) {
+    return ""
+  }
+  let k = "f" + str(FE.text) + "|" + str(FE.sel) + "|" + str(FE.ghost) + "|" + str(FE.code)
+  if (FE.focus != null) {
+    k = k + FE.focus.field + FE.focus.text + str(FE.focus.caret)
+  }
+  if (FE.drag != null) {
+    k = k + "d" + str(FE.drag.off)
+  }
+  let h = V.hover
+  if (text.starts(h, "fe:")) {
+    k = k + h
+  }
+  k
+}
+
+-~> == The pointer ==
+
+-~> The hover id at a UI point: fe:<part>, fe:bar, fe:stop:i, fe:h:<handle>,
+-~> fe:box (on the editor, nowhere special), or null off it. On the bar it
+-~> also remembers where a new stop would go (the ghost stop).
+function fe_hover_at(x, y) {
+  if (!FE.open) {
+    return null
+  }
+  FE.ghost = null
+  if (!view_in(x, y, FE.x, FE.y, fe_w, FE.h)) {
+    let h = fe_handle_at(x, y)
+    if (h != null) {
+      return "fe:h:" + h
+    }
+    return null
+  }
+  let lay = fe_layout()
+  let parts = fe_parts(lay)
+  for (let i = 0; i < len(parts); i = i + 1) {
+    let p = parts[i]
+    if (view_in(x, y, p.x, p.y, p.w, p.h)) {
+      return "fe:" + p.id
+    }
+  }
+  if (lay.bar != null) {
+    let b = lay.bar
+    let f = FE.f
+    for (let i = len(f.stops) - 1; i >= 0; i = i - 1) {
+      let cx = fe_bar_x(lay, f.stops[i].t)
+      if (view_in(x, y, cx - 4, b[1] + b[3], 9, 10)) {
+        return "fe:stop:" + str(i)
+      }
+    }
+    if (view_in(x, y, b[0], b[1], b[2], b[3])) {
+      FE.ghost = fe_bar_t(lay, x)
+      return "fe:bar"
+    }
+  }
+  "fe:box"
+}
+
+-~> A press. True when it was the editor's (on it, or on a handle); a press
+-~> anywhere else leaves the editor open but not the one keys go to.
+function fe_down(e) {
+  if (!FE.open) {
+    return false
+  }
+  let id = fe_hover_at(e.pos.x, e.pos.y)
+  if (id == null) {
+    fe_commit_focus()
+    FE.active = false
+    return false
+  }
+  FE.active = true
+  let parts = text.split(id, ":")
+  let what = parts[1]
+  if (FE.focus != null && FE.focus.field != what) {
+    fe_commit_focus()
+  }
+  if (what == "close") {
+    fe_close()
+  } elif (what == "tab") {
+    fe_set_kind(parts[2])
+  } elif (what == "bar") {
+    let lay = fe_layout()
+    let added = fill_add_stop(FE.f, fe_bar_t(lay, e.pos.x))
+    ed_begin_gesture("fill")
+    fe_write(added[0])
+    FE.sel = added[1]
+    fe_drag_begin("stop", added[1], e)
+  } elif (what == "stop") {
+    FE.sel = int(parts[2])
+    ed_begin_gesture("fill")
+    fe_drag_begin("stop", FE.sel, e)
+  } elif (what == "h") {
+    ed_begin_gesture("fill")
+    fe_drag_begin("handle", parts[2], e)
+  } elif (what == "hex" || what == "at" || what == "steps" || what == "angle") {
+    fe_focus(what)
+  } elif (what == "trash") {
+    fe_remove_selected()
+  } elif (what == "soft" || what == "hard") {
+    if (FE.sel > 0) {
+      fe_step(fill_set_stop(FE.f, FE.sel, "hard", what == "hard"))
+    }
+  } elif (what == "minus" || what == "plus") {
+    let dir = 1
+    if (what == "minus") {
+      dir = -1
+    }
+    fe_step(fill_set_steps(FE.f, fill_step_next(FE.f.steps, dir)))
+  } elif (what == "aminus" || what == "aplus") {
+    fe_nudge(what == "aplus")
+  } elif (what == "inline") {
+    fe_inline()
+  }
+  view_touch()
+  true
+}
+
+function fe_drag_begin(kind, which, _e) {
+  FE.drag = {"kind": kind, "which": which, "base": FE.f, "box": fe_shape_box(), "off": false}
+  V.drag = {"kind": "fill_editor"}
+}
+
+-~> A move while a stop or a handle is held: the code is rewritten as it goes.
+function fe_drag_move(e) {
+  let d = FE.drag
+  if (d == null) {
+    return null
+  }
+  if (d.kind == "stop") {
+    let lay = fe_layout()
+    let b = lay.bar
+    let t = fe_bar_t(lay, e.pos.x)
+    d.off = len(d.base.stops) > 2 && math.abs(e.pos.y - (b[1] + b[3] + 5)) > 18
+    if (d.off) {
+      fe_write(fill_remove_stop(d.base, d.which))
+      FE.sel = math.max(0, math.min(d.which, len(FE.f.stops) - 1))
+    } else {
+      let moved = fill_move_stop(d.base, d.which, t)
+      fe_write(moved[0])
+      FE.sel = moved[1]
+    }
+  } elif (d.box != null) {
+    let cl = view_canvas_layout()
+    let p = view_to_drawing(cl, e.pos.x, e.pos.y)
+    fe_write(fill_drag_handle(d.base, d.box, d.which, p, e.mods != null && e.mods.shift == true))
+  }
+  view_touch()
+}
+
+-~> The release: the whole drag is one undo step.
+function fe_drag_up(_e) {
+  FE.drag = null
+  ed_end_gesture()
+  view_prepare()
+  view_after()
+}
+
+-~> == Changes ==
+
+-~> Writes the fill into the row (inside a gesture this joins it) and shows it.
+function fe_write(f) {
+  if (f == null) {
+    return null
+  }
+  FE.f = f
+  let lit = fill_literal(f)
+  if (lit == FE.text) {
+    return null
+  }
+  if (ed_shape_paint(FE.line, ed_docs(), FE.which, f)) {
+    FE.text = lit
+    FE.code = false
+  }
+  view_prepare()
+  view_after()
+  fe_place_again()
+}
+
+-~> A change that is one undo step of its own.
+function fe_step(f) {
+  fe_write(f)
+}
+
+function fe_set_kind(kind) {
+  if (list.index(fe_kinds(), kind) < 0 || FE.f == null) {
+    return null
+  }
+  fe_step(fill_as_kind(FE.f, kind))
+  FE.sel = math.min(1, math.max(0, len(FE.f.stops) - 1))
+}
+
+function fe_remove_selected() {
+  if (FE.f == null || FE.f.kind == "solid") {
+    return false
+  }
+  let out = fill_remove_stop(FE.f, FE.sel)
+  if (out == null) {
+    return false
+  }
+  fe_step(out)
+  FE.sel = math.max(0, math.min(FE.sel, len(FE.f.stops) - 1))
+  true
+}
+
+-~> − and + of the angle (15 degrees) or of the reach (5%).
+function fe_nudge(up) {
+  let f = fill_copy(FE.f)
+  let dir = -1
+  if (up) {
+    dir = 1
+  }
+  if (f.kind == "radial") {
+    f.r = math.max(0.05, math.round((f.r + dir * 0.05) * 100) / 100.0)
+  } else {
+    f.angle = ((math.round(f.angle / 15.0) + dir) * 15 + 360) % 360
+  }
+  fe_step(f)
+}
+
+-~> Writes the value the code has now as a literal in its place.
+function fe_inline() {
+  if (FE.value == null) {
+    return null
+  }
+  let f = fill_from_value(FE.value)
+  if (f != null) {
+    fe_step(f)
+  }
+}
+
+-~> == The fields ==
+
+function fe_focus(field) {
+  let s = fe_field_text(field)
+  FE.focus = {"field": field, "text": s, "caret": len(s), "fresh": true}
+}
+
+-~> Writes what a field holds (one undo step) and leaves it.
+function fe_commit_focus() {
+  let fo = FE.focus
+  if (fo == null) {
+    return null
+  }
+  FE.focus = null
+  if (!FE.open || FE.f == null) {
+    return null
+  }
+  let s = text.trim(fo.text)
+  let f = FE.f
+  if (fo.field == "hex") {
+    let c = fe_parse_hex(s)
+    if (c == null) {
+      return null
+    }
+    if (f.kind == "solid") {
+      let out = fill_copy(f)
+      out.color = c
+      return fe_step(out)
+    }
+    return fe_step(fill_set_stop(f, FE.sel, "color", c))
+  }
+  let n = text.number(text.replace(text.replace(s, "%", ""), "°", ""))
+  if (fo.field == "steps") {
+    if (n == null) {
+      n = 0
+    }
+    return fe_step(fill_set_steps(f, int(n)))
+  }
+  if (n == null) {
+    return null
+  }
+  if (fo.field == "at") {
+    let moved = fill_move_stop(f, FE.sel, n / 100.0)
+    fe_step(moved[0])
+    FE.sel = moved[1]
+  } elif (fo.field == "angle") {
+    let out = fill_copy(f)
+    if (f.kind == "radial") {
+      out.r = math.max(0.01, n / 100.0)
+    } else {
+      out.angle = ((int(math.round(n)) % 360) + 360) % 360
+    }
+    fe_step(out)
+  }
+}
+
+-~> A key while the editor is open. True when it used it.
+function fe_key(e) {
+  if (!FE.open) {
+    return false
+  }
+  let k = text.lower(e.key)
+  let fo = FE.focus
+  if (fo != null) {
+    if (k == "enter" || k == "return" || k == "tab") {
+      fe_commit_focus()
+    } elif (k == "escape") {
+      FE.focus = null
+    } elif (k == "backspace") {
+      if (fo.fresh) {
+        fo.text = ""
+        fo.caret = 0
+      } elif (fo.caret > 0) {
+        fo.text = text.slice(fo.text, 0, fo.caret - 1) + text.slice(fo.text, fo.caret, len(fo.text))
+        fo.caret = fo.caret - 1
+      }
+    } elif (k == "arrowleft") {
+      fo.caret = math.max(0, fo.caret - 1)
+    } elif (k == "arrowright") {
+      fo.caret = math.min(len(fo.text), fo.caret + 1)
+    } else {
+      return true
+    }
+    fo.fresh = false
+    view_touch()
+    return true
+  }
+  if (k == "escape") {
+    fe_close()
+    return true
+  }
+  if (FE.active && (k == "delete" || k == "backspace")) {
+    if (fe_remove_selected()) {
+      view_touch()
+    }
+    return true
+  }
+  false
+}
+
+-~> Text typed into the focused field.
+function fe_text(s) {
+  if (!FE.open || FE.focus == null) {
+    return false
+  }
+  let fo = FE.focus
+  if (fo.fresh) {
+    fo.text = ""
+    fo.caret = 0
+    fo.fresh = false
+  }
+  fo.text = text.slice(fo.text, 0, fo.caret) + s + text.slice(fo.text, fo.caret, len(fo.text))
+  fo.caret = fo.caret + len(s)
+  view_touch()
+  true
+}
+
+-~> == Drawing ==
+
+-~> The editor's box (3 px hard shadow), the tail, the parts; and in the
+-~> canvas buffer the handles on the shape.
+function fe_draw() {
+  if (!FE.open) {
+    return null
+  }
+  let x = FE.x
+  let y = FE.y
+  let h = FE.h
+  let lay = fe_layout()
+  g_rect(x + 3, y + 3, fe_w, h, P.void)
+  g_frame(x, y, fe_w, h, P.void)
+  g_rect(x + 1, y + 1, fe_w - 2, h - 2, P.row)
+  g_rect(x + 1, y + 1, fe_w - 2, 1, P.bevel)
+  fe_draw_tail()
+  g_rect(x + 1, y + 1, fe_w - 2, 13, P.raised)
+  g_rect(x + 1, y + 14, fe_w - 2, 1, P.void)
+  let head = t("fill.title")
+  if (FE.which == "stroke") {
+    head = t("fill.title_stroke")
+  }
+  let where = t("word.line") + " " + str(FE.line)
+  let title = head + " · " + FE.callee + " · " + where
+  if (g_text_w(title) > fe_w - 22) {
+    title = head + " · " + where
+  }
+  g_text(title, x + 5, y + 1, P.mute)
+  let cc = P.mute
+  if (V.hover == "fe:close") {
+    cc = P.bright
+  }
+  g_icon("close", x + fe_w - 12, y + 4, cc)
+  if (FE.code || FE.f == null) {
+    fe_draw_code(lay)
+  } else {
+    fe_draw_edit(lay)
+  }
+  if (g.s == 2) {
+    fe_draw_handles()
+  }
+}
+
+-~> The 5-step pixel tail on the side toward the shape.
+function fe_draw_tail() {
+  let tl = FE.tail
+  if (tl == null) {
+    return null
+  }
+  for (let k = 0; k < 6; k = k + 1) {
+    let span = 11 - 2 * k
+    if (span <= 0) {
+      break
+    }
+    let cx = FE.x - k
+    if (tl.side == "right") {
+      cx = FE.x + fe_w - 1 + k
+    }
+    let top = tl.y - span // 2
+    g_rect(cx, top, 1, span, P.void)
+    if (span > 2) {
+      g_rect(cx, top + 1, 1, span - 2, P.row)
+    }
+  }
+}
+
+function fe_part(lay, id) {
+  let ps = fe_parts(lay)
+  for (let i = 0; i < len(ps); i = i + 1) {
+    if (ps[i].id == id) {
+      return ps[i]
+    }
+  }
+  null
+}
+
+function fe_state(id, on) {
+  if (!on) {
+    return "disabled"
+  }
+  if (V.hover == "fe:" + id) {
+    return "hover"
+  }
+  "normal"
+}
+
+function fe_draw_edit(lay) {
+  let x = FE.x
+  let f = FE.f
+  let tabs = fe_tabs()
+  let icons = {"solid": "solid", "linear": "gradient", "radial": "radial"}
+  let kinds = fe_kinds()
+  for (let i = 0; i < len(tabs); i = i + 1) {
+    let tb = tabs[i]
+    let st = fe_state("tab:" + tb.id, list.index(kinds, tb.id) >= 0)
+    if (tb.id == f.kind) {
+      st = "active"
+    }
+    g_button(tb.x, lay.tabs_y, tb.w, 14, icons[tb.id], t("fill.tab_" + tb.id), st)
+  }
+  if (lay.bar != null) {
+    fe_draw_bar(lay)
+  }
+  fe_draw_field(fe_part(lay, "hex"), "text", fe_sel_color())
+  if (f.kind != "solid") {
+    let ax = x + 83
+    g_text(t("fill.at"), ax, lay.row1 + 1, P.mute)
+    fe_draw_field(fe_part(lay, "at"), "amber", null)
+    let tr = fe_part(lay, "trash")
+    g_button(tr.x, tr.y, tr.w, tr.h, "trash", "", fe_state("trash", len(f.stops) > 2))
+    let hard = f.stops[FE.sel].hard
+    let so = fe_part(lay, "soft")
+    let ha = fe_part(lay, "hard")
+    let can = FE.sel > 0
+    let s1 = fe_state("soft", can)
+    let s2 = fe_state("hard", can)
+    if (!hard) {
+      s1 = "active"
+    } else {
+      s2 = "active"
+    }
+    g_button(so.x, so.y, so.w, so.h, "", t("fill.soft"), s1)
+    g_button(ha.x, ha.y, ha.w, ha.h, "", t("fill.hard"), s2)
+    let stx = ha.x + ha.w + 6
+    g_icon("steps", stx, lay.row2 + 3, P.mute)
+    g_text(t("fill.steps"), stx + 10, lay.row2, P.mute)
+    let sc = "mute"
+    if (f.steps >= 2) {
+      sc = "amber"
+    }
+    fe_draw_field(fe_part(lay, "steps"), sc, null)
+    let mi = fe_part(lay, "minus")
+    let pl = fe_part(lay, "plus")
+    g_button(mi.x, mi.y, mi.w, mi.h, "minus", "", fe_state("minus", f.steps >= 2))
+    g_button(pl.x, pl.y, pl.w, pl.h, "plus", "", fe_state("plus", f.steps < fill_max_steps))
+    if (f.pinned == null) {
+      let label = t("fill.angle")
+      if (f.kind == "radial") {
+        label = t("fill.reach")
+      }
+      g_text(label, x + 6, lay.row3 + 1, P.mute)
+      fe_draw_field(fe_part(lay, "angle"), "amber", null)
+      let am = fe_part(lay, "aminus")
+      let ap = fe_part(lay, "aplus")
+      g_button(am.x, am.y, am.w, am.h, "minus", "", fe_state("aminus", true))
+      g_button(ap.x, ap.y, ap.w, ap.h, "plus", "", fe_state("aplus", true))
+    } else {
+      g_text(t("fill.pinned"), x + 6, lay.row3 + 1, P.mute)
+    }
+  }
+  fe_draw_code_box(lay)
+  if (f.kind != "solid") {
+    g_text(t("fill.hint_add"), x + 6, lay.hint_y, P.mute)
+    g_text(t("fill.hint_remove"), x + 6, lay.hint_y + 12, P.mute)
+  }
+  -~> saving a fill as a variable comes with the palette's variables
+  g_icon("plus", x + 6, lay.save_y + 3, P.dim)
+  g_text(t("fill.save_var"), x + 16, lay.save_y, P.dim)
+}
+
+-~> A field: its text (or the text being typed, with the caret), a swatch for a color.
+function fe_draw_field(p, color, swatch) {
+  let focused = FE.focus != null && FE.focus.field == p.id
+  g_field(p.x, p.y, p.w, p.h, focused)
+  let tx = p.x + 4
+  if (swatch != null) {
+    g_rect(p.x + 3, p.y + 3, 10, 10, P.void)
+    fe_checker(p.x + 4, p.y + 4, 8, 8, 2)
+    g_rect(p.x + 4, p.y + 4, 8, 8, swatch)
+    tx = p.x + 16
+  }
+  let s = fe_field_text(p.id)
+  let room = (p.w - (tx - p.x) - 2) // 7
+  let from = 0
+  if (focused) {
+    from = math.max(0, FE.focus.caret - room)
+  }
+  g_text(text.slice(s, from, math.min(len(s), from + room)), tx, p.y + 2, P[color])
+  if (focused) {
+    g_rect(tx + (FE.focus.caret - from) * 7, p.y + 3, 1, 11, P.amber)
+  }
+}
+
+-~> The light and dark checker that shows alpha, squares of n UI pixels.
+function fe_checker(x, y, w, h, n) {
+  g_rect(x, y, w, h, #d4dacd)
+  for (let j = 0; j * n < h; j = j + 1) {
+    for (let i = 0; i * n < w; i = i + 1) {
+      if ((i + j) % 2 == 1) {
+        g_rect(x + i * n, y + j * n, math.min(n, w - i * n), math.min(n, h - j * n), #a0ab9b)
+      }
+    }
+  }
+}
+
+-~> Whether a color list has a color that is not opaque.
+function fe_any_alpha(stops) {
+  for (let i = 0; i < len(stops); i = i + 1) {
+    if (stops[i].color.a < 255) {
+      return true
+    }
+  }
+  false
+}
+
+-~> The stops as lib/draw takes them, for drawing the bar.
+function fe_draw_stops(stops) {
+  let out = []
+  for (let i = 0; i < len(stops); i = i + 1) {
+    if (stops[i].hard && i > 0) {
+      push(out, [stops[i].t, stops[i].color, "hard"])
+    } else {
+      push(out, [stops[i].t, stops[i].color])
+    }
+  }
+  out
+}
+
+-~> The gradient bar: the colors (smooth, at the buffer's own resolution, or
+-~> in flat bands), a bright line at each hard stop, the stops under it.
+function fe_draw_bar(lay) {
+  let f = FE.f
+  let b = lay.bar
+  let ix = b[0] + 1
+  let iy = b[1] + 1
+  let iw = b[2] - 2
+  let ih = b[3] - 2
+  g_frame(b[0], b[1], b[2], b[3], P.void)
+  if (fe_any_alpha(f.stops)) {
+    fe_checker(ix, iy, iw, ih, 3)
+  }
+  if (f.steps >= 2) {
+    for (let i = 0; i < f.steps; i = i + 1) {
+      let x0 = ix + iw * i // f.steps
+      let x1 = ix + iw * (i + 1) // f.steps
+      g_rect(x0, iy, x1 - x0, ih, fill_color_at(f.stops, i / (f.steps - 1.0)))
+    }
+  } else {
+    let s = g.s
+    let bx0 = (ix - g.ox) * s
+    let bx1 = (ix + iw - g.ox) * s
+    let gr = linear((bx0, 0), (bx1, 0), fe_draw_stops(f.stops))
+    let rows = []
+    for (let yy = (iy - g.oy) * s; yy < (iy + ih - g.oy) * s; yy = yy + 1) {
+      push(rows, [yy, bx0, bx1])
+    }
+    fb.spans_gradient(rows, (0, 0), gr)
+  }
+  for (let i = 1; i < len(f.stops); i = i + 1) {
+    if (f.stops[i].hard) {
+      g_rect(fe_bar_x(lay, f.stops[i].t), iy, 1, ih, P.bright)
+    }
+  }
+  let top = b[1] + b[3] + 1
+  for (let i = 0; i < len(f.stops); i = i + 1) {
+    if (i != FE.sel) {
+      fe_draw_stop(fe_bar_x(lay, f.stops[i].t), top, f.stops[i], "normal")
+    }
+  }
+  if (FE.drag == null || !FE.drag.off) {
+    fe_draw_stop(fe_bar_x(lay, f.stops[FE.sel].t), top, f.stops[FE.sel], "selected")
+  }
+  if (FE.ghost != null && V.hover == "fe:bar" && FE.drag == null) {
+    fe_draw_stop(fe_bar_x(lay, FE.ghost), top, null, "ghost")
+  }
+}
+
+-~> One 9x9 stop marker centered on cx: a 3-row pointer and a 7x5 color body
+-~> with a void outline; a hard stop has a 1 px stem; selected = a bright
+-~> outline in a void ring; ghost = a dim outline and a +.
+function fe_draw_stop(cx, top, s, look) {
+  let edge = P.void
+  if (look == "selected") {
+    edge = P.bright
+    g_frame(cx - 5, top + 2, 11, 8, P.void)
+  } elif (look == "ghost") {
+    edge = P.dim
+  }
+  if (s != null && s.hard) {
+    g_rect(cx, top, 1, 3, edge)
+  } else {
+    g_rect(cx, top, 1, 1, edge)
+    g_rect(cx - 1, top + 1, 3, 1, edge)
+    g_rect(cx - 2, top + 2, 5, 1, edge)
+  }
+  g_frame(cx - 4, top + 3, 9, 6, edge)
+  if (look == "ghost") {
+    g_rect(cx - 3, top + 4, 7, 4, P.row)
+    g_text("+", cx - 3, top + 9, P.dim)
+  } else {
+    fe_checker(cx - 3, top + 4, 7, 4, 2)
+    g_rect(cx - 3, top + 4, 7, 4, s.color)
+  }
+}
+
+-~> The inset with the code the editor writes.
+function fe_draw_code_box(lay) {
+  let x = FE.x
+  let lines = lay.lines
+  let ch = len(lines) * 13 + 6
+  g_frame(x + 6, lay.code_y, fe_w - 12, ch, P.void)
+  g_rect(x + 7, lay.code_y + 1, fe_w - 14, ch - 2, P.coal)
+  for (let i = 0; i < len(lines); i = i + 1) {
+    code_draw(code_render(lines[i], fe_wrap_w, false), x + 10, lay.code_y + 2 + i * 13)
+  }
+}
+
+-~> A fill written as code: what it is, and the way to make it a literal.
+function fe_draw_code(lay) {
+  let x = FE.x
+  for (let i = 0; i < len(lay.msg); i = i + 1) {
+    g_text(lay.msg[i], x + 6, FE.y + 18 + i * 12, P.text)
+  }
+  fe_draw_code_box(lay)
+  let p = fe_part(lay, "inline")
+  if (p != null) {
+    g_button(p.x, p.y, p.w, p.h, "fill", t("fill.inline"), fe_state("inline", true))
+  }
+}
+
+-~> The handles on the shape (canvas buffer only): a linear gradient's line
+-~> from its start (bright) to its end (lizard) with the stops as dots on it;
+-~> a radial one's center, its reach as a pixel circle and the reach handle.
+function fe_draw_handles() {
+  let hs = fe_handles()
+  if (len(hs.list) == 0) {
+    return null
+  }
+  let cl = view_canvas_layout()
+  let a = fe_ui(cl, hs.list[0].pos)
+  let b = fe_ui(cl, hs.list[1].pos)
+  if (FE.f.kind == "linear") {
+    let pts = fe_line_pixels(a, b)
+    for (let i = 0; i < len(pts); i = i + 1) {
+      g_rect(pts[i][0] - 1, pts[i][1], 3, 1, P.void)
+      g_rect(pts[i][0], pts[i][1] - 1, 1, 3, P.void)
+    }
+    for (let i = 0; i < len(pts); i = i + 1) {
+      g_rect(pts[i][0], pts[i][1], 1, 1, P.bright)
+    }
+    let st = FE.f.stops
+    for (let i = 1; i < len(st) - 1; i = i + 1) {
+      let px = math.round(a[0] + (b[0] - a[0]) * st[i].t)
+      let py = math.round(a[1] + (b[1] - a[1]) * st[i].t)
+      g_rect(px - 3, py - 3, 7, 7, P.void)
+      g_rect(px - 2, py - 2, 5, 5, st[i].color)
+    }
+  } else {
+    let rr = b[0] - a[0]
+    fe_pixel_circle(a, rr - 1, P.void)
+    fe_pixel_circle(a, rr + 1, P.void)
+    fe_pixel_circle(a, rr, P.bright)
+  }
+  fe_draw_handle(a, P.bright, V.hover == "fe:h:" + hs.list[0].id)
+  fe_draw_handle(b, P.lizard, V.hover == "fe:h:" + hs.list[1].id)
+}
+
+function fe_draw_handle(u, c, hover) {
+  let s = 5
+  if (hover) {
+    s = 7
+    c = P.amber
+  }
+  let h = s // 2
+  g_rect(u[0] - h - 1, u[1] - h - 1, s + 2, s + 2, P.void)
+  g_rect(u[0] - h, u[1] - h, s, s, c)
+}
+
+-~> The UI pixels of a line from a to b (Bresenham).
+function fe_line_pixels(a, b) {
+  let out = []
+  let x0 = a[0]
+  let y0 = a[1]
+  let dx = math.abs(b[0] - x0)
+  let dy = -math.abs(b[1] - y0)
+  let sx = 1
+  if (x0 > b[0]) {
+    sx = -1
+  }
+  let sy = 1
+  if (y0 > b[1]) {
+    sy = -1
+  }
+  let err = dx + dy
+  for (let n = 0; n < 4096; n = n + 1) {
+    push(out, [x0, y0])
+    if (x0 == b[0] && y0 == b[1]) {
+      break
+    }
+    let e2 = 2 * err
+    if (e2 >= dy) {
+      err = err + dy
+      x0 = x0 + sx
+    }
+    if (e2 <= dx) {
+      err = err + dx
+      y0 = y0 + sy
+    }
+  }
+  out
+}
+
+-~> A 1 px circle of UI pixels (midpoint circle).
+function fe_pixel_circle(c, r, color) {
+  if (r <= 0) {
+    return null
+  }
+  let x = r
+  let y = 0
+  let d = 1 - r
+  while (x >= y) {
+    let pts = [[x, y], [y, x], [-x, y], [-y, x], [x, -y], [y, -x], [-x, -y], [-y, -x]]
+    for (let i = 0; i < 8; i = i + 1) {
+      g_rect(c[0] + pts[i][0], c[1] + pts[i][1], 1, 1, color)
+    }
+    y = y + 1
+    if (d < 0) {
+      d = d + 2 * y + 1
+    } else {
+      x = x - 1
+      d = d + 2 * (y - x) + 1
+    }
+  }
+}

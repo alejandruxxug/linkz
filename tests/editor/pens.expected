@@ -1,0 +1,28 @@
+-- the picker has a gear on every row and a footer
+pengear:1 5 133
+true pencil my pencil false 
+-- a slider changes the draft, never the built-in pen
+0.95 0.05 pressure.smoothing
+firm [[0, 0], [0.6, 0.3], [1, 1]]
+-- the curve: press on the graph adds a point, dragging it off takes it out
+4
+3
+-- the test pad: strokes stay in the pad
+1 true false 1
+0
+-- a built-in's name is refused; a name of its own saves the pen
+pencil is a built-in pen: save the copy under another name false
+true soft_ink soft_ink 6 Soft Ink
+Soft Ink 0.95 true pencil
+-- the picker lists the saved pen after the built-in ones, "yours"
+yours 153
+-- a drawing that uses the saved pen runs
+[] 1
+-- Esc closes the window; a double-click on the brush button opens it
+false
+false 
+true soft_ink brush
+-- the string stabilizer steadies a stroke live, and catches up at the end
+true true 
+true
+true

@@ -1,0 +1,789 @@
+-~> shape_menu: the menu a right-click (or a two-finger click, or Ctrl+click)
+-~> opens on a shape of the canvas or on its row: rename, duplicate, the paint
+-~> order, hide, lock, the fill (a submenu of kinds and the drawing's colors),
+-~> the stroke color, blend (later), copy, show in code and remove. Every
+-~> choice is a code edit and one undo step (editor_shape_ops.liz).
+-~> The menu is keyboard driven too: Up and Down pick, Right opens the fill
+-~> submenu, Left closes it, Enter chooses, Esc closes, and the shortcuts it
+-~> shows work while it is open.
+-~> Metrics (style guide, R002 "Context menu"): rows 14, header 13, icon at
+-~> +6, label at +18, shortcut 6 from the edge, separators 4, swatches 10x10
+-~> step 12; it flips left and up at the window's edge.
+
+use "app"
+use "editor_doc"
+use "editor_shape_ops"
+use "editor_state"
+use "editor_undo"
+use "fill_editor"
+use "fill_model"
+use "i18n"
+use "icons_shape"
+use "view_canvas"
+use "view_gfx"
+use "view_input"
+use "view_layout"
+
+let SM = {
+  "open": false,
+  "line": 0,
+  "x": 0,
+  "y": 0,
+  "w": 0,
+  "h": 0,
+  "items": [],
+  "hot": -1,
+  "sub": null,
+  "rename": null,
+  "title": ""
+}
+
+let sm_row_h = 14
+let sm_sep_h = 4
+
+-~> == What it shows ==
+
+-~> One entry: {"id", "icon", "label", "keys" (the shortcut shown), "on"
+-~> (enabled), "danger", "sub" (opens a submenu), "check"}; "-" is a separator.
+function sm_item(id, icon, label, keys, on) {
+  {"id": id, "icon": icon, "label": label, "keys": keys, "on": on, "danger": false, "sub": false, "check": false}
+}
+
+function sm_sep() {
+  {"id": "-"}
+}
+
+-~> The kind of the fill the call on `line` has now ("solid", "linear",
+-~> "radial"), or "" when it is not one the editor reads.
+function sm_fill_kind(line) {
+  let f = fe_fill_of(line, "fill")
+  if (f == null) {
+    return ""
+  }
+  f.kind
+}
+
+-~> The entries of the menu for the row on `line`.
+function sm_items(line) {
+  let m = ed_model()
+  let r = view_rows()[line - 1]
+  let stmt = r.stmt != null
+  let marks = r.kind != "comment" && r.kind != "cont" && r.kind != "empty"
+  let hide = sm_item("hide", "eye-off", t("menu.hide"), "H", marks)
+  if (r.hidden) {
+    hide = sm_item("hide", "eye", t("menu.show"), "H", marks)
+  }
+  let lock = sm_item("lock", "lock", t("menu.lock"), "L", marks)
+  if (r.locked) {
+    lock = sm_item("lock", "lock", t("menu.unlock"), "L", marks)
+  }
+  let fill = sm_item("fill", "fill", t("menu.fill"), "", fill_field(m, line, ed_docs(), "fill") != null)
+  fill.sub = true
+  let blend = sm_item("blend", "blend", t("menu.blend"), "", false)
+  blend.sub = true
+  let remove = sm_item("remove", "trash", t("menu.remove"), t("menu.key_delete"), stmt)
+  remove.danger = true
+  [
+    sm_item("rename", "rename", t("menu.rename"), "F2", stmt),
+    sm_item("duplicate", "copy", t("menu.duplicate"), "Cmd+D", stmt),
+    sm_item("front", "up", t("menu.front"), "", stmt && can_order_row(m, line, "front")),
+    sm_item("forward", "up", t("menu.forward"), "Cmd+]", stmt && can_order_row(m, line, "forward")),
+    sm_item("backward", "down", t("menu.backward"), "Cmd+[", stmt && can_order_row(m, line, "backward")),
+    sm_item("back", "down", t("menu.back"), "", stmt && can_order_row(m, line, "back")),
+    sm_sep(),
+    hide,
+    lock,
+    sm_sep(),
+    fill,
+    sm_item("stroke", "pencil", t("menu.stroke"), "", fill_field(m, line, ed_docs(), "stroke") != null),
+    blend,
+    sm_sep(),
+    sm_item("copy", "code", t("menu.copy"), "", stmt),
+    sm_item("show", "open", t("menu.show_code"), "", true),
+    sm_sep(),
+    remove
+  ]
+}
+
+-~> The entries of the fill submenu.
+function sm_sub_items(line) {
+  let kind = sm_fill_kind(line)
+  let out = [
+    sm_item("solid", "solid", t("menu.fill_solid"), "", true),
+    sm_item("linear", "gradient", t("menu.fill_linear"), "", true),
+    sm_item("radial", "radial", t("menu.fill_radial"), "", true),
+    sm_sep(),
+    sm_item("edit", "fill", t("menu.fill_edit"), "F", true)
+  ]
+  for (let i = 0; i < 3; i = i + 1) {
+    out[i].check = out[i].id == kind
+  }
+  out
+}
+
+-~> The solid colors the drawing uses, the first 8, for the submenu's swatch row.
+function sm_swatches() {
+  let out = []
+  let seen = {}
+  let shapes = ed.shapes
+  for (let i = 0; i < len(shapes) && len(out) < 8; i = i + 1) {
+    let c = shapes[i].fill
+    if (type(c) != "COLOR") {
+      c = shapes[i].stroke
+    }
+    if (type(c) == "COLOR" && seen[str(c)] == null) {
+      seen[str(c)] = true
+      push(out, c)
+    }
+  }
+  out
+}
+
+-~> == Where it is ==
+
+-~> The size [w, h] of a menu with these entries (and a header, and swatches).
+function sm_size(items, title, swatches) {
+  let lw = 0
+  let kw = 0
+  let h = 4
+  if (title != "") {
+    h = h + 14
+    lw = g_text_w(title) - 12
+  }
+  for (let i = 0; i < len(items); i = i + 1) {
+    let it = items[i]
+    if (it.id == "-") {
+      h = h + sm_sep_h
+    } else {
+      h = h + sm_row_h
+      lw = math.max(lw, g_text_w(it.label))
+      if (it.keys != "") {
+        kw = math.max(kw, g_text_w(it.keys))
+      }
+    }
+  }
+  let w = lw + 18 + 14
+  if (kw > 0) {
+    w = w + kw + 12
+  }
+  if (swatches > 0) {
+    h = h + 16
+    w = math.max(w, 12 + swatches * 12)
+  }
+  [w, h]
+}
+
+-~> Where a box of size [w, h] goes for the point (x, y): right of it and
+-~> down, flipped left or up when the window ends first.
+function sm_place(x, y, size) {
+  let px = x + 2
+  let py = y
+  if (px + size[0] + 3 > V.w) {
+    px = x - size[0] - 2
+  }
+  if (py + size[1] + 3 > V.h) {
+    py = V.h - size[1] - 3
+  }
+  [math.max(1, px), math.max(17, py)]
+}
+
+-~> The y of each entry, from the top of the menu (y0: after the header).
+function sm_rows(items, y0) {
+  let out = []
+  let y = y0
+  for (let i = 0; i < len(items); i = i + 1) {
+    push(out, y)
+    if (items[i].id == "-") {
+      y = y + sm_sep_h
+    } else {
+      y = y + sm_row_h
+    }
+  }
+  out
+}
+
+-~> The submenu's box: {"x", "y", "w", "h", "items", "rows", "swatches"}, beside
+-~> the Fill entry, on the side that has room.
+function sm_sub_box() {
+  let s = SM.sub
+  let items = s.items
+  let sw = sm_swatches()
+  let size = sm_size(items, "", len(sw))
+  let at = list.index(sm_ids(SM.items), "fill")
+  let iy = SM.y + 16 + sm_rows(SM.items, 0)[at]
+  let x = SM.x + SM.w - 2
+  if (x + size[0] + 3 > V.w) {
+    x = SM.x - size[0] + 2
+  }
+  let y = math.max(17, math.min(iy - 2, V.h - size[1] - 3))
+  {"x": x, "y": y, "w": size[0], "h": size[1], "items": items, "rows": sm_rows(items, y + 2), "swatches": sw}
+}
+
+function sm_ids(items) {
+  let out = []
+  for (let i = 0; i < len(items); i = i + 1) {
+    push(out, items[i].id)
+  }
+  out
+}
+
+-~> The rename box: [x, y, w, h].
+function sm_rename_rect() {
+  [SM.x, SM.y, 176, 52]
+}
+
+-~> The boxes the menu covers now, with their shadows, as [kind, rect].
+function sm_popup_rects() {
+  if (!SM.open) {
+    return []
+  }
+  if (SM.rename != null) {
+    let r = sm_rename_rect()
+    return [["shape_menu", [r[0], r[1], r[2] + 2, r[3] + 2]]]
+  }
+  let out = [["shape_menu", [SM.x, SM.y, SM.w + 2, SM.h + 2]]]
+  if (SM.sub != null) {
+    let b = sm_sub_box()
+    push(out, ["shape_sub", [b.x, b.y, b.w + 2, b.h + 2]])
+  }
+  let tip = sm_tip_box()
+  if (tip != null) {
+    push(out, ["shape_tip", [tip[0], tip[1], tip[2] + 2, tip[3] + 2]])
+  }
+  out
+}
+
+-~> The note of the disabled Blend entry while it is the one pointed at: [x, y, w, h].
+function sm_tip_box() {
+  if (SM.hot < 0 || SM.items[SM.hot].id != "blend") {
+    return null
+  }
+  let s = t("menu.blend_soon")
+  let w = g_text_w(s) + 14
+  let y = SM.y + 16 + sm_rows(SM.items, 0)[SM.hot]
+  let x = SM.x + SM.w + 2
+  if (x + w + 3 > V.w) {
+    x = SM.x - w - 2
+  }
+  if (x < 1) {
+    -~> no room on either side: above the menu
+    return [SM.x, math.max(17, SM.y - 24), w, 21]
+  }
+  [x, y, w, 21]
+}
+
+-~> What the menu shows, as a text: it is drawn again when this changes.
+function sm_content_key() {
+  if (!SM.open) {
+    return ""
+  }
+  let k = "m" + str(SM.hot) + str(SM.line)
+  if (SM.sub != null) {
+    k = k + "s" + str(SM.sub.hot)
+  }
+  if (SM.rename != null) {
+    k = k + "r" + SM.rename.text + str(SM.rename.caret)
+  }
+  k
+}
+
+-~> == Opening and closing ==
+
+-~> Opens the menu for the row on `line` at the UI point (x, y).
+function sm_open(line, x, y) {
+  let r = view_rows()[line - 1]
+  SM.line = line
+  SM.items = sm_items(line)
+  let head = r.callee
+  if (head == "") {
+    head = r.kind
+  }
+  SM.title = head + " · " + t("word.line") + " " + str(line)
+  let size = sm_size(SM.items, SM.title, 0)
+  let at = sm_place(x, y, size)
+  SM.x = at[0]
+  SM.y = at[1]
+  SM.w = size[0]
+  SM.h = size[1]
+  SM.hot = -1
+  SM.sub = null
+  SM.rename = null
+  SM.open = true
+  view_touch()
+}
+
+function sm_close() {
+  if (SM.open) {
+    SM.open = false
+    SM.sub = null
+    SM.rename = null
+    view_touch()
+  }
+}
+
+function sm_open_sub() {
+  if (SM.sub == null) {
+    SM.sub = {"items": sm_sub_items(SM.line), "hot": -1}
+    view_touch()
+  }
+}
+
+-~> A right-click (or Ctrl+click) at e.pos: on a row of code, or on a shape of
+-~> the canvas, it selects the row and opens the menu. Anywhere else it closes
+-~> what is open.
+function sm_context(e) {
+  let p = e.pos
+  if (V.dialog != null) {
+    return null
+  }
+  view_prepare()
+  view_commit_focus()
+  fe_commit_focus()
+  sm_close()
+  V.tip = null
+  V.tip_due = 0
+  let line = sm_line_at(p)
+  if (line <= 0) {
+    app.needs_paint = true
+    return null
+  }
+  view_select_line(line)
+  view_prepare()
+  view_after()
+  sm_open(line, p.x, p.y)
+}
+
+-~> The line of the row or shape at a UI point, or 0.
+function sm_line_at(p) {
+  let gm = view_geom()
+  if (p.x < gm.pw && p.y >= gm.rows_y && p.y < gm.lim) {
+    let id = view_hover_at(p.x, p.y)
+    let parts = text.split(id, ":")
+    let kinds = ["row", "callee", "eye", "lock", "fold"]
+    if (list.index(kinds, parts[0]) >= 0 && len(parts) > 1) {
+      let line = int(parts[1])
+      let r = view_rows()[line - 1]
+      if (r.stmt != null) {
+        return line
+      }
+    }
+    return 0
+  }
+  if (p.x >= gm.cx && p.y >= 30 && p.y < gm.status_y) {
+    let cl = view_canvas_layout()
+    let s = view_hit_shape(cl, view_to_drawing(cl, p.x, p.y))
+    if (s != null && type(s.line) == "INTEGER") {
+      return s.line
+    }
+  }
+  0
+}
+
+-~> == The pointer ==
+
+-~> The hover id of the menu at a UI point: menu:i, msub:i, msw:i, menu:box
+-~> (on the menu, between entries), or null off it. Pointing at an entry makes
+-~> it the current one, and at Fill opens its submenu.
+function sm_hover_at(x, y) {
+  if (!SM.open) {
+    return null
+  }
+  if (SM.rename != null) {
+    let r = sm_rename_rect()
+    if (view_in(x, y, r[0], r[1], r[2], r[3])) {
+      return "mren:box"
+    }
+    return null
+  }
+  if (SM.sub != null) {
+    let b = sm_sub_box()
+    if (view_in(x, y, b.x, b.y, b.w, b.h)) {
+      for (let i = 0; i < len(b.items); i = i + 1) {
+        if (b.items[i].id != "-" && y >= b.rows[i] && y < b.rows[i] + sm_row_h) {
+          SM.sub.hot = i
+          return "msub:" + str(i)
+        }
+      }
+      let sy = b.y + b.h - 16
+      for (let i = 0; i < len(b.swatches); i = i + 1) {
+        if (view_in(x, y, b.x + 6 + i * 12, sy + 3, 10, 10)) {
+          return "msw:" + str(i)
+        }
+      }
+      return "menu:box"
+    }
+  }
+  if (!view_in(x, y, SM.x, SM.y, SM.w, SM.h)) {
+    return null
+  }
+  let rows = sm_rows(SM.items, SM.y + 16)
+  for (let i = 0; i < len(SM.items); i = i + 1) {
+    let it = SM.items[i]
+    if (it.id != "-" && y >= rows[i] && y < rows[i] + sm_row_h) {
+      SM.hot = i
+      if (it.id == "fill" && it.on) {
+        sm_open_sub()
+      } elif (SM.sub != null) {
+        SM.sub = null
+        view_touch()
+      }
+      return "menu:" + str(i)
+    }
+  }
+  "menu:box"
+}
+
+-~> A press while the menu is open: chooses what is under it, or closes the
+-~> menu when it is outside (that press then does nothing else). True when
+-~> the press was the menu's.
+function sm_down(e) {
+  if (!SM.open) {
+    return false
+  }
+  let id = sm_hover_at(e.pos.x, e.pos.y)
+  if (id == null) {
+    if (SM.rename != null) {
+      sm_rename_commit()
+    }
+    sm_close()
+    return true
+  }
+  let parts = text.split(id, ":")
+  if (parts[0] == "menu" && parts[1] != "box") {
+    sm_choose_at(int(parts[1]))
+  } elif (parts[0] == "msub") {
+    sm_choose(SM.sub.items[int(parts[1])].id)
+  } elif (parts[0] == "msw") {
+    sm_paint_color(sm_sub_box().swatches[int(parts[1])])
+  }
+  true
+}
+
+-~> == The keyboard ==
+
+-~> The next entry from i that can be chosen, going dir (1 or -1), or i.
+function sm_step(items, i, dir) {
+  let n = len(items)
+  let j = i
+  for (let k = 0; k < n; k = k + 1) {
+    j = (j + dir + n) % n
+    if (j < 0) {
+      j = n - 1
+    }
+    if (items[j].id != "-" && items[j].on) {
+      return j
+    }
+  }
+  i
+}
+
+-~> A key while the menu is open. True when the menu used it (every key does).
+function sm_key(e) {
+  if (!SM.open) {
+    return false
+  }
+  let k = text.lower(e.key)
+  let cmd = e.mods.cmd || e.mods.ctrl
+  if (SM.rename != null) {
+    return sm_rename_key(k)
+  }
+  if (k == "escape") {
+    if (SM.sub != null) {
+      SM.sub = null
+      view_touch()
+    } else {
+      sm_close()
+    }
+    return true
+  }
+  if (SM.sub != null) {
+    let s = SM.sub
+    if (k == "arrowdown" || k == "arrowup") {
+      let dir = 1
+      if (k == "arrowup") {
+        dir = -1
+      }
+      s.hot = sm_step(s.items, math.max(-1, s.hot), dir)
+      view_touch()
+    } elif (k == "arrowleft") {
+      SM.sub = null
+      view_touch()
+    } elif ((k == "enter" || k == "return" || k == " ") && s.hot >= 0) {
+      sm_choose(s.items[s.hot].id)
+    } elif (k == "f") {
+      sm_choose("edit")
+    }
+    return true
+  }
+  if (k == "arrowdown" || k == "arrowup") {
+    let dir = 1
+    if (k == "arrowup") {
+      dir = -1
+    }
+    SM.hot = sm_step(SM.items, math.max(-1, SM.hot), dir)
+    view_touch()
+  } elif (k == "arrowright" || k == "enter" || k == "return" || k == " ") {
+    if (SM.hot >= 0) {
+      sm_choose_at(SM.hot)
+      if (SM.sub != null) {
+        SM.sub.hot = sm_step(SM.sub.items, -1, 1)
+      }
+    }
+  } else {
+    let id = sm_shortcut(k, cmd)
+    if (id != "") {
+      let at = list.index(sm_ids(SM.items), id)
+      if (id == "edit") {
+        if (SM.items[list.index(sm_ids(SM.items), "fill")].on) {
+          sm_choose("edit")
+        }
+      } elif (at >= 0) {
+        sm_choose_at(at)
+      }
+    }
+  }
+  true
+}
+
+-~> The entry a shortcut key stands for, or "".
+function sm_shortcut(k, cmd) {
+  if (cmd) {
+    let by_cmd = {"d": "duplicate", "]": "forward", "[": "backward"}
+    if (by_cmd[k] != null) {
+      return by_cmd[k]
+    }
+    return ""
+  }
+  let plain = {"f2": "rename", "h": "hide", "l": "lock", "f": "edit", "delete": "remove", "backspace": "remove"}
+  if (plain[k] != null) {
+    return plain[k]
+  }
+  ""
+}
+
+-~> Text typed while the menu is open goes to the rename field (or nowhere).
+function sm_text(s) {
+  if (!SM.open) {
+    return false
+  }
+  let r = SM.rename
+  if (r != null) {
+    r.text = text.slice(r.text, 0, r.caret) + s + text.slice(r.text, r.caret, len(r.text))
+    r.caret = r.caret + len(s)
+    view_touch()
+  }
+  true
+}
+
+-~> == Choosing ==
+
+function sm_choose_at(i) {
+  let it = SM.items[i]
+  if (it.id == "-" || !it.on) {
+    return null
+  }
+  if (it.sub) {
+    sm_open_sub()
+    return null
+  }
+  sm_choose(it.id)
+}
+
+-~> Does what the entry `id` says to the menu's row.
+function sm_choose(id) {
+  let line = SM.line
+  if (id == "rename") {
+    let name = comment_parts(comment_split(ed_model().lines[line - 1])[1]).name
+    SM.rename = {"text": name, "caret": len(name), "line": line}
+    SM.sub = null
+    view_touch()
+    return null
+  }
+  sm_close()
+  if (id == "duplicate") {
+    ed_shape_duplicate(line)
+  } elif (id == "front" || id == "forward" || id == "backward" || id == "back") {
+    ed_shape_order(line, id)
+  } elif (id == "hide") {
+    ed_set_hidden(line, !view_rows()[line - 1].hidden)
+  } elif (id == "lock") {
+    ed_set_locked(line, !view_rows()[line - 1].locked)
+  } elif (id == "remove") {
+    ed_shape_remove(line)
+  } elif (id == "copy") {
+    ed_copy_rows()
+  } elif (id == "show") {
+    view_select_line(line)
+  } elif (id == "solid" || id == "linear" || id == "radial") {
+    sm_paint_kind(line, id)
+  } elif (id == "edit") {
+    fe_open(line, "fill")
+  } elif (id == "stroke") {
+    fe_open(line, "stroke")
+  }
+  view_prepare()
+  view_after()
+}
+
+-~> The fill of the menu's row turned into another kind (one undo step); a
+-~> gradient opens the fill editor on it.
+function sm_paint_kind(line, kind) {
+  let f = fe_fill_of(line, "fill")
+  if (f == null) {
+    return null
+  }
+  ed_shape_paint(line, ed_docs(), "fill", fill_as_kind(f, kind))
+  if (kind != "solid") {
+    view_prepare()
+    fe_open(line, "fill")
+  }
+}
+
+-~> The fill of the menu's row set to a color of the swatch row.
+function sm_paint_color(c) {
+  let line = SM.line
+  sm_close()
+  ed_shape_paint(line, ed_docs(), "fill", fill_from_value(c))
+  view_prepare()
+  view_after()
+}
+
+-~> == Renaming ==
+
+function sm_rename_key(k) {
+  let r = SM.rename
+  if (k == "escape") {
+    sm_close()
+  } elif (k == "enter" || k == "return") {
+    sm_rename_commit()
+  } elif (k == "backspace") {
+    if (r.caret > 0) {
+      r.text = text.slice(r.text, 0, r.caret - 1) + text.slice(r.text, r.caret, len(r.text))
+      r.caret = r.caret - 1
+    }
+  } elif (k == "delete") {
+    r.text = text.slice(r.text, 0, r.caret) + text.slice(r.text, r.caret + 1, len(r.text))
+  } elif (k == "arrowleft") {
+    r.caret = math.max(0, r.caret - 1)
+  } elif (k == "arrowright") {
+    r.caret = math.min(len(r.text), r.caret + 1)
+  } elif (k == "home") {
+    r.caret = 0
+  } elif (k == "end") {
+    r.caret = len(r.text)
+  }
+  view_touch()
+  true
+}
+
+function sm_rename_commit() {
+  let r = SM.rename
+  sm_close()
+  ed_shape_rename(r.line, r.text)
+  view_prepare()
+  view_after()
+}
+
+-~> == Drawing ==
+
+function sm_draw() {
+  if (!SM.open) {
+    return null
+  }
+  if (SM.rename != null) {
+    return sm_draw_rename()
+  }
+  sm_draw_box(SM.x, SM.y, SM.w, SM.h, SM.title, SM.items, sm_rows(SM.items, SM.y + 16), SM.hot, [])
+  if (SM.sub != null) {
+    let b = sm_sub_box()
+    sm_draw_box(b.x, b.y, b.w, b.h, "", b.items, b.rows, SM.sub.hot, b.swatches)
+  }
+  let tip = sm_tip_box()
+  if (tip != null) {
+    g_box(tip[0], tip[1], tip[2], tip[3])
+    g_text(t("menu.blend_soon"), tip[0] + 7, tip[1] + 4, P.text)
+  }
+}
+
+-~> One menu box: the header (when there is a title), the entries, the swatches.
+function sm_draw_box(x, y, w, h, title, items, rows, hot, swatches) {
+  g_box(x, y, w, h)
+  if (title != "") {
+    g_rect(x + 1, y + 1, w - 2, 13, P.raised)
+    g_rect(x + 1, y + 14, w - 2, 1, P.void)
+    g_text(title, x + 6, y + 1, P.mute)
+  }
+  for (let i = 0; i < len(items); i = i + 1) {
+    let it = items[i]
+    let yy = rows[i]
+    if (it.id == "-") {
+      g_rect(x + 4, yy + 1, w - 8, 1, P.bevel)
+    } else {
+      sm_draw_item(x, yy, w, it, i == hot && it.on)
+    }
+  }
+  if (len(swatches) > 0) {
+    let sy = y + h - 16
+    for (let i = 0; i < len(swatches); i = i + 1) {
+      g_rect(x + 6 + i * 12, sy + 3, 10, 10, P.void)
+      g_rect(x + 7 + i * 12, sy + 4, 8, 8, swatches[i])
+    }
+  }
+}
+
+-~> One entry. Hover: moss with a lizard bar, bright text, lizard icon; a
+-~> dangerous one (Remove) keeps the row color, its ember fails on moss.
+function sm_draw_item(x, y, w, it, hot) {
+  let tc = P.text
+  let ic = P.mute
+  let kc = P.mute
+  if (it.danger) {
+    tc = P.ember
+    ic = P.ember
+  }
+  if (!it.on) {
+    tc = P.dim
+    ic = P.dim
+    kc = P.dim
+  } elif (hot && it.danger) {
+    g_rect(x + 1, y, 2, sm_row_h, P.ember)
+  } elif (hot) {
+    g_rect(x + 1, y, w - 2, sm_row_h, P.moss)
+    g_rect(x + 1, y, 2, sm_row_h, P.lizard)
+    tc = P.bright
+    ic = P.lizard
+    kc = P.text
+  }
+  g_icon(it.icon, x + 6, y + 3, ic)
+  g_text(it.label, x + 18, y, tc)
+  if (it.sub) {
+    let cc = kc
+    if (hot) {
+      cc = P.bright
+    }
+    g_icon("chevron-right", x + w - 12, y + 3, cc)
+  } elif (it.check) {
+    g_icon("check", x + w - 12, y + 3, P.lizard)
+  } elif (it.keys != "") {
+    g_text(it.keys, x + w - 6 - g_text_w(it.keys), y, kc)
+  }
+}
+
+function sm_draw_rename() {
+  let r = sm_rename_rect()
+  let x = r[0]
+  let y = r[1]
+  let w = r[2]
+  g_box(x, y, w, r[3])
+  g_rect(x + 1, y + 1, w - 2, 13, P.raised)
+  g_rect(x + 1, y + 14, w - 2, 1, P.void)
+  g_text(t("menu.rename") + " · " + t("word.line") + " " + str(SM.rename.line), x + 6, y + 1, P.mute)
+  g_field(x + 6, y + 18, w - 12, 16, true)
+  let s = SM.rename.text
+  let room = (w - 22) // 7
+  let from = math.max(0, SM.rename.caret - room)
+  let shown = text.slice(s, from, math.min(len(s), from + room))
+  g_text(shown, x + 10, y + 19, P.text)
+  g_rect(x + 10 + (SM.rename.caret - from) * 7, y + 20, 1, 12, P.amber)
+  g_text(t("menu.rename_hint"), x + 6, y + 36, P.mute)
+}

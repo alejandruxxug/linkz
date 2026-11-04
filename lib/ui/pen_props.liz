@@ -1,0 +1,146 @@
+-~> pen_props: the brush and pencil inspector, in the properties panel while
+-~> one of the two tools is picked. With the brush, a row that is no shape
+-~> shows the tool itself ("PROPERTIES · brush · pens.ink", the pen and its
+-~> gear), and a brush row gets the gear next to its pen. Under them, for
+-~> either tool, the stabilizer: Off / String / Average and its length (drag
+-~> it sideways like a number). The gear opens the pen settings. The changes
+-~> are the tool's settings for the session (tool_stabilizer.liz) and, while
+-~> the pen settings are open on the same pen, its draft too.
+
+use "../draw/pens"
+use "editor_undo"
+use "i18n"
+use "pen_edit"
+use "pen_route"
+use "tool_stabilizer"
+use "view_gfx"
+use "view_layout"
+
+-~> The stabilizer key of the tool now, or null when it is neither tool.
+function pen_props_key() {
+  if (V.tool != "brush" && V.tool != "pencil") {
+    return null
+  }
+  tool_stab_key(V.tool, ed.pen)
+}
+
+-~> Adds the inspector to a layout of the panel (view_props_layout_build's).
+function pen_props_wrap(lay) {
+  let key = pen_props_key()
+  if (key == null) {
+    return lay
+  }
+  let gm = view_geom()
+  let y = gm.props_y + 22
+  let props = lay.props
+  if (V.tool == "brush" && props == null) {
+    lay.title = text.upper(t("panel.properties")) + " · " + text.lower(t("tool.brush")) + " · pens." + ed.pen
+    lay.msg = ""
+    lay.hint = ""
+    push(lay.labels, {"x": 6, "y": y + 2, "s": "pen"})
+    let txt = pens[ed.pen].name
+    let w = g_text_w(txt) + 20
+    push(lay.boxes, {"field": "pen", "sub": 0, "kind": "pen", "x": 34, "y": y, "w": w, "h": 18, "text": txt, "focus": V.picker})
+    push(lay.boxes, {"field": "pengear", "sub": 0, "kind": "pengear", "x": 34 + w + 4, "y": y + 2, "w": 14, "h": 14, "text": "", "focus": false})
+    push(lay.labels, {"x": 34 + w + 24, "y": y + 2, "s": t("pen.tool_hint")})
+  } elif (V.tool == "brush" && props.kind == "call" && props.callee == "brush") {
+    for (let i = 0; i < len(lay.boxes); i = i + 1) {
+      let b = lay.boxes[i]
+      if (b.kind == "pen") {
+        push(lay.boxes, {"field": "pengear", "sub": 0, "kind": "pengear", "x": b.x + b.w + 3, "y": b.y + 2, "w": 14, "h": 14, "text": "", "focus": false})
+        break
+      }
+    }
+  }
+  pen_props_strip(lay, gm.props_y + 42, key)
+  lay.pen_strip = true
+  lay
+}
+
+-~> The stabilizer row: its label, the three modes and the length.
+function pen_props_strip(lay, y, key) {
+  let s = tool_stab_get(key)
+  let label = t("stab.label")
+  push(lay.labels, {"x": 6, "y": y + 1, "s": label})
+  let x = 6 + g_text_w(label) + 6
+  let modes = ["off", "string", "average"]
+  for (let i = 0; i < len(modes); i = i + 1) {
+    let txt = t(prefixed("stab.", modes[i]))
+    let w = g_text_w(txt) + 6
+    push(lay.boxes, {"field": "stab", "sub": modes[i], "kind": "stabmode", "x": x, "y": y, "w": w, "h": 14, "text": txt, "focus": s.mode == modes[i]})
+    x = x + w
+  }
+  let len_txt = str(math.round(s.length)) + " px"
+  push(lay.boxes, {"field": "stablen", "sub": 0, "kind": "stablen", "x": x + 6, "y": y, "w": g_text_w(len_txt) + 8, "h": 14, "text": len_txt, "focus": false})
+}
+
+-~> Paints a box of the inspector. True when it was one.
+function pen_props_paint_box(b) {
+  if (b.kind == "pengear") {
+    let state = "normal"
+    if (V.hover == "field:pengear:0") {
+      state = "hover"
+    }
+    g_button(b.x, b.y, b.w, b.h, "settings", "", state)
+    return true
+  }
+  if (b.kind == "stabmode") {
+    let face = P.raised
+    let tc = P.text
+    if (b.focus) {
+      face = P.moss
+      tc = P.bright
+    } elif (V.hover == "field:stab:" + b.sub) {
+      face = P.bevel
+    }
+    g_frame(b.x, b.y, b.w, b.h, P.void)
+    g_rect(b.x + 1, b.y + 1, b.w - 2, b.h - 2, face)
+    g_text(b.text, b.x + 3, b.y, tc)
+    return true
+  }
+  if (b.kind == "stablen") {
+    g_text(b.text, b.x + 4, b.y, P.amber)
+    return true
+  }
+  false
+}
+
+-~> Puts settings in the session and, when the pen settings show this pen, in its draft.
+function pen_props_set(key, s) {
+  tool_stab_set(key, s)
+  if (pw.open && pw.key == key) {
+    pw.draft.stabilizer = pw_stab_hash(s)
+    pw_mark("stabilizer")
+  }
+  view_touch()
+}
+
+-~> A press on a box of the inspector. True when it was one.
+function pen_props_press(b, e) {
+  let key = pen_props_key()
+  if (b.kind == "pengear") {
+    pen_route_show(ed.pen)
+    return true
+  }
+  if (key == null) {
+    return false
+  }
+  if (b.kind == "stabmode") {
+    let s = tool_stab_get(key)
+    pen_props_set(key, {"mode": b.sub, "length": s.length, "catch_up": s.catch_up})
+    return true
+  }
+  if (b.kind == "stablen") {
+    V.drag = {"kind": "pen_props", "key": key, "x0": e.pos.x, "v0": tool_stab_get(key).length}
+    return true
+  }
+  false
+}
+
+-~> Dragging the length sideways: a pixel a step.
+function pen_props_drag(e) {
+  let d = V.drag
+  let s = tool_stab_get(d.key)
+  let v = math.max(2, math.min(64, math.round(d.v0 + (e.pos.x - d.x0))))
+  pen_props_set(d.key, {"mode": s.mode, "length": v, "catch_up": s.catch_up})
+}

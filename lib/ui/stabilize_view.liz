@@ -1,0 +1,32 @@
+-~> stabilize_view: how the string stabilizer looks while a line is drawn
+-~> (style guide, "String stabilizer"): the pen tip as a 3x3 `bright` square
+-~> with a `void` outline, a 1 px `sky` string from the tip to the cursor and
+-~> a dotted `sky` circle around the cursor, as wide as the string is long.
+-~> It paints into the canvas buffer (full resolution, 2 pixels per UI
+-~> pixel); the brush, the pencil, the lasso and the test pad all use it.
+
+use "../gfx/raster"
+use "view_gfx"
+
+-~> Paints the string for a tip and a cursor at buffer pixels, the string
+-~> `radius` buffer pixels long. Nothing when either is missing.
+function stab_paint(tip, cursor, radius) {
+  if (tip == null || cursor == null) {
+    return null
+  }
+  let r = math.max(2.0, radius)
+  -~> the dotted circle: a 2x2 dot every 7 pixels or so of its length
+  let n = math.max(12, math.round(2 * 3.14159 * r / 7))
+  for (let i = 0; i < n; i = i + 1) {
+    let a = i * 2 * 3.14159 / n
+    let p = cursor + (math.cos(a) * r, math.sin(a) * r)
+    fb.fill((math.round(p.x) - 1, math.round(p.y) - 1), (2, 2), P.sky)
+  }
+  if (math.dist(tip, cursor) >= 1) {
+    fb.spans(raster.stroke([["M", tip], ["L", cursor]], 2.0), (0, 0), P.sky)
+  }
+  let tx = math.round(tip.x)
+  let ty = math.round(tip.y)
+  fb.fill((tx - 4, ty - 4), (8, 8), P.void)
+  fb.fill((tx - 3, ty - 3), (6, 6), P.bright)
+}

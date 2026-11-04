@@ -1,0 +1,64 @@
+-~> The fill editor's model: reading a fill from its value, writing it back as
+-~> code, and the changes the editor makes (stops, kinds, steps, handles).
+use "../../draw/gradient"
+use "../fill_model"
+use "../lang_en"
+
+-~> What a value reads as and writes back as.
+function round_trip(v) {
+  fill_literal(fill_from_value(v))
+}
+
+puts("-- literals")
+puts(fill_is_literal("#e0607a"), fill_is_literal("gradient([#3b2a6b, #e0607a, #f2a65a], 90deg)"))
+puts(fill_is_literal("radial_gradient([#fff3c4, [0.6, #f2a65a, \"hard\"], #f2a65a00])"))
+puts(fill_is_literal("colors.sky"), fill_is_literal("rgb(1, 2, 3)"), fill_is_literal("gradient(stops, 90deg)"), fill_is_literal(""))
+
+puts("-- round trips")
+puts(round_trip(#e0607a))
+puts(round_trip(gradient([#3b2a6b, #e0607a, #f2a65a], 90deg)))
+puts(round_trip(gradient([#3b2a6b, #e0607a, #f2a65a], 45deg, 5)))
+puts(round_trip(gradient([#3b2a6b, [0.3, #e0607a], #f2a65a])))
+puts(round_trip(radial_gradient([#fff3c4, [0.6, #f2a65a, "hard"], #f2a65a00])))
+puts(round_trip(radial_gradient([#fff3c4, hard(#f2a65a), #000])))
+puts(round_trip(radial_gradient([#fff3c4, #000], (0.25, 0.5), 0.75)))
+puts(round_trip(linear((0, 0), (200, 0), [#fff, #000], 4)))
+puts(round_trip(radial((10, 20), 30, [#fff, #000])))
+puts(fill_from_value(42))
+
+puts("-- stops")
+let f = fill_from_value(gradient([#000000, #ffffff]))
+let added = fill_add_stop(f, 0.5)
+puts(added[1], fill_literal(added[0]))
+let moved = fill_move_stop(added[0], 1, 0.9)
+puts(moved[1], fill_literal(moved[0]))
+let past = fill_move_stop(added[0], 1, 1.4)
+puts(past[1], fill_literal(past[0]))
+puts(fill_literal(fill_remove_stop(added[0], 1)))
+puts(fill_remove_stop(f, 0))
+puts(fill_literal(fill_set_stop(added[0], 1, "hard", true)))
+puts(fill_literal(fill_set_stop(added[0], 2, "color", #ff000080)))
+puts(fill_color_at(added[0].stops, 0.25), fill_color_at(fill_set_stop(added[0], 1, "hard", true).stops, 0.75))
+
+puts("-- kinds and steps")
+let solid = fill_from_value(#336699)
+puts(fill_literal(fill_as_kind(solid, "linear")))
+puts(fill_literal(fill_as_kind(solid, "radial")))
+puts(fill_literal(fill_as_kind(f, "solid")))
+puts(fill_literal(fill_as_kind(fill_from_value(linear((0, 0), (9, 9), [#fff, #000])), "radial")))
+puts(fill_literal(fill_set_steps(f, 5)), fill_literal(fill_set_steps(f, 1)), fill_set_steps(f, 40).steps)
+puts(fill_step_next(0, 1), fill_step_next(2, 1), fill_step_next(2, -1), fill_step_next(16, 1), fill_step_next(5, -1))
+
+puts("-- handles")
+let box = {"min": (0, 0), "max": (200, 100)}
+puts(fill_geometry(f, box))
+puts(fill_literal(fill_drag_handle(f, box, "to", (200, 50), false)))
+puts(fill_literal(fill_drag_handle(f, box, "from", (90, 0), true)))
+let rad = fill_from_value(radial_gradient([#fff, #000]))
+puts(fill_geometry(rad, box))
+puts(fill_literal(fill_drag_handle(rad, box, "center", (50, 25), false)))
+puts(fill_literal(fill_drag_handle(rad, box, "radius", (100, 100), false)))
+let pin = fill_from_value(linear((0, 0), (200, 0), [#fff, #000]))
+puts(fill_literal(fill_drag_handle(pin, box, "to", (120.4, 80.6), false)))
+let pinr = fill_from_value(radial((10, 20), 30, [#fff, #000]))
+puts(fill_literal(fill_drag_handle(pinr, box, "radius", (10, 60), false)))

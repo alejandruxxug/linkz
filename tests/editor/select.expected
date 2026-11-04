@@ -1,0 +1,41 @@
+layer sky -~> [locked]
+-- the tools come first
+select 3 lasso 18 circle 37
+select
+-- click and Shift-click
+[10] 10
+[10, 14]
+[10]
+[]
+-- a marquee takes what is inside it (Alt: what it touches)
+[14, 15, 16]
+[10, 11]
+[10, 11]
+-- a drag moves every selected shape, one undo step
+[10, 11]
+circle((329, 131), 34, #fff3c4) | circle((329, 131), 56, #f2a65a66)
+1 move 2 objects [10, 11]
+-- the arrows nudge while the canvas has the keyboard
+circle((330, 121), 34, #fff3c4) | circle((330, 121), 56, #f2a65a66) nudge
+circle((360, 90), 34, #fff3c4) | circle((360, 90), 56, #f2a65a66)
+-- the handles scale and turn
+circle((375, 105), 49, #fff3c4) scale circle
+[14, 15]
+polygon([(137, 171), (137, 231), (119, 216), (119, 186)], #3b2a6b) | line((137, 201), (181, 201), #3b2a6b, 3) rotate 2 objects
+-- a rect can't turn, and a shape made by a loop can't move
+a rect can't turn: it has no angle to write 23 rect((0, horizon), (480, 120), #2d6a8f)
+[21]
+position comes from `40 + i * 20` 21
+-- Esc clears the selection, and the other tools drop it
+[] select
+[10] pencil
+-- L and V choose the tools from the canvas, and are not typed
+lasso true
+select true
+-- the lasso selects what it closes around
+[14, 15, 16] 3 inside
+[14, 15, 16]
+-- and fills a loop as a polygon row of the current layer
+1 17 true true
+1 lasso fill [17] true 
+true

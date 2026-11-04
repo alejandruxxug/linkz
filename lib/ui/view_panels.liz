@@ -6,6 +6,9 @@ use "editor_doc"
 use "editor_undo"
 use "home_data"
 use "i18n"
+use "pen_props"
+use "select_model"
+use "tool_route"
 use "view_code"
 use "view_gfx"
 use "view_layout"
@@ -92,6 +95,9 @@ function view_paint_tabs() {
 
 -~> Whether a line is part of the selected rows.
 function view_selected(m, line) {
+  if (pick_active()) {
+    return pick_has(line)
+  }
   if (m.sel != null) {
     return line >= m.sel.from && line <= m.sel.to
   }
@@ -134,7 +140,7 @@ function view_row_render(r) {
 function view_paint_row(r, y, pinned) {
   let m = ed_model()
   let sel = view_selected(m, r.line)
-  let hover = V.hover == "row:" + str(r.line) && !sel
+  let hover = (V.hover == "row:" + str(r.line) || route_row_hot(r.line)) && !sel
   let err = r.error != null
   let ec_err = P.ember
   let pw = V.pw
@@ -213,6 +219,7 @@ function view_paint_row(r, y, pinned) {
     g_rect(bx, y + 4, cw + 4, 10, P.raised)
     g_text(str(count), bx + 2, y + 3, P.mute)
   }
+  route_paint_badge(r.line, y)
   if (r.line == m.line && V.focus == null && V.dialog == null) {
     let idx = math.max(0, math.min(m.col - cd[1], len(rendered.xs) - 1))
     let cxx = cx + rendered.xs[idx]
@@ -334,6 +341,9 @@ function view_paint_rows() {
 -~> == The properties panel ==
 
 function view_paint_box(b) {
+  if (pen_props_paint_box(b)) {
+    return null
+  }
   g_field(b.x, b.y, b.w, b.h, b.focus)
   if (b.kind == "bool") {
     if (b.text == "true") {
@@ -369,6 +379,9 @@ function view_paint_box(b) {
 }
 
 function view_hint(lay) {
+  if (lay.pen_strip == true) {
+    return ""
+  }
   let m = ed_model()
   let props = lay.props
   if (props == null) {
@@ -406,6 +419,7 @@ function view_paint_props() {
   for (let i = 0; i < len(lay.boxes); i = i + 1) {
     view_paint_box(lay.boxes[i])
   }
+  route_props_paint(lay)
   let hint = view_hint(lay)
   if (hint != "") {
     g_text(hint, 6, y + 45, P.mute)
@@ -452,9 +466,12 @@ function view_status_parts() {
     push(left, ["", ed.refusal.message, "ember"])
   } else {
     push(left, ["", t("stat.steps", {"n": view_thousands(ed.stats.steps), "ms": math.round(ed.stats.ms)}), "mute"])
-    if (V.mouse_draw != null) {
+    if (V.mouse_draw != null && route_status() == "") {
       push(right, ["", "x " + str(math.round(V.mouse_draw.x)) + " y " + str(math.round(V.mouse_draw.y)), "mute"])
     }
+  }
+  if (route_status() != "") {
+    push(right, ["", route_status(), "mute"])
   }
   push(right, ["", str(math.round(view_canvas_layout().zoom * 100)) + "%", "mute"])
   push(right, ["language", text.upper(lang_get()), "text"])

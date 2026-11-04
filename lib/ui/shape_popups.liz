@@ -1,0 +1,78 @@
+-~> shape_popups: where the shape menu and the fill editor meet the rest of the
+-~> editor. view_input, view_main and view_popups call these, one line each,
+-~> and know nothing else of the two: the menu goes over the fill editor, and
+-~> while one of them is open it gets the pointer and the keys first.
+
+use "fill_editor"
+use "shape_menu"
+
+-~> Whether either is open.
+function shape_popup_open() {
+  SM.open || FE.open
+}
+
+-~> The boxes they cover, as [kind, rect] (see popup_list).
+function shape_popup_rects() {
+  fe_sync()
+  fe_popup_rects() + sm_popup_rects()
+}
+
+-~> What they show, as a text: they are drawn again when it changes.
+function shape_popup_key() {
+  fe_sync()
+  fe_content_key() + "|" + sm_content_key()
+}
+
+-~> Draws them into the current buffer (popup_paint draws into both).
+function shape_popup_draw() {
+  fe_draw()
+  sm_draw()
+}
+
+-~> The hover id at a UI point, or null when neither is there.
+function shape_hover_at(x, y) {
+  let id = sm_hover_at(x, y)
+  if (id != null) {
+    return id
+  }
+  fe_hover_at(x, y)
+}
+
+-~> A left press: true when one of them took it.
+function shape_down(e) {
+  if (sm_down(e)) {
+    return true
+  }
+  fe_down(e)
+}
+
+-~> A move or a release of a drag the fill editor started.
+function shape_move(e) {
+  fe_drag_move(e)
+}
+
+function shape_up(e) {
+  fe_drag_up(e)
+}
+
+-~> A key: true when one of them used it.
+function shape_keydown(e) {
+  if (sm_key(e)) {
+    return true
+  }
+  fe_key(e)
+}
+
+-~> Typed text: true when one of them took it.
+function shape_text(s) {
+  if (sm_text(s)) {
+    return true
+  }
+  fe_text(s)
+}
+
+-~> A right-click, two-finger click or Ctrl+click: the shape menu.
+function shape_context(e) {
+  fe_close()
+  sm_context(e)
+}

@@ -1,0 +1,116 @@
+-~> stabilize: steadies a line while it is being drawn (the brush, the pencil
+-~> and the lasso). Samples go in one at a time, as they arrive, and what comes
+-~> out is where the ink goes:
+-~>   off      every sample as it is
+-~>   string   a pulled string: the pen tip stays where it is until the cursor
+-~>            is farther than `length` from it, then it is dragged along the
+-~>            line to the cursor, `length` behind it. Shaky hands shake the
+-~>            cursor, not the tip
+-~>   average  the mean of the last few positions (more with a longer `length`)
+-~> settings is {"mode", "length", "catch_up"}; length is in the units of the
+-~> samples' "pos". With catch_up the end of the line runs to the cursor
+-~> (stabilize_end). A sample is any hash with a "pos": what comes out is a
+-~> copy of the sample that arrived, with the steadied "pos".
+
+-~> The settings when a pen says nothing: off, 24 long, catching up.
+let stabilize_default = {"mode": "off", "length": 24, "catch_up": true}
+
+-~> The settings of a pen hash (its "stabilizer" key), the defaults filling
+-~> what it leaves out. Unknown modes are off.
+function stabilize_settings(pen) {
+  let out = {"mode": stabilize_default.mode, "length": stabilize_default.length, "catch_up": stabilize_default.catch_up}
+  if (pen == null || type(pen.stabilizer) != "HASH") {
+    return out
+  }
+  let s = pen.stabilizer
+  if (s.mode == "off" || s.mode == "string" || s.mode == "average") {
+    out.mode = s.mode
+  }
+  if (type(s.length) == "INTEGER" || type(s.length) == "FLOAT") {
+    out.length = math.max(1, s.length)
+  }
+  if (s.catch_up == true || s.catch_up == false) {
+    out.catch_up = s.catch_up
+  }
+  out
+}
+
+-~> A new line: where its tip and cursor are and the positions to average.
+function stabilize_new() {
+  {"tip": null, "cursor": null, "last": null, "hist": []}
+}
+
+-~> How many positions the average mode takes for a length.
+function stabilize_window(length) {
+  math.max(2, math.min(48, math.round(length / 3)))
+}
+
+-~> A copy of sample s at pos.
+function stabilize_at(s, pos) {
+  let out = {}
+  let ks = keys(s)
+  for (let i = 0; i < len(ks); i = i + 1) {
+    out[ks[i]] = s[ks[i]]
+  }
+  out.pos = pos
+  out
+}
+
+-~> One sample of the line: the list of samples to ink now (none while the
+-~> string is slack). The first sample of a line is always inked.
+function stabilize(state, sample, settings) {
+  state.cursor = sample.pos
+  state.last = sample
+  let mode = settings.mode
+  if (mode == "string") {
+    if (state.tip == null) {
+      state.tip = sample.pos
+      return [sample]
+    }
+    let d = math.dist(state.tip, sample.pos)
+    let length = math.max(1, settings.length)
+    if (d <= length) {
+      return []
+    }
+    state.tip = sample.pos - (sample.pos - state.tip) * (length / d)
+    return [stabilize_at(sample, state.tip)]
+  }
+  if (mode == "average") {
+    push(state.hist, sample.pos)
+    let n = stabilize_window(settings.length)
+    while (len(state.hist) > n) {
+      list.remove(state.hist, 0)
+    }
+    let sum = (0.0, 0.0)
+    for (let i = 0; i < len(state.hist); i = i + 1) {
+      sum = sum + state.hist[i]
+    }
+    state.tip = sum / len(state.hist)
+    return [stabilize_at(sample, state.tip)]
+  }
+  state.tip = sample.pos
+  [sample]
+}
+
+-~> The line is over: with catch_up, the samples that take the tip to the
+-~> cursor (a straight run, a point every quarter of the length); without
+-~> it, none.
+function stabilize_end(state, settings) {
+  if (!settings.catch_up || state.tip == null || state.last == null || settings.mode == "off") {
+    return []
+  }
+  let d = math.dist(state.tip, state.cursor)
+  if (d < 0.5) {
+    return []
+  }
+  let step = math.max(1.0, settings.length / 4.0)
+  let n = math.max(1, math.ceil(d / step))
+  let from = state.tip
+  let out = []
+  for (let i = 1; i <= n; i = i + 1) {
+    push(out, stabilize_at(state.last, from + (state.cursor - from) * (i / float(n))))
+  }
+  state.tip = state.cursor
+  state.hist = [state.cursor]
+  out
+}

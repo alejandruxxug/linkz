@@ -1,0 +1,76 @@
+-~> pen_files: the pens saved from the editor's pen settings, one lizard file
+-~> per pen in ~/.linkz/pens: soft_ink.liz holds `let pen = {...}` (a pen
+-~> hash, see lib/draw/pens.liz), and its name without .liz is the key a
+-~> drawing writes, pens.soft_ink. Every drawing run gets them (drawing.liz),
+-~> after the built-in pens and by name; a file with an error, or whose name
+-~> is not a key, is left out.
+
+use "engine"
+
+-~> The step limit of a pen file.
+let pen_files_steps = 100000
+
+-~> The pens' folder, ~/.linkz/pens.
+function pen_files_dir() {
+  fs.join(fs.home(), ".linkz", "pens")
+}
+
+-~> Whether a name can follow `pens.`: letters, digits and _, not a digit first.
+function pen_files_key_ok(key) {
+  if (len(key) == 0 || text.find("0123456789", key[0]) >= 0) {
+    return false
+  }
+  for (let i = 0; i < len(key); i += 1) {
+    if (text.find("abcdefghijklmnopqrstuvwxyz0123456789_", key[i]) < 0) {
+      return false
+    }
+  }
+  true
+}
+
+-~> The pen hash of a pen file's code, or null when it doesn't make one.
+function pen_files_eval(code, path) {
+  let r = lizard.run(code, {"name": path, "steps": pen_files_steps, "engine": engine_name()})
+  if (r.error != null || type(r.globals.pen) != "HASH") {
+    return null
+  }
+  r.globals.pen
+}
+
+-~> What was read last: the folder's files (names and digests) and their pens.
+let pen_files_cache = {"key": null, "list": []}
+
+-~> The saved pens of a folder, by key: [{"key", "pen", "path"}]. The files
+-~> are read again only when one of them changed.
+function pen_files_load(dir = pen_files_dir()) {
+  if (!fs.exists(dir)) {
+    return []
+  }
+  let files = []
+  let key = dir
+  let names = list.sort(fs.list(dir))
+  for (let i = 0; i < len(names); i += 1) {
+    let name = names[i]
+    if (text.ends(name, ".liz") && !text.starts(name, ".")) {
+      let path = fs.join(dir, name)
+      push(files, [text.slice(name, 0, len(name) - 4), path])
+      key += "|" + name + ":" + fs.digest(path, "fnv")
+    }
+  }
+  if (key == pen_files_cache.key) {
+    return pen_files_cache.list
+  }
+  let out = []
+  for (let i = 0; i < len(files); i += 1) {
+    let k = files[i][0]
+    if (pen_files_key_ok(k)) {
+      let pen = pen_files_eval(fs.read(files[i][1]), files[i][1])
+      if (pen != null) {
+        push(out, {"key": k, "pen": pen, "path": files[i][1]})
+      }
+    }
+  }
+  pen_files_cache.key = key
+  pen_files_cache.list = out
+  out
+}

@@ -1,0 +1,141 @@
+-~> pen_code: a pen hash as lizard code, the way the pen settings show it and
+-~> save it (~/.linkz/pens/<key>.liz):
+-~>   let pen = {
+-~>     "name": "soft ink",
+-~>     "min": 1,
+-~>     ...
+-~>     "pressure": {
+-~>       "curve": [[0, 0], [0.3, 0.6], [1, 1]],
+-~>       ...
+-~>   }
+-~> One key per line, and the pressure block and its inputs one key per line
+-~> too, so the line of a setting is easy to find. Each line says which
+-~> setting it holds ("min", "pressure.curve", "pressure.inputs.trackpad").
+
+-~> The keys of a pen in the order they are written; any others follow, by name.
+let pen_code_order = ["name", "min", "max", "taper", "opacity", "nib", "grain", "pressure", "tilt", "stabilizer"]
+let pen_code_pressure_order = ["curve", "width", "opacity", "smoothing", "speed", "floor", "nib_weight", "inputs"]
+let pen_code_inputs_order = ["trackpad", "tablet", "mouse"]
+let pen_code_inline_order = ["mode", "length", "catch_up"]
+
+-~> A number as short text: whole numbers without a point, others with four
+-~> decimals at most (0.30000000000000004 is 0.3, 45deg is 0.7854).
+function pen_code_number(v) {
+  if (type(v) == "INTEGER") {
+    return str(v)
+  }
+  let r = math.round(v * 10000) / 10000.0
+  if (r == math.round(r)) {
+    return str(math.round(r))
+  }
+  str(r)
+}
+
+-~> A text as a lizard string literal.
+function pen_code_string(s) {
+  "\"" + text.replace(text.replace(s, "\\", "\\\\"), "\"", "\\\"") + "\""
+}
+
+-~> Any value of a pen on one line.
+function pen_code_value(v) {
+  let ty = type(v)
+  if (ty == "INTEGER" || ty == "FLOAT") {
+    return pen_code_number(v)
+  }
+  if (ty == "STRING") {
+    return pen_code_string(v)
+  }
+  if (ty == "ARRAY") {
+    let parts = []
+    for (let i = 0; i < len(v); i = i + 1) {
+      push(parts, pen_code_value(v[i]))
+    }
+    return "[" + text.join(parts, ", ") + "]"
+  }
+  if (ty == "POINT") {
+    return "[" + pen_code_number(v.x) + ", " + pen_code_number(v.y) + "]"
+  }
+  if (ty == "HASH") {
+    let ks = pen_code_keys(v, pen_code_inline_order)
+    let parts = []
+    for (let i = 0; i < len(ks); i = i + 1) {
+      push(parts, pen_code_string(ks[i]) + ": " + pen_code_value(v[ks[i]]))
+    }
+    return "{" + text.join(parts, ", ") + "}"
+  }
+  str(v)
+}
+
+-~> The keys of h to write: those of `order` it has, then the rest by name.
+-~> "key" is the editor's own note of a saved pen's key, never written.
+function pen_code_keys(h, order) {
+  let out = []
+  for (let i = 0; i < len(order); i = i + 1) {
+    if (hash.has(h, order[i])) {
+      push(out, order[i])
+    }
+  }
+  let rest = list.sort(keys(h))
+  for (let i = 0; i < len(rest); i = i + 1) {
+    if (list.index(out, rest[i]) < 0 && rest[i] != "key") {
+      push(out, rest[i])
+    }
+  }
+  out
+}
+
+-~> The lines of a block of keys, at an indent: [{"s", "key"}]. `nest` says
+-~> which keys open a block of their own (their order), the others are inline.
+function pen_code_block(h, order, indent, path, nest) {
+  let out = []
+  let ks = pen_code_keys(h, order)
+  for (let i = 0; i < len(ks); i = i + 1) {
+    let k = ks[i]
+    let v = h[k]
+    let comma = ","
+    if (i == len(ks) - 1) {
+      comma = ""
+    }
+    let here = path + k
+    if (nest[k] != null && type(v) == "HASH" && len(keys(v)) > 0) {
+      push(out, {"s": indent + pen_code_string(k) + ": {", "key": here})
+      out = out + pen_code_block(v, nest[k], indent + "  ", here + ".", nest)
+      push(out, {"s": indent + "}" + comma, "key": here})
+    } else {
+      push(out, {"s": indent + pen_code_string(k) + ": " + pen_code_value(v) + comma, "key": here})
+    }
+  }
+  out
+}
+
+-~> The lines of `let pen = {...}` for a pen: [{"s", "key"}].
+function pen_code_lines(pen) {
+  let nest = {"pressure": pen_code_pressure_order, "inputs": pen_code_inputs_order}
+  [{"s": "let pen = {", "key": ""}] + pen_code_block(pen, pen_code_order, "  ", "", nest) + [{"s": "}", "key": ""}]
+}
+
+-~> The line (0 up) that holds a setting, or the closest one above it: the
+-~> setting "pressure.inputs.trackpad.floor" is on the trackpad's line.
+function pen_code_line_of(lines, key) {
+  let k = key
+  while (k != "") {
+    for (let i = 0; i < len(lines); i = i + 1) {
+      if (lines[i].key == k) {
+        return i
+      }
+    }
+    let parts = text.split(k, ".")
+    k = text.join(list.slice(parts, 0, len(parts) - 1), ".")
+  }
+  0
+}
+
+-~> The text of a pen file: a note line, then the pen.
+function pen_code_file(pen) {
+  let lines = pen_code_lines(pen)
+  let out = ["-~> " + pen.name + ": a pen saved from Linkz's pen settings."]
+  for (let i = 0; i < len(lines); i = i + 1) {
+    push(out, lines[i].s)
+  }
+  text.join(out, "\n") + "\n"
+}

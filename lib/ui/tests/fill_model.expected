@@ -1,0 +1,40 @@
+-- literals
+true true
+true
+false false false false
+-- round trips
+#e0607a
+gradient([#3b2a6b, #e0607a, #f2a65a], 90deg)
+gradient([#3b2a6b, #e0607a, #f2a65a], 45deg, 5)
+gradient([#3b2a6b, [0.3, #e0607a], #f2a65a], 90deg)
+radial_gradient([#fff3c4, [0.6, #f2a65a, "hard"], #f2a65a00])
+radial_gradient([#fff3c4, hard(#f2a65a), #000000])
+radial_gradient([#fff3c4, #000000], (0.25, 0.5), 0.75)
+linear((0, 0), (200, 0), [#ffffff, #000000], 4)
+radial((10, 20), 30, [#ffffff, #000000])
+null
+-- stops
+1 gradient([#000000, #808080, #ffffff], 90deg)
+1 gradient([#000000, [0.9, #808080], #ffffff], 90deg)
+1 gradient([#000000, [1, #808080], #ffffff], 90deg)
+gradient([#000000, #ffffff], 90deg)
+null
+gradient([#000000, hard(#808080), #ffffff], 90deg)
+gradient([#000000, #808080, #ff000080], 90deg)
+#404040 #c0c0c0
+-- kinds and steps
+gradient([#336699, #adc2d6], 90deg)
+radial_gradient([#336699, #adc2d6])
+#000000
+radial_gradient([#ffffff, #000000])
+gradient([#000000, #ffffff], 90deg, 5) gradient([#000000, #ffffff], 90deg) 16
+2 3 0 16 4
+-- handles
+{"from": (100.0, 0.0), "to": (100.0, 100.0)}
+gradient([#000000, #ffffff], 0deg)
+gradient([#000000, #ffffff], 75deg)
+{"center": (100.0, 50.0), "r": 100.0}
+radial_gradient([#ffffff, #000000], (0.25, 0.25), 0.5)
+radial_gradient([#ffffff, #000000], (0.5, 0.5), 0.25)
+linear((0, 0), (120, 81), [#ffffff, #000000])
+radial((10, 20), 40, [#ffffff, #000000])

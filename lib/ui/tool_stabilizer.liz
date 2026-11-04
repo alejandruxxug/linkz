@@ -1,0 +1,36 @@
+-~> tool_stabilizer: the stabilizer each drawing tool uses now. A pen's comes
+-~> from its hash ("stabilizer", see stabilize.liz) until the pen settings or
+-~> the inspector change it for this session; the pencil and the lasso have
+-~> one of their own ("@pencil", "@lasso"), kept for the session only.
+
+use "../draw/pens"
+use "stabilize"
+
+let tool_stab = {"by_key": {}}
+
+-~> The settings {"mode", "length", "catch_up"} for a pen key or a tool.
+function tool_stab_get(key) {
+  let own = tool_stab.by_key[key]
+  if (own != null) {
+    return own
+  }
+  stabilize_settings(pens[key])
+}
+
+-~> Changes the settings of a pen key or a tool for the session.
+function tool_stab_set(key, settings) {
+  tool_stab.by_key[key] = {"mode": settings.mode, "length": settings.length, "catch_up": settings.catch_up}
+}
+
+-~> Forgets a session change (the pen's own settings count again).
+function tool_stab_forget(key) {
+  delete(tool_stab.by_key, key)
+}
+
+-~> The key the stabilizer of a tool is kept under: the pen for the brush.
+function tool_stab_key(tool, pen_key) {
+  if (tool == "brush") {
+    return pen_key
+  }
+  "@" + tool
+}

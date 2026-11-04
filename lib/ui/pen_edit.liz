@@ -1,0 +1,414 @@
+-~> pen_edit: what the pen settings window edits, `pw`: a draft copy of one
+-~> pen, never the pen itself, until Save as new pen writes it under a name
+-~> (pen_library.liz). The test pad and the tools use the draft live. Each
+-~> change notes which setting it was ("pressure.smoothing"), so the code
+-~> view can show that line. The functions here are the window's logic; the
+-~> window itself is pen_window.liz.
+
+use "../draw/pens"
+use "i18n"
+use "pen_code"
+use "pen_library"
+use "stabilize"
+use "tool_stabilizer"
+
+let pw = {
+  "open": false,
+  "x": 16,
+  "y": 34,
+  "key": "",
+  "draft": null,
+  "orig": null,
+  "source": "trackpad",
+  "name": "",
+  "name_focus": false,
+  "name_caret": 0,
+  "changed": "",
+  "code_top": 0,
+  "ver": 0,
+  "live_p": null,
+  "live_src": null,
+  "curve_hover": -1,
+  "pad": [],
+  "pad_live": null,
+  "note": "",
+  "follow": false
+}
+
+-~> The presets of the curve, by name.
+let pw_presets = {
+  "soft": [[0, 0], [0.3, 0.6], [1, 1]],
+  "linear": [[0, 0], [1, 1]],
+  "firm": [[0, 0], [0.6, 0.3], [1, 1]]
+}
+let pw_preset_names = ["soft", "linear", "firm"]
+
+-~> The sliders: [id, the setting it notes, low, high, step]; width and opacity are ranges.
+let pw_sliders = [
+  ["width", "max", 0, 30, 0.5],
+  ["opacity", "opacity", 0, 1, 0.01],
+  ["taper", "taper", 0, 0.5, 0.01],
+  ["smoothing", "pressure.smoothing", 0, 0.95, 0.01],
+  ["speed", "pressure.speed", 0, 1, 0.01]
+]
+
+-~> Opens the window on a pen (its key): the draft is a copy of it, and a
+-~> built-in's copy gets a name of its own to be saved under.
+function pw_open(key) {
+  let pen = pens[key]
+  if (pen == null) {
+    return false
+  }
+  pw.key = key
+  pw.draft = pen_deep_copy(pen)
+  pw.orig = pen_deep_copy(pen)
+  pw.name = pen.name
+  if (pen_is_builtin(key)) {
+    pw.name = t("pen.copy_name", {"name": pen.name})
+  }
+  pw.name_focus = false
+  pw.name_caret = len(pw.name)
+  pw.changed = ""
+  pw.code_top = 0
+  pw.note = ""
+  pw.curve_hover = -1
+  pw.draft.stabilizer = pw_stab_hash(tool_stab_get(key))
+  pw.open = true
+  pw.ver += 1
+  true
+}
+
+function pw_close() {
+  pw.open = false
+  pw.name_focus = false
+  pw.ver += 1
+}
+
+-~> Back to the pen as it was when the window opened.
+function pw_reset() {
+  pw.draft = pen_deep_copy(pw.orig)
+  pw.changed = ""
+  pw.note = ""
+  pw.draft.stabilizer = pw_stab_hash(stabilize_settings(pw.orig))
+  tool_stab_forget(pw.key)
+  pw.ver += 1
+}
+
+-~> A change to the draft: which setting, so the code view shows its line.
+function pw_mark(setting) {
+  pw.changed = setting
+  pw.follow = true
+  pw.note = ""
+  pw.ver += 1
+}
+
+-~> The draft's pressure block, made when it has none.
+function pw_pressure() {
+  if (type(pw.draft.pressure) != "HASH") {
+    pw.draft.pressure = {}
+  }
+  pw.draft.pressure
+}
+
+-~> A number of the draft's pressure block, or its default.
+function pw_pressure_num(name, fallback) {
+  let v = pw_pressure()[name]
+  if (type(v) == "INTEGER" || type(v) == "FLOAT") {
+    return v
+  }
+  fallback
+}
+
+-~> A value kept inside [lo, hi] and rounded to step.
+function pw_snap(v, lo, hi, step) {
+  let x = math.max(lo, math.min(hi, v))
+  let r = math.round(x / step) * step
+  math.round(r * 1000) / 1000.0
+}
+
+-~> The slider row of an id, or null.
+function pw_slider(id) {
+  for (let i = 0; i < len(pw_sliders); i = i + 1) {
+    if (pw_sliders[i][0] == id) {
+      return pw_sliders[i]
+    }
+  }
+  null
+}
+
+-~> What a slider holds: [low, high] for a range, else [value].
+function pw_value(id) {
+  let d = pw.draft
+  if (id == "width") {
+    return [d.min, d.max]
+  }
+  if (id == "opacity") {
+    return [d.opacity[0], d.opacity[1]]
+  }
+  if (id == "taper") {
+    return [d.taper]
+  }
+  if (id == "smoothing") {
+    return [pw_pressure_num("smoothing", 0)]
+  }
+  if (id == "speed") {
+    return [pw_pressure_num("speed", 0)]
+  }
+  if (id == "length") {
+    return [stabilize_settings(d).length]
+  }
+  if (id == "override") {
+    return [pw_override_value()]
+  }
+  [0]
+}
+
+-~> The slider's limits [low, high, step].
+function pw_limits(id) {
+  let s = pw_slider(id)
+  if (s != null) {
+    return [s[2], s[3], s[4]]
+  }
+  if (id == "length") {
+    return [2, 64, 1]
+  }
+  if (pw.source == "mouse") {
+    return [0, 1, 0.01]
+  }
+  [0, 0.9, 0.01]
+}
+
+-~> Sets one end (sub 0 or 1) of a slider. A range keeps low <= high.
+function pw_set(id, sub, v) {
+  let lim = pw_limits(id)
+  let x = pw_snap(v, lim[0], lim[1], lim[2])
+  let d = pw.draft
+  if (id == "width") {
+    if (sub == 0) {
+      d.min = math.min(x, d.max)
+      pw_mark("min")
+    } else {
+      d.max = math.max(x, d.min)
+      pw_mark("max")
+    }
+  } elif (id == "opacity") {
+    let o = [d.opacity[0], d.opacity[1]]
+    if (sub == 0) {
+      o[0] = math.min(x, o[1])
+    } else {
+      o[1] = math.max(x, o[0])
+    }
+    d.opacity = o
+    pw_mark("opacity")
+  } elif (id == "taper") {
+    d.taper = x
+    pw_mark("taper")
+  } elif (id == "smoothing" || id == "speed") {
+    pw_pressure()[id] = x
+    pw_mark("pressure." + id)
+  } elif (id == "length") {
+    let s = stabilize_settings(d)
+    s.length = math.round(x)
+    pw_set_stab(s)
+  } elif (id == "override") {
+    pw_set_override(x)
+  }
+}
+
+-~> The text a slider shows: "1-12", "80-100%", "0.3", "40%", "24 px".
+function pw_value_text(id) {
+  let v = pw_value(id)
+  if (id == "width") {
+    return pen_code_number(v[0]) + "-" + pen_code_number(v[1])
+  }
+  if (id == "opacity") {
+    return str(math.round(v[0] * 100)) + "-" + str(math.round(v[1] * 100)) + "%"
+  }
+  if (id == "taper") {
+    return pen_code_number(v[0])
+  }
+  if (id == "length") {
+    return str(math.round(v[0])) + " px"
+  }
+  str(math.round(v[0] * 100)) + "%"
+}
+
+-~> == The curve ==
+
+-~> The draft's curve: points [raw, effective] from 0 to 1.
+function pw_curve() {
+  let c = pw_pressure().curve
+  if (type(c) != "ARRAY" || len(c) < 2) {
+    return [[0, 0], [1, 1]]
+  }
+  c
+}
+
+function pw_set_curve(c) {
+  pw_pressure().curve = c
+  pw_mark("pressure.curve")
+}
+
+-~> Moves point i to (x, y) (0 to 1): the ends stay at raw 0 and 1, a middle
+-~> point stays between its neighbours.
+function pw_curve_move(i, x, y) {
+  let c = pen_deep_copy(pw_curve())
+  let n = len(c)
+  if (i < 0 || i >= n) {
+    return false
+  }
+  let nx = x
+  if (i == 0) {
+    nx = 0
+  } elif (i == n - 1) {
+    nx = 1
+  } else {
+    nx = math.max(c[i - 1][0] + 0.02, math.min(c[i + 1][0] - 0.02, x))
+  }
+  c[i] = [pw_snap(nx, 0, 1, 0.01), pw_snap(y, 0, 1, 0.01)]
+  pw_set_curve(c)
+  true
+}
+
+-~> Adds a point at (x, y) between the two around it; gives its index, or -1
+-~> when it is too close to one.
+function pw_curve_add(x, y) {
+  let c = pen_deep_copy(pw_curve())
+  for (let i = 1; i < len(c); i = i + 1) {
+    if (x < c[i][0]) {
+      if (x - c[i - 1][0] < 0.04 || c[i][0] - x < 0.04) {
+        return -1
+      }
+      list.insert(c, i, [pw_snap(x, 0, 1, 0.01), pw_snap(y, 0, 1, 0.01)])
+      pw_set_curve(c)
+      return i
+    }
+  }
+  -1
+}
+
+-~> Takes out a middle point (the ends stay).
+function pw_curve_remove(i) {
+  let c = pen_deep_copy(pw_curve())
+  if (i <= 0 || i >= len(c) - 1) {
+    return false
+  }
+  list.remove(c, i)
+  pw_set_curve(c)
+  true
+}
+
+-~> The preset the curve is, or "custom".
+function pw_preset_name() {
+  let c = pw_curve()
+  for (let i = 0; i < len(pw_preset_names); i = i + 1) {
+    if (str(pw_presets[pw_preset_names[i]]) == str(c)) {
+      return pw_preset_names[i]
+    }
+  }
+  "custom"
+}
+
+-~> The next preset after the current one (the dropdown cycles them).
+function pw_preset_next() {
+  let at = list.index(pw_preset_names, pw_preset_name())
+  let name = pw_preset_names[(at + 1) % len(pw_preset_names)]
+  pw_set_curve(pen_deep_copy(pw_presets[name]))
+  name
+}
+
+-~> The effective pressure of the draft at raw pressure p, for the current input.
+function pw_effective(p) {
+  pen_curve(pen_block(pw.draft, pw.source), p)
+}
+
+-~> == The inputs ==
+
+-~> The overrides of an input in the draft, made when missing.
+function pw_inputs(src) {
+  let b = pw_pressure()
+  if (type(b.inputs) != "HASH") {
+    b.inputs = {}
+  }
+  if (type(b.inputs[src]) != "HASH") {
+    b.inputs[src] = {}
+  }
+  b.inputs[src]
+}
+
+-~> The setting the overrides box shows for the current input: a floor for
+-~> the trackpad and the tablet, how much speed sets the pressure for a mouse.
+function pw_override_name() {
+  if (pw.source == "mouse") {
+    return "speed"
+  }
+  "floor"
+}
+
+function pw_override_value() {
+  let v = pw_inputs(pw.source)[pw_override_name()]
+  if (type(v) == "INTEGER" || type(v) == "FLOAT") {
+    return v
+  }
+  if (pw.source == "mouse") {
+    return 1
+  }
+  0
+}
+
+function pw_set_override(x) {
+  pw_inputs(pw.source)[pw_override_name()] = x
+  pw_mark("pressure.inputs." + pw.source)
+}
+
+-~> Shows another input's overrides (trackpad, tablet or mouse).
+function pw_set_source(src) {
+  pw.source = src
+  pw.ver += 1
+}
+
+-~> == The stabilizer ==
+
+function pw_stab_hash(s) {
+  {"mode": s.mode, "length": s.length, "catch_up": s.catch_up}
+}
+
+-~> Puts stabilizer settings in the draft; the tools use them at once.
+function pw_set_stab(s) {
+  pw.draft.stabilizer = pw_stab_hash(s)
+  tool_stab_set(pw.key, s)
+  pw_mark("stabilizer")
+}
+
+function pw_stab_mode(mode) {
+  let s = stabilize_settings(pw.draft)
+  s.mode = mode
+  pw_set_stab(s)
+}
+
+function pw_toggle_catch_up() {
+  let s = stabilize_settings(pw.draft)
+  s.catch_up = !s.catch_up
+  pw_set_stab(s)
+}
+
+-~> == Saving ==
+
+-~> Saves the draft as a new pen under the name field: the pen is then the
+-~> current one and the window edits it. Gives the key, or null (pw.note says why).
+function pw_save() {
+  let r = pen_lib_save(pw.draft, pw.name)
+  if (r.refused != null) {
+    pw.note = r.refused
+    pw.ver += 1
+    return null
+  }
+  let s = stabilize_settings(pw.draft)
+  pw.key = r.key
+  pw.orig = pen_deep_copy(pens[r.key])
+  pw.draft = pen_deep_copy(pens[r.key])
+  tool_stab_set(r.key, s)
+  pw.note = t("pen.saved", {"key": "pens." + r.key})
+  pw.ver += 1
+  r.key
+}

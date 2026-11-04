@@ -1,0 +1,63 @@
+-~> The pen settings' logic: the window edits a draft copy of a pen (the
+-~> built-in stays as it is), its sliders keep their limits, the curve keeps
+-~> its ends, the presets are recognised, and the pen hash is written one
+-~> setting per line, so the line of a change can be found and the file runs
+-~> back to the same pen.
+use "../../draw/pens"
+use "../lang_en"
+use "../pen_code"
+use "../pen_edit"
+use "../pen_library"
+use "../tool_stabilizer"
+
+puts("-- the draft is a copy; a built-in's copy gets a name of its own")
+puts(pw_open("ink"), pw_open("nope"), pw.key, pw.name, pw.draft.name)
+pw_set("width", 1, 14)
+pw_set("width", 0, 20)
+puts(pw_value("width"), pens.ink.min, pens.ink.max, pw.changed)
+pw_set("opacity", 0, 0.8)
+pw_set("smoothing", 0, 2)
+pw_set("speed", 0, -1)
+pw_set("taper", 0, 0.333)
+puts(pw_value_text("width"), pw_value_text("opacity"), pw_value_text("smoothing"), pw_value_text("speed"), pw_value_text("taper"))
+puts(pens.ink.opacity, pens.ink.pressure.smoothing, pens.ink.taper)
+
+puts("-- the curve and its presets")
+puts(pw_preset_name(), pw_preset_next(), pw_preset_next(), pw_preset_next(), pw_preset_name())
+puts(pw_curve_add(0.5, 0.9), pw_curve_add(0.01, 0.5), pw_curve())
+pw_curve_move(0, 0.4, 0.2)
+pw_curve_move(1, 2, 2)
+pw_curve_move(2, 0.1, 0.7)
+puts(pw_curve(), pw_preset_name())
+puts(pw_curve_remove(0), pw_curve_remove(1), pw_curve())
+puts(pens.ink.pressure.curve)
+
+puts("-- each input has its overrides box")
+puts(pw_override_name(), pw_value_text("override"))
+pw_set("override", 0, 0.95)
+pw_set_source("mouse")
+puts(pw_override_name(), pw_value_text("override"))
+pw_set("override", 0, 0.3)
+puts(pw.draft.pressure.inputs, pens.ink.pressure.inputs.trackpad)
+
+puts("-- the stabilizer goes to the draft and to the tools at once")
+pw_stab_mode("string")
+pw_set("length", 0, 99)
+pw_toggle_catch_up()
+puts(pw.draft.stabilizer, tool_stab_get("ink"), pens.ink.stabilizer)
+pw_reset()
+puts(pw.draft.min, pw.draft.stabilizer, tool_stab_get("ink"))
+
+puts("-- the pen hash, one setting per line")
+pw_open("calligraphy")
+pw_set("smoothing", 0, 0.5)
+let lines = pen_code_lines(pw.draft)
+for (let i = 0; i < len(lines); i = i + 1) {
+  puts(lines[i].s)
+}
+puts(pen_code_line_of(lines, "pressure.smoothing"), pen_code_line_of(lines, "pressure.inputs.trackpad.floor"), pen_code_line_of(lines, "nothing"))
+puts(text.lines(pen_code_file(pw.draft))[0])
+
+puts("-- names and keys")
+puts(pen_lib_key("Soft Ink!"), pen_lib_key("  9 lives "), pen_lib_key("?!"), pen_is_builtin("ink"), pen_is_builtin("list"), pen_is_builtin("soft_ink"))
+puts(pen_code_number(0.30000000000000004), pen_code_number(1.0), pen_code_number(12), pen_code_string("a \"b\""))

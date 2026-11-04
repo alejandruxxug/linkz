@@ -1,0 +1,212 @@
+-~> The Select (V) and Lasso (L) tools in the editor's window: clicking and
+-~> Shift-clicking shapes selects their rows, a marquee takes what is inside
+-~> it, a drag moves every selected shape in one undo step, the handles scale
+-~> and turn, the arrows nudge, a shape made by a loop refuses with the
+-~> reason, and the lasso selects what it closes around or fills a new
+-~> polygon row.
+
+use "../../lib/app/editor"
+use "../../lib/app/libs"
+use "rig"
+
+let dir = fs.join(fs.home(), "select-test")
+let code = fs.read(fs.join(libs_root(), "examples", "layers.lzdraw"))
+let rig = rig_open(dir, code, editor_size, rig_modules + ["ui/view_panels", "ui/select_model", "ui/tool_select", "ui/tool_lasso"])
+let n = rig.names
+let cmds = rig.ed.app.debug_commands
+
+let plain = {"shift": false, "alt": false, "cmd": false, "ctrl": false}
+let shifted = {"shift": true, "alt": false, "cmd": false, "ctrl": false}
+
+-~> A point of the drawing as a UI point of the window.
+function at(p) {
+  n.view_to_window(n.view_canvas_layout(), p) * 0.5
+}
+
+function down(p, mods = plain) {
+  {"type": "down", "pos": at(p), "mods": mods}
+}
+
+function move(p, mods = plain) {
+  {"type": "move", "pos": at(p), "mods": mods}
+}
+
+function up(p, mods = plain) {
+  {"type": "up", "pos": at(p), "mods": mods}
+}
+
+function key(k, mods = plain) {
+  {"type": "key", "key": k, "mods": mods}
+}
+
+-~> A press, a few moves along the way and the release, one frame each.
+function drag(a, b, mods = plain, steps = 4) {
+  rig_frame(rig, [down(a, mods)])
+  for (let i = 1; i <= steps; i += 1) {
+    rig_frame(rig, [move(a + (b - a) * (i / float(steps)), mods)])
+  }
+  rig_frame(rig, [up(b, mods)])
+}
+
+function click(p, mods = plain) {
+  rig_frame(rig, [down(p, mods), up(p, mods)])
+}
+
+function lines(a, b) {
+  let m = n.ed_model()
+  let out = []
+  for (let i = a; i <= b; i += 1) {
+    push(out, text.trim(m.lines[i - 1]))
+  }
+  text.join(out, " | ")
+}
+
+-~> The sky is locked, so a press on it is a press on nothing.
+n.ed_set_locked(25, true)
+rig_frame(rig)
+puts(text.trim(n.ed_model().lines[24]))
+
+puts("-- the tools come first")
+let bs = n.view_toolbar()
+puts(bs[0].id, bs[0].x, bs[1].id, bs[1].x, bs[2].id, bs[2].x)
+puts(cmds.Tool(["select"]).tool)
+
+puts("-- click and Shift-click")
+click((360, 90))
+puts(n.pick_lines(), n.ed_model().line)
+click((165, 225), shifted)
+puts(n.pick_lines())
+click((165, 225), shifted)
+puts(n.pick_lines())
+click((40, 40))
+puts(n.pick_lines())
+
+puts("-- a marquee takes what is inside it (Alt: what it touches)")
+drag((100, 160), (200, 240))
+puts(n.pick_lines())
+drag((300, 20), (420, 160))
+puts(n.pick_lines())
+drag((300, 20), (380, 100), {"shift": false, "alt": true, "cmd": false, "ctrl": false})
+puts(n.pick_lines())
+
+puts("-- a drag moves every selected shape, one undo step")
+cmds.SelectRow([10])
+rig_frame(rig)
+click((360, 90))
+click((360, 140), shifted)
+puts(n.pick_lines())
+let undo0 = len(n.ed.undo)
+drag((360, 90), (330, 130))
+puts(lines(10, 11))
+puts(len(n.ed.undo) - undo0, n.ed_undo_text(), n.pick_lines())
+
+puts("-- the arrows nudge while the canvas has the keyboard")
+rig_frame(rig, [key("ArrowRight")])
+rig_frame(rig, [key("ArrowUp", shifted)])
+puts(lines(10, 11), n.ed_undo_text())
+n.view_undo()
+n.view_undo()
+n.view_undo()
+rig_frame(rig)
+puts(lines(10, 11))
+
+puts("-- the handles scale and turn")
+click((360, 90))
+let cl = n.view_canvas_layout()
+let box = n.select_ui_box(cl, n.select_shapes())
+let hs = n.select_handles(box)
+let se = hs[7]
+let ui = (se.x, se.y)
+rig_frame(rig, [{"type": "down", "pos": ui, "mods": plain}])
+rig_frame(rig, [{"type": "move", "pos": ui + (6, 6), "mods": plain}])
+rig_frame(rig, [{"type": "move", "pos": ui + (12, 12), "mods": plain}])
+rig_frame(rig, [{"type": "up", "pos": ui + (12, 12), "mods": plain}])
+puts(lines(10, 10), n.ed_undo_text())
+n.view_undo()
+rig_frame(rig)
+click((150, 220))
+click((150, 176), shifted)
+puts(n.pick_lines())
+box = n.select_ui_box(n.view_canvas_layout(), n.select_shapes())
+let ring = n.select_handles(box)[8]
+let c = ((box[0] + box[2]) / 2.0, (box[1] + box[3]) / 2.0)
+let r0 = (ring.x, ring.y)
+let r1 = (c.x + (c.y - r0.y), c.y)
+rig_frame(rig, [{"type": "down", "pos": r0, "mods": shifted}])
+rig_frame(rig, [{"type": "move", "pos": (r0 + r1) / 2, "mods": shifted}])
+rig_frame(rig, [{"type": "move", "pos": r1, "mods": shifted}])
+rig_frame(rig, [{"type": "up", "pos": r1, "mods": shifted}])
+puts(lines(14, 15), n.ed_undo_text())
+n.view_undo()
+rig_frame(rig)
+
+puts("-- a rect can't turn, and a shape made by a loop can't move")
+click((460, 312))
+box = n.select_ui_box(n.view_canvas_layout(), n.select_shapes())
+ring = n.select_handles(box)[8]
+rig_frame(rig, [{"type": "down", "pos": (ring.x, ring.y), "mods": plain}])
+rig_frame(rig, [{"type": "move", "pos": (ring.x + 40, ring.y + 20), "mods": plain}])
+rig_frame(rig, [{"type": "up", "pos": (ring.x + 40, ring.y + 20), "mods": plain}])
+puts(n.ed.refusal.message, n.ed.refusal.line, lines(23, 23))
+click((40, 230))
+puts(n.pick_lines())
+drag((40, 230), (50, 250))
+puts(n.ed.refusal.message, n.ed.refusal.line)
+
+puts("-- Esc clears the selection, and the other tools drop it")
+click((360, 90))
+click((150, 220), shifted)
+rig_frame(rig, [key("Escape")])
+puts(n.pick_lines(), n.V.tool)
+click((360, 90))
+click((150, 220), shifted)
+cmds.Tool(["pencil"])
+puts(n.pick_lines(), n.V.tool)
+
+puts("-- L and V choose the tools from the canvas, and are not typed")
+cmds.Tool(["select"])
+click((40, 40))
+let before = text.join(n.ed_model().lines, "\n")
+rig_frame(rig, [key("l"), {"type": "type", "text": "l", "mods": plain}])
+puts(n.V.tool, text.join(n.ed_model().lines, "\n") == before)
+rig_frame(rig, [key("v"), {"type": "type", "text": "v", "mods": plain}])
+puts(n.V.tool, text.join(n.ed_model().lines, "\n") == before)
+
+puts("-- the lasso selects what it closes around")
+cmds.Tool(["lasso"])
+let loop = []
+for (let i = 0; i <= 24; i += 1) {
+  let a = math.tau * i / 24
+  push(loop, (150 + math.cos(a) * 52, 200 + math.sin(a) * 52))
+}
+rig_frame(rig, [down(loop[0])])
+for (let i = 1; i < len(loop); i += 1) {
+  rig_frame(rig, [move(loop[i])])
+}
+puts(n.sel_ui.hot, n.view_status_parts()[1][0][1])
+rig_frame(rig, [up(loop[len(loop) - 1])])
+puts(n.pick_lines())
+
+puts("-- and fills a loop as a polygon row of the current layer")
+n.lasso_cfg.mode = "fill"
+n.ed.color = "#8a6fb0"
+cmds.SelectRow([16])
+rig_frame(rig)
+let count = len(n.ed_model().lines)
+let undo1 = len(n.ed.undo)
+let blob = []
+for (let i = 0; i <= 24; i += 1) {
+  let a = math.tau * i / 24
+  push(blob, (130 + math.cos(a) * 40, 240 + math.sin(a) * 10))
+}
+rig_frame(rig, [down(blob[0])])
+for (let i = 1; i < len(blob); i += 1) {
+  rig_frame(rig, [move(blob[i])])
+}
+rig_frame(rig, [up(blob[len(blob) - 1])])
+let row = n.ed_model().lines[16]
+puts(len(n.ed_model().lines) - count, n.ed_model().line, text.starts(text.trim(row), "polygon([("), text.ends(row, "], #8a6fb0)"))
+puts(len(n.ed.undo) - undo1, n.ed_undo_text(), n.pick_lines(), n.lasso_badge_on(17), rig.ed.error)
+n.view_undo()
+rig_frame(rig)
+puts(len(n.ed_model().lines) == count)

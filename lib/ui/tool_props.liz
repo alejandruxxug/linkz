@@ -1,0 +1,240 @@
+-~> tool_props: what the properties panel shows for the Select and Lasso tools.
+-~>   select, two or more objects   "2 objects · move ( dx , dy )" (the drag's
+-~>                                 move while it runs) and how to select more
+-~>   lasso                         the options strip: Select / Fill, catch up,
+-~>                                 and the stabilizer Off / String / Average
+-~>                                 with its length slider
+-~> The layout is the panel's ({"title", "labels", "boxes", "msg", "hint",
+-~> "props"}) with the tool's own widgets in "own"; a widget is {"id", "kind",
+-~> "x", "y", "w", "h", ...} and its id ("lasso:fill", ...) is what the
+-~> pointer is over.
+
+use "editor_undo"
+use "i18n"
+use "select_model"
+use "tool_lasso"
+use "tool_select"
+use "view_gfx"
+use "view_layout"
+
+-~> The stabilizer's length range on the slider (drawing pixels).
+let strip_min = 4
+let strip_max = 64
+
+-~> The panel's layout for the tool, or null when the panel shows the row as usual.
+function tool_props_layout(gm) {
+  if (V.tool == "lasso") {
+    return strip_layout(gm)
+  }
+  if (V.tool == "select") {
+    let n = len(select_shapes())
+    let g = V.gest
+    if (n >= 2 || (g != null && g.owner == "select" && g.mode == "move" && g.moved)) {
+      return select_props_layout(gm, n)
+    }
+  }
+  null
+}
+
+function tool_props_base(title, hint) {
+  {"title": title, "labels": [], "boxes": [], "msg": "", "hint": hint, "props": null, "own": []}
+}
+
+-~> "PROPERTIES · select · lines 10, 11" and "2 objects · move ( -30 , +40 )".
+function select_props_layout(gm, n) {
+  let lines = pick_lines()
+  let shown = []
+  for (let i = 0; i < len(lines) && i < 4; i += 1) {
+    push(shown, str(lines[i]))
+  }
+  let list_text = text.join(shown, ", ")
+  if (len(lines) > 4) {
+    list_text += ", …"
+  }
+  let head = text.upper(t("panel.properties")) + " · " + t("select.title") + " · " + t("select.lines", {"list": list_text})
+  let out = tool_props_base(head, t("select.hint"))
+  let y = gm.props_y + 22
+  let count = t("select.objects", {"n": n})
+  push(out.own, {"id": "", "kind": "text", "x": 6, "y": y + 2, "s": count, "c": "text"})
+  let x = 6 + g_text_w(count)
+  let word = " · " + t("select.move") + " ("
+  push(out.own, {"id": "", "kind": "text", "x": x, "y": y + 2, "s": word, "c": "mute"})
+  x += g_text_w(word) + 2
+  let d = sel_ui.move
+  if (d == null) {
+    d = (0, 0)
+  }
+  let parts = [select_signed(d.x), select_signed(d.y)]
+  for (let i = 0; i < 2; i += 1) {
+    let w = g_text_w(parts[i]) + 8
+    push(out.own, {"id": "", "kind": "value", "x": x, "y": y, "w": w, "h": 18, "s": parts[i]})
+    x += w + 2
+    if (i == 0) {
+      push(out.own, {"id": "", "kind": "text", "x": x - 1, "y": y + 2, "s": ",", "c": "mute"})
+      x += 6
+    }
+  }
+  push(out.own, {"id": "", "kind": "text", "x": x + 1, "y": y + 2, "s": ")", "c": "mute"})
+  out
+}
+
+-~> The lasso's options strip.
+function strip_layout(gm) {
+  let mode = lasso_cfg.mode
+  let st = lasso_steady()
+  let head = text.upper(t("panel.properties")) + " · " + t(prefixed("lasso.title_", mode))
+  let out = tool_props_base(head, "")
+  if (mode == "fill") {
+    out.title = head + " · "
+    push(out.own, {"id": "", "kind": "swatch", "x": 6 + g_text_w(out.title), "y": gm.props_y + 5, "s": ed.color})
+  }
+  let y = gm.props_y + 22
+  let x = 6
+  let modes = [["select", "lasso"], ["fill", "lasso-fill"]]
+  for (let i = 0; i < len(modes); i += 1) {
+    let label = t(prefixed("lasso.", modes[i][0]))
+    let w = g_text_w(label) + 18
+    push(out.own, {"id": "lasso:" + modes[i][0], "kind": "seg", "x": x, "y": y, "w": w, "h": 14, "icon": modes[i][1], "label": label, "on": mode == modes[i][0]})
+    x += w
+  }
+  x += 12
+  let catch_text = t("lasso.catch_up")
+  push(out.own, {"id": "lasso:catch", "kind": "check", "x": x, "y": y + 2, "w": 10 + 4 + g_text_w(catch_text), "h": 10, "label": catch_text, "on": st.catch_up})
+  let y2 = gm.props_y + 41
+  x = 6
+  let kinds = ["off", "string", "average"]
+  for (let i = 0; i < len(kinds); i += 1) {
+    let label = t(prefixed("lasso.", kinds[i]))
+    let w = g_text_w(label) + 8
+    push(out.own, {"id": "lasso:" + kinds[i], "kind": "seg", "x": x, "y": y2, "w": w, "h": 14, "icon": "", "label": label, "on": st.mode == kinds[i]})
+    x += w
+  }
+  x += 4
+  let on = st.mode != "off"
+  push(out.own, {"id": "lasso:length", "kind": "slider", "x": x, "y": y2 + 1, "w": 66, "h": 12, "on": on})
+  push(out.own, {"id": "", "kind": "text", "x": x + 70, "y": y2, "s": str(st.length) + " px", "c": "amber"})
+  out
+}
+
+-~> == Painting ==
+
+function tool_props_paint(lay) {
+  if (lay.own == null) {
+    return null
+  }
+  for (let i = 0; i < len(lay.own); i += 1) {
+    strip_paint(lay.own[i])
+  }
+}
+
+function strip_paint(w) {
+  let k = w.kind
+  if (k == "text") {
+    g_text(w.s, w.x, w.y, P[w.c])
+  } elif (k == "value") {
+    g_field(w.x, w.y, w.w, w.h, false)
+    g_text(w.s, w.x + 4, w.y + 3, P.amber)
+  } elif (k == "swatch") {
+    g_rect(w.x, w.y, 8, 8, P.void)
+    let c = g_hex_color(w.s)
+    if (c != null) {
+      g_rect(w.x + 1, w.y + 1, 6, 6, c)
+    }
+    g_text(w.s, w.x + 11, w.y - 3, P.mute)
+  } elif (k == "seg") {
+    let state = "normal"
+    if (w.on) {
+      state = "active"
+    } elif (V.hover == w.id) {
+      state = "hover"
+    }
+    g_button(w.x, w.y, w.w, w.h, w.icon, w.label, state)
+  } elif (k == "check") {
+    g_field(w.x, w.y, 10, 10, false)
+    if (w.on) {
+      g_icon("check", w.x + 1, w.y + 1, P.lizard)
+    }
+    g_text(w.label, w.x + 14, w.y - 2, P.text)
+  } elif (k == "slider") {
+    strip_paint_slider(w)
+  }
+}
+
+-~> The length slider: a 6 high track (lizard up to the value) and a 5x12 bright thumb.
+function strip_paint_slider(w) {
+  let ty = w.y + 3
+  g_frame(w.x, ty, w.w, 6, P.void)
+  g_rect(w.x + 1, ty + 1, w.w - 2, 4, P.coal)
+  let at = strip_thumb_x(w)
+  let fill = P.lizard
+  let thumb = P.bright
+  if (!w.on) {
+    fill = P.dim
+    thumb = P.mute
+  }
+  g_rect(w.x + 1, ty + 1, at - w.x - 1, 4, fill)
+  g_rect(at - 2, w.y, 5, 12, P.void)
+  g_rect(at - 1, w.y + 1, 3, 10, thumb)
+}
+
+-~> Where the slider's thumb is for the length.
+function strip_thumb_x(w) {
+  let k = (lasso_steady().length - strip_min) / float(strip_max - strip_min)
+  w.x + 2 + math.round(k * (w.w - 4))
+}
+
+-~> == The pointer ==
+
+-~> The id of the tool's widget under a UI point of the panel, or "".
+function tool_props_hit(x, y) {
+  let lay = view_props_cached()
+  if (lay.own == null) {
+    return ""
+  }
+  for (let i = 0; i < len(lay.own); i += 1) {
+    let w = lay.own[i]
+    if (w.id != "" && view_in(x, y, w.x, w.y, w.w, w.h)) {
+      return w.id
+    }
+  }
+  ""
+}
+
+-~> A press on a widget of the strip.
+function tool_props_press(id, e) {
+  let what = text.split(id, ":")[1]
+  if (what == "select" || what == "fill") {
+    lasso_cfg.mode = what
+  } elif (what == "catch") {
+    lasso_set_steady("catch_up", !lasso_steady().catch_up)
+  } elif (what == "off" || what == "string" || what == "average") {
+    lasso_set_steady("mode", what)
+  } elif (what == "length") {
+    strip_slide(e.pos.x)
+    V.drag = {"kind": "canvas"}
+    V.gest = {"owner": "strip"}
+  }
+  view_touch()
+}
+
+-~> Sets the length from the pointer's x over the slider.
+function strip_slide(x) {
+  let lay = view_props_cached()
+  for (let i = 0; i < len(lay.own); i += 1) {
+    let w = lay.own[i]
+    if (w.id == "lasso:length") {
+      let k = math.max(0.0, math.min(1.0, (x - w.x - 2) / float(w.w - 4)))
+      lasso_set_steady("length", strip_min + math.round(k * (strip_max - strip_min)))
+    }
+  }
+  view_touch()
+}
+
+-~> The part of the status bar the lasso shows while drawing: "3 inside", or "".
+function tool_status_note() {
+  let g = V.gest
+  if (V.tool == "lasso" && g != null && g.owner == "lasso" && lasso_cfg.mode == "select") {
+    return t("lasso.inside", {"n": len(sel_ui.hot)})
+  }
+  ""
+}

@@ -1,0 +1,127 @@
+-~> pen_library: the editor's pens: the built-in ones of lib/draw/pens.liz,
+-~> then the ones saved from the pen settings (~/.linkz/pens, read through
+-~> src.saved_pens). A saved pen goes into `pens` under its key and at the
+-~> end of pens.list, with its key noted in the copy the editor keeps
+-~> (pen.key; pen_code never writes it). Saving never touches a built-in.
+
+use "../draw/pens"
+use "i18n"
+use "pen_code"
+
+-~> How many pens are built in (the first ones of pens.list) and their keys.
+let pen_lib = {"builtin": len(pens.list), "builtin_keys": keys(pens), "loaded": false}
+
+-~> The key of a pen: its noted key for a saved one, its name for a built-in.
+function pen_key_of(pen) {
+  if (pen.key != null) {
+    return pen.key
+  }
+  pen.name
+}
+
+-~> Whether a key is one of the built-in pens (or pens.list itself).
+function pen_is_builtin(key) {
+  list.index(pen_lib.builtin_keys, key) >= 0
+}
+
+-~> A copy of a pen's value, all the way down (the pen settings edit copies).
+function pen_deep_copy(v) {
+  if (type(v) == "ARRAY") {
+    let out = []
+    for (let i = 0; i < len(v); i = i + 1) {
+      push(out, pen_deep_copy(v[i]))
+    }
+    return out
+  }
+  if (type(v) == "HASH") {
+    let out = {}
+    let ks = keys(v)
+    for (let i = 0; i < len(ks); i = i + 1) {
+      out[ks[i]] = pen_deep_copy(v[ks[i]])
+    }
+    return out
+  }
+  v
+}
+
+-~> Puts a saved pen in `pens` (a new key goes at the end of pens.list, a key
+-~> already saved is replaced where it is). Built-in keys are refused.
+function pen_lib_put(key, pen) {
+  if (pen_is_builtin(key)) {
+    return false
+  }
+  let own = pen_deep_copy(pen)
+  own.key = key
+  let old = pens[key]
+  pens[key] = own
+  if (old == null) {
+    push(pens.list, own)
+  } else {
+    for (let i = 0; i < len(pens.list); i = i + 1) {
+      if (pen_key_of(pens.list[i]) == key) {
+        pens.list[i] = own
+      }
+    }
+  }
+  true
+}
+
+-~> Reads the saved pens once (the editor calls it when it opens).
+function pen_lib_load() {
+  if (pen_lib.loaded) {
+    return null
+  }
+  pen_lib.loaded = true
+  let saved = src.saved_pens()
+  for (let i = 0; i < len(saved); i = i + 1) {
+    pen_lib_put(saved[i].key, saved[i].pen)
+  }
+}
+
+-~> The key a pen name is saved under: lower case, every run of other
+-~> characters as one _ ("Soft Ink!" is soft_ink), "pen_" before a digit.
+function pen_lib_key(name) {
+  let out = ""
+  let gap = false
+  let s = text.lower(text.trim(name))
+  for (let i = 0; i < len(s); i = i + 1) {
+    if (text.find("abcdefghijklmnopqrstuvwxyz0123456789", s[i]) >= 0) {
+      if (gap && out != "") {
+        out = out + "_"
+      }
+      out = out + s[i]
+      gap = false
+    } else {
+      gap = true
+    }
+  }
+  if (out != "" && text.find("0123456789", out[0]) >= 0) {
+    out = "pen_" + out
+  }
+  out
+}
+
+-~> The folder saved pens go to.
+function pen_lib_dir() {
+  linkz.config_dir() + "/pens"
+}
+
+-~> Saves a pen under a name: {"key"} once written and in `pens`, or
+-~> {"refused": why} (no name, or a built-in's name: a built-in is never
+-~> replaced, its copy needs a name of its own).
+function pen_lib_save(pen, name) {
+  let key = pen_lib_key(name)
+  if (key == "") {
+    return {"refused": t("pen.refuse_name")}
+  }
+  if (pen_is_builtin(key)) {
+    return {"refused": t("pen.refuse_builtin", {"name": key})}
+  }
+  let own = pen_deep_copy(pen)
+  own.name = text.trim(name)
+  delete(own, "key")
+  fs.mkdir(pen_lib_dir())
+  fs.write(pen_lib_dir() + "/" + key + ".liz", pen_code_file(own))
+  pen_lib_put(key, own)
+  {"key": key}
+}
