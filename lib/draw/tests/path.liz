@@ -28,3 +28,31 @@ puts(open.path[0][0], open.path[len(open.path) - 1][0])
 puts(len(path([(0, 0), (9, 9)], #1d1d1f).path))
 
 puts(len(sq.anchors))
+
+-~> Curve items are drawn exactly: ["c", c1, c2, p] is a C command, ["q", c, p] a Q one, and
+-~> the plain points between them are smoothed with the points next to a curve as sharp ends.
+let leaf = path([(0, 0), ["c", (0, -20), (20, -20), (20, 0)], ["q", (10, 15), (0, 0)]], #3fa34d)
+puts(len(leaf.path), leaf.path[0], leaf.path[1], leaf.path[2], leaf.path[3])
+puts(len(leaf.anchors), leaf.anchors[0].item)
+let mixed = path([(0, 0), (10, 4), (20, 0), ["c", (30, -10), (40, 10), (50, 0)], (40, 20), (20, 20)], #3fa34d)
+puts(len(mixed.path), mixed.path[1][0], mixed.path[2][0], mixed.path[3], mixed.path[4][0], mixed.path[5][0], mixed.path[6][0])
+puts(len(mixed.anchors))
+let bounds = path_bounds(leaf.path)
+puts(bounds.min, bounds.max.x, bounds.max.y > 0)
+
+-~> A hole of curves is turned to run the other way too, and its curves go with it.
+let drum = path([(0, 0), (20, 0), (20, 20), (0, 20)], #2d6a8f, true, true,
+  [[(5, 5), ["c", (5, 8), (5, 12), (5, 15)], (15, 15), ["c", (15, 12), (15, 8), (15, 5)]]])
+let drum_subs = flatten_path(drum.path, 0.1)
+puts(len(drum_subs), polygon_area2(drum_subs[0].points) > 0, polygon_area2(drum_subs[1].points) > 0)
+puts(reverse_items([(0, 0), ["c", (1, 1), (2, 2), (3, 3)], (4, 4), ["q", (5, 5), (6, 6)]]))
+
+-~> A quadratic is the cubic with the same shape: half way along, the same point.
+let quad = flatten_path([["M", (0, 0)], ["Q", (10, 20), (20, 0)]], 0.01)[0].points
+let top = quad[0]
+for (let i = 0; i < len(quad); i += 1) {
+  if (quad[i].y > top.y) {
+    top = quad[i]
+  }
+}
+puts(math.abs(top.x - 10) < 0.2, math.abs(top.y - 10) < 0.05)

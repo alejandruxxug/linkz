@@ -1,6 +1,7 @@
 00 ff 3f #3fa34d
 3 3 2.5 0.12 0 1234.57
 M 1 2 L 3.5 4 C 1 1 2 2 3 3 Z
+M 1 2 Q 5 6.5 9 2 Z
  fill="#3fa34d"
  fill="#3fa34d" fill-opacity="0.5"
  stroke="none"
@@ -33,5 +34,10 @@ M 1 2 L 3.5 4 C 1 1 2 2 3 3 Z
   <path d="M 0 0 L 100 60" fill="none" stroke="#000000" stroke-opacity="0.67" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
   <path d="M 60 30 C 60 35.52 55.52 40 50 40 C 44.48 40 40 35.52 40 30 C 40 24.48 44.48 20 50 20 C 55.52 20 60 24.48 60 30 Z" fill="#0000ff"/>
   <path d="M 0 0 L 50 0 L 50 50 L 0 50 Z" fill="#ff0000"/>
+</svg>
+
+<svg xmlns="http://www.w3.org/2000/svg" width="50" height="50" viewBox="0 0 50 50">
+  <rect width="50" height="50" fill="#ffffff"/>
+  <path d="M 5 5 C 5 30 40 30 40 5 Q 20 -10 5 5 Z" fill="#3fa34d"/>
 </svg>
 

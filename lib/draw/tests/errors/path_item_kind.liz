@@ -1,0 +1,3 @@
+-~> A path item that is neither a point nor a "c" or "q" curve is refused.
+use "../../shapes"
+path([(0, 0), ["s", (5, 5), (9, 9)], (20, 0)], #3fa34d)

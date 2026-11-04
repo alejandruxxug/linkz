@@ -9,6 +9,7 @@
 
 use "../../lib/app/drawing"
 use "../../lib/app/paint"
+use "../../lib/draw/geometry"
 use "../../lib/trace/trace"
 
 -~> The distance from p to the segment a-b, and how far along it (0 to 1).
@@ -206,26 +207,42 @@ for (let i = 0; i < len(fill_cases); i += 1) {
 
 -~> The disc's fill reaches the middle of the ring (radius 18.5), not just
 -~> its inner edge (17), and (not snapped) is a curve with points between
--~> pixel corners.
+-~> pixel corners. Its outline is written as exact Bezier items; the points
+-~> checked for the grid are all of them, controls included; the reach is
+-~> measured along the curve.
 let disc_code = trace_pixels(disc.size, disc.pixels, {"mode": "lineart", "snap": 0}, "disc").code
 let disc_fill = null
+let disc_curve = null
 let shapes = drawing_run(disc_code).shapes
 for (let k = 0; k < len(shapes); k += 1) {
   if (shapes[k].kind == "path") {
-    disc_fill = shapes[k].args[0]
+    disc_fill = []
+    disc_curve = flatten_path(shapes[k].path, 0.25)[0].points
+    let items = shapes[k].args[0]
+    for (let i = 0; i < len(items); i += 1) {
+      if (type(items[i]) == "POINT") {
+        push(disc_fill, items[i])
+      } else {
+        for (let q = 1; q < len(items[i]); q += 1) {
+          push(disc_fill, items[i][q])
+        }
+      }
+    }
   }
 }
 let reach = 0.0
 let off_grid = 0
 for (let k = 0; k < len(disc_fill); k += 1) {
-  reach += math.dist(disc_fill[k], (30, 30))
   let fx = disc_fill[k].x * 2
   let fy = disc_fill[k].y * 2
   if (fx != math.round(fx) || fy != math.round(fy)) {
     off_grid += 1
   }
 }
-reach = reach / len(disc_fill)
+for (let k = 0; k < len(disc_curve); k += 1) {
+  reach += math.dist(disc_curve[k], (30, 30))
+}
+reach = reach / len(disc_curve)
 puts("the fill grows under the ring:", reach > 17.8 && reach < 19.2, "| off the pixel grid:", off_grid > len(disc_fill) / 2)
 let halves_code = trace_pixels(halves.size, halves.pixels, {"mode": "lineart"}, "halves").code
 puts("no seam between the halves:", bare(halves_code, halves.size, [8, 8, 55, 31]) == 0)
@@ -264,6 +281,14 @@ for (let i = 0; i < len(bad); i += 1) {
 -~> keeps a sharp point at each tip (within 2 px of it); a stroke with a sharp turn is cut there
 -~> into two pieces that meet at the corner; a gap of 2 px between two
 -~> line ends that face each other is bridged, a wider one is not.
+
+-~> Where a path item ends: the point itself, or the last point of a curve item.
+function item_end(it) {
+  if (type(it) == "POINT") {
+    return it
+  }
+  it[len(it) - 1]
+}
 
 -~> The point p turned by `deg` degrees round c.
 function spin(p, c, deg) {
@@ -313,7 +338,7 @@ for (let i = 0; i < len(shapes_7c); i += 1) {
       for (let t = 0; t < 3; t += 1) {
         let near = 100.0
         for (let q = 0; q < len(sh.args[0]); q += 1) {
-          near = math.min(near, math.dist(sh.args[0][q], tuft[t]))
+          near = math.min(near, math.dist(item_end(sh.args[0][q]), tuft[t]))
         }
         push(sharp, near < 2.0)
       }
@@ -370,3 +395,27 @@ for (let k = 0; k < len(vee_shapes); k += 1) {
   }
 }
 puts("the V's pieces meet near its apex:", apex < 2.5)
+
+-~> The fills are written as exact curves: path() gets ["c", c1, c2, p] items
+-~> (the first item a point), the drawing keeps C commands for them, and
+-~> redrawing the points they end at stays within a pixel of the fit.
+let curved = drawing_run(disc_code).shapes
+let items_seen = 0
+let c_cmds = 0
+for (let k = 0; k < len(curved); k += 1) {
+  if (curved[k].kind == "path") {
+    let items = curved[k].args[0]
+    items_seen += len(items)
+    for (let i = 0; i < len(items); i += 1) {
+      if (type(items[i]) == "ARRAY" && items[i][0] != "c") {
+        puts("unexpected item", items[i][0])
+      }
+    }
+    for (let i = 0; i < len(curved[k].path); i += 1) {
+      if (curved[k].path[i][0] == "C") {
+        c_cmds += 1
+      }
+    }
+  }
+}
+puts("curved fill:", text.find(disc_code, "[\"c\", (") >= 0, items_seen == 4, c_cmds == 3)

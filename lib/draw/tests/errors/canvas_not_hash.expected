@@ -1,1 +1,1 @@
-[line 153, column 17] runtime error: canvas: must be a hash like {"size": (400, 200), "background": #ffffff}, got INTEGER
+[line 155, column 17] runtime error: canvas: must be a hash like {"size": (400, 200), "background": #ffffff}, got INTEGER

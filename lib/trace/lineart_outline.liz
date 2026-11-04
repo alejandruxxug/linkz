@@ -21,7 +21,9 @@ use "lineart_flow"
 
 -~> The shapes of one region `id`: {"outers": [[(x, y)...]...], "holes":
 -~> [[...] for each outer], "prims": [the primitive of each outer, or
--~> null]}, in picture pixels. `fill` is lineart_regions' result, `order`
+-~> null], "outer_curves", "hole_curves": the Bezier pieces behind each
+-~> outer and each hole (see lineart_outline_points), []
+-~> for a loop too small to fit}, in picture pixels. `fill` is lineart_regions' result, `order`
 -~> lineart_order's. `curve` has the settings of lineart_outline_points.
 function lineart_region_shapes(fill, order, id, w, h, curve) {
   let m = lineart_region_mask(fill, order, id, w, h)
@@ -29,6 +31,7 @@ function lineart_region_shapes(fill, order, id, w, h, curve) {
   let loops = lineart_contours(v, m.w, m.h, m.x0, m.y0, 0.5)
   let outers = []
   let holes = []
+  let hole_curves = []
   let inner = []
   for (let i = 0; i < len(loops); i += 1) {
     let a = polygon_area2(loops[i])
@@ -38,6 +41,7 @@ function lineart_region_shapes(fill, order, id, w, h, curve) {
     if (a > 0) {
       push(outers, loops[i])
       push(holes, [])
+      push(hole_curves, [])
     } else {
       push(inner, loops[i])
     }
@@ -55,20 +59,24 @@ function lineart_region_shapes(fill, order, id, w, h, curve) {
       }
     }
     if (best >= 0) {
-      push(holes[best], lineart_outline_points(inner[i], curve).points)
+      let o = lineart_outline_points(inner[i], curve)
+      push(holes[best], o.points)
+      push(hole_curves[best], o.curves)
     }
   }
   let prims = []
+  let outer_curves = []
   for (let k = 0; k < len(outers); k += 1) {
     let o = lineart_outline_points(outers[k], curve)
     outers[k] = o.points
+    push(outer_curves, o.curves)
     if (len(holes[k]) == 0) {
       push(prims, o.prim)
     } else {
       push(prims, null)
     }
   }
-  {"outers": outers, "holes": holes, "prims": prims}
+  {"outers": outers, "holes": holes, "prims": prims, "outer_curves": outer_curves, "hole_curves": hole_curves}
 }
 
 -~> The points written for an outline loop, and the primitive it snaps to.
@@ -80,7 +88,9 @@ function lineart_region_shapes(fill, order, id, w, h, curve) {
 -~> `curve` is {"detail", "corner" (degrees), "snap" (px, 0 for never),
 -~> "flow" (its weight), "luma", "w", "h", "r" (the field's half side),
 -~> "half" (the lines' usual half-width)}.
--~> Returns {"points", "prim" (null when it snaps to none), "curves"}.
+-~> Returns {"points", "prim" (null when it snaps to none), "curves": the
+-~> fitted cubics [p0, c1, c2, p3] round the loop, each starting where the
+-~> one before ends (path() draws them exactly)}.
 function lineart_outline_points(loop, curve) {
   let n = len(loop)
   if (n < 8) {

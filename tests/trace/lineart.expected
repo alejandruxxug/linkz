@@ -35,3 +35,4 @@ a gap of 4 px is not: strokes 2 bridged 0 ["line", "line"] close true errors []
 a gap of 2 px on a curve is bridged: strokes 1 bridged 1 ["brush"] close true errors []
 two ends side by side are not bridged: strokes 2 bridged 0 ["line", "line"] close true errors []
 the V's pieces meet near its apex: true
+curved fill: true true true

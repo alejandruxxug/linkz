@@ -46,7 +46,9 @@ layer lines
   line((140, 400), (372, 400), colors.ink, 2)
 ```
 
-The fills need `path` to accept Bézier segments, not only points: today `path(points)` smooths with Catmull-Rom, and `geometry.liz` already flattens cubic commands internally. Proposal: a `curve(…)` helper (or path commands as a list of points and `["c", c1, c2, p]` items), so the fitted curves are kept exactly.
+**Done.** `path` accepts Bézier items mixed in its points: `["c", c1, c2, p]` (cubic) and `["q", c, p]` (quadratic) draw a curve exactly from the previous point to `p` (flattened with `flatten_cubic`, no Catmull-Rom smoothing round them; SVG export writes real `C`/`Q`). Plain points keep their smoothing, and the points next to a curve are sharp ends. The tracer writes the fills' fitted curves this way (`path([(x, y), ["c", …], …], fill)`). Strokes stay points: `brush` takes one width and pressure per point, and following them along a curve would need widths at the curve ends and between them, which it has no way to say yet.
+
+Measured on `wikipe-tan-casual.png` at 1024 (561×1024): fill outlines went from 6558 points to 3393 curves (about 10600 numbers' worth of points with their controls), the code from 134020 to 219676 bytes (fills 104 KB to 190 KB: three points per curve cost more than the simplified samples they replace), mean color error 5.48 to 5.46, ink IoU 0.832 to 0.832. The gain is exactness and editability (real curves, no resampling), not size.
 
 ## 🎛️ Options (new, with v1's)
 

@@ -38,3 +38,40 @@ function need_points(call, name, v) {
     }
   }
 }
+
+-~> Like need_points, for the points of a path(): the list may also hold curve
+-~> items ["c", c1, c2, p] and ["q", c, p], each of points, after a first
+-~> item that is a point.
+function need_path_items(call, name, v) {
+  if (type(v) != "ARRAY" || len(v) == 0) {
+    reject(call, name + " must be a list of points like [(0, 0), (10, 5)] with at least one")
+  }
+  for (let i = 0; i < len(v); i = i + 1) {
+    let it = v[i]
+    if (type(it) == "POINT") {
+      continue
+    }
+    if (i == 0) {
+      reject(call, name + " must start with a point, but item 0 is " + type(it))
+    }
+    if (type(it) != "ARRAY") {
+      reject(call, name + " must only hold points and curve items, but item " + str(i) + " is " + type(it))
+    }
+    let want = 0
+    if (len(it) > 0 && it[0] == "c") {
+      want = 4
+    } elif (len(it) > 0 && it[0] == "q") {
+      want = 3
+    } else {
+      reject(call, name + " item " + str(i) + " must be a point or [\"c\", c1, c2, p] or [\"q\", c, p]")
+    }
+    if (len(it) != want) {
+      reject(call, name + " item " + str(i) + " (\"" + it[0] + "\") needs " + str(want - 1) + " points, not " + str(len(it) - 1))
+    }
+    for (let k = 1; k < want; k = k + 1) {
+      if (type(it[k]) != "POINT") {
+        reject(call, name + " item " + str(i) + " must only hold points, but its part " + str(k) + " is " + type(it[k]))
+      }
+    }
+  }
+}

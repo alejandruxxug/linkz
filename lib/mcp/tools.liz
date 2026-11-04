@@ -256,6 +256,8 @@ function mcp_scale_shape(s, k) {
     let c = s.path[i]
     if (c[0] == "C") {
       push(path, ["C", c[1] * k, c[2] * k, c[3] * k])
+    } elif (c[0] == "Q") {
+      push(path, ["Q", c[1] * k, c[2] * k])
     } elif (c[0] == "Z") {
       push(path, ["Z"])
     } else {

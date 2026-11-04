@@ -36,6 +36,9 @@ ok draw/tests/errors/opacity_outside.liz
 ok draw/tests/errors/opacity_range.liz
 ok draw/tests/errors/path_bad_points.liz
 ok draw/tests/errors/path_holes_open.liz
+ok draw/tests/errors/path_item_first.liz
+ok draw/tests/errors/path_item_kind.liz
+ok draw/tests/errors/path_item_short.liz
 ok draw/tests/errors/rect_fill.liz
 ok draw/tests/errors/stroke_empty.liz
 ok draw/tests/errors/stroke_item.liz

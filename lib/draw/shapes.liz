@@ -57,7 +57,9 @@ function make_anchor(pos, arg, item, role) {
 function anchors_of(points) {
   let out = []
   for (let i = 0; i < len(points); i = i + 1) {
-    push(out, make_anchor(points[i], 0, i, "point"))
+    if (type(points[i]) == "POINT") {
+      push(out, make_anchor(points[i], 0, i, "point"))
+    }
   }
   out
 }
@@ -166,15 +168,21 @@ function polygon(points, fill) {
 -~> by more than `corner` degrees stays a sharp corner, and the pieces
 -~> between two sharp corners are straight. It is what a traced picture is
 -~> made of.
--~> points: the outline, a list of points
+-~> The list may also hold curve items, drawn exactly (no smoothing through
+-~> them, and SVG gets real C and Q commands): ["c", c1, c2, p] is a cubic
+-~> from the point before it to p with controls c1 and c2, ["q", c, p] a
+-~> quadratic. The first item must be a point. Plain points between two curve
+-~> items are smoothed as usual, with the points next to a curve as sharp ends.
+-~> points: the outline, a list of points and curve items
 -~> fill: the color inside
 -~> closed: true to join the last point to the first (needed for holes)
 -~> smooth: false for straight sides, like polygon
--~> holes: a list of point lists, each one cut out of the shape
+-~> holes: a list of such lists, each one cut out of the shape
 -~> corner: the turn in degrees from which a point stays sharp
 -~> example: path([(100, 40), (200, 60), (180, 160), (80, 140)], #3fa34d)
+-~> example: path([(40, 100), ["c", (40, 20), (160, 20), (160, 100)], (100, 160)], #3fa34d)
 function path(points, fill, closed = true, smooth = true, holes = [], corner = 55) {
-  need_points("path", "points", points)
+  need_path_items("path", "points", points)
   need_paint("path", "fill", fill)
   if (!is_number(corner)) {
     reject("path", "corner must be a number of degrees, not " + type(corner))
@@ -185,30 +193,35 @@ function path(points, fill, closed = true, smooth = true, holes = [], corner = 5
   if (len(holes) > 0 && !closed) {
     reject("path", "holes need closed = true")
   }
-  let outline = []
-  if (smooth) {
-    outline = smooth_outline(points, closed, corner)
-  } else {
-    outline = smooth_outline(points, closed, 0)
+  let turn = corner
+  if (!smooth) {
+    turn = 0
   }
-  let sign = polygon_area2(points) > 0
+  let outline = ring_outline(points, closed, turn)
+  let sign = polygon_area2(items_points(points)) > 0
   for (let h = 0; h < len(holes); h = h + 1) {
-    need_points("path", "holes item " + str(h), holes[h])
+    need_path_items("path", "holes item " + str(h), holes[h])
     let ring = holes[h]
-    if ((polygon_area2(ring) > 0) == sign) {
-      ring = list.reverse(ring)
+    if ((polygon_area2(items_points(ring)) > 0) == sign) {
+      ring = reverse_items(ring)
     }
-    let sub = []
-    if (smooth) {
-      sub = smooth_outline(ring, true, corner)
-    } else {
-      sub = smooth_outline(ring, true, 0)
-    }
+    let sub = ring_outline(ring, true, turn)
     for (let i = 0; i < len(sub); i = i + 1) {
       push(outline, sub[i])
     }
   }
   make_shape("path", [points, fill, closed, smooth, holes, corner], outline, fill, null, 0, anchors_of(points))
+}
+
+-~> The commands of one ring of path(): the old smoothing for plain points,
+-~> mixed_outline when the list holds curve items.
+function ring_outline(items, closed, corner) {
+  for (let i = 0; i < len(items); i = i + 1) {
+    if (type(items[i]) != "POINT") {
+      return mixed_outline(items, closed, corner)
+    }
+  }
+  smooth_outline(items, closed, corner)
 }
 
 -~> Draws a smooth curve that passes through every point. One point is a

@@ -256,7 +256,7 @@ function twoway_insert_edit(arr, after, item_text) {
 -~> the curve does).
 function insert_point_near(m, shape, pos) {
   let path = shape.path
-  if (shape.kind != "polygon") {
+  if (shape.kind != "polygon" && len(items_points(shape.args[0])) == len(shape.args[0])) {
     path = smooth_path(shape.args[0])
   }
   let hit = nearest_on_path(path, pos)

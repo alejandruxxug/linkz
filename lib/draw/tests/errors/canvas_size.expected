@@ -1,1 +1,1 @@
-[line 171, column 17] runtime error: canvas: size must be between (1, 1) and (16384, 16384), got (-5, 0)
+[line 173, column 17] runtime error: canvas: size must be between (1, 1) and (16384, 16384), got (-5, 0)

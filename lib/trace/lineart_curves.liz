@@ -12,13 +12,13 @@
 -~>                    (Schneider), split where the error is over `detail` px
 -~>   lineart_curve_points  the points written for those curves
 -~>
--~> path() and brush() take points, not Bezier pieces, so the fitted pieces
--~> are sampled (lineart_curve_points) and the samples simplified again
--~> between the corners, which all stay: the smooth curve the shape draws
--~> through the points stays near the fit, with fewer points than the raw
--~> outline needs, and a corner keeps a turn sharp enough to stay one. The
--~> pieces themselves are kept in the results ("curves") for when the
--~> shapes take them.
+-~> path() takes the fitted pieces as they are, written as curve items (the
+-~> fills). brush() takes points, one width and pressure each, so the
+-~> centerlines are sampled (lineart_curve_points) and the samples
+-~> simplified again between the corners, which all stay: the smooth curve
+-~> the shape draws through the points stays near the fit, with fewer points
+-~> than the raw line needs, and a corner keeps a turn sharp enough to stay
+-~> one. The pieces are kept in the results ("curves").
 -~>
 -~> A line is a list of points; a closed one does not repeat its first point.
 

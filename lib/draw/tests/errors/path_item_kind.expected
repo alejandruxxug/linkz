@@ -1,0 +1,1 @@
+[line 6, column 8] runtime error: path: points item 1 must be a point or ["c", c1, c2, p] or ["q", c, p]

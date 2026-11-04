@@ -39,6 +39,8 @@ function path_data(path) {
       push(out, "Z")
     } elif (op == "C") {
       push(out, "C " + point_text(cmd[1]) + " " + point_text(cmd[2]) + " " + point_text(cmd[3]))
+    } elif (op == "Q") {
+      push(out, "Q " + point_text(cmd[1]) + " " + point_text(cmd[2]))
     } else {
       push(out, op + " " + point_text(cmd[1]))
     }

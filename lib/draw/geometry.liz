@@ -1,6 +1,6 @@
 -~> geometry: the maths every shape, the rasterizer and hit-testing share.
 -~> A path is a list of commands with absolute points:
--~>   ["M", p]  ["L", p]  ["C", c1, c2, p]  ["Z"]
+-~>   ["M", p]  ["L", p]  ["C", c1, c2, p]  ["Q", c, p]  ["Z"]
 -~> Float tolerance for flattening a curve into line segments is in pixels.
 
 let flatten_tolerance = 0.25
@@ -75,6 +75,12 @@ function smooth_path(points) {
   path
 }
 
+-~> The two controls of the cubic that is the same curve as the quadratic
+-~> p0, c, p2: [c1, c2].
+function quad_cubic(p0, c, p2) {
+  [p0 + (c - p0) * (2.0 / 3.0), p2 + (c - p2) * (2.0 / 3.0)]
+}
+
 -~> Adds the points of a cubic Bezier to `out` (not the start point) and the
 -~> matching t values to `ts`, splitting until the curve is within `tol`
 -~> pixels of its segments. t0 and t1 are the t range of this piece.
@@ -129,6 +135,10 @@ function flatten_path(path, tolerance) {
       if (op == "L") {
         push(points, cmd[1])
         cur = cmd[1]
+      } elif (op == "Q") {
+        let q = quad_cubic(cur, cmd[1], cmd[2])
+        flatten_cubic(cur, q[0], q[1], cmd[2], tolerance, points, [], 0.0, 1.0, 0)
+        cur = cmd[2]
       } else {
         flatten_cubic(cur, cmd[1], cmd[2], cmd[3], tolerance, points, [], 0.0, 1.0, 0)
         cur = cmd[3]
@@ -249,6 +259,10 @@ function nearest_on_path(path, p) {
     } elif (op == "C") {
       flatten_cubic(cur, cmd[1], cmd[2], cmd[3], flatten_tolerance, pts, ts, 0.0, 1.0, 0)
       cur = cmd[3]
+    } elif (op == "Q") {
+      let q = quad_cubic(cur, cmd[1], cmd[2])
+      flatten_cubic(cur, q[0], q[1], cmd[2], flatten_tolerance, pts, ts, 0.0, 1.0, 0)
+      cur = cmd[2]
     } else {
       push(pts, start)
       push(ts, 1.0)
@@ -373,6 +387,87 @@ function smooth_outline(points, closed, corner) {
       }
       push(path, ["C", points[i] + (points[j] - before) / 6.0, points[j] - (after - points[i]) / 6.0, points[j]])
     }
+  }
+  if (closed) {
+    push(path, ["Z"])
+  }
+  path
+}
+
+-~> The point a path item ends at: the item itself for a point, else the last
+-~> part of ["c", c1, c2, p] or ["q", c, p].
+function item_end(it) {
+  if (type(it) == "POINT") {
+    return it
+  }
+  it[len(it) - 1]
+}
+
+-~> Every point of a list of path items (controls included), for judging
+-~> which way the ring turns.
+function items_points(items) {
+  let out = []
+  for (let i = 0; i < len(items); i = i + 1) {
+    if (type(items[i]) == "POINT") {
+      push(out, items[i])
+    } else {
+      for (let k = 1; k < len(items[i]); k = k + 1) {
+        push(out, items[i][k])
+      }
+    }
+  }
+  out
+}
+
+-~> A list of path items run backwards: the same ring, the other way round.
+function reverse_items(items) {
+  let n = len(items)
+  let out = [item_end(items[n - 1])]
+  for (let i = n - 1; i > 0; i = i - 1) {
+    let it = items[i]
+    let back = item_end(items[i - 1])
+    if (type(it) == "POINT") {
+      push(out, back)
+    } elif (it[0] == "c") {
+      push(out, ["c", it[2], it[1], back])
+    } else {
+      push(out, ["q", it[1], back])
+    }
+  }
+  out
+}
+
+-~> Path commands for a ring of points mixed with curve items (see path()).
+-~> The curve items are drawn exactly. The points between two of them are
+-~> smoothed like smooth_outline does, with the points the curves leave and
+-~> arrive at as sharp ends, so nothing bends round a curve item.
+function mixed_outline(items, closed, corner) {
+  let path = [["M", items[0]]]
+  let run = [items[0]]
+  for (let i = 1; i <= len(items); i = i + 1) {
+    let it = null
+    if (i < len(items)) {
+      it = items[i]
+    }
+    if (type(it) == "POINT") {
+      push(run, it)
+      continue
+    }
+    if (len(run) > 1) {
+      let sub = smooth_outline(run, false, corner)
+      for (let k = 1; k < len(sub); k = k + 1) {
+        push(path, sub[k])
+      }
+    }
+    if (it === null) {
+      break
+    }
+    if (it[0] == "c") {
+      push(path, ["C", it[1], it[2], it[3]])
+    } else {
+      push(path, ["Q", it[1], it[2]])
+    }
+    run = [item_end(it)]
   }
   if (closed) {
     push(path, ["Z"])

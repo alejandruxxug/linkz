@@ -44,13 +44,13 @@ let docs_es = {
     }
   },
   "path": {
-    "summary": "Dibuja una figura rellena de contorno suave, con huecos si los das. El contorno es una curva por los puntos; donde la línea gira más de `corner` grados queda una esquina, y entre dos esquinas los tramos son rectos. Es de lo que se hace una imagen vectorizada.",
+    "summary": "Dibuja una figura rellena de contorno suave, con huecos si los das. El contorno es una curva por los puntos; donde la línea gira más de `corner` grados queda una esquina, y entre dos esquinas los tramos son rectos. Es de lo que se hace una imagen vectorizada. La lista puede llevar también curvas exactas: [\"c\", c1, c2, p] es una cúbica desde el punto anterior hasta p con controles c1 y c2, y [\"q\", c, p] una cuadrática; el primer elemento debe ser un punto.",
     "params": {
-      "points": "el contorno, una lista de puntos",
+      "points": "el contorno, una lista de puntos y curvas",
       "fill": "el color del relleno",
       "closed": "true para unir el último punto con el primero (necesario para huecos)",
       "smooth": "false para lados rectos, como polygon",
-      "holes": "una lista de listas de puntos, cada una recortada de la figura",
+      "holes": "una lista de listas como esa, cada una recortada de la figura",
       "corner": "el giro en grados desde el que un punto queda como esquina"
     }
   },

@@ -397,8 +397,8 @@ function lineart_code(source_name, w, h, m, strokes, fills, scale) {
           points += lineart_prim_points(s.prims[k])
           prims += 1
         } else {
-          push(lines, "  " + lineart_fill_line(s.outers[k], s.holes[k], fill, scale))
-          points += len(s.outers[k])
+          push(lines, "  " + lineart_fill_line(s.outers[k], s.holes[k], s.outer_curves[k], s.hole_curves[k], fill, scale))
+          points += lineart_ring_points(s.outers[k], s.outer_curves[k])
         }
         count += 1
       }
@@ -476,22 +476,50 @@ function lineart_used_colors(fills) {
   list.sort(used, function(a, b) { count[a] > count[b] || (count[a] == count[b] && a < b) })
 }
 
+-~> A point as source text, one decimal: (1.5, 2).
+function lineart_point_text(p, scale) {
+  "(" + lineart_num(p.x * scale) + ", " + lineart_num(p.y * scale) + ")"
+}
+
 -~> A list of points as source text, one decimal: [(1.5, 2), (3, 4.2)].
 function lineart_points_text(points, scale) {
   let parts = []
   for (let i = 0; i < len(points); i += 1) {
-    push(parts, "(" + lineart_num(points[i].x * scale) + ", " + lineart_num(points[i].y * scale) + ")")
+    push(parts, lineart_point_text(points[i], scale))
   }
   "[" + text.join(parts, ", ") + "]"
 }
 
+-~> One ring of a path(): the fitted curves as items ["c", c1, c2, p] after
+-~> the first point, or the plain points when it has no curves (too small
+-~> to fit).
+function lineart_ring_text(points, curves, scale) {
+  if (len(curves) == 0) {
+    return lineart_points_text(points, scale)
+  }
+  let parts = [lineart_point_text(curves[0][0], scale)]
+  for (let i = 0; i < len(curves); i += 1) {
+    parts = parts + ["[\"c\", " + lineart_point_text(curves[i][1], scale) + ", " + lineart_point_text(curves[i][2], scale) +
+      ", " + lineart_point_text(curves[i][3], scale) + "]"]
+  }
+  "[" + text.join(parts, ", ") + "]"
+}
+
+-~> How many points a ring writes: its points, or one per curve end.
+function lineart_ring_points(points, curves) {
+  if (len(curves) == 0) {
+    return len(points)
+  }
+  len(curves)
+}
+
 -~> One path(...) call for a fill shape, with its holes when it has some.
-function lineart_fill_line(outer, holes, fill, scale) {
-  let call = "path(" + lineart_points_text(outer, scale) + ", " + fill
+function lineart_fill_line(outer, holes, outer_curves, hole_curves, fill, scale) {
+  let call = "path(" + lineart_ring_text(outer, outer_curves, scale) + ", " + fill
   if (len(holes) > 0) {
     let parts = []
     for (let i = 0; i < len(holes); i += 1) {
-      push(parts, lineart_points_text(holes[i], scale))
+      push(parts, lineart_ring_text(holes[i], hole_curves[i], scale))
     }
     call = call + ", true, true, [" + text.join(parts, ", ") + "]"
   }
