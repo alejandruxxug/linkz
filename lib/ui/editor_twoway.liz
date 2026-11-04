@@ -302,7 +302,7 @@ function twoway_remove_edit(arr, index) {
 -~> line number), or the top of the file when layer is null. Returns the model
 -~> with the caret on the new row.
 function twoway_new_row(m, code, layer) {
-  let at = twoway_after_header(m)
+  let at = twoway_after_decls(m)
   let pad = 0
   if (layer != null) {
     at = layer
@@ -322,6 +322,27 @@ function twoway_after_header(m) {
     at += 1
   }
   at
+}
+
+-~> Where loose new rows go: after the opening comments and after the
+-~> top-level `let` declarations that follow them (`let colors = {...}`, pens,
+-~> values), so a new row can use them. Blank and comment lines between
+-~> declarations are skipped; nothing after the last declaration counts.
+function twoway_after_decls(m) {
+  let end = twoway_after_header(m)
+  let at = end
+  while (at < len(m.lines)) {
+    let li = m.lines[at]
+    if (text.starts(li, "let ")) {
+      end = doc_row(m, at + 1, null, null).end_line
+      at = end
+    } elif (is_blank(li) || text.starts(text.trim(li), "-~>")) {
+      at += 1
+    } else {
+      break
+    }
+  }
+  end
 }
 
 -~> The canvas points of a list of move samples, each with its pressure and time.

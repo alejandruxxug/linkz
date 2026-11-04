@@ -62,3 +62,12 @@ true {"kind": "stop"} #fadbbdc2
 -- the fill editor's Save as variable
   circle((360, 90), 56, colors.fill) 1 fill gradient([#f2a65a66, #123456c2], 90deg)
 
+-- a variable chip gives the selected shape its color; a double-click edits it
+  circle((360, 90), 34, colors.sea)
+  circle((360, 90), 34, colors.dawn) 1 null
+  circle((360, 90), 34, colors.sea) 2 null
+  circle((360, 90), 34, colors.sea) 2 sea
+  circle((360, 90), 34, colors.dawn)
+-- with no shape selected, a click selects the variable as before
+0 sea
+

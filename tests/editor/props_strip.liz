@@ -1,0 +1,62 @@
+-~> The brush's stabilizer strip in the properties panel never draws over the
+-~> fields above it, at any panel width: it goes under the last row of fields
+-~> (the narrow panel wraps them to a second row), its length wraps to a row of
+-~> its own when the row is too wide, and the panel grows for the rows it needs.
+
+use "../../lib/app/editor"
+use "rig"
+
+let dir = fs.join(fs.home(), "props-strip-test")
+let code = "canvas = {\"size\": (480, 320), \"background\": #f4f1e8}\nbrush([(10, 10), (60, 40), (110, 10)], [0.5, 1.0, 0.5], #1d1d1f, pens.ink)\ncircle((240, 160), 40, #e06)"
+let modules = rig_modules + ["ui/view_popups", "ui/pen_edit", "ui/pen_window", "ui/pen_pad", "ui/tool_stabilizer", "ui/pen_route",
+  "draw/pens"]
+let rig = rig_open(dir, code, editor_size, modules)
+let n = rig.names
+let cmds = rig.ed.app.debug_commands
+
+-~> Whether two boxes [x, y, w, h] share a pixel.
+function overlap(a, b) {
+  a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
+}
+
+-~> What is wrong with the panel now: pairs of boxes that overlap, boxes that
+-~> leave the panel, and labels that sit on a box they do not belong to.
+function problems() {
+  let lay = n.view_props_cached()
+  let gm = n.view_geom()
+  let bad = []
+  for (let i = 0; i < len(lay.boxes); i += 1) {
+    let a = lay.boxes[i]
+    if (a.x < 0 || (a.x + a.w > n.V.pw && text.starts(a.field, "stab")) || a.y < gm.props_y || a.y + a.h > gm.status_y) {
+      push(bad, "outside " + a.field + " " + str(a.x) + "," + str(a.y))
+    }
+    for (let j = i + 1; j < len(lay.boxes); j += 1) {
+      if (overlap(a, lay.boxes[j])) {
+        push(bad, a.field + " over " + lay.boxes[j].field)
+      }
+    }
+    for (let j = 0; j < len(lay.labels); j += 1) {
+      let l = lay.labels[j]
+      if (overlap(a, {"x": l.x, "y": l.y, "w": len(l.s) * 7, "h": 12})) {
+        push(bad, a.field + " under label " + l.s)
+      }
+    }
+  }
+  bad
+}
+
+for (let k = 0; k < 2; k += 1) {
+  cmds.Tool(["brush"])
+  if (k == 1) {
+    cmds.SelectRow([2])
+  }
+  let widths = [160, 180, 220, 256, 300, 360, 420]
+  for (let i = 0; i < len(widths); i += 1) {
+    n.V.pw_user = true
+    n.V.pw = widths[i]
+    n.view_touch()
+    rig_frame(rig)
+    rig_frame(rig)
+    puts(k, widths[i], "extra", n.V.props_extra, problems())
+  }
+}

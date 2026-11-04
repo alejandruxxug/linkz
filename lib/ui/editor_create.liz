@@ -4,6 +4,7 @@
 
 use "editor_doc"
 use "editor_rows"
+use "editor_twoway"
 use "i18n"
 
 let default_canvas_size = (512, 512)
@@ -63,6 +64,13 @@ function create_rows(m, rows, focus) {
   } elif (row.kind == "layer") {
     at = m.line
     pad = leading_ws(cur) + 2
+  }
+  let top = twoway_after_decls(m)
+  if (at < top) {
+    -~> In the header or among the declarations: the rows go after them.
+    at = top
+    drop = 0
+    pad = 0
   }
   let made = []
   for (let i = 0; i < len(rows); i = i + 1) {

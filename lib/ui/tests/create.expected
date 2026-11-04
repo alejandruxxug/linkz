@@ -29,3 +29,44 @@ can't add a text yet
 2
 1: layer layer1
 2:   circle((50, 50), 40, #3fa34d)|
+1: -~> lzdraw 1
+2: -~> notes
+3: 
+4: let colors = {
+5:   "sky": #4aa3df
+6: }
+7: let n = 3
+8: circle((50, 50), 40, #3fa34d)|
+9: 
+10: rect((0, 0), (1, 1), #000)
+1: -~> lzdraw 1
+2: -~> notes
+3: 
+4: let colors = {
+5:   "sky": #4aa3df
+6: }
+7: let n = 3
+8: line((156, 256), (356, 256), #1d1d1f, 2)|
+9: 
+10: rect((0, 0), (1, 1), #000)
+1: -~> lzdraw 1
+2: -~> notes
+3: 
+4: let colors = {
+5:   "sky": #4aa3df
+6: }
+7: let n = 3
+8: let value1 = 0|
+9: 
+10: rect((0, 0), (1, 1), #000)
+1: -~> lzdraw 1
+2: -~> notes
+3: 
+4: let colors = {
+5:   "sky": #4aa3df
+6: }
+7: let n = 3
+8: circle((1, 1), 2, colors.sky)|
+9: 
+10: rect((0, 0), (1, 1), #000)
+0

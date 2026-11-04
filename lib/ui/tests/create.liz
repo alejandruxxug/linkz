@@ -2,6 +2,7 @@
 use "../editor_create"
 use "../editor_doc"
 use "../editor_rows"
+use "../editor_twoway"
 use "../lang_en"
 use "../lang_es"
 let m = doc_new("")
@@ -34,3 +35,11 @@ show(two)
 puts(len(doc_layers(two)))
 -~> Added into an empty row of a layer, a shape takes its indentation.
 show(add_shape(doc_at(add_layer(m), 2, 2), "circle", (100, 100)))
+-~> With the caret in the header or among the declarations, a new shape goes
+-~> after them, so it can use `colors`; the pencil and the lasso agree.
+let decl = doc_new("-~> lzdraw 1\n-~> notes\n\nlet colors = {\n  \"sky\": #4aa3df\n}\nlet n = 3\n\nrect((0, 0), (1, 1), #000)")
+show(add_shape(doc_at(decl, 1, 0), "circle", (100, 100)))
+show(add_shape(doc_at(decl, 5, 0), "line", null))
+show(add_shape(doc_at(decl, 3, 0), "value", null))
+show(twoway_new_row(decl, "circle((1, 1), 2, colors.sky)", null))
+puts(len(src.run(doc_text(twoway_new_row(decl, "circle((1, 1), 2, colors.sky)", null))).errors))

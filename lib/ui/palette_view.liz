@@ -507,6 +507,11 @@ function pal_set_open(on) {
   view_force_all()
 }
 
+-~> The last press on a variable chip, to tell a double-click (which edits the
+-~> variable) from a click (which gives it to the selected shape).
+let pal_click = {"id": "", "ms": -100000}
+let pal_double_ms = 450
+
 -~> A press on the sidebar. True when it was there.
 function pal_down(e) {
   let id = pal_hover_at(e.pos.x, e.pos.y)
@@ -555,7 +560,15 @@ function pal_down(e) {
     pal_focus(what)
   } elif (what == "var") {
     let name = ct_vars()[int(parts[2])].name
-    if (PAL.sel == name) {
+    let now = time.ms()
+    let double = pal_click.id == id && now - pal_click.ms < pal_double_ms
+    pal_click.id = id
+    pal_click.ms = now
+    let line = ct_fill_line()
+    if (line != null && !double) {
+      -~> A shape is selected: one click gives it the variable (one undo step).
+      ct_fill_with_var(line, name)
+    } elif (PAL.sel == name) {
       PAL.sel = null
     } else {
       PAL.sel = name

@@ -418,6 +418,19 @@ function ct_fill_with_var(line, name) {
   ed_try_at(twoway_apply(m, [{"l1": fld.line, "c1": fld.start, "l2": fld.end_line, "c2": fld.end, "text": colors_name + "." + name}]), null, line)
 }
 
+-~> The line of the selected shape (the caret's row) when it has a fill to
+-~> write, else null.
+function ct_fill_line() {
+  let m = ed_model()
+  if (ed_rows()[m.line - 1].kind != "shape") {
+    return null
+  }
+  if (fill_field(m, m.line, ed_docs(), "fill") == null) {
+    return null
+  }
+  m.line
+}
+
 -~> Several new variables at once (the harmony's "+ add all"): one step.
 function ct_add_vars(names, colors) {
   let m = ed_model()

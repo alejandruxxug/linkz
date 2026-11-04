@@ -19,7 +19,7 @@ step 3 box [27, 27, 250, 95] below targets [[131, 1, 14, 14], [280, 120, 194, 13
 -- step 3: the brush and the canvas, a dotted stroke to trace
 true #4fc46a true
 brush(
-step 4 box [70, 111, 250, 95] below targets [[0, 45, 255, 36]]
+step 4 box [70, 147, 250, 95] below targets [[0, 81, 255, 36]]
 -- step 4: the rows made, the lizard, Let's draw!
 ["Let's draw!", "Back"] true true
 true
@@ -39,7 +39,7 @@ true 3
 step 1 box [26, 49, 250, 95] right targets [[3, 53, 14, 176]] true
 step 2 box [109, 60, 250, 95] below targets [[362, 50, 150, 95], [176, 32, 71, 16]] true
 step 3 box [26, 52, 250, 95] right targets [[3, 181, 14, 14], [63, 110, 254, 174]] true
-step 4 box [70, 143, 250, 95] above targets [[0, 247, 359, 36]] true
+step 4 box [70, 179, 250, 95] above targets [[0, 283, 359, 36]] true
 true ["Every shape you made is a line", "of this code. Change the code", "and the drawing follows."]
 off, done true false
 -- the smallest window: the coach-mark moves to stay in it

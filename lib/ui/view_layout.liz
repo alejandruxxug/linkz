@@ -55,6 +55,7 @@ let V = {
   "paints": 0,
   "painted_ms": 0,
   "pen_note": "",
+  "props_extra": 0,
   "hover_anchor": null,
   "zoom": 1.0,
   "host_origin": null,
@@ -77,7 +78,7 @@ function view_geom() {
     return ag
   }
   let h = V.h
-  let props_y = h - 78
+  let props_y = h - 78 - V.props_extra
   {
     "w": V.w,
     "h": h,
@@ -113,6 +114,14 @@ function view_panel_rects() {
     "status": [0, gm.status_y, gm.w, 16],
     "canvas": [gm.pw, 30, gm.cx + gm.cw - gm.pw, gm.h - 46],
     "palette": [gm.cx + gm.cw, 30, gm.w - gm.cx - gm.cw, gm.h - 46]
+  }
+}
+
+-~> Every panel repaints in full on the next frame (the panels moved).
+function view_repaint_panels() {
+  let names = keys(view_panel_rects())
+  for (let i = 0; i < len(names); i = i + 1) {
+    V.force[names[i]] = true
   }
 }
 
@@ -570,10 +579,26 @@ function view_shown_fields(props) {
 function view_props_cached() {
   let key = str(V.ver) + "|" + str(V.focus) + "|" + str(V.picker) + "|" + lang_get() + "|" + str(V.pw) + "|" + str(V.h) + "|" + str(mode_artist())
   if (V.pl == null || V.pl_key != key) {
-    V.pl = art_ctx_wrap(color_props_wrap(blend_props_wrap(pen_props_wrap(view_props_layout_build()))))
+    V.pl = view_props_build()
+    -~> The brush and pencil strip may need a third row: the panel grows for it.
+    let need = V.pl.props_extra
+    if (need == null) {
+      need = 0
+    }
+    if (need != V.props_extra) {
+      V.props_extra = need
+      view_touch()
+      view_repaint_panels()
+      key = str(V.ver) + "|" + str(V.focus) + "|" + str(V.picker) + "|" + lang_get() + "|" + str(V.pw) + "|" + str(V.h) + "|" + str(mode_artist())
+      V.pl = view_props_build()
+    }
     V.pl_key = key
   }
   V.pl
+}
+
+function view_props_build() {
+  art_ctx_wrap(pen_props_strip_wrap(color_props_wrap(blend_props_wrap(pen_props_wrap(view_props_layout_build())))))
 }
 
 -~> What the panel shows, with places: {"title", "labels": [{x, y, s}], "boxes": [...],

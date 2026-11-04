@@ -251,3 +251,30 @@ before = steps()
 click(mid(fp))
 puts(line_of(8), steps() - before, n.PAL.sel, n.colors_entry(n.colors_find(n.ed_model()), "fill").text)
 puts(rig.ed.error)
+
+puts("-- a variable chip gives the selected shape its color; a double-click edits it")
+key("Escape")
+n.PAL.sel = null
+n.ed_set_caret(7, 0)
+rig_frame(rig)
+puts(line_of(7))
+before = steps()
+n.pal_click.ms = -100000
+click(mid(n.pal_part(n.pal_layout(), "var:0")))
+puts(line_of(7), steps() - before, n.PAL.sel)
+n.pal_click.ms = -100000
+click(mid(n.pal_part(n.pal_layout(), "var:1")))
+puts(line_of(7), steps() - before, n.PAL.sel)
+click(mid(n.pal_part(n.pal_layout(), "var:1")))
+puts(line_of(7), steps() - before, n.PAL.sel)
+n.ed_undo()
+puts(line_of(7))
+puts("-- with no shape selected, a click selects the variable as before")
+n.PAL.sel = null
+n.ed_set_caret(4, 0)
+rig_frame(rig)
+before = steps()
+n.pal_click.ms = -100000
+click(mid(n.pal_part(n.pal_layout(), "var:1")))
+puts(steps() - before, n.PAL.sel)
+puts(rig.ed.error)
