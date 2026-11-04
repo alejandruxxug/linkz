@@ -1,0 +1,86 @@
+-~> props_colors: the properties panel of the `let colors` row, the drawing's
+-~> color variables: a swatch field for each entry (`sky [■ #f2a65a]`), as many
+-~> as fit, then `+N` for the rest, and a hint with how many shapes the first
+-~> variable (or the one the sidebar edits) repaints. A swatch field opens the
+-~> color popover on that variable (color_route.liz).
+
+use "color_state"
+use "color_target"
+use "color_vars"
+use "i18n"
+use "view_gfx"
+
+-~> What an entry's field shows: its color, a gradient as `gradient(…)`, other code cut short.
+function props_colors_shown(text_in) {
+  let s = text.trim(text_in)
+  if (text.starts(s, "gradient(") || text.starts(s, "radial_gradient(")) {
+    return "gradient(…)"
+  }
+  if (len(s) > 9) {
+    return text.slice(s, 0, 8) + "…"
+  }
+  s
+}
+
+-~> The hint: what changing the variable repaints.
+function props_colors_hint(cv) {
+  let name = cv.entries[0].name
+  if (PAL.sel != null && colors_entry(cv, PAL.sel) != null) {
+    name = PAL.sel
+  }
+  let n = ct_uses(name)
+  if (n == 1) {
+    return t("props.colors_one", {"name": name})
+  }
+  if (n > 1) {
+    return t("props.colors_many", {"name": name, "n": n})
+  }
+  t("props.colors_click")
+}
+
+-~> The layout of the panel for the caret's line (a layout like view_layout's:
+-~> title, labels, boxes, msg, hint), or null when that line isn't in the colors hash.
+-~> A box is {"kind": "cvar", "field": the variable, "swatch": its color}.
+function props_colors_layout(m, y, width) {
+  let cv = colors_find(m)
+  if (cv == null || len(cv.entries) == 0 || m.line < cv.line || m.line > cv.end_line) {
+    return null
+  }
+  let out = {
+    "title": text.upper(t("panel.properties")) + " · " + colors_name + " · " + t("word.line") + " " + str(cv.line),
+    "labels": [],
+    "boxes": [],
+    "msg": "",
+    "hint": props_colors_hint(cv),
+    "props": null
+  }
+  let vars = ct_vars()
+  let x = 6
+  let shown = 0
+  for (let i = 0; i < len(cv.entries); i = i + 1) {
+    let e = cv.entries[i]
+    let txt = props_colors_shown(e.text)
+    let lw = g_text_w(e.name) + 4
+    let bw = g_text_w(txt) + 22
+    let more = len(cv.entries) - i - 1
+    let rest = 0
+    if (more > 0) {
+      rest = g_text_w("+" + str(more)) + 8
+    }
+    if (shown > 0 && x + lw + bw + rest > width - 6) {
+      break
+    }
+    push(out.labels, {"x": x, "y": y + 2, "s": e.name})
+    let sw = null
+    if (i < len(vars)) {
+      sw = ct_color_of(vars[i].value)
+    }
+    push(out.boxes, {"field": e.name, "sub": 0, "kind": "cvar", "x": x + lw, "y": y, "w": bw, "h": 18, "text": txt, "swatch": sw, "focus": false})
+    x = x + lw + bw + 8
+    shown = shown + 1
+  }
+  if (shown < len(cv.entries)) {
+    push(out.labels, {"x": x, "y": y + 2, "s": "+" + str(len(cv.entries) - shown)})
+  }
+  out
+}

@@ -22,6 +22,8 @@ use "view_items"
 use "tool_route"
 use "pen_edit"
 use "pen_props"
+use "props_colors"
+use "props_fill"
 
 let V = {
   "w": 512,
@@ -638,7 +640,7 @@ function view_props_none() {
 }
 
 function view_props_build() {
-  art_ctx_wrap(pen_props_strip_wrap(color_props_wrap(blend_props_wrap(pen_props_wrap(view_props_layout_build())))))
+  art_ctx_wrap(pen_props_strip_wrap(color_props_wrap(props_fill_wrap(blend_props_wrap(pen_props_wrap(view_props_layout_build()))))))
 }
 
 -~> What the panel shows, with places: {"title", "labels": [{x, y, s}], "boxes": [...],
@@ -660,6 +662,10 @@ function view_props_layout_build() {
   let y = gm.props_y + 22
   let out = {"title": view_props_title(props, m.line), "labels": [], "boxes": [], "msg": "", "hint": "", "props": props}
   if (props == null) {
+    let cl = props_colors_layout(m, y, V.pw)
+    if (cl != null) {
+      return cl
+    }
     let row = ed_rows()[m.line - 1]
     if (row.kind == "empty") {
       out.msg = t("hint.empty")

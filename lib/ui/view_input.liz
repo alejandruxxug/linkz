@@ -651,7 +651,7 @@ function view_field_key(name, mods) {
     let lay = view_props_layout_build()
     if (len(lay.boxes) > 0 && at >= 0) {
       let b = lay.boxes[(at + dir + len(lay.boxes)) % len(lay.boxes)]
-      if (b.kind != "bool" && b.kind != "pen" && b.kind != "missing") {
+      if (b.kind != "bool" && b.kind != "pen" && b.kind != "missing" && b.kind != "steps" && b.kind != "cvar") {
         view_focus_box(b)
       }
     }
@@ -741,7 +741,7 @@ function view_press_box(b, e) {
     V.ver = V.ver + 1
     return null
   }
-  if (b.kind == "missing") {
+  if (b.kind == "missing" || b.kind == "steps" || b.kind == "cvar") {
     return null
   }
   let v = view_number(b.text)

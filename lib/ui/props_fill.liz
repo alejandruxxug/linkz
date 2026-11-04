@@ -1,0 +1,151 @@
+-~> props_fill: how the properties panel shows a gradient fill. The `fill`
+-~> field of a shape whose fill is a gradient is a chip of the gradient and
+-~> `gradient(…)` instead of the code cut at the panel's edge; while the fill
+-~> editor is open on the row the field has the amber ring; and a stepped
+-~> gradient shows a `steps [5]` field and the hint "5 flat bands, no blending".
+-~> It changes the layout view_props_layout_build made (labels, boxes, note),
+-~> and knows nothing of painting: a gradient box carries its "chip", the colors
+-~> of eight columns.
+
+use "color_target"
+use "editor_props"
+use "editor_undo"
+use "fill_editor"
+use "fill_model"
+use "i18n"
+use "view_gfx"
+
+-~> The width of the chip's columns, one color each.
+let pf_columns = 8
+
+-~> Whether the code of a fill is a gradient call.
+function props_fill_is_gradient(s) {
+  let c = text.trim(s)
+  text.starts(c, "gradient(") || text.starts(c, "radial_gradient(") || text.starts(c, "linear(") || text.starts(c, "radial(")
+}
+
+-~> The word the gradient's field shows: `gradient(…)` or `radial(…)`.
+function props_fill_word(f) {
+  if (f.kind == "radial") {
+    return "radial(…)"
+  }
+  "gradient(…)"
+}
+
+-~> The fill of the field's code, or null when it isn't a gradient the editor reads.
+function props_fill_of(line, f) {
+  let value = null
+  if (fill_is_literal(f.text)) {
+    value = ct_value_of_text(f.text)
+  } else {
+    value = fe_value_of(line, "fill")
+  }
+  if (value == null) {
+    return null
+  }
+  let fl = fill_from_value(value)
+  if (fl == null || fl.kind == "solid") {
+    return null
+  }
+  fl
+}
+
+-~> The colors of the chip: the gradient at the middle of each column (a stepped
+-~> gradient in its flat bands).
+function props_fill_chip(fl) {
+  let out = []
+  for (let k = 0; k < pf_columns; k = k + 1) {
+    let at = (k + 0.5) / pf_columns
+    if (fl.steps > 1) {
+      at = (math.floor(at * fl.steps) + 0.5) / fl.steps
+    }
+    push(out, fill_color_at(fl.stops, at))
+  }
+  out
+}
+
+-~> Moves everything at or right of `from` by dx.
+function props_fill_shift(lay, from, dx) {
+  for (let i = 0; i < len(lay.labels); i = i + 1) {
+    if (lay.labels[i].x >= from) {
+      lay.labels[i].x = lay.labels[i].x + dx
+    }
+  }
+  for (let i = 0; i < len(lay.boxes); i = i + 1) {
+    if (lay.boxes[i].x >= from) {
+      lay.boxes[i].x = lay.boxes[i].x + dx
+    }
+  }
+}
+
+-~> The label with the text s that ends just before x, or -1.
+function props_fill_label_at(lay, s, x) {
+  for (let i = 0; i < len(lay.labels); i = i + 1) {
+    if (lay.labels[i].s == s && lay.labels[i].x + g_text_w(s) + 4 == x) {
+      return i
+    }
+  }
+  -1
+}
+
+function props_fill_steps_box(x, y, n) {
+  let s = str(n)
+  {"field": "steps", "sub": 0, "kind": "steps", "x": x, "y": y, "w": math.max(g_text_w(s) + 8, 20), "h": 18, "text": s, "focus": false}
+}
+
+-~> The layout with the fill field of a gradient dressed (see the top).
+function props_fill_wrap(lay) {
+  let props = lay.props
+  if (props == null || props.kind != "call" || lay.boxes == null) {
+    return lay
+  }
+  let at = -1
+  for (let i = 0; i < len(lay.boxes) && at < 0; i = i + 1) {
+    if (lay.boxes[i].field == "fill" && lay.boxes[i].sub == 0) {
+      at = i
+    }
+  }
+  let f = props_field_named(props, "fill")
+  if (at < 0 || f == null || f.missing || lay.boxes[at].focus || !props_fill_is_gradient(f.text)) {
+    return lay
+  }
+  let line = ed_model().line
+  let fl = props_fill_of(line, f)
+  if (fl == null) {
+    return lay
+  }
+  let box = lay.boxes[at]
+  let open = FE.open && FE.line == line && FE.which == "fill"
+  let label = props_fill_label_at(lay, "fill", box.x)
+  let right = box.x + box.w
+  if (open && fl.steps > 0 && label >= 0) {
+    -~> the editor shows the bands: `steps [5]` takes the fill's place
+    let sb = props_fill_steps_box(0, box.y, fl.steps)
+    lay.labels[label].s = t("fill.steps")
+    sb.x = lay.labels[label].x + g_text_w(lay.labels[label].s) + 4
+    props_fill_shift(lay, right, sb.x + sb.w - right)
+    lay.boxes[at] = sb
+  } else {
+    let word = props_fill_word(fl)
+    box.kind = "gradient"
+    box.text = word
+    box.chip = props_fill_chip(fl)
+    box.ring = open
+    box.w = g_text_w(word) + 22
+    props_fill_shift(lay, right, box.x + box.w - right)
+    if (fl.steps > 0 && label >= 0) {
+      let lx = box.x + box.w + 8
+      let name = t("fill.steps")
+      let sb = props_fill_steps_box(lx + g_text_w(name) + 4, box.y, fl.steps)
+      props_fill_shift(lay, box.x + box.w + 1, sb.x + sb.w + 8 - (box.x + box.w))
+      push(lay.labels, {"x": lx, "y": lay.labels[label].y, "s": name})
+      push(lay.boxes, sb)
+    }
+  }
+  if (fl.steps > 0) {
+    lay.note = t("props.fill_steps", {"line": str(line), "n": fl.steps})
+  } elif (open) {
+    lay.note = t("props.fill_handles", {"line": str(line)})
+  }
+  lay
+}

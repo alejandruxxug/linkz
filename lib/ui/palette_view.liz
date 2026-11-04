@@ -18,6 +18,7 @@ use "color_picker"
 use "color_state"
 use "color_target"
 use "color_vars"
+use "editor_state"
 use "editor_undo"
 use "fill_editor"
 use "fill_model"
@@ -584,6 +585,11 @@ function pal_down(e) {
     } else {
       PAL.sel = name
       PAL.stop = 0
+      -~> the edit shows the `let colors` row too: it is the selected row
+      let cv = colors_find(ed_model())
+      if (cv != null && !mode_artist()) {
+        ed_set_caret(cv.line, 0)
+      }
     }
   } elif (what == "plus" || what == "add") {
     pal_add_var()

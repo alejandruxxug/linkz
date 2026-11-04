@@ -1,0 +1,13 @@
+-- gradient fill, editor closed
+PROPERTIES · rect · line 5 | ["pos:point:0", "pos:point:0", "size:point:480", "size:point:200", "fill:gradient:gradient(…)"] | line 5 · drag the shape or its anchors
+-- editor open: the field is ringed, the hint is about the handles
+true
+PROPERTIES · rect · line 5 | ["pos:point:0", "pos:point:0", "size:point:480", "size:point:200", "fill:gradient:gradient(…)"] | line 5 · drag the handles
+-- stepped: steps [3] takes the fill's place while the editor is open
+PROPERTIES · rect · line 5 | ["pos:point:0", "pos:point:0", "size:point:480", "size:point:200", "fill:gradient:gradient(…)", "steps:steps:3"] | line 5 · 3 flat bands, no blending
+PROPERTIES · rect · line 5 | ["pos:point:0", "pos:point:0", "size:point:480", "size:point:200", "steps:steps:3"] | line 5 · 3 flat bands, no blending
+-- let colors: a swatch field per variable and +N
+PROPERTIES · colors · line 4 | ["sky:cvar:#f2a65a", "sea:cvar:#2d6a8f", "sun:cvar:#fff0c9"] | click a swatch: color popover
+[{"x": 6, "y": 306, "s": "sky"}, {"x": 110, "y": 306, "s": "sea"}, {"x": 214, "y": 306, "s": "sun"}, {"x": 318, "y": 306, "s": "+2"}]
+-- a swatch opens the popover on its variable
+true {"kind": "var", "name": "sky"}

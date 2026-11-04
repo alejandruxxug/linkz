@@ -25,6 +25,11 @@ lang_register("en", {
   "props.none": "nothing selected",
   "props.canvas": "canvas ({w}, {h})",
   "props.hover_hint": "hover a layer to preview it",
+  "props.fill_handles": "line {line} · drag the handles",
+  "props.fill_steps": "line {line} · {n} flat bands, no blending",
+  "props.colors_one": "changing {name} repaints its 1 shape",
+  "props.colors_many": "changing {name} repaints its {n} shapes",
+  "props.colors_click": "click a swatch: color popover",
 
   "button.save": "Save",
   "button.export": "Export PNG",

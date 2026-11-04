@@ -379,7 +379,7 @@ function view_paint_box(b) {
   if (pen_props_paint_box(b) || blend_props_paint_box(b)) {
     return null
   }
-  g_field(b.x, b.y, b.w, b.h, b.focus)
+  g_field(b.x, b.y, b.w, b.h, b.focus || b.ring == true)
   if (b.kind == "bool") {
     if (b.text == "true") {
       g_rect(b.x + 3, b.y + 3, b.w - 6, b.h - 6, P.lizard)
@@ -388,7 +388,13 @@ function view_paint_box(b) {
   }
   let tc = P.amber
   let shown = b.text
-  if (b.kind == "color") {
+  if (b.kind == "gradient") {
+    g_rect(b.x + 3, b.y + 4, 10, 10, P.void)
+    for (let k = 0; k < len(b.chip); k = k + 1) {
+      g_rect(b.x + 4 + k, b.y + 5, 1, 8, b.chip[k])
+    }
+    g_text(shown, b.x + 16, b.y + 3, P.text)
+  } elif (b.kind == "color" || b.kind == "cvar") {
     let c = g_hex_color(b.text)
     if (b.swatch != null) {
       c = b.swatch
@@ -427,6 +433,9 @@ function view_hint(lay) {
   }
   if (props.kind == "layer") {
     return lay.hint
+  }
+  if (V.hover_anchor == null && lay.note != null) {
+    return lay.note
   }
   if (V.hover_anchor != null) {
     let p = V.hover_anchor.pos

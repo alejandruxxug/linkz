@@ -92,6 +92,9 @@ function color_hover_at(x, y) {
       if (b.kind == "color" && view_in(x, y, b.x, b.y, 15, b.h)) {
         return "cpo:field:" + b.field
       }
+      if (b.kind == "cvar" && view_in(x, y, b.x, b.y, b.w, b.h)) {
+        return "cpo:cvar:" + b.field
+      }
     }
   }
   null
@@ -185,6 +188,12 @@ function color_down(e) {
     let lw = math.max(7, math.min(8 + (tg.c2 - tg.c1) * 7, view_geom().pw - sx))
     cp_open(color_target_of(tg), [sx, y + 3, 7, 12], [sx, y + 3, lw, 12], [sx - 1, y + 6, 8, 8])
     ov_quiet_here()
+    return true
+  }
+  if (parts[1] == "cvar") {
+    -~> a `let colors` field of the properties: the popover edits that variable
+    let r = view_hit_rect("field:" + parts[2] + ":0")
+    cp_open({"kind": "var", "name": parts[2]}, r, null, r)
     return true
   }
   if (parts[1] == "field") {

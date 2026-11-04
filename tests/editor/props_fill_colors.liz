@@ -1,0 +1,82 @@
+-~> The properties panel for a gradient fill (a chip, `gradient(…)`, `steps [5]`
+-~> and the hint) and for the `let colors` row (a swatch field per variable,
+-~> `+N`, the hint about the shapes it repaints, the popover from a swatch).
+
+use "../../lib/app/editor"
+use "rig"
+
+let code = "-~> lzdraw 1
+
+canvas = {\"size\": (480, 320), \"background\": #f6d9a8}
+let colors = {\"sky\": #f2a65a, \"sea\": #2d6a8f, \"sun\": #fff0c9, \"boat\": #3b2a6b, \"dusk\": gradient([#3b2a6b, #e0607a], 90deg)}
+rect((0, 0), (480, 200), gradient([#f2a65a, #fadbbd], 90deg))
+rect((0, 200), (480, 120), colors.sea)
+"
+
+let modules = rig_modules + ["ui/view_panels", "ui/view_canvas", "ui/palette_view", "ui/color_popover", "ui/color_state", "ui/color_route",
+  "ui/color_target", "ui/color_vars", "ui/color_hsv", "ui/color_wheel", "ui/fill_editor", "ui/shape_menu", "ui/props_fill", "ui/props_colors"]
+let rig = rig_open(fs.join(fs.home(), "props-fill-colors-test"), code, editor_size, modules)
+let n = rig.names
+
+function shown() {
+  let lay = n.view_props_cached()
+  let out = []
+  for (let i = 0; i < len(lay.boxes); i += 1) {
+    push(out, lay.boxes[i].field + ":" + lay.boxes[i].kind + ":" + lay.boxes[i].text)
+  }
+  puts(lay.title, "|", out, "|", n.view_hint(lay))
+}
+
+function wide() {
+  n.V.pw_user = true
+  n.V.pw = 420
+  n.view_touch()
+  rig_frame(rig)
+}
+
+n.ed.none = false
+wide()
+puts("-- gradient fill, editor closed")
+n.ed_set_caret(5, 0)
+n.view_touch()
+rig_frame(rig)
+shown()
+
+puts("-- editor open: the field is ringed, the hint is about the handles")
+n.fe_open(5, "fill")
+n.view_touch()
+rig_frame(rig)
+let ring = false
+for (let i = 0; i < len(n.view_props_cached().boxes); i += 1) {
+  if (n.view_props_cached().boxes[i].ring == true) {
+    ring = true
+  }
+}
+puts(ring)
+shown()
+
+puts("-- stepped: steps [3] takes the fill's place while the editor is open")
+n.fe_close()
+n.ed_set_prop("fill", "gradient([#f2a65a, #fadbbd], 90deg, 3)")
+n.view_touch()
+rig_frame(rig)
+shown()
+n.fe_open(5, "fill")
+n.view_touch()
+rig_frame(rig)
+shown()
+n.fe_close()
+
+puts("-- let colors: a swatch field per variable and +N")
+n.ed_set_caret(4, 0)
+n.view_touch()
+rig_frame(rig)
+shown()
+puts(n.view_props_cached().labels)
+
+puts("-- a swatch opens the popover on its variable")
+let box = n.view_props_cached().boxes[0]
+let p = (box.x + 8, box.y + 9)
+rig_frame(rig, [{"type": "move", "pos": p}])
+rig_frame(rig, [{"type": "down", "pos": p}, {"type": "up", "pos": p}])
+puts(n.CP.open, n.CP.target)

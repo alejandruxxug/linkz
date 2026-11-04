@@ -25,6 +25,11 @@ lang_register("es", {
   "props.none": "nada seleccionado",
   "props.canvas": "lienzo ({w}, {h})",
   "props.hover_hint": "pasa sobre una capa para verla",
+  "props.fill_handles": "línea {line} · arrastra los tiradores",
+  "props.fill_steps": "línea {line} · {n} bandas planas, sin mezcla",
+  "props.colors_one": "cambiar {name} repinta su 1 figura",
+  "props.colors_many": "cambiar {name} repinta sus {n} figuras",
+  "props.colors_click": "clic en una muestra: selector de color",
 
   "button.save": "Guardar",
   "button.export": "Exportar PNG",
