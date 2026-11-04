@@ -6,6 +6,7 @@
 -~> builtin members are code, so they are written here.
 
 use "doc_cache"
+use "doc_splice"
 use "editor_doc"
 use "i18n"
 use "icons"
@@ -108,19 +109,31 @@ function cmp_def_line(m, name) {
   }
   let at = cmp_def_cache.lines[name]
   if (at == null) {
-    at = cmp_find_def(doc_parsed(m).statements, name)
+    at = cmp_find_top(doc_parsed(m), name)
     cmp_def_cache.lines[name] = at
   }
   at
 }
 
-function cmp_find_def(stmts, name) {
+-~> The same over the top-level statements of the parse p, whose real lines
+-~> are their own plus the splice's shift (stmt_shift, doc_splice.liz).
+function cmp_find_top(p, name) {
+  for (let i = 0; i < len(p.statements); i = i + 1) {
+    let at = cmp_find_def([p.statements[i]], name, stmt_shift(p, i))
+    if (at > 0) {
+      return at
+    }
+  }
+  0
+}
+
+function cmp_find_def(stmts, name, d = 0) {
   for (let i = 0; i < len(stmts); i = i + 1) {
     let s = stmts[i]
     if (s.kind == "function" && s.name == name) {
-      return s.line
+      return s.line + d
     }
-    let inner = cmp_find_def(s.children, name)
+    let inner = cmp_find_def(s.children, name, d)
     if (inner > 0) {
       return inner
     }

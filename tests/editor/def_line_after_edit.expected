@@ -1,0 +1,5 @@
+-- as written
+6
+-- a line typed above shifts it
+canvas = {"size": (480, 320), "background": #f6d9a8}
+7

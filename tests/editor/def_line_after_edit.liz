@@ -1,0 +1,31 @@
+-~> The "line N" the completion list shows for a function the document defines
+-~> (cmp_def_line): after a line is typed above the definition, the parse is a
+-~> splice whose statements carry a shift, and the number follows it.
+
+use "../../lib/app/editor"
+use "rig"
+
+let code = "-~> lzdraw 1
+
+canvas = {\"size\": (480, 320), \"background\": #f6d9a8}
+rect((0, 200), (480, 120), #2d6a8f)
+rect((0, 100), (480, 60), #f2a65a)
+function tree(x) {
+  rect((x, 0), (10, 10), #112233)
+}
+tree(40)
+"
+
+let rig = rig_open(fs.join(fs.home(), "def-line-test"), code, editor_size, rig_modules + ["ui/complete_info"])
+let n = rig.names
+
+puts("-- as written")
+puts(n.cmp_def_line(n.ed_model(), "tree"))
+
+puts("-- a line typed above shifts it")
+n.ed_set_caret(3, 0)
+rig_frame(rig)
+rig_frame(rig, [{"type": "type", "text": "-~> a note"}])
+rig_frame(rig, [{"type": "key", "key": "enter"}])
+puts(n.ed_model().lines[3])
+puts(n.cmp_def_line(n.ed_model(), "tree"))
