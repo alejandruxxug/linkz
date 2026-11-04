@@ -9,6 +9,8 @@ use "../home_view"
 use "../i18n"
 use "../lang_en"
 use "../lang_es"
+use "../trace_model"
+use "../trace_view"
 let dir = "/home/u/Documents/Linkz"
 let times = {}
 fs.home = function() { "/home/u" }
@@ -225,3 +227,9 @@ times = {}
 reset_files()
 home_scan()
 puts(home_layout().empty, len(home.cards))
+
+puts("-- files dropped on the home screen")
+puts(drop_kind("/a/b.PNG"), drop_kind("/a/b.jpeg"), drop_kind("/a/b.lzdraw"), drop_kind("/a/b.txt"), drop_pick([]) == null)
+puts(drop_pick(["/x/n.txt", "/x/p.jpg"]).path, drop_pick(["/x/n.txt"]).kind)
+home_event({"type": "drop", "pos": (10, 10), "paths": ["/x/notes.txt"]})
+puts(home.status, tr_is_open())

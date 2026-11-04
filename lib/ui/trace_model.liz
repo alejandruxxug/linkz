@@ -497,3 +497,31 @@ function trace_base(path) {
   }
   text.slice(path, slash + 1, len(path))
 }
+
+-~> What a dropped file is for: "image" (a PNG or JPEG, which the trace dialog
+-~> takes), "drawing" (a .lzdraw, which opens) or "other".
+function drop_kind(path) {
+  let p = text.lower(path)
+  if (text.ends(p, ".png") || text.ends(p, ".jpg") || text.ends(p, ".jpeg")) {
+    return "image"
+  }
+  if (text.ends(p, ".lzdraw")) {
+    return "drawing"
+  }
+  "other"
+}
+
+-~> The file of a drop to act on: the first image or drawing, else the first
+-~> path ("other"), else null. {"path", "kind"}.
+function drop_pick(paths) {
+  if (paths == null || len(paths) == 0) {
+    return null
+  }
+  for (let i = 0; i < len(paths); i += 1) {
+    let k = drop_kind(paths[i])
+    if (k != "other") {
+      return {"path": paths[i], "kind": k}
+    }
+  }
+  {"path": paths[0], "kind": "other"}
+}

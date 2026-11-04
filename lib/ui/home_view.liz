@@ -24,6 +24,7 @@ use "home_thumbs"
 use "i18n"
 use "new_drawing_view"
 use "trace_editor"
+use "trace_model"
 use "trace_view"
 use "tutorial_home"
 
@@ -1105,6 +1106,27 @@ function home_cursor_gone() {
   }
 }
 
+-~> Files dropped on the home screen: a PNG or JPEG opens the Trace image
+-~> dialog with it, a .lzdraw opens as a drawing, anything else is said.
+function home_drop(e) {
+  let pick = drop_pick(e.paths)
+  if (pick == null) {
+    return null
+  }
+  if (pick.kind == "image") {
+    home_trace_dialog()
+    T.d.text = pick.path
+    tr_apply_path()
+  } elif (pick.kind == "drawing") {
+    if (!home_open(pick.path)) {
+      return null
+    }
+  } else {
+    home_say(t("drop.cant_open", {"file": trace_base(pick.path)}))
+  }
+  home_dirty()
+}
+
 function home_event(e) {
   if (e.type == "resize") {
     home.size = e.size
@@ -1118,6 +1140,9 @@ function home_event(e) {
     tr_event(e)
     home_dirty()
     return null
+  }
+  if (e.type == "drop" && !nd_is_open() && home.dialog == null) {
+    return home_drop(e)
   }
   if (nd_is_open()) {
     if (nd_event(e)) {

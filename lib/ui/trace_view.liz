@@ -735,6 +735,21 @@ function tr_on_key(e) {
   }
 }
 
+-~> Files dropped on the dialog: the first PNG or JPEG becomes the picture.
+function tr_drop(e) {
+  let d = T.d
+  let pick = drop_pick(e.paths)
+  if (pick == null) {
+    return null
+  }
+  if (pick.kind != "image") {
+    d.error = t("drop.cant_open", {"file": trace_base(pick.path)})
+    return tr_touch()
+  }
+  d.text = pick.path
+  tr_apply_path()
+}
+
 -~> One event while the dialog is open (the screen hands over every one).
 function tr_event(e) {
   let d = T.d
@@ -767,6 +782,8 @@ function tr_event(e) {
     tr_touch()
   } elif (ty == "key") {
     tr_on_key(e)
+  } elif (ty == "drop") {
+    tr_drop(e)
   } elif (ty == "text" && (e.mods == null || (!e.mods.cmd && !e.mods.ctrl))) {
     tr_type(e.text)
   }

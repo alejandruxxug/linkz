@@ -36,3 +36,14 @@ false
 -- Open as drawing: a new file named after the picture, opened
 false true true
 true 0
+-- a drop on the editor: an image opens the dialog with it, a drawing opens, other files are said
+false true
+true true
+idle true true
+-- a drop on the dialog sets its path; other files are said in it
+true true
+true true true
+or drop an image on this dialog
+o suelta una imagen en este diálogo
+-- a drop of a .lzdraw opens it as the drawing
+false true

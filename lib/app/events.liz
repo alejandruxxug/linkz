@@ -1,7 +1,7 @@
 -~> events: the window's events as the editor takes them. The editor was
 -~> written for the events of the old Go host, so this keeps them as they were:
 -~>   type        down, up, move, wheel (the window's scroll), key, text (type),
--~>               resize, focus, leave, enter
+-~>               resize, focus, leave, enter, drop (pos, paths)
 -~>   pos         the pointer in ui pixels
 -~>   canvas_pos  the pointer in the canvas's own (full resolution) pixels, when it is
 -~>               over the canvas
@@ -74,6 +74,9 @@ function events_app(e) {
     h.size = e.size
   } elif (type == "focus") {
     h.focused = e.focused
+  } elif (type == "drop") {
+    h.pos = e.pos
+    h.paths = e.paths
   }
   h.mods = events_no_mods
   if (e.mods != null) {

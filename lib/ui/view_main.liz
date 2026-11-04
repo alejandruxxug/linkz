@@ -23,6 +23,7 @@ use "view_popups"
 use "shape_popups"
 use "tool_route"
 use "trace_editor"
+use "trace_model"
 use "trace_view"
 use "pen_library"
 use "pen_route"
@@ -234,6 +235,10 @@ function view_event(e) {
     tr_editor_event(e)
     return null
   }
+  if (ty == "drop") {
+    view_drop(e)
+    return null
+  }
   if (ty == "down" || ty == "key") {
     view_clear_refusal()
   }
@@ -267,6 +272,28 @@ function view_event(e) {
   } elif (ty == "leave" || (ty == "focus" && !e.focused)) {
     view_cursor_gone()
   }
+}
+
+-~> Files dropped on the editor: a PNG or JPEG opens the Trace image dialog
+-~> with it, a .lzdraw opens as the drawing (after the unsaved-changes
+-~> question), anything else is said in the status bar.
+function view_drop(e) {
+  let pick = drop_pick(e.paths)
+  if (pick == null) {
+    return null
+  }
+  if (pick.kind == "image") {
+    tr_editor_open()
+    T.d.text = pick.path
+    tr_apply_path()
+    tr_editor_changed()
+  } elif (pick.kind == "drawing") {
+    let path = pick.path
+    view_confirm(function() { show_screen("editor", {"path": path}) })
+  } else {
+    ed.status = t("drop.cant_open", {"file": trace_base(pick.path)})
+  }
+  app.needs_paint = true
 }
 
 -~> The pointer left the window (or the window lost focus): the mouse readout

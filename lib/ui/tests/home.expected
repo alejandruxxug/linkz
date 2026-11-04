@@ -134,3 +134,7 @@ true
 3 5 1 2 3 5
 false
 true 0
+-- files dropped on the home screen
+image image drawing other true
+/x/p.jpg other
+Can't open notes.txt: drop a PNG, a JPEG or a .lzdraw false
