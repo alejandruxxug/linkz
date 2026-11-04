@@ -98,7 +98,7 @@ function art_geom(w, h) {
 
 -~> The compact palette's height now.
 function art_pal_height() {
-  if (PAL.open == false) {
+  if (PAL.cfold) {
     return art_pal_rail_h
   }
   art_pal_h

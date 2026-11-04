@@ -72,6 +72,10 @@ pal:dropper_at
 -- the pen picker beside the column's brush, the pen settings without code
 brush true [21, 181, 230, 133]
 [16, 51, 480, 220] null
+-- the compact palette keeps a variable on the same row, lets go on another, and folds apart from the coder sidebar
+sky
+null
+false
 -- back to coder mode: the code panel's width comes back
 false true true 285 true
 true

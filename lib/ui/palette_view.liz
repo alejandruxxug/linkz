@@ -507,7 +507,11 @@ function pal_hover_at(x, y) {
 
 -~> Opens (true) or collapses (false) the sidebar: the canvas changes size.
 function pal_set_open(on) {
-  PAL.open = on
+  if (mode_artist()) {
+    PAL.cfold = !on
+  } else {
+    PAL.open = on
+  }
   PAL.focus = null
   V.pw = math.max(math.min(160, V.w * 5 // 8), math.min(V.pw, V.w - 120 - pal_reserved(V.w)))
   view_touch()
@@ -680,6 +684,7 @@ function pal_save_paint(line, which) {
     PAL.sel = name
     PAL.stop = 0
     PAL.open = true
+    PAL.cfold = false
     PAL.focus = {"field": "name", "text": name, "caret": len(name), "fresh": true}
     V.pw = math.max(math.min(160, V.w * 5 // 8), math.min(V.pw, V.w - 120 - pal_reserved(V.w)))
     view_force_all()

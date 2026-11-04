@@ -61,15 +61,13 @@ function pal_compact_fill_target() {
 -~> What the compact palette edits in artist mode (pal_target asks it
 -~> first): the selected shape's fill, or null for the sidebar's own targets
 -~> (a variable picked in it, the fill editor's stop, the color new shapes
--~> get). A newly selected shape with a fill ends editing a variable.
+-~> get). Selecting another row or layer, or opening another file, ends editing a variable.
 function pal_compact_target() {
   let tg = pal_compact_fill_target()
-  let seen = str(ed_model().line) + "|" + pick_key()
+  let seen = str(ed.file) + "|" + str(ed_model().line) + "|" + pick_key()
   if (seen != pcmp.seen) {
     pcmp.seen = seen
-    if (tg != null) {
-      PAL.sel = null
-    }
+    PAL.sel = null
   }
   if (tg == null || PAL.sel != null || (FE.open && FE.f != null && !FE.code)) {
     return null
@@ -108,7 +106,7 @@ function pal_compact_layout() {
 -~> The parts as [{"id", "x", "y", "w", "h"}]: folded, only the chevron.
 function pal_compact_parts(lay) {
   let r = pal_rect()
-  if (PAL.open == false) {
+  if (PAL.cfold) {
     return [{"id": "expand", "x": r[0] + r[2] - 14, "y": r[1] + 1, "w": 12, "h": 12}]
   }
   let x = lay.x
@@ -144,7 +142,7 @@ function pal_compact_paint() {
     tcol = P.bright
   }
   g_text(title, r[0] + 5, r[1], tcol)
-  let folded = PAL.open == false
+  let folded = PAL.cfold
   let cc = P.mute
   if (V.hover == "pal:collapse" || V.hover == "pal:expand") {
     cc = P.bright

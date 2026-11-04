@@ -8,13 +8,15 @@
 -~> window narrower than 1100 screen pixels (550 UI pixels) and open in a
 -~> wider one.
 
--~> The sidebar. open: null (follow the window), true or false. sel: the
+-~> The sidebar. cfold: the artist compact palette is folded (its own state,
+-~> apart from the coder sidebar's open). open: null (follow the window), true or false. sel: the
 -~> variable it edits, or null. mode: "ring" or "square". hsv: its picker's
 -~> color (color_hsv.liz). stop: the stop of a gradient variable it edits.
 -~> focus: the field being typed in, {"field", "text", "caret", "fresh"}.
 -~> confirm: the variable whose removal waits for a second click.
 let PAL = {
   "open": null,
+  "cfold": false,
   "sel": null,
   "mode": "ring",
   "hsv": null,

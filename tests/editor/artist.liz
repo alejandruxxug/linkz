@@ -344,6 +344,19 @@ n.pen_route_show(n.ed.pen)
 rig_frame(rig)
 puts(n.pw_rect(), n.pw_layout().code)
 
+puts("-- the compact palette keeps a variable on the same row, lets go on another, and folds apart from the coder sidebar")
+n.PAL.sel = "sky"
+n.pal_compact_target()
+puts(n.PAL.sel)
+n.view_select_line(3)
+n.view_after()
+rig_frame(rig)
+n.pal_compact_target()
+puts(n.PAL.sel)
+n.PAL.open = false
+puts(n.PAL.cfold)
+n.PAL.open = null
+
 puts("-- back to coder mode: the code panel's width comes back")
 n.pen_route_command(["close"])
 click(mid(tb("mode:coder")))
