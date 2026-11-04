@@ -70,7 +70,7 @@ Old → new names (for the rule table above): ink → `void`, night → `coal`, 
 |---|---|
 | **Linkz** (Figma desktop, edited through the Figwright plugin) | 🖼️ Inputs (direction + references) · 🎨 Style (palette, font 1× and 2×, components, 8×8 icons) · 🧪 Reviews (one section per review while it is open) · ✅ Approved (the frames to build from) |
 
-⚠️ 2026-11-03: the 🧪 Reviews page is **empty**. The R001, R002 and R003 review sections (`3:2`, `6:1257`, `9:2302`) were moved, not copied, to ✅ Approved (they now have new `21:*` ids), so the old review node ids in the tables below are history only. Their pictures are still in `docs/Art/Reviews/R002/` and `R003/`. If the team wants the review copies back on 🧪 Reviews, clone the three ✅ Approved sections there.
+⚠️ 2026-11-03: the 🧪 Reviews page holds only **R004 – Layer hover preview** (`25:4344`, open). The R001, R002 and R003 review sections (`3:2`, `6:1257`, `9:2302`) were moved, not copied, to ✅ Approved (they now have new `21:*` ids), so the old review node ids in the tables below are history only. Their pictures are still in `docs/Art/Reviews/R002/` and `R003/`. If the team wants the review copies back on 🧪 Reviews, clone the three ✅ Approved sections there.
 
 Mockups are drawn at window size (1024×720) with every UI pixel as a 2×2 block. Each UI part is its own layer, rendered pixel-exact from the real 7×13 font and 8×8 icons. The canvas drawing is vector and smooth, and home thumbnails are rendered drawings. Layer names say what each part is (`row line 10 · circle (selected)`, `properties panel`, `tool strip`, `card menu ⋯ (open)`), so the builder reads the frame tree. The generator that produced them works in UI pixels with the numbers below.
 
@@ -237,6 +237,28 @@ R003 metrics ✅ (UI pixels):
 | Harmony | `HARMONY` + name right, 6 icon segments (complementary, split, analogous, triadic, square, mono; 27 wide), then the swatches 24×14 (click = use, drag = palette) and `+ add all` (`lizard`) → `colors.sky_2`, `sky_3` |
 | Trace dialog | 452×270 at y 34 over the 62% `void` dim; header 15 (`TRACE IMAGE · file`); preview 240×180 with before (left) / after (right) and a vertical 1 px `bright` split (+ `void` side) with an 11×17 grip; chips `original` / `traced`; source row (file · size + `Change…`), drop hint; right: MODE Photo / Line art, sliders line threshold, colors, detail, snap to shapes, flow; ☑ show lines, ☑ show fills; stats (`amber` numbers: strokes, fills, primitives, ms); footer Insert as layer + primary Open as drawing |
 
+R004 – Layer hover preview ⏳ (🧪 Reviews, section `25:4344`; generator `docs/Art/Figma-gen/r004.py` on top of `r002.py` / `r003.py`, split into layers by `raster.py`; PNGs in `docs/Art/Reviews/R004/`). Developer: "when we hover on a layer it should show a preview of only the items in the layer!" The sun layer has a third object for this review (`circle((360, 90), 80, #fff3c433)`, a faint halo) so it reads "3 objects".
+
+| # | Frame | Node | PNG |
+|---|---|---|---|
+| 1 | Coder – hover card on `layer sun` (option **card**) | `25:4345` | `R004-01-coder-hover-card.png` |
+| 2 | Coder – canvas isolation only, no card (option **isolation**) | `25:4396` | `R004-02-coder-isolation.png` |
+| 3 | Artist – hover card beside the layers panel | `25:4348` | `R004-03-artist-hover-card.png` |
+| 4 | Artist – card + isolation (option **both**) | `25:4731` | `R004-04-artist-card-and-isolation.png` |
+| 5 | Coder – Spanish ("3 objetos", "clic: elegir la capa") | `25:4441` | `R004-05-coder-spanish.png` |
+| 6 | Coder – nested `layer rays` inside `layer sun`: only the rays in the preview, path `sun/rays`, `8 objects` (made by a `for`), `SCR 70%` badge | `25:4486` | `R004-06-nested-layer.png` |
+| 7 | Coder – hidden `layer boat` (`amber` eye-off on the row): the preview still shows it with a `hidden` chip, hint "only shown here"; the canvas does not | `25:4531` | `R004-07-hidden-layer.png` |
+
+R004 metrics (UI pixels, proposed):
+
+| Part | Metric |
+|---|---|
+| Hover card | tooltip construction (`row` face, 1 px `void` outline, `bevel` top line, 2 px `void` drop shadow), 152 wide, padding 6. Preview 140×93 (the drawing's 3:2 ratio, whole canvas so you see where the layer sits) in a 1 px `void` frame, the layer alone drawn full-res over the canvas background (`#f6d9a8` here); a drawing with no background shows the 3 px `#d4dacd`/`#a0ab9b` checker instead (color-content rule). Under it, pitch 15: `layer` icon (`lizard`) + name `bright` (parent path `sun/` in `mute` for a nested layer), shape count right-aligned `mute` (`3 objects` / `3 objetos`, the shapes the layer draws, loops included, not its rows); a blend/opacity badge line (`raised`, like the layer-row badge: `SCR 70%`) only when not Normal 100%; a `mute` hint line. Hidden layer: 13 px `raised` chip with `void` outline, `amber` eye-off + `hidden` in the preview's top-left. Height 128 (148 with the badge line) |
+| Card placement | coder: right of the hovered row's text (+22), top 6 above the row, 5-step pixel tail (`void` edge, `row` fill) on the left pointing at the row; artist: left of the layers panel (7 px gap), tail on the right. Flips up near the bottom edge like menus |
+| Timing | appears after the tooltip delay, 400 ms of rest on a layer row; while a card is open, moving to another layer row swaps it at once (no new delay); hides 150 ms after the cursor leaves the row, at once on click, drag, scroll or Esc. Never while dragging rows or drawing |
+| Canvas isolation | over the drawing area only: `void` at 70% over the whole drawing, then the hovered layer drawn again above the dim (its real colors and blend), plus a chip under the canvas (`row` + `void` outline + `bevel` top line, 16 high: `layer` icon `lizard`, `sun · 3 objects`). The surround, panels and selection overlays are not dimmed. Hidden layers: no isolation (the card is the only place they show) |
+| Hidden row | the row's eye becomes `eye-off` in `amber` |
+
 ## 🖼️ Inputs
 
 | File | For | What to take from it |
@@ -279,6 +301,7 @@ R003 metrics ✅ (UI pixels):
 | 2026-11-03 | R003 – trace image dialog (Tracing v2 UI): Photo / Line art, line threshold, colors, detail, snap to shapes, flow, before/after split on an original placeholder head (no copyrighted art), show lines / fills, stats, Insert as layer / Open as drawing `9:2312` | ✅ approved 2026-11-03 (design only, not scheduled) |
 | 2026-11-03 | R002 + R003 moved to ✅ Approved (developer: "everything on figma is approved, move it and check it"): sections `21:3120` (R002, 29 frames) and `21:4094` (R003, 6 frames), plus R001 `21:2692`. They were moved, not copied, before this pass, so 🧪 Reviews is empty. The 35 frames are exported at 1× to `docs/Art/Approved/21-*.png` and listed in the approved tables | ✅ moved · ⚠️ review copies gone from 🧪 Reviews (pictures kept in `docs/Art/Reviews/`) |
 | 2026-11-03 | v1.1 design check, real app vs approved frames (`docs/Reviews/2026-11-03 v1.1 design check.md`, shots in `docs/Art/Checks/v1.1/`) | 3 ✅ · 23 🟡 · 5 🔴 (R002-6 artist selection not revealed, R002-9 submenu off-window, R002-20 / 22 autocomplete layout + error while typing, R002-25 named colors open no popover) · R003-3 not verifiable · R003-6 not built · R002-18/19 superseded |
+| 2026-11-03 | R004 – layer hover preview (developer: "when we hover on a layer it should show a preview of only the items in the layer!"): hover card with the layer alone over the canvas background at 140×93, name, shape count, blend badge, hint; canvas isolation option (70% `void`, layer drawn again on top, chip under the canvas); coder `25:4345`, isolation `25:4396`, artist `25:4348`, both `25:4731`, Spanish `25:4441`, nested `sun/rays` `25:4486`, hidden `boat` `25:4531` (section `25:4344`). Designer's pick: card on hover, isolation while Alt is held | ⏳ waiting for approval |
 | 2026-11-03 | Proposal from the check: R002-9's code preview `hard(#f2a65a, 0.6)` should read `hard(#f2a65a)` (the library's one-argument `hard` is the better API). Additions the app made (Arrange + Blend ▸ in the shape menu, fill-editor `angle` / `alcance`, dialog Background + `measure again`, tutorial `Back`) should be drawn into the frames next pass | ⏳ proposed |
 
 ## Approval of R002 and R003 (2026-11-03)
