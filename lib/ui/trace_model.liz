@@ -1,0 +1,499 @@
+-~> trace_model: the Trace image dialog apart from how it looks: the sliders
+-~> and which trace option each one sets, the values, the options handed to
+-~> trace(), the stats it shows, and the turning of traced code into one
+-~> `layer traced` that goes into an open drawing.
+-~>
+-~> The sliders follow the approved frame (R003-6). A slider whose option the
+-~> engine doesn't have (snap, flow) is left out: trace_known(mode) says which
+-~> option names the engine takes, and trace_visible() hides the others.
+-~> The labels are language keys; the view turns them into words.
+
+-~> The sliders: the key (also the option's name), the language key of the
+-~> label, the range, the step, the decimals shown, the unit after the value,
+-~> and the modes it belongs to.
+let trace_sliders = [
+  {"key": "line_threshold", "label": "trace.line_threshold", "lo": 0.05, "hi": 0.95, "step": 0.05, "dec": 2, "unit": "", "modes": ["lineart"]},
+  {"key": "colors", "label": "trace.colors", "lo": 2, "hi": 32, "step": 1, "dec": 0, "unit": "", "modes": ["photo", "lineart"]},
+  {"key": "detail", "label": "trace.detail", "lo": 0.3, "hi": 4.0, "step": 0.1, "dec": 1, "unit": " px", "modes": ["photo", "lineart"]},
+  {"key": "snap", "label": "trace.snap", "lo": 0.0, "hi": 4.0, "step": 0.1, "dec": 1, "unit": " px", "modes": ["lineart"]},
+  {"key": "flow", "label": "trace.flow", "lo": 0.0, "hi": 1.0, "step": 0.05, "dec": 2, "unit": "", "modes": ["lineart"]}
+]
+
+-~> The longest side of the picture while the preview is traced.
+let trace_preview_side = 160
+
+-~> A new dialog's state. known: the option names the engine takes, per mode
+-~> ({"photo": [...], "lineart": [...]}); defaults: the engine's default
+-~> options per mode.
+function trace_new(known, defaults) {
+  let vals = {"photo": {}, "lineart": {}}
+  let modes = ["photo", "lineart"]
+  for (let m = 0; m < len(modes); m += 1) {
+    for (let i = 0; i < len(trace_sliders); i += 1) {
+      let s = trace_sliders[i]
+      if (list.index(s.modes, modes[m]) >= 0) {
+        let v = defaults[modes[m]][s.key]
+        if (v == null) {
+          v = s.lo
+        }
+        vals[modes[m]][s.key] = v
+      }
+    }
+  }
+  {
+    "mode": "lineart",
+    "vals": vals,
+    "lines": true,
+    "fills": true,
+    "known": known,
+    "split": 0.5,
+    "path": "",
+    "text": "",
+    "fresh": false,
+    "focus": "path",
+    "image": null,
+    "error": "",
+    "phase": "idle",
+    "due": 0,
+    "result": null,
+    "preview": null,
+    "raw": null,
+    "retrace": false
+  }
+}
+
+-~> The sliders shown in a mode: the ones that belong to it and whose option
+-~> the engine has.
+function trace_visible(d) {
+  let out = []
+  for (let i = 0; i < len(trace_sliders); i += 1) {
+    let s = trace_sliders[i]
+    if (list.index(s.modes, d.mode) >= 0 && list.index(d.known[d.mode], s.key) >= 0) {
+      push(out, s)
+    }
+  }
+  out
+}
+
+-~> A number rounded to `dec` decimals (a whole number when dec is 0).
+function trace_round(v, dec) {
+  if (dec == 0) {
+    return math.round(v)
+  }
+  let k = pow10(dec)
+  math.round(v * k) / float(k)
+}
+
+-~> 10 to the power n, for a whole n from 0 up.
+function pow10(n) {
+  let k = 1
+  for (let i = 0; i < n; i += 1) {
+    k *= 10
+  }
+  k
+}
+
+-~> The value of a slider as shown: "0.50", "6", "0.8 px".
+function trace_format(s, v) {
+  if (s.dec == 0) {
+    return str(math.round(v)) + s.unit
+  }
+  let r = trace_round(v, s.dec)
+  let whole = math.floor(r)
+  let frac = str(math.round((r - whole) * pow10(s.dec)))
+  while (len(frac) < s.dec) {
+    frac = "0" + frac
+  }
+  str(whole) + "." + frac + s.unit
+}
+
+-~> Where the value of a slider sits along its track, from 0 to 1.
+function trace_fraction(s, v) {
+  math.max(0.0, math.min(1.0, (v - s.lo) / float(s.hi - s.lo)))
+}
+
+-~> The value at a place along the track (0 to 1), snapped to the step.
+function trace_value_at(s, f) {
+  let f2 = math.max(0.0, math.min(1.0, f))
+  let steps = math.round((f2 * (s.hi - s.lo)) / s.step)
+  let v = s.lo + steps * s.step
+  if (s.dec == 0) {
+    return math.round(v)
+  }
+  trace_round(v, s.dec + 1)
+}
+
+-~> Sets slider `key` of the current mode to v (inside its range).
+function trace_set(d, key, v) {
+  for (let i = 0; i < len(trace_sliders); i += 1) {
+    if (trace_sliders[i].key == key) {
+      let s = trace_sliders[i]
+      d.vals[d.mode][key] = math.max(s.lo, math.min(s.hi, v))
+    }
+  }
+  d
+}
+
+-~> The options of trace() from the dialog: the mode's sliders and the extra
+-~> ones given (max_side, scale). The lines and fills toggles don't change the
+-~> trace; they only leave a layer out of its code (trace_filter).
+function trace_options(d, extra = {}) {
+  let out = {}
+  if (d.mode == "lineart") {
+    out.mode = "lineart"
+  }
+  let shown = trace_visible(d)
+  for (let i = 0; i < len(shown); i += 1) {
+    let key = shown[i].key
+    out[key] = d.vals[d.mode][key]
+  }
+  if (out.colors != null) {
+    out.colors = math.round(out.colors)
+  }
+  hash.merge(out, extra)
+}
+
+-~> The size the picture has once it is shrunk to a longest side of at most
+-~> `side` pixels (never enlarged).
+function trace_shrunk(size, side) {
+  let longest = math.max(size.x, size.y)
+  if (longest <= side) {
+    return size
+  }
+  let k = side / float(longest)
+  (math.max(1, math.round(size.x * k)), math.max(1, math.round(size.y * k)))
+}
+
+-~> The scale that makes a traced picture fill a canvas of `canvas`, as big as
+-~> fits (3 decimals).
+function trace_fit_scale(traced, canvas) {
+  let k = math.min(canvas.x / float(traced.x), canvas.y / float(traced.y))
+  math.max(0.001, trace_round(k, 3))
+}
+
+-~> == Stats ==
+
+-~> The numbers under the sliders: a list of [number, language key] pairs, in
+-~> the order shown. Line art says strokes, fills and (when the engine counts
+-~> them) primitives; photo says colors, regions and points. The time is last.
+function trace_stat_pairs(stats) {
+  let out = []
+  if (stats == null) {
+    return out
+  }
+  if (stats.mode == "lineart") {
+    push(out, [stats.strokes, "trace.strokes"])
+    push(out, [stats.fills, "trace.fills"])
+    if (stats.primitives != null) {
+      push(out, [stats.primitives, "trace.primitives"])
+    }
+  } else {
+    push(out, [stats.colors, "trace.colors"])
+    push(out, [stats.regions, "trace.regions"])
+    push(out, [stats.points, "trace.points"])
+  }
+  push(out, [math.round(stats.ms), "trace.ms"])
+  out
+}
+
+-~> 1240 as "1,240".
+function trace_thousands(n) {
+  let s = str(math.round(n))
+  let out = ""
+  let k = 0
+  for (let i = len(s) - 1; i >= 0; i -= 1) {
+    if (k > 0 && k % 3 == 0 && s[i] != "-") {
+      out = "," + out
+    }
+    out = s[i] + out
+    k += 1
+  }
+  out
+}
+
+-~> == Traced code into a layer ==
+
+-~> The lines of a text.
+function trace_lines(code) {
+  text.split(code, "\n")
+}
+
+function trace_indent(line) {
+  let n = 0
+  while (n < len(line) && line[n] == " ") {
+    n += 1
+  }
+  n
+}
+
+-~> The name after "layer " on a layer row, or null for any other row.
+function trace_layer_name(line) {
+  let s = text.trim(line)
+  if (text.starts(s, "layer ")) {
+    return text.trim(text.slice(s, 6, len(s)))
+  }
+  null
+}
+
+-~> Whether c can be part of a name.
+function trace_word_char(c) {
+  text.find("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_", c) >= 0
+}
+
+-~> `s` with every `prefix`NAME (a whole name after the prefix) replaced by
+-~> what pick(NAME) says, or kept when it says null.
+function trace_replace_names(s, prefix, pick) {
+  let out = ""
+  let at = 0
+  while (true) {
+    let i = text.find(text.slice(s, at, len(s)), prefix)
+    if (i < 0) {
+      break
+    }
+    i += at
+    out += text.slice(s, at, i)
+    let j = i + len(prefix)
+    while (j < len(s) && trace_word_char(s[j])) {
+      j += 1
+    }
+    let name = text.slice(s, i + len(prefix), j)
+    let by = pick(name)
+    if (by == null) {
+      out += text.slice(s, i, j)
+    } else {
+      out += by
+    }
+    at = j
+  }
+  out + text.slice(s, at, len(s))
+}
+
+-~> The colors of `let colors = {"name": #hex, ...}` as a hash of name to
+-~> "#hex" (a block over several rows or a single row). {} when there is none.
+function trace_colors(lines) {
+  let out = {}
+  let on = false
+  for (let i = 0; i < len(lines); i += 1) {
+    let s = lines[i]
+    if (text.starts(s, "let colors = {")) {
+      on = true
+    }
+    if (on) {
+      let at = 0
+      while (true) {
+        let q = text.find(text.slice(s, at, len(s)), "\": #")
+        if (q < 0) {
+          break
+        }
+        q += at
+        let b = q
+        while (b > 0 && s[b - 1] != "\"") {
+          b -= 1
+        }
+        let e = q + 3
+        while (e < len(s) && text.find("0123456789abcdefABCDEF#", s[e]) >= 0) {
+          e += 1
+        }
+        out[text.slice(s, b, q)] = text.slice(s, q + 3, e)
+        at = e
+      }
+      if (text.find(s, "}") >= 0) {
+        on = false
+      }
+    }
+  }
+  out
+}
+
+-~> The rows of `lines` without the layers named in `drop` (at the first
+-~> indentation, with everything inside them).
+function trace_drop_layers(lines, drop) {
+  let out = []
+  let skipping = false
+  for (let i = 0; i < len(lines); i += 1) {
+    let line = lines[i]
+    if (trace_indent(line) == 0 && text.trim(line) != "") {
+      skipping = false
+      let name = trace_layer_name(line)
+      if (name != null && list.index(drop, name) >= 0) {
+        skipping = true
+      }
+    }
+    if (!skipping) {
+      push(out, line)
+    }
+  }
+  out
+}
+
+-~> The text of a traced drawing without the layers `lines` and `fills` the
+-~> dialog has switched off (line art only: the photo's layers have other names).
+function trace_filter(code, lines, fills) {
+  let drop = []
+  if (!lines) {
+    push(drop, "lines")
+  }
+  if (!fills) {
+    push(drop, "fills")
+  }
+  if (len(drop) == 0) {
+    return code
+  }
+  text.join(trace_drop_layers(trace_lines(code), drop), "\n")
+}
+
+-~> A name that `taken` (the drawing's text) doesn't use yet: base, base2, ...
+-~> `marker` says how it shows in the text ("layer " or "pens.").
+function trace_free(taken, marker, base) {
+  let n = 1
+  let name = base
+  while (trace_uses(taken, marker, name)) {
+    n += 1
+    name = base + str(n)
+  }
+  name
+}
+
+-~> Whether the text has `marker`name as a whole name.
+function trace_uses(taken, marker, name) {
+  let found = {"yes": false}
+  trace_replace_names(taken, marker, function(w) {
+    if (w == name) {
+      found.yes = true
+    }
+    null
+  })
+  found.yes
+}
+
+-~> The rows to put into a drawing for traced code, as {"lines", "layer"}: the
+-~> rows to write (pen definitions first, then `layer traced` with
+-~> everything inside, colors written out as literals so nothing clashes with
+-~> the drawing's own names) and the index in them of the layer row. `into` is
+-~> the drawing's text, so the names it already uses stay free.
+function trace_as_layer(code, into) {
+  let src = trace_lines(code)
+  let colors = trace_colors(src)
+  let pens = []
+  let body = []
+  let seen_layer = false
+  let in_colors = false
+  for (let i = 0; i < len(src); i += 1) {
+    let line = src[i]
+    if (text.starts(line, "let colors = {")) {
+      in_colors = true
+    }
+    if (in_colors) {
+      if (text.find(line, "}") >= 0) {
+        in_colors = false
+      }
+      continue
+    }
+    if (trace_layer_name(line) != null && trace_indent(line) == 0) {
+      seen_layer = true
+    }
+    if (seen_layer) {
+      push(body, line)
+    } elif (text.starts(line, "pens.")) {
+      push(pens, line)
+    }
+  }
+  while (len(body) > 0 && text.trim(body[len(body) - 1]) == "") {
+    pop(body)
+  }
+  let pen = trace_free(into, "pens.", "traced")
+  let fix = function(line) {
+    let l = trace_replace_names(line, "colors.", function(name) { colors[name] })
+    if (pen != "traced") {
+      l = trace_replace_names(l, "pens.", function(name) {
+        if (name == "traced") {
+          return "pens." + pen
+        }
+        null
+      })
+    }
+    l
+  }
+  let rows = []
+  for (let i = 0; i < len(pens); i += 1) {
+    push(rows, fix(pens[i]))
+  }
+  let name = trace_free(into, "layer ", "traced")
+  let top = 0
+  let only = true
+  for (let i = 0; i < len(body); i += 1) {
+    if (trace_indent(body[i]) == 0 && text.trim(body[i]) != "") {
+      top += 1
+    }
+  }
+  only = top == 1 && trace_layer_name(body[0]) == "traced"
+  let at = len(rows)
+  if (only) {
+    push(rows, "layer " + name)
+    for (let i = 1; i < len(body); i += 1) {
+      push(rows, fix(body[i]))
+    }
+  } else {
+    push(rows, "layer " + name)
+    for (let i = 0; i < len(body); i += 1) {
+      if (text.trim(body[i]) == "") {
+        push(rows, "")
+      } else {
+        push(rows, "  " + fix(body[i]))
+      }
+    }
+  }
+  {"lines": rows, "layer": at}
+}
+
+-~> Where traced rows go in a drawing's rows: just above the first layer (so
+-~> it is the frontmost one), or at the end when there is no layer yet.
+function trace_insert_at(lines) {
+  for (let i = 0; i < len(lines); i += 1) {
+    if (trace_indent(lines[i]) == 0 && trace_layer_name(lines[i]) != null) {
+      return i
+    }
+  }
+  let n = len(lines)
+  while (n > 0 && text.trim(lines[n - 1]) == "") {
+    n -= 1
+  }
+  n
+}
+
+-~> The rows of a drawing with the traced layer inserted: {"lines", "line"}
+-~> where line is the 1-based row of `layer traced` in the result.
+function trace_insert(lines, code) {
+  let made = trace_as_layer(code, text.join(lines, "\n"))
+  let at = trace_insert_at(lines)
+  let out = list.slice(lines, 0, at) + made.lines + list.slice(lines, at, len(lines))
+  {"lines": out, "line": at + made.layer + 1}
+}
+
+-~> The name for a drawing opened from a picture's path: the file's name
+-~> without its extension.
+function trace_stem(path) {
+  let name = path
+  let slash = len(name) - 1
+  while (slash >= 0 && name[slash] != "/") {
+    slash -= 1
+  }
+  name = text.slice(name, slash + 1, len(name))
+  let dot = len(name) - 1
+  while (dot > 0 && name[dot] != ".") {
+    dot -= 1
+  }
+  if (dot > 0) {
+    name = text.slice(name, 0, dot)
+  }
+  name
+}
+
+-~> The last part of a path.
+function trace_base(path) {
+  let slash = len(path) - 1
+  while (slash >= 0 && path[slash] != "/") {
+    slash -= 1
+  }
+  text.slice(path, slash + 1, len(path))
+}

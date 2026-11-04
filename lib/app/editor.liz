@@ -4,7 +4,8 @@
 -~> loaded in a sandbox of their own, with the host's primitives (host.liz),
 -~> the settings and the machine's measurement around them; the loop hands
 -~> them every event and asks them to paint when they say they need it.
--~> The editor's `linkz` has two more functions: machine() gives the
+-~> The editor's `linkz` has three more functions: trace_engine() loads the
+-~> tracer for the Trace image dialog; machine() gives the
 -~> machine's measurement ({} when unknown) and measure() measures again,
 -~> keeps it in ~/.linkz/machine.liz and gives it.
 -~>
@@ -54,6 +55,10 @@ function editor_load(win, path, settings, machine, modules = editor_modules, sta
       kept.machine
     }
   })
+  -~> The tracer (lib/trace) for the Trace image dialog, loaded when it is asked for.
+  around.linkz.trace_engine = function() {
+    libs_load(libs_draw + libs_trace + ["trace/lineart"], {"img": around.img, "time": around.time})
+  }
   around.src.run = function(code) {
     let r = drawing_run(code)
     stats.run_ms = r.ms

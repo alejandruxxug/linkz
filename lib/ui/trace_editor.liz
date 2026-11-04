@@ -1,0 +1,89 @@
+-~> trace_editor: the Trace image dialog inside the editor (Cmd+Shift+T, or
+-~> the backdoor's TraceDialog): what the screen gives trace_view when the
+-~> dialog is opened here.
+-~>   Insert as layer   adds the traced picture as `layer traced`, the frontmost
+-~>                     layer, scaled to fit the canvas: one undo step
+-~>   Open as drawing   writes a new drawing next to the others and opens it
+-~>                     (after the unsaved-changes question, when there is one)
+-~> The editor paints the dialog with its popups: every change of the dialog
+-~> paints the panels again first (the dim behind it is not opaque, so it
+-~> would darken more with each popup paint otherwise).
+
+use "app"
+use "app_screens"
+use "editor_doc"
+use "editor_undo"
+use "home_data"
+use "home_view"
+use "trace_model"
+use "trace_view"
+use "view_input"
+use "view_layout"
+
+-~> What the editor's trace dialog last showed, so a change is noticed.
+let tr_seen = {"ver": -1}
+
+-~> Opens the dialog over the editor.
+function tr_editor_open() {
+  view_commit_focus()
+  tr_open((V.w, V.h), {"canvas": function() { ed.canvas.size }, "insert": tr_editor_insert, "open": tr_editor_open_drawing}, true)
+  tr_editor_changed()
+}
+
+-~> Called when anything of the dialog changed: the whole window is painted again.
+function tr_editor_changed() {
+  tr_seen.ver = T.ver
+  view_force_all()
+  app.needs_paint = true
+}
+
+-~> Gives an event to the open dialog.
+function tr_editor_event(e) {
+  tr_event(e)
+  if (T.ver != tr_seen.ver) {
+    tr_editor_changed()
+  }
+  app.needs_paint = true
+}
+
+-~> At the start of a paint: a waiting trace moves along, and a change that
+-~> came with it paints everything again.
+function tr_editor_frame() {
+  if (T.d == null && T.ver == tr_seen.ver) {
+    return null
+  }
+  tr_tick()
+  if (T.ver != tr_seen.ver) {
+    tr_editor_changed()
+  }
+  if (tr_wants_paint()) {
+    -~> a trace is waiting: the next frame comes by itself
+    app.needs_paint = true
+  }
+}
+
+-~> Insert as layer: the traced code goes into the file as one undo step.
+-~> "" when it did, else what went wrong.
+function tr_editor_insert(code) {
+  view_commit_focus()
+  let m = ed_model()
+  let r = trace_insert(m.lines, code)
+  ed_label("trace_layer")
+  ed_apply(doc_with(m, r.lines, r.line, 0), null)
+  view_prepare()
+  view_after()
+  ""
+}
+
+-~> Open as drawing: a new file in the drawings folder, then the editor opens it.
+function tr_editor_open_drawing(stem, code) {
+  let taken = home_names(home_list(home_dir()))
+  let made = home_write_new(home_free_name(stem, taken), code)
+  if (made.error != null) {
+    return made.error
+  }
+  let path = made.path
+  tr_close()
+  view_confirm(function() { show_screen("editor", {"path": path}) })
+  ""
+}

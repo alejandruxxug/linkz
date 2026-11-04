@@ -1,6 +1,6 @@
 opened:  editor 1 14
 -- commands
-["AddLayer", "AddShape", "Caret", "ClickRow", "Complete", "Confirm", "Export", "Focus", "Home", "Hover", "Language", "NewDrawing", "Open", "OpenCard", "Pen", "PenSettings", "PencilStroke", "Picker", "Ping", "Redo", "Save", "Screen", "SelectRow", "SetCode", "SetProp", "Show", "ToggleLayer", "Tool", "Tutorial", "Undo"]
+["AddLayer", "AddShape", "Caret", "ClickRow", "Complete", "Confirm", "Export", "Focus", "Home", "Hover", "Language", "NewDrawing", "Open", "OpenCard", "Pen", "PenSettings", "PencilStroke", "Picker", "Ping", "Redo", "Save", "Screen", "SelectRow", "SetCode", "SetProp", "Show", "ToggleLayer", "Tool", "TraceDialog", "Tutorial", "Undo"]
 {"ok": true, "status": "Opened $HOME/editor-test/drawing.lzdraw"}
 6 
 -- unknown and presence events

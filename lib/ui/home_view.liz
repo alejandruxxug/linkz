@@ -23,6 +23,8 @@ use "home_gfx"
 use "home_thumbs"
 use "i18n"
 use "new_drawing_view"
+use "trace_editor"
+use "trace_view"
 use "tutorial_home"
 
 -~> files: every drawing, newest first. recent: the paths opened last.
@@ -94,6 +96,7 @@ function home_enter(args) {
   tut_home_close()
   home.dialog = null
   nd_close()
+  tr_close()
   home.hover = null
   home.warm = false
   home.scroll = 0
@@ -218,13 +221,17 @@ function home_empty_layout() {
   let by = ty + 40
   let ex = t("home.example")
   let ew = len(ex) * 7 + 18
+  let tl = t("trace.open_btn")
+  let tw = len(tl) * 7 + 18
+  let rx = (w - (ew + 6 + tw)) // 2
   {
     "lx": lx,
     "ly": ly,
     "k": k,
     "ty": ty,
     "new": {"x": (w - bw) // 2, "y": by, "w": bw, "h": 26},
-    "example": {"x": (w - ew) // 2, "y": by + 34, "w": ew, "h": 16},
+    "example": {"x": rx, "y": by + 34, "w": ew, "h": 16},
+    "trace": {"x": rx + ew + 6, "y": by + 34, "w": tw, "h": 16},
     "hint_y": by + 58
   }
 }
@@ -237,9 +244,16 @@ function home_top_layout() {
   let w = home.size.x
   let lang = text.upper(lang_get())
   let lw = len(lang) * 7 + 18
+  let lang_x = w - 8 - 16 - 4 - lw
+  let tw = len(t("trace.open_short")) * 7 + 18
+  let trace = {"x": 368, "y": 4, "w": tw, "h": 14}
+  if (trace.x + trace.w + 6 > lang_x) {
+    trace = null
+  }
   {
     "search": {"x": 150, "y": 3, "w": 212, "h": 16},
-    "lang": {"x": w - 8 - 16 - 4 - lw, "y": 4, "w": lw, "h": 14},
+    "trace": trace,
+    "lang": {"x": lang_x, "y": 4, "w": lw, "h": 14},
     "settings": {"x": w - 8 - 16, "y": 4, "w": 16, "h": 14}
   }
 }
@@ -377,6 +391,22 @@ function home_new_dialog() {
   home.menu = null
   home.dialog = null
   nd_open(home_names(home_list(home_dir())), home.size, home_create_drawing)
+  home_dirty()
+}
+
+-~> The Trace image dialog's Open as drawing: the traced code becomes a new
+-~> drawing called after the picture, in the drawings folder, and opens.
+function home_trace_open(stem, code) {
+  let taken = home_names(home_list(home_dir()))
+  home_create_drawing(home_free_name(stem, taken), code)
+}
+
+-~> Opens the Trace image dialog over the home screen (nothing is open here to
+-~> insert a layer into).
+function home_trace_dialog() {
+  home.menu = null
+  home.dialog = null
+  tr_open(home.size, {"canvas": function() { null }, "insert": function(_code) { "" }, "open": home_trace_open})
   home_dirty()
 }
 
@@ -596,6 +626,14 @@ function home_paint_topbar() {
       home_rect(s.x + 17 + len(shown) * 7, s.y + 3, 1, 10, "amber")
     }
   }
+  if (tl.trace != null) {
+    let tr = tl.trace
+    let ts = "normal"
+    if (home.hover != null && home.hover.kind == "trace") {
+      ts = "hover"
+    }
+    home_button(tr.x, tr.y, tr.w, tr.h, "open", t("trace.open_short"), ts)
+  }
   let l = tl.lang
   let state = "normal"
   if (home.hover != null && home.hover.kind == "lang") {
@@ -668,6 +706,12 @@ function home_paint_empty() {
     state = "hover"
   }
   home_button(x.x, x.y, x.w, x.h, "open", t("home.example"), state)
+  let tb = e.trace
+  state = "normal"
+  if (home.hover != null && home.hover.kind == "trace") {
+    state = "hover"
+  }
+  home_button(tb.x, tb.y, tb.w, tb.h, "open", t("trace.open_btn"), state)
   let hint = t("home.empty_hint")
   home_text(hint, (w - len(hint) * 7) // 2, e.hint_y, "mute")
 }
@@ -848,8 +892,9 @@ function home_paint() {
     home_paint_dialog()
   }
   nd_paint(size)
+  tr_paint(size)
   home.warm = true
-  home.needs_paint = (!lay.empty && len(home_thumbs_waiting()) > 0) || nd_wants_paint()
+  home.needs_paint = (!lay.empty && len(home_thumbs_waiting()) > 0) || nd_wants_paint() || tr_wants_paint()
 }
 
 -~> == Events ==
@@ -894,6 +939,9 @@ function home_hit(x, y) {
   if (home_in(tl.search, x, y)) {
     return {"kind": "search"}
   }
+  if (home_in(tl.trace, x, y)) {
+    return {"kind": "trace"}
+  }
   if (home_in(tl.lang, x, y)) {
     return {"kind": "lang"}
   }
@@ -911,6 +959,9 @@ function home_hit(x, y) {
     }
     if (home_in(e.example, x, y)) {
       return {"kind": "example"}
+    }
+    if (home_in(e.trace, x, y)) {
+      return {"kind": "trace"}
     }
     return null
   }
@@ -1036,6 +1087,8 @@ function home_click(hit, e) {
     home_new_dialog()
   } elif (hit.kind == "example") {
     home_open_example()
+  } elif (hit.kind == "trace") {
+    home_trace_dialog()
   } elif (hit.kind == "more" || (hit.kind == "card" && e.button == 1)) {
     home_menu_open(hit.index)
   } elif (hit.kind == "card") {
@@ -1057,6 +1110,12 @@ function home_event(e) {
     home.size = e.size
     home_clamp_scroll()
     nd_event(e)
+    tr_event(e)
+    home_dirty()
+    return null
+  }
+  if (tr_is_open()) {
+    tr_event(e)
     home_dirty()
     return null
   }
@@ -1227,8 +1286,23 @@ function home_cmd_new_drawing(_args) {
   {"created": ok, "files": len(home.files)}
 }
 
+-~> TraceDialog [path]: opens the Trace image dialog (on the home screen, or in
+-~> the editor when it is the current screen) with the path typed in.
+function home_cmd_trace_dialog(args) {
+  if (screen_state.current == "home") {
+    home_trace_dialog()
+  } else {
+    tr_editor_open()
+  }
+  if (len(args) > 0) {
+    T.d.text = str(args[0])
+    tr_apply_path()
+  }
+  tr_debug_state()
+}
+
 function home_debug_commands() {
-  {"Home": home_cmd_home, "OpenCard": home_cmd_open_card, "NewDrawing": home_cmd_new_drawing}
+  {"Home": home_cmd_home, "OpenCard": home_cmd_open_card, "NewDrawing": home_cmd_new_drawing, "TraceDialog": home_cmd_trace_dialog}
 }
 
 function home_thumb_state(c) {
@@ -1271,6 +1345,7 @@ function home_debug_state() {
     "recent": home.recent,
     "renders": home_thumbs.renders,
     "new_dialog": nd_debug_state(),
+    "trace_dialog": tr_debug_state(),
     "new_card": nr,
     "cards": cards
   }

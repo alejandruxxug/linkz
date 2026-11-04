@@ -22,6 +22,8 @@ use "view_panels"
 use "view_popups"
 use "shape_popups"
 use "tool_route"
+use "trace_editor"
+use "trace_view"
 use "pen_library"
 use "pen_route"
 use "color_route"
@@ -113,6 +115,7 @@ function view_tick() {
 function view_paint() {
   let t0 = time.ms()
   view_tick()
+  tr_editor_frame()
   view_prepare()
   budget_editor_note()
   tut_frame()
@@ -171,9 +174,10 @@ function view_paint() {
   }
   g_ui()
   fb.unclip()
+  tr_after_paint()
   V.paints = V.paints + 1
   V.painted_ms = time.ms() - t0
-  if (V.tip_due == 0 && LC.hide_due == 0 && !ed_note_active() && !route_wants_tick()) {
+  if (V.tip_due == 0 && LC.hide_due == 0 && !ed_note_active() && !route_wants_tick() && !tr_wants_paint()) {
     app.needs_paint = false
   }
 }
@@ -225,6 +229,11 @@ function view_event(e) {
     -~> Alt on its own only changes the isolation: it keeps the card open
     return null
   }
+  if (tr_is_open() && ty != "resize") {
+    -~> the Trace image dialog is modal: it gets every event
+    tr_editor_event(e)
+    return null
+  }
   if (ty == "down" || ty == "key") {
     view_clear_refusal()
   }
@@ -234,6 +243,9 @@ function view_event(e) {
     view_fit_split()
     view_touch()
     view_force_all()
+    if (tr_is_open()) {
+      tr_editor_event(e)
+    }
   } elif (ty == "down") {
     if (e.button == 1 || (e.button == 0 && e.mods != null && e.mods.ctrl == true)) {
       shape_context(e)

@@ -1,0 +1,38 @@
+-- closed at first; Cmd+Shift+T opens it, nothing else gets the keys
+false
+true lineart idle [30, 34, 452, 270]
+true x
+-- the path, Enter: the preview waits, shows tracing, then runs
+wait false (64, 48) (240, 180)
+run
+idle true true
+4 strokes, 2 fills, 1 primitives
+line_threshold colors detail snap flow
+-- a slider: a click on its track sets it, a drag moves it, a trace follows
+0.45 wait
+idle true
+22
+-- the split follows a drag in the preview
+0.75
+-- show lines and show fills only leave a layer out (no new trace)
+false true
+true true
+-- Photo: its own sliders and stats
+photo colors detail
+idle true 5 colors, 7 regions, 48 points
+-- Insert as layer: one undo step, the frontmost layer, fitted to the canvas
+false 1
+layer traced   circle((360, 90), 34, #fff3c4) 
+3 [] true
+true true
+true
+true
+-- a missing file says so and Insert does nothing
+can't read that image false
+true 0
+-- Spanish
+CALCAR IMAGEN Insertar como capa Abrir como dibujo umbral de línea
+false
+-- Open as drawing: a new file named after the picture, opened
+false true true
+true 0

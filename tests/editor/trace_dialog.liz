@@ -1,0 +1,217 @@
+-~> The Trace image dialog in a headless editor: Cmd+Shift+T opens it, the
+-~> path is typed, the preview is traced after a pause (the frame before it
+-~> says "tracing…"), Photo / Line art change the sliders, a slider drag and the
+-~> split drag move, the toggles leave a layer out, Insert as layer is one
+-~> undo step and scales the picture to the canvas, a missing file is said,
+-~> Open as drawing writes a new drawing and opens it, the dialog is modal and
+-~> shows in Spanish. The picture is a small one made here.
+
+use "rig"
+
+let code = "-~> lzdraw 1
+canvas = {\"size\": (480, 320), \"background\": #f6d9a8}
+layer sun
+  circle((360, 90), 34, #fff3c4)
+"
+
+let dir = fs.join(fs.home(), "trace-dialog-test")
+fs.mkdir(dir)
+let pic_path = fs.join(dir, "head.png")
+let pic = img.new(64, 48)
+img.fill(pic, [0, 0, 64, 48], #dbe4f0)
+img.fill(pic, [12, 20, 40, 28], #5a3d8c)
+img.fill(pic, [20, 8, 24, 30], #f6d9c8)
+img.fill(pic, [26, 18, 4, 4], #2a5cb0)
+img.fill(pic, [34, 18, 4, 4], #2a5cb0)
+img.fill(pic, [20, 8, 24, 2], #222222)
+img.fill(pic, [20, 36, 24, 2], #222222)
+img.save(pic, pic_path)
+
+let size = (512, 360)
+let modules = rig_modules + ["ui/view_panels", "ui/view_canvas", "ui/view_popups", "ui/i18n", "ui/home_view", "ui/app_screens",
+  "ui/trace_model", "ui/trace_view", "ui/trace_editor"]
+let drawings = fs.join(dir, "drawings")
+let rig = rig_open(fs.join(dir, "editor"), code, size, modules, {"tutorial_done": true, "drawings_dir": drawings})
+let n = rig.names
+let none = {"shift": false, "alt": false, "cmd": false, "ctrl": false}
+
+function frame(events = []) {
+  rig_frame(rig, events)
+}
+
+function click(p) {
+  frame([{"type": "down", "pos": p}, {"type": "up", "pos": p}])
+}
+
+function key(k, mods = none) {
+  frame([{"type": "key", "key": k, "mods": mods}])
+}
+
+function mid(r) {
+  (r[0] + r[2] // 2, r[1] + r[3] // 2)
+}
+
+function mid_rect(r) {
+  (r.x + 6, r.y + 6)
+}
+
+function state() {
+  n.tr_debug_state()
+}
+
+function lines() {
+  n.ed_model().lines
+}
+
+function steps() {
+  len(n.ed.undo)
+}
+
+-~> Frames until the trace that was waiting has run (the pause is skipped).
+function settle() {
+  for (let i = 0; i < 8; i += 1) {
+    if (n.T.d != null && n.T.d.phase == "wait") {
+      n.T.d.due = 0
+    }
+    frame()
+    if (n.T.d == null || n.T.d.phase == "idle") {
+      break
+    }
+  }
+}
+
+-~> The stats as "number word" pairs, without the time.
+function stats() {
+  let out = []
+  let pairs = state().stats
+  for (let i = 0; i < len(pairs) - 1; i += 1) {
+    push(out, str(pairs[i][0]) + " " + n.t(pairs[i][1]))
+  }
+  text.join(out, ", ")
+}
+
+function slider(key) {
+  let all = state().sliders
+  for (let i = 0; i < len(all); i += 1) {
+    if (all[i].key == key) {
+      return all[i]
+    }
+  }
+  null
+}
+
+function keys_of(rows) {
+  let out = []
+  for (let i = 0; i < len(rows); i += 1) {
+    push(out, rows[i].key)
+  }
+  text.join(out, " ")
+}
+
+puts("-- closed at first; Cmd+Shift+T opens it, nothing else gets the keys")
+puts(n.tr_is_open())
+key("T", {"shift": true, "alt": false, "cmd": true, "ctrl": false})
+puts(n.tr_is_open(), state().mode, state().phase, state().box)
+let s0 = steps()
+frame([{"type": "type", "text": "x"}])
+puts(lines() == text.split(code, "\n"), state().text)
+key("Backspace")
+
+puts("-- the path, Enter: the preview waits, shows tracing, then runs")
+frame([{"type": "type", "text": pic_path}])
+key("Enter")
+puts(state().phase, state().traced, n.T.d.image.size, n.T.d.image.fit)
+n.T.d.due = 0
+frame()
+puts(state().phase)
+frame()
+puts(state().phase, state().traced, state().error == "")
+puts(stats())
+puts(keys_of(state().sliders))
+
+puts("-- a slider: a click on its track sets it, a drag moves it, a trace follows")
+let thr = slider("line_threshold")
+click((thr.track[0] + 15, thr.track[1] + 3))
+puts(slider("line_threshold").value, state().phase)
+settle()
+puts(state().phase, state().traced)
+let col = slider("colors")
+frame([{"type": "down", "pos": (col.track[0] + 2, col.track[1] + 3)}])
+frame([{"type": "move", "pos": (col.track[0] + 20, col.track[1] + 3)}])
+frame([{"type": "up", "pos": (col.track[0] + 20, col.track[1] + 3)}])
+puts(slider("colors").value)
+settle()
+
+puts("-- the split follows a drag in the preview")
+let pre = state().preview
+frame([{"type": "down", "pos": (pre[0] + 60, pre[1] + 50)}])
+frame([{"type": "move", "pos": (pre[0] + 180, pre[1] + 50)}])
+frame([{"type": "up", "pos": (pre[0] + 180, pre[1] + 50)}])
+puts(state().split)
+
+puts("-- show lines and show fills only leave a layer out (no new trace)")
+let before = n.T.d.raw
+click(mid_rect(n.tr_layout().lines))
+puts(state().lines, state().fills)
+settle()
+puts(n.T.d.raw == before, state().traced)
+
+puts("-- Photo: its own sliders and stats")
+click(mid(state().photo))
+puts(state().mode, keys_of(state().sliders))
+settle()
+puts(state().phase, state().traced, stats())
+click(mid(state().lineart))
+settle()
+
+puts("-- Insert as layer: one undo step, the frontmost layer, fitted to the canvas")
+s0 = steps()
+click(mid(state().insert))
+puts(n.tr_is_open(), steps() - s0)
+let rows = lines()
+puts(rows[3], rows[len(rows) - 2], rows[len(rows) - 1])
+let at = list.index(rows, "layer traced")
+puts(at, n.ed.errors, len(n.ed.shapes) > 1)
+let right = 0.0
+for (let i = 0; i < len(n.ed.shapes); i += 1) {
+  let path = n.ed.shapes[i].path
+  for (let c = 0; c < len(path); c += 1) {
+    for (let k = 1; k < len(path[c]); k += 1) {
+      if (type(path[c][k]) == "POINT") {
+        right = math.max(right, path[c][k].x)
+      }
+    }
+  }
+}
+puts(right > 300, right <= 480.5)
+n.ed_undo()
+puts(lines() == text.split(code, "\n"))
+n.ed_redo()
+puts(list.index(lines(), "layer traced") == at)
+n.ed_undo()
+
+puts("-- a missing file says so and Insert does nothing")
+key("T", {"shift": true, "alt": false, "cmd": true, "ctrl": false})
+frame([{"type": "type", "text": fs.join(dir, "nothing.png")}])
+key("Enter")
+puts(state().error, state().traced)
+s0 = steps()
+click(mid(state().insert))
+puts(n.tr_is_open(), steps() - s0)
+
+puts("-- Spanish")
+n.lang_use("es")
+frame()
+puts(n.t("trace.title"), n.t("trace.insert"), n.t("trace.open"), n.t("trace.line_threshold"))
+n.lang_use("en")
+key("Escape")
+puts(n.tr_is_open())
+
+puts("-- Open as drawing: a new file named after the picture, opened")
+key("T", {"shift": true, "alt": false, "cmd": true, "ctrl": false})
+frame([{"type": "type", "text": pic_path}])
+key("Enter")
+settle()
+click(mid(state().open_button))
+puts(n.tr_is_open(), fs.exists(fs.join(drawings, "head.lzdraw")), fs.join(drawings, "head.lzdraw") == n.ed.file)
+puts(text.starts(fs.read(fs.join(drawings, "head.lzdraw")), "-~> lzdraw 1"), len(n.ed.errors))

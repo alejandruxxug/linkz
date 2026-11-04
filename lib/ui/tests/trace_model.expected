@@ -1,0 +1,64 @@
+lineart line_threshold colors detail
+colors detail
+line_threshold colors detail snap flow
+{"colors": 8, "detail": 1.5}
+{"colors": 8, "detail": 1.5, "max_side": 160, "scale": 1.5}
+{"colors": 8, "detail": 1.5}
+6 0.50 0.8 px 4.0 px
+2 32 17 32
+0.5 1.2
+0.0 1.0 0.5
+32
+{"colors": 6, "detail": 1.5}
+[[38, "trace.strokes"], [12, "trace.fills"], [1240, "trace.ms"]]
+[[38, "trace.strokes"], [12, "trace.fills"], [5, "trace.primitives"], [9, "trace.ms"]]
+[[6, "trace.colors"], [7, "trace.regions"], [56, "trace.points"], [36, "trace.ms"]]
+[]
+1,240 42 1,234,567
+(256, 192) (100, 50) (75, 150)
+1.667 0.5
+girl photo.v2 .png girl.png
+4
+-~> lzdraw 1
+canvas = {"size": (480, 320), "background": #ffffff}
+pens.traced = {"name": "traced", "min": 2.5, "max": 3}
+layer traced
+  layer lines
+    brush([(48, 61), (35, 61)], [0, 0.4], #3d3456, pens.traced)
+    brush([(49, 61), (50, 33)], [0.1, 0], #3d3456, pens.traced)
+  layer fills
+    path([(35, 62), (45, 62), (48, 63)], #f6d9c8)
+layer sun
+  circle((360, 90), 34, #fff3c4)
+layer sky
+  rect((0, 0), (480, 200), #f2a65a)
+
+-- inserted twice: the names stay free
+5
+pens.traced = {"name": "traced", "min": 2.5, "max": 3}
+pens.traced2 = {"name": "traced", "min": 2.5, "max": 3}
+layer traced2
+layer traced
+layer sun
+layer sky
+-- no layer in the drawing: at the end; lines and fills switched off
+3
+canvas = {"size": (480, 320), "background": #ffffff}
+pens.traced = {"name": "traced", "min": 2.5, "max": 3}
+layer traced
+  layer fills
+    path([(35, 62), (45, 62), (48, 63)], #f6d9c8)
+
+true true
+-- photo code already has its layer traced
+3
+layer traced
+  layer color_1
+    path([(0, 0), (160, 0), (160, 120)], #dbe4f0)
+  layer color_10
+    path([(1, 1), (9, 1), (9, 9)], #4e3a7c)
+layer sun
+  circle((360, 90), 34, #fff3c4)
+layer sky
+  rect((0, 0), (480, 200), #f2a65a)
+

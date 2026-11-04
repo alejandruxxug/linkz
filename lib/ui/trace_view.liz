@@ -1,0 +1,810 @@
+-~> trace_view: the Trace image dialog (approved frame R003-6): the picture's
+-~> path, Photo / Line art, the sliders that set the trace options, show
+-~> lines / show fills, a before / after preview with a draggable split, the
+-~> stats of the trace, and Insert as layer / Open as drawing.
+-~>
+-~> It is a modal dialog over the home screen and over the editor. Both give
+-~> it every event while it is open (tr_event) and paint it last (tr_paint
+-~> over the home screen, tr_draw inside the editor's popups); what the
+-~> screen does with the result is theirs: tr_open takes the functions to call.
+-~>
+-~> The preview is traced at a small size (trace_preview_side) a moment after
+-~> the last change (a debounce of tr_wait ms), and never while a frame is
+-~> being drawn: the frame that follows a change says "tracing…", the next
+-~> one runs the trace, like the New drawing dialog's measuring.
+-~>
+-~> Everything is drawn with the view_gfx pieces (g_*), so the same code draws
+-~> into the editor's two buffers (the interface and the canvas surface).
+
+use "home_thumbs"
+use "i18n"
+use "trace_model"
+use "view_gfx"
+
+-~> d: the dialog's state (trace_new), null when closed. host: what the screen
+-~> gives: {"canvas": function() the open drawing's canvas size or null,
+-~> "insert": function(code) "" or what went wrong, "open": function(stem, code)
+-~> "" or what went wrong}. hover: what the pointer is over. drag: "split" or
+-~> a slider's key while the button is down. ver: grows with every change
+-~> that shows.
+let T = {"d": null, "host": null, "size": (512, 360), "hover": "", "drag": null, "ver": 0, "engine": null, "dim": true, "lx": 0, "lw": 0}
+
+-~> The debounce after the last change, in ms.
+let tr_wait = 250
+
+-~> The geometry of the approved frame, in UI pixels.
+let tr_w = 452
+let tr_h = 270
+let tr_top = 34
+let tr_prev_w = 240
+let tr_prev_h = 180
+
+-~> == Opening and closing ==
+
+function tr_is_open() {
+  T.d != null
+}
+
+-~> The engine: trace() and its option tables, loaded the first time it is
+-~> needed (the editor doesn't carry it until then).
+function tr_names() {
+  if (T.engine == null) {
+    T.engine = linkz.trace_engine()
+  }
+  T.engine
+}
+
+-~> Opens the dialog in a window of `size`. dim: whether to darken what is
+-~> behind (the editor does it itself).
+function tr_open(size, host, dim = true) {
+  let n = tr_names()
+  let known = {"photo": keys(n.trace_options), "lineart": keys(n.lineart_options)}
+  let defaults = {"photo": n.trace_options, "lineart": n.lineart_options}
+  T.d = trace_new(known, defaults)
+  T.host = host
+  T.size = size
+  T.hover = ""
+  T.drag = null
+  T.dim = dim
+  tr_touch()
+}
+
+function tr_close() {
+  T.d = null
+  T.drag = null
+  T.hover = ""
+  tr_touch()
+}
+
+-~> A change that shows: the editor sees the version and paints it again.
+function tr_touch() {
+  T.ver += 1
+}
+
+-~> Whether a trace is waiting (the screen keeps painting until it ran).
+function tr_wants_paint() {
+  T.d != null && T.d.phase != "idle"
+}
+
+-~> A text that changes when the dialog looks different (for the editor's popups).
+function tr_version() {
+  if (T.d == null) {
+    return ""
+  }
+  str(T.ver)
+}
+
+-~> == Layout ==
+
+function tr_in(r, x, y) {
+  r != null && x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h
+}
+
+-~> Every part of the dialog, in UI pixels, for the mode now.
+function tr_layout() {
+  let d = T.d
+  let size = T.size
+  let x0 = math.max(2, (size.x - tr_w) // 2)
+  let y0 = tr_top
+  if (y0 + tr_h + 2 > size.y) {
+    y0 = math.max(2, size.y - tr_h - 2)
+  }
+  let px = x0 + 6
+  let py = y0 + 21
+  let rx = x0 + 257
+  let rw = 186
+  let change_w = g_text_w(t("trace.change")) + 10
+  let sliders = []
+  let shown = trace_visible(d)
+  for (let i = 0; i < len(shown); i += 1) {
+    let sy = y0 + 57 + i * 18
+    push(sliders, {
+      "s": shown[i],
+      "y": sy,
+      "track": {"x": rx + 105, "y": sy + 4, "w": 34, "h": 7},
+      "hit": {"x": rx + 100, "y": sy, "w": 46, "h": 15}
+    })
+  }
+  let ty = y0 + 57 + len(shown) * 18 + 2
+  let half = rw // 2
+  {
+    "box": {"x": x0, "y": y0, "w": tr_w, "h": tr_h},
+    "close": {"x": x0 + tr_w - 15, "y": y0 + 1, "w": 13, "h": 13},
+    "pre": {"x": px, "y": py, "w": tr_prev_w, "h": tr_prev_h},
+    "path": {"x": px, "y": py + 184, "w": tr_prev_w - change_w - 4, "h": 16},
+    "change": {"x": px + tr_prev_w - change_w, "y": py + 184, "w": change_w, "h": 16},
+    "hint_y": py + 204,
+    "rx": rx,
+    "rw": rw,
+    "mode_y": y0 + 22,
+    "photo": {"x": rx, "y": y0 + 36, "w": half, "h": 15},
+    "lineart": {"x": rx + half, "y": y0 + 36, "w": rw - half, "h": 15},
+    "sliders": sliders,
+    "lines": {"x": rx, "y": ty, "w": 110, "h": 14},
+    "fills": {"x": rx, "y": ty + 16, "w": 110, "h": 14},
+    "rule": y0 + 184,
+    "stats_y": y0 + 189,
+    "foot": y0 + 240,
+    "insert": {"x": x0 + tr_w - 12 - 118 - 6 - 130, "y": y0 + 247, "w": 130, "h": 16},
+    "open": {"x": x0 + tr_w - 12 - 118, "y": y0 + 247, "w": 118, "h": 16}
+  }
+}
+
+-~> What is under the pointer: an id like "close", "path", "slider:colors", or
+-~> "dim" outside the dialog (it is modal: nothing behind it can be reached).
+function tr_hit(x, y) {
+  let d = T.d
+  let g = tr_layout()
+  if (!tr_in(g.box, x, y)) {
+    return "dim"
+  }
+  let simple = ["close", "path", "change", "photo", "lineart", "insert", "open"]
+  for (let i = 0; i < len(simple); i += 1) {
+    if (tr_in(g[simple[i]], x, y)) {
+      return simple[i]
+    }
+  }
+  if (tr_in(g.pre, x, y)) {
+    return "preview"
+  }
+  for (let i = 0; i < len(g.sliders); i += 1) {
+    if (tr_in(g.sliders[i].hit, x, y)) {
+      return "slider:" + g.sliders[i].s.key
+    }
+  }
+  if (d.mode == "lineart") {
+    if (tr_in(g.lines, x, y)) {
+      return "lines"
+    }
+    if (tr_in(g.fills, x, y)) {
+      return "fills"
+    }
+  }
+  "box"
+}
+
+-~> == Painting ==
+
+function tr_slider_value(d, s) {
+  d.vals[d.mode][s.key]
+}
+
+function tr_paint_chip(label, x, y) {
+  let w = g_text_w(label) + 6
+  g_rect(x, y, w, 12, P.void)
+  g_text(label, x + 3, y - 1, P.bright)
+  w
+}
+
+-~> A kept picture at (x, y) in UI pixels, `size` big, into the current buffer.
+function tr_blit(name, x, y, size) {
+  fb.blit(name, ((x - g.ox) * g.s, (y - g.oy) * g.s), (size.x * g.s, size.y * g.s))
+}
+
+-~> The before / after picture: the original left of the split, the trace
+-~> right of it, the split line with its grip on top.
+function tr_paint_preview(l) {
+  let d = T.d
+  let r = l.pre
+  g_frame(r.x - 1, r.y - 1, r.w + 2, r.h + 2, P.void)
+  g_rect(r.x, r.y, r.w, r.h, P.coal)
+  if (d.image == null) {
+    let msg = t("trace.no_image")
+    g_text(msg, r.x + (r.w - g_text_w(msg)) // 2, r.y + r.h // 2 - 6, P.dim)
+    return null
+  }
+  let pic = d.image.fit
+  let ox = r.x + (r.w - pic.x) // 2
+  let oy = r.y + (r.h - pic.y) // 2
+  let sx = r.x + math.max(1, math.min(r.w - 2, math.round(d.split * r.w)))
+  g_clip(r.x, r.y, sx - r.x, r.h)
+  tr_blit("trace:before", ox, oy, pic)
+  fb.unclip()
+  if (d.preview != null) {
+    g_clip(sx, r.y, r.x + r.w - sx, r.h)
+    tr_blit("trace:after", ox, oy, pic)
+    fb.unclip()
+  } else {
+    g_rect(sx, r.y, r.x + r.w - sx, r.h, P.coal)
+  }
+  g_rect(sx, r.y, 1, r.h, P.bright)
+  let gy = r.y + (r.h - 17) // 2
+  g_rect(sx - 5, gy, 11, 17, P.void)
+  g_rect(sx - 4, gy + 1, 9, 15, P.raised)
+  g_rect(sx - 2, gy + 5, 1, 7, P.bright)
+  g_rect(sx + 1, gy + 5, 1, 7, P.bright)
+  tr_paint_chip(t("trace.original"), r.x + 1, r.y + 1)
+  let cw = g_text_w(t("trace.traced")) + 6
+  tr_paint_chip(t("trace.traced"), r.x + r.w - cw - 1, r.y + 1)
+  if (d.phase != "idle") {
+    let msg = t("trace.tracing")
+    let w = g_text_w(msg) + 8
+    g_rect(r.x + (r.w - w) // 2, r.y + r.h - 16, w, 13, P.void)
+    g_text(msg, r.x + (r.w - w) // 2 + 4, r.y + r.h - 17, P.amber)
+  }
+}
+
+function tr_paint_slider(row, d) {
+  let s = row.s
+  let v = tr_slider_value(d, s)
+  let hot = T.hover == "slider:" + s.key || T.drag == s.key
+  let lc = P.mute
+  if (hot) {
+    lc = P.bright
+  }
+  g_text(t(s.label), T.lx, row.y, lc)
+  let tk = row.track
+  g_rect(tk.x, tk.y, tk.w, tk.h, P.void)
+  g_rect(tk.x + 1, tk.y + 1, tk.w - 2, tk.h - 2, P.coal)
+  let f = trace_fraction(s, v)
+  let kx = tk.x + 1 + math.round(f * (tk.w - 8))
+  g_rect(tk.x + 1, tk.y + 1, kx - tk.x - 1, tk.h - 2, P.lizard)
+  g_rect(kx - 1, tk.y - 2, 6, tk.h + 4, P.void)
+  g_rect(kx, tk.y - 1, 4, tk.h + 2, P.bright)
+  let shown = trace_format(s, v)
+  g_text(shown, T.lx + T.lw - g_text_w(shown), row.y, P.amber)
+}
+
+function tr_paint_check(r, label, on, hot) {
+  g_frame(r.x, r.y + 2, 10, 10, P.void)
+  g_rect(r.x + 1, r.y + 3, 8, 8, P.coal)
+  if (on) {
+    g_icon("check", r.x + 1, r.y + 3, P.lizard)
+  }
+  let c = P.text
+  if (hot) {
+    c = P.bright
+  }
+  g_text(label, r.x + 14, r.y, c)
+}
+
+function tr_paint_stats(l, d) {
+  let pairs = trace_stat_pairs(d.result)
+  let x = 0
+  let row = 0
+  for (let i = 0; i < len(pairs); i += 1) {
+    let n = trace_thousands(pairs[i][0])
+    let word = t(pairs[i][1])
+    let w = g_text_w(n) + 4 + g_text_w(word)
+    if (x > 0 && x + w > l.rw) {
+      x = 0
+      row += 1
+    }
+    g_text(n, l.rx + x, l.stats_y + row * 14, P.amber)
+    g_text(word, l.rx + x + g_text_w(n) + 4, l.stats_y + row * 14, P.mute)
+    x += w + 14
+  }
+}
+
+-~> Draws the dialog (the dim behind it too, when asked) into the current
+-~> buffer. Positions are UI pixels; view_gfx's g says where the buffer is.
+function tr_draw() {
+  let d = T.d
+  if (d == null) {
+    return null
+  }
+  let l = tr_layout()
+  T.lx = l.rx
+  T.lw = l.rw
+  let b = l.box
+  if (T.dim) {
+    g_rect(0, 0, T.size.x, T.size.y, rgba(11, 12, 11, 158))
+  }
+  g_rect(b.x + 2, b.y + 2, b.w, b.h, P.void)
+  g_frame(b.x, b.y, b.w, b.h, P.void)
+  g_rect(b.x + 1, b.y + 1, b.w - 2, 13, P.raised)
+  g_rect(b.x + 1, b.y + 14, b.w - 2, 1, P.void)
+  g_rect(b.x + 1, b.y + 15, b.w - 2, b.h - 16, P.panel)
+  let title = t("trace.title")
+  if (d.image != null) {
+    title = title + " · " + d.image.name
+  }
+  g_icon("canvas", b.x + 4, b.y + 3, P.mute)
+  g_text(g_fit_words(title, b.w - 40), b.x + 15, b.y + 1, P.mute)
+  let cc = P.mute
+  if (T.hover == "close") {
+    cc = P.bright
+  }
+  g_icon("close", l.close.x + 3, l.close.y + 3, cc)
+
+  tr_paint_preview(l)
+  let f = l.path
+  g_field(f.x, f.y, f.w, f.h, d.focus == "path")
+  let shown = d.text
+  let room = (f.w - 9) // 7
+  let ink = P.text
+  if (d.error != "") {
+    ink = P.ember
+  }
+  if (d.image != null && d.focus != "path") {
+    -~> the picture as the frame shows it: name · size
+    shown = d.image.name + " · " + str(d.image.size.x) + "×" + str(d.image.size.y)
+    g_icon("canvas", f.x + 4, f.y + 4, P.lizard)
+    g_text(g_fit_words(shown, f.w - 18), f.x + 15, f.y + 1, P.text)
+  } else {
+    if (len(shown) > room) {
+      shown = text.slice(shown, len(shown) - room, len(shown))
+    }
+    g_text(shown, f.x + 4, f.y + 1, ink)
+    if (d.focus == "path") {
+      g_rect(f.x + 4 + g_text_w(shown), f.y + 3, 1, 10, P.amber)
+    }
+  }
+  let c = l.change
+  let st = "normal"
+  if (T.hover == "change") {
+    st = "hover"
+  }
+  g_button(c.x, c.y, c.w, c.h, "", t("trace.change"), st)
+  let hint = t("trace.hint")
+  if (d.error != "") {
+    g_text(g_fit_words(d.error, tr_prev_w), l.pre.x, l.hint_y, P.ember)
+  } else {
+    g_text(hint, l.pre.x, l.hint_y, P.dim)
+  }
+
+  g_text(t("trace.mode"), l.rx, l.mode_y, P.mute)
+  let modes = ["photo", "lineart"]
+  for (let i = 0; i < len(modes); i += 1) {
+    let r = l[modes[i]]
+    let ms = "normal"
+    if (d.mode == modes[i]) {
+      ms = "active"
+    } elif (T.hover == modes[i]) {
+      ms = "hover"
+    }
+    g_button(r.x, r.y, r.w, r.h, "", t("trace." + modes[i]), ms)
+  }
+  for (let i = 0; i < len(l.sliders); i += 1) {
+    tr_paint_slider(l.sliders[i], d)
+  }
+  if (d.mode == "lineart") {
+    tr_paint_check(l.lines, t("trace.show_lines"), d.lines, T.hover == "lines")
+    tr_paint_check(l.fills, t("trace.show_fills"), d.fills, T.hover == "fills")
+  }
+  g_rect(l.rx, l.rule, l.rw, 1, P.bevel)
+  tr_paint_stats(l, d)
+
+  g_rect(b.x + 1, l.foot, b.w - 2, 1, P.void)
+  let ins = l.insert
+  let ist = "normal"
+  if (T.host.canvas() == null) {
+    ist = "disabled"
+  } elif (T.hover == "insert") {
+    ist = "hover"
+  }
+  g_button(ins.x, ins.y, ins.w, ins.h, "layer", t("trace.insert"), ist)
+  let o = l.open
+  g_rect(o.x, o.y, o.w, o.h, P.void)
+  g_rect(o.x + 1, o.y + 1, o.w - 2, o.h - 2, P.moss)
+  g_bevel(o.x + 1, o.y + 1, o.w - 2, o.h - 2, P.lizard, P.void)
+  if (T.hover == "open") {
+    g_frame(o.x + 1, o.y + 1, o.w - 2, o.h - 2, P.lizard)
+  }
+  g_text(t("trace.open"), o.x + (o.w - g_text_w(t("trace.open"))) // 2, o.y + 1, P.bright)
+  null
+}
+
+-~> Paints the dialog over the home screen's UI buffer (when open) and says
+-~> whether it needs another paint by itself. A trace waiting runs here, one
+-~> frame after the "tracing…" frame showed.
+function tr_paint(size) {
+  if (T.d == null) {
+    return null
+  }
+  T.size = size
+  tr_tick()
+  g_ui()
+  tr_draw()
+  tr_after_paint()
+}
+
+-~> == The preview ==
+
+function tr_schedule(d, retrace = true) {
+  if (d.image == null) {
+    return null
+  }
+  d.phase = "wait"
+  d.due = time.ms() + tr_wait
+  if (retrace || d.result == null) {
+    d.retrace = true
+  }
+  tr_touch()
+}
+
+-~> Moves a waiting trace along: past its time it shows "tracing…"; in the
+-~> frame after that it runs. Call at the start of a frame.
+function tr_tick() {
+  let d = T.d
+  if (d == null) {
+    return null
+  }
+  if (d.phase == "run") {
+    tr_run()
+  } elif (d.phase == "wait" && time.ms() >= d.due) {
+    d.phase = "show"
+    tr_touch()
+  }
+}
+
+-~> Call at the end of a frame: a "tracing…" frame is on screen now, so the
+-~> next frame runs the trace.
+function tr_after_paint() {
+  let d = T.d
+  if (d != null && d.phase == "show") {
+    d.phase = "run"
+  }
+}
+
+-~> The picture fitted into the preview box: its size there.
+function tr_fit(size) {
+  let k = math.min(tr_prev_w / float(size.x), tr_prev_h / float(size.y))
+  (math.max(1, math.round(size.x * k)), math.max(1, math.round(size.y * k)))
+}
+
+-~> Takes the typed path as the picture: loads it for the preview.
+function tr_apply_path() {
+  let d = T.d
+  let p = text.trim(d.text)
+  if (text.starts(p, "~/")) {
+    p = fs.home() + text.slice(p, 1, len(p))
+  }
+  d.image = null
+  d.preview = null
+  d.result = null
+  d.phase = "idle"
+  d.error = ""
+  if (p == "") {
+    return tr_touch()
+  }
+  try {
+    let size = fb.load_png(p, "trace:orig")
+    let fit = tr_fit(size)
+    fb.offscreen(fit)
+    fb.blit("trace:orig", (0, 0), fit)
+    fb.keep("trace:before")
+    d.path = p
+    d.image = {"size": size, "fit": fit, "name": trace_base(p)}
+    d.focus = null
+    tr_schedule(d)
+  } catch (e) {
+    fb.screen()
+    d.error = t("trace.cant_read")
+  }
+  tr_touch()
+}
+
+-~> The traced code of the dialog's picture: the trace at `extra`'s options,
+-~> the layers that are switched off taken away.
+function tr_code(extra) {
+  let d = T.d
+  let r = tr_names().trace(d.path, trace_options(d, extra))
+  {"code": trace_filter(r.code, d.lines, d.fills), "raw": r.code, "stats": r.stats}
+}
+
+-~> Paints the preview's "after" from traced code.
+function tr_render(code) {
+  let d = T.d
+  let r = src.run(code)
+  if (len(r.errors) > 0) {
+    error(r.errors[0].message)
+  }
+  fb.offscreen(d.image.fit)
+  try {
+    home_paint_run(r, d.image.fit)
+  } catch (e) {
+    fb.screen()
+    error(e.message)
+  }
+  fb.keep("trace:after")
+  d.preview = true
+}
+
+-~> Runs what is waiting: a new trace, or only the drawing again when just a
+-~> toggle changed.
+function tr_run() {
+  let d = T.d
+  d.phase = "idle"
+  try {
+    if (d.retrace || d.raw == null) {
+      let r = tr_code({"max_side": trace_preview_side})
+      d.raw = r.raw
+      d.result = r.stats
+      d.retrace = false
+    }
+    tr_render(trace_filter(d.raw, d.lines, d.fills))
+    d.error = ""
+  } catch (e) {
+    d.error = t("trace.failed", {"message": e.message})
+  }
+  tr_touch()
+}
+
+-~> == What the buttons do ==
+
+-~> The picture's size once traced for a drawing: as big as fits the canvas.
+function tr_insert_scale() {
+  let d = T.d
+  let n = tr_names()
+  let table = n.trace_options
+  if (d.mode == "lineart") {
+    table = n.lineart_options
+  }
+  let canvas = T.host.canvas()
+  trace_fit_scale(trace_shrunk(d.image.size, table.max_side), canvas)
+}
+
+function tr_insert() {
+  let d = T.d
+  if (d.focus == "path") {
+    tr_apply_path()
+  }
+  if (d.image == null || T.host.canvas() == null) {
+    return null
+  }
+  try {
+    let r = tr_code({"scale": tr_insert_scale()})
+    let err = T.host.insert(r.code)
+    if (err == "") {
+      return tr_close()
+    }
+    d.error = err
+  } catch (e) {
+    d.error = t("trace.failed", {"message": e.message})
+  }
+  tr_touch()
+}
+
+function tr_open_drawing() {
+  let d = T.d
+  if (d.focus == "path") {
+    tr_apply_path()
+  }
+  if (d.image == null) {
+    return null
+  }
+  try {
+    let r = tr_code({})
+    let err = T.host.open(trace_stem(d.path), r.code)
+    if (err == "") {
+      return tr_close()
+    }
+    d.error = err
+  } catch (e) {
+    d.error = t("trace.failed", {"message": e.message})
+  }
+  tr_touch()
+}
+
+-~> Moves the split to the pointer's x (a drag in the preview).
+function tr_drag_split(x) {
+  let r = tr_layout().pre
+  T.d.split = math.max(0.0, math.min(1.0, (x - r.x) / float(r.w)))
+  tr_touch()
+}
+
+-~> Sets slider `key` from the pointer's x over its track; a change starts a trace.
+function tr_drag_slider(key, x) {
+  let d = T.d
+  let rows = tr_layout().sliders
+  for (let i = 0; i < len(rows); i += 1) {
+    if (rows[i].s.key == key) {
+      let tk = rows[i].track
+      let v = trace_value_at(rows[i].s, (x - tk.x - 3) / float(tk.w - 8))
+      if (v != tr_slider_value(d, rows[i].s)) {
+        d.vals[d.mode][key] = v
+        tr_schedule(d)
+      }
+    }
+  }
+}
+
+function tr_set_mode(mode) {
+  let d = T.d
+  if (d.mode != mode) {
+    d.mode = mode
+    d.result = null
+    d.raw = null
+    tr_schedule(d)
+  }
+  tr_touch()
+}
+
+function tr_click(hit, x) {
+  let d = T.d
+  if (hit == "close") {
+    return tr_close()
+  }
+  if (hit == "path") {
+    d.focus = "path"
+    d.fresh = true
+  } else {
+    if (d.focus == "path" && d.text != d.path) {
+      tr_apply_path()
+    }
+    d.focus = null
+  }
+  if (hit == "change") {
+    d.focus = "path"
+    d.fresh = true
+  } elif (hit == "photo" || hit == "lineart") {
+    tr_set_mode(hit)
+  } elif (hit == "lines") {
+    d.lines = !d.lines
+    tr_schedule(d, false)
+  } elif (hit == "fills") {
+    d.fills = !d.fills
+    tr_schedule(d, false)
+  } elif (hit == "preview") {
+    T.drag = "split"
+    tr_drag_split(x)
+  } elif (text.starts(hit, "slider:")) {
+    T.drag = text.slice(hit, 7, len(hit))
+    tr_drag_slider(T.drag, x)
+  } elif (hit == "insert") {
+    tr_insert()
+  } elif (hit == "open") {
+    tr_open_drawing()
+  }
+  tr_touch()
+}
+
+-~> == Events ==
+
+function tr_key_name(e) {
+  let k = text.lower(str(e.key))
+  if (text.starts(k, "key") && len(k) == 4) {
+    k = text.slice(k, 3, 4)
+  }
+  k
+}
+
+-~> Typing into the path.
+function tr_type(s) {
+  let d = T.d
+  if (d.focus != "path") {
+    return null
+  }
+  if (d.fresh) {
+    d.text = ""
+    d.fresh = false
+  }
+  d.text = d.text + s
+  d.error = ""
+  tr_touch()
+}
+
+function tr_on_key(e) {
+  let d = T.d
+  let k = tr_key_name(e)
+  let cmd = e.mods != null && (e.mods.cmd || e.mods.ctrl)
+  if (k == "escape") {
+    return tr_close()
+  }
+  if (k == "enter" || k == "return" || k == "numpadenter") {
+    if (d.focus == "path") {
+      d.focus = null
+      return tr_apply_path()
+    }
+    return tr_open_drawing()
+  }
+  if (d.focus == "path") {
+    if (k == "backspace") {
+      if (d.fresh) {
+        d.text = ""
+        d.fresh = false
+      } elif (len(d.text) > 0) {
+        d.text = text.slice(d.text, 0, len(d.text) - 1)
+      }
+      d.error = ""
+      return tr_touch()
+    }
+    if (cmd && k == "v") {
+      return tr_type(text.trim(clip.get()))
+    }
+    if (cmd && k == "a") {
+      d.fresh = true
+      return tr_touch()
+    }
+  }
+  if (k == "tab") {
+    d.focus = "path"
+    d.fresh = true
+    tr_touch()
+  }
+}
+
+-~> One event while the dialog is open (the screen hands over every one).
+function tr_event(e) {
+  let d = T.d
+  if (d == null) {
+    return null
+  }
+  let ty = e.type
+  if (ty == "resize") {
+    T.size = e.size
+    tr_touch()
+  } elif (ty == "move") {
+    if (T.drag == "split") {
+      tr_drag_split(e.pos.x)
+    } elif (T.drag != null) {
+      tr_drag_slider(T.drag, e.pos.x)
+    } else {
+      let hit = tr_hit(e.pos.x, e.pos.y)
+      if (hit != T.hover) {
+        T.hover = hit
+        tr_touch()
+      }
+    }
+  } elif (ty == "leave") {
+    T.hover = ""
+    tr_touch()
+  } elif (ty == "down" && e.button == 0) {
+    tr_click(tr_hit(e.pos.x, e.pos.y), e.pos.x)
+  } elif (ty == "up") {
+    T.drag = null
+    tr_touch()
+  } elif (ty == "key") {
+    tr_on_key(e)
+  } elif (ty == "text" && (e.mods == null || (!e.mods.cmd && !e.mods.ctrl))) {
+    tr_type(e.text)
+  }
+  null
+}
+
+-~> == The backdoor ==
+
+function tr_debug_state() {
+  let d = T.d
+  if (d == null) {
+    return {"open": false}
+  }
+  let g = tr_layout()
+  let rows = []
+  for (let i = 0; i < len(g.sliders); i += 1) {
+    let s = g.sliders[i]
+    push(rows, {"key": s.s.key, "value": tr_slider_value(d, s.s), "track": [s.track.x, s.track.y, s.track.w, s.track.h]})
+  }
+  {
+    "open": true,
+    "mode": d.mode,
+    "path": d.path,
+    "text": d.text,
+    "error": d.error,
+    "phase": d.phase,
+    "traced": d.preview != null,
+    "split": d.split,
+    "lines": d.lines,
+    "fills": d.fills,
+    "sliders": rows,
+    "stats": trace_stat_pairs(d.result),
+    "box": [g.box.x, g.box.y, g.box.w, g.box.h],
+    "preview": [g.pre.x, g.pre.y, g.pre.w, g.pre.h],
+    "path_field": [g.path.x, g.path.y, g.path.w, g.path.h],
+    "photo": [g.photo.x, g.photo.y, g.photo.w, g.photo.h],
+    "lineart": [g.lineart.x, g.lineart.y, g.lineart.w, g.lineart.h],
+    "insert": [g.insert.x, g.insert.y, g.insert.w, g.insert.h],
+    "open_button": [g.open.x, g.open.y, g.open.w, g.open.h]
+  }
+}

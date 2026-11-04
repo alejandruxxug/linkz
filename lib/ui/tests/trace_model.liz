@@ -1,0 +1,114 @@
+-~> The Trace image dialog without painting: the sliders for each mode (an
+-~> option the engine doesn't have is left out), the values and the options
+-~> trace() gets, the shapes of the stats, the scale that fits a canvas, and
+-~> how traced code becomes one `layer traced` in a drawing: colors written
+-~> out, names that are taken left alone, the layers the toggles switch off.
+use "../trace_model"
+
+-~> The options the engine takes, as the dialog is told (no snap, no flow).
+let known = {"photo": ["colors", "detail", "min_area"], "lineart": ["mode", "line_threshold", "colors", "detail", "fills"]}
+let known_more = {"photo": known.photo, "lineart": known.lineart + ["snap", "flow"]}
+let defaults = {"photo": {"colors": 8, "detail": 1.5}, "lineart": {"line_threshold": 0.5, "colors": 16, "detail": 0.8}}
+
+function names(list) {
+  let out = []
+  for (let i = 0; i < len(list); i += 1) {
+    push(out, list[i].key)
+  }
+  text.join(out, " ")
+}
+
+-~> == Sliders and options ==
+let d = trace_new(known, defaults)
+puts(d.mode, names(trace_visible(d)))
+d.mode = "photo"
+puts(names(trace_visible(d)))
+let more = trace_new(known_more, defaults)
+puts(names(trace_visible(more)))
+puts(trace_options(d))
+puts(trace_options(d, {"max_side": 160, "scale": 1.5}))
+d.mode = "photo"
+puts(trace_options(d))
+
+-~> == Values ==
+let colors = trace_sliders[1]
+let thr = trace_sliders[0]
+let detail = trace_sliders[2]
+puts(trace_format(colors, 6), trace_format(thr, 0.5), trace_format(detail, 0.8), trace_format(detail, 4))
+puts(trace_value_at(colors, 0), trace_value_at(colors, 1), trace_value_at(colors, 0.5), trace_value_at(colors, 2))
+puts(trace_value_at(thr, 0.5), trace_value_at(detail, 0.25))
+puts(trace_fraction(colors, 2), trace_fraction(colors, 32), trace_fraction(colors, 17))
+trace_set(d, "colors", 99)
+puts(d.vals.photo.colors)
+trace_set(d, "colors", 6)
+puts(trace_options(d))
+
+-~> == Stats and sizes ==
+puts(trace_stat_pairs({"mode": "lineart", "strokes": 38, "fills": 12, "ms": 1240.4}))
+puts(trace_stat_pairs({"mode": "lineart", "strokes": 38, "fills": 12, "primitives": 5, "ms": 9}))
+puts(trace_stat_pairs({"mode": "photo", "colors": 6, "regions": 7, "points": 56, "ms": 36}))
+puts(trace_stat_pairs(null))
+puts(trace_thousands(1240), trace_thousands(42), trace_thousands(1234567))
+puts(trace_shrunk((640, 480), 256), trace_shrunk((100, 50), 256), trace_shrunk((300, 600), 150))
+puts(trace_fit_scale((256, 192), (480, 320)), trace_fit_scale((100, 100), (50, 80)))
+puts(trace_stem("/a/b/girl.png"), trace_stem("photo.v2.jpeg"), trace_stem(".png"), trace_base("/a/b/girl.png"))
+
+-~> == Traced code as a layer ==
+let lineart = "-~> lzdraw 1
+-~> Traced from girl.png as line art: 2 strokes, 1 fills.
+let colors = {\"paper\": #dbe4f0, \"ink\": #3d3456, \"skin\": #f6d9c8}
+pens.traced = {\"name\": \"traced\", \"min\": 2.5, \"max\": 3}
+canvas = {\"size\": (160, 120), \"background\": colors.paper}
+
+layer lines
+  brush([(48, 61), (35, 61)], [0, 0.4], colors.ink, pens.traced)
+  brush([(49, 61), (50, 33)], [0.1, 0], colors.ink, pens.traced)
+layer fills
+  path([(35, 62), (45, 62), (48, 63)], colors.skin)
+"
+let drawing = "-~> lzdraw 1
+canvas = {\"size\": (480, 320), \"background\": #ffffff}
+layer sun
+  circle((360, 90), 34, #fff3c4)
+layer sky
+  rect((0, 0), (480, 200), #f2a65a)
+"
+let r = trace_insert(text.split(drawing, "\n"), lineart)
+puts(r.line)
+puts(text.join(r.lines, "\n"))
+
+puts("-- inserted twice: the names stay free")
+let again = trace_insert(r.lines, lineart)
+puts(again.line)
+let rows = again.lines
+for (let i = 0; i < len(rows); i += 1) {
+  if (text.starts(rows[i], "pens.") || text.starts(rows[i], "layer ")) {
+    puts(rows[i])
+  }
+}
+
+puts("-- no layer in the drawing: at the end; lines and fills switched off")
+let bare = text.split("canvas = {\"size\": (480, 320), \"background\": #ffffff}\n", "\n")
+let only_fills = trace_insert(bare, trace_filter(lineart, false, true))
+puts(only_fills.line)
+puts(text.join(only_fills.lines, "\n"))
+let neither = trace_filter(lineart, false, false)
+puts(text.find(neither, "layer") < 0, text.find(trace_filter(lineart, true, true), "layer lines") >= 0)
+
+puts("-- photo code already has its layer traced")
+let photo = "-~> lzdraw 1
+let colors = {
+  \"c1\": #dbe4f0,
+  \"c10\": #4e3a7c
+}
+canvas = {\"size\": (160, 120), \"background\": colors.c1}
+
+layer traced
+  layer color_1
+    path([(0, 0), (160, 0), (160, 120)], colors.c1)
+  layer color_10
+    path([(1, 1), (9, 1), (9, 9)], colors.c10)
+"
+let p = trace_insert(text.split(drawing, "\n"), photo)
+puts(p.line)
+puts(text.join(list.slice(p.lines, 2, len(p.lines)), "\n"))

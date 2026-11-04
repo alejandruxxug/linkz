@@ -31,6 +31,7 @@ use "view_tools"
 use "shape_popups"
 use "tool_route"
 use "color_route"
+use "trace_editor"
 use "tutorial_view"
 use "overlay_rules"
 
@@ -1168,6 +1169,11 @@ function view_key(e) {
   }
   if (cmd && k == "e") {
     view_export()
+    return null
+  }
+  if (cmd && mods.shift && (k == "t" || k == "keyt")) {
+    -~> Trace image…
+    tr_editor_open()
     return null
   }
   if (cmd && (k == "n" || k == "keyn") && view_has_home()) {
