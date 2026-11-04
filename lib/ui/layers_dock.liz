@@ -1,0 +1,72 @@
+-~> layers_dock: the layers panel in coder mode. It is the artist mode's
+-~> panel (artist_layers.liz) placed under the palette sidebar: the same
+-~> x and width, the palette keeps the top and the layers take the bottom
+-~> of the right column. The collapsed rail has no room for it, so the rail
+-~> takes both away. A chevron in the panel's header folds it to that
+-~> header; the choice is remembered in settings.liz as
+-~> `let layers_panel = true` (or false). It uses nothing of the editor, so
+-~> the layout and the palette can ask it.
+
+use "color_state"
+use "i18n"
+use "mode_state"
+
+-~> on: the panel is open (not folded to its header). loaded: whether the
+-~> setting was read.
+let LD = {"on": true, "loaded": false}
+
+-~> The height of the folded panel (its header) and of the open one at most.
+let ld_head_h = 14
+let ld_max_h = 130
+
+-~> The least window room (from the toolbar to the status bar) that is shared
+-~> between the palette and the panel: with less the panel is left out.
+let ld_min_room = 330
+
+-~> The palette keeps at least this much when the panel is open (its picker,
+-~> a row of variables, the selected one's line and the + Variable button).
+let ld_pal_min = 250
+
+-~> Whether the panel is open (the setting; true until it says false).
+function ld_open() {
+  if (!LD.loaded) {
+    LD.loaded = true
+    LD.on = settings.layers_panel != false
+  }
+  LD.on
+}
+
+-~> Opens or folds the panel and remembers it in settings.liz (a file that
+-~> can't be written only loses the memory, not the change).
+function ld_store(on) {
+  ld_open()
+  LD.on = on
+  settings.layers_panel = on
+  try {
+    let path = settings_path()
+    let body = null
+    if (fs.exists(path)) {
+      body = fs.read(path)
+    }
+    fs.write(path, mode_settings_with(body, "layers_panel", str(on)))
+  } catch (e) {
+    null
+  }
+}
+
+-~> The height the panel takes in coder mode for a window w UI pixels wide
+-~> with the status bar at sy: 0 for none (artist mode, the palette's rail,
+-~> a window too short), the header's height when folded.
+function ld_height(w, sy) {
+  if (mode_artist() || !pal_is_open(w)) {
+    return 0
+  }
+  let room = sy - 30
+  if (room < ld_min_room) {
+    return 0
+  }
+  if (!ld_open()) {
+    return ld_head_h
+  }
+  math.min(ld_max_h, room - ld_pal_min)
+}

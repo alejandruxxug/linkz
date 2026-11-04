@@ -1,0 +1,34 @@
+-- the rail has no layers panel; the open sidebar has one under it
+null ["toolbar", "tabs", "rows", "props", "status", "canvas", "palette"]
+[532, 30, 108, 304] [532, 334, 108, 130] ["toolbar", "tabs", "rows", "props", "status", "canvas", "palette", "layers"]
+true true true true
+3:layer@370 4:shape@392 5:shape@410
+-- the same rows: hover ids, select, fold, eye (one undo step each)
+al:eye:3 al:fold:3 al:row:3
+3:layer@370 6:layer@392 7:shape@414
+6
+layer boat -~> [hidden] 1
+layer boat
+-- a drag moves a layer: one undo step
+layer boat 1
+layer sun layer boat
+-- the blend row: the dropdown and the opacity of the current layer
+[536, 350, 62, 16] [602, 350, 34, 16] null
+true true
+false
+-- the chevron folds the panel to its header; the setting remembers it
+al:panel
+[532, 450, 108, 14] [532, 30, 108, 420] true
+ []
+[532, 334, 108, 130] true {"line": 3, "kind": "layer", "x": 532, "y": 370, "w": 108, "h": 22}
+-- the debug state lists the rows in coder mode too
+3 coder
+-- the rail takes both away
+false null ["toolbar", "tabs", "rows", "props", "status", "canvas", "palette"]
+-- a window too short leaves it out
+true
+null
+-- artist mode keeps its own panel
+[490, 145, 150, 319] false true
+true
+

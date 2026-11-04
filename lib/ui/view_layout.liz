@@ -15,6 +15,7 @@ use "complete_state"
 use "editor_state"
 use "editor_undo"
 use "i18n"
+use "layers_dock"
 use "mode_state"
 use "view_gfx"
 use "view_items"
@@ -107,15 +108,21 @@ function view_panel_rects() {
   if (gm.artist == true) {
     return art_panel_rects(gm)
   }
-  {
+  -~> the layers panel takes the bottom of the sidebar's column (layers_dock.liz)
+  let lh = ld_height(gm.w, gm.status_y)
+  let out = {
     "toolbar": [0, 0, gm.w, 16],
     "tabs": [0, 16, gm.w, 14],
     "rows": [0, 30, gm.pw, gm.props_y - 30],
     "props": [0, gm.props_y, gm.pw, gm.status_y - gm.props_y],
     "status": [0, gm.status_y, gm.w, 16],
     "canvas": [gm.pw, 30, gm.cx + gm.cw - gm.pw, gm.h - 46],
-    "palette": [gm.cx + gm.cw, 30, gm.w - gm.cx - gm.cw, gm.h - 46]
+    "palette": [gm.cx + gm.cw, 30, gm.w - gm.cx - gm.cw, gm.h - 46 - lh]
   }
+  if (lh > 0) {
+    out.layers = [gm.cx + gm.cw, gm.status_y - lh, gm.w - gm.cx - gm.cw, lh]
+  }
+  out
 }
 
 -~> Every panel repaints in full on the next frame (the panels moved).
@@ -132,6 +139,8 @@ function view_panel_names() {
   let names = ["toolbar", "tabs", "rows", "props", "status", "canvas", "palette"]
   if (mode_artist()) {
     names = names + ["tools", "layers"]
+  } elif (ld_height(V.w, V.h - 16) > 0) {
+    names = names + ["layers"]
   }
   names
 }

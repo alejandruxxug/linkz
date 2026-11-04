@@ -25,7 +25,9 @@ use "editor_state"
 use "editor_undo"
 use "i18n"
 use "layer_blend"
+use "layers_dock"
 use "layer_thumbs"
+use "mode_state"
 use "tool_route"
 use "view_canvas"
 use "view_gfx"
@@ -47,12 +49,38 @@ function la_rect() {
   view_panel_rects().layers
 }
 
+-~> Whether the panel is on screen: always in artist mode, under the open
+-~> palette in coder mode (layers_dock.liz).
+function la_present() {
+  mode_artist() || ld_height(V.w, view_geom().status_y) > 0
+}
+
+-~> Whether the panel is folded to its header (coder mode's chevron).
+function la_folded() {
+  !mode_artist() && !ld_open()
+}
+
+-~> Whether the panel is narrower than artist mode's 150 (coder mode's 106,
+-~> the palette's width): the blend row and the names get tighter.
+function la_narrow() {
+  la_rect()[2] < art_right_w
+}
+
 -~> The parts of the header and the blend row: {"add", "trash", "blend",
--~> "opicon", "opacity"} as [x, y, w, h].
+-~> "opicon", "opacity"} as [x, y, w, h]; "opicon" is null when narrow.
 function la_parts() {
   let r = la_rect()
   let x = r[0]
   let y = r[1]
+  if (r[2] < art_right_w) {
+    return {
+      "add": [x + r[2] - 24, y + 1, 11, 11],
+      "trash": [x + r[2] - 13, y + 1, 11, 11],
+      "blend": [x + 4, y + 16, 62, 16],
+      "opicon": null,
+      "opacity": [x + 70, y + 16, 34, 16]
+    }
+  }
   {
     "add": [x + r[2] - 24, y + 1, 11, 11],
     "trash": [x + r[2] - 13, y + 1, 11, 11],
@@ -238,9 +266,18 @@ function la_scroll(n) {
 
 -~> The hover id at a UI point of the panel ("al:..."), or null off it.
 function art_layers_hover(x, y) {
+  if (!la_present()) {
+    return null
+  }
   let r = la_rect()
   if (!view_in(x, y, r[0], r[1], r[2], r[3])) {
     return null
+  }
+  if (!mode_artist() && y < r[1] + 13 && x < r[0] + r[2] - 26) {
+    return "al:panel"
+  }
+  if (la_folded()) {
+    return "al:box"
   }
   let ps = la_parts()
   let names = ["add", "trash", "blend", "opacity"]
@@ -296,7 +333,11 @@ function art_layers_press(id, e) {
   let parts = text.split(id, ":")
   let what = parts[1]
   let rows = view_rows()
-  if (what == "eye" || what == "lock" || what == "fold") {
+  if (what == "panel") {
+    ld_store(!ld_open())
+    view_touch()
+    view_force_all()
+  } elif (what == "eye" || what == "lock" || what == "fold") {
     let line = int(parts[2])
     let r = rows[line - 1]
     if (what == "eye") {
@@ -487,7 +528,7 @@ function art_layers_key() {
     focus = V.focus.text + str(V.focus.caret)
   }
   str(V.ver) + "|" + str(LA.top) + "|" + h + "|" + str(LA.drop) + "|" + focus + "|" + str(BM.open) + "|" + str(ed.shapes_ver) + "|" +
-    str(art_pal_height()) + "|" + lang_get() + "|" + route_rows_key()
+    str(art_pal_height()) + "|" + str(la_rect()) + str(ld_open()) + "|" + lang_get() + "|" + route_rows_key()
 }
 
 function art_layers_paint() {
@@ -497,7 +538,27 @@ function art_layers_paint() {
   g_rect(x, y, r[2], r[3], P.panel)
   g_rect(x, y, r[2], 13, P.raised)
   g_rect(x, y + 13, r[2], 1, P.void)
-  g_text(text.upper(t("panel.layers")), x + 5, y, P.mute)
+  let tx = x + 5
+  if (!mode_artist()) {
+    -~> coder mode: the splitter beside it and the chevron that folds it
+    g_rect(x - 2, y, 1, r[3], P.void)
+    g_rect(x - 1, y, 1, r[3], P.bevel)
+    g_rect(x, y - 1, r[2], 1, P.void)
+    let hc = P.mute
+    if (V.hover == "al:panel") {
+      hc = P.bright
+    }
+    let chev = "chevron-down"
+    if (la_folded()) {
+      chev = "chevron-right"
+    }
+    g_icon(chev, x + 3, y + 3, hc)
+    tx = x + 14
+  }
+  g_text(text.upper(t("panel.layers")), tx, y, P.mute)
+  if (la_folded()) {
+    return null
+  }
   let ps = la_parts()
   let ac = P.lizard
   if (V.hover == "al:add") {
@@ -552,9 +613,11 @@ function la_paint_blend(ps) {
   if (st != null && !st.readable) {
     label = t("blend.code")
   }
-  g_text(label, b[0] + 4, b[1] + 2, tc)
+  g_text(la_fit(label, b[2] - 16), b[0] + 4, b[1] + 2, tc)
   g_icon("chevron-down", b[0] + b[2] - 12, b[1] + 4, P.mute)
-  g_icon("opacity", ps.opicon[0], ps.opicon[1], P.mute)
+  if (ps.opicon != null) {
+    g_icon("opacity", ps.opicon[0], ps.opicon[1], P.mute)
+  }
   let o = ps.opacity
   let focused = V.focus != null && V.focus.field == "opacity"
   let txt = str(blend_percent(op)) + "%"
@@ -637,6 +700,10 @@ function la_paint_row(row, y, m) {
     if (len(parts) > 1 && g_text_w(row.stmt.name) > room - g_text_w(badge) - 6) {
       badge = parts[0]
     }
+    if (badge != "" && la_narrow() && g_text_w(row.stmt.name) > room - g_text_w(badge) - 6) {
+      -~> narrow: the name keeps the room when the badge would crowd it out
+      badge = ""
+    }
     if (badge != "") {
       room = room - g_text_w(badge) - 6
       g_text(badge, x + w - 6 - g_text_w(badge), y + 4, P.mute)
@@ -700,7 +767,7 @@ function la_paint_canvas_row(row, y, m) {
   if (sel) {
     tc = P.bright
   }
-  g_text(t("artist.canvas"), x + 67, y + 4, tc)
+  g_text(la_fit(t("artist.canvas"), r[2] - 69), x + 67, y + 4, tc)
 }
 
 -~> Where a dragged row would land: a lizard line between the rows.

@@ -24,6 +24,7 @@ use "fill_model"
 use "i18n"
 use "icons_color"
 use "icons_shape"
+use "layers_dock"
 use "mode_state"
 use "palette_compact"
 use "view_gfx"
@@ -95,7 +96,7 @@ function pal_rect() {
   }
   let gm = view_geom()
   let x = gm.cx + gm.cw + 2
-  [x, 30, V.w - x, gm.status_y - 30]
+  [x, 30, V.w - x, gm.status_y - 30 - ld_height(V.w, gm.status_y)]
 }
 
 -~> Where everything sits (open): {"x", "y", "tabs_y", "picker", "bar",
@@ -264,7 +265,7 @@ function pal_panel_key() {
     uses = str(ed.shapes_ver)
   }
   str(pal_is_open(V.w)) + PAL.mode + str(PAL.sel) + str(PAL.stop) + str(PAL.hsv) + "|" + str(PAL.confirm) + h + f + fe + "|" + ed.color + "|" +
-    str(color_recent) + "|" + vars + "|" + uses + "|" + str(ct_shape_colors()) + "|" + str(V.h) + "|" + lang_get() + "|" + str(mode_artist()) + str(PAL.dropper)
+    str(color_recent) + "|" + vars + "|" + uses + "|" + str(ct_shape_colors()) + "|" + str(V.h) + "|" + lang_get() + "|" + str(mode_artist()) + str(PAL.dropper) + str(ld_open())
 }
 
 -~> Paints the sidebar (open or the rail) and its splitter.

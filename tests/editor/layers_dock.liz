@@ -1,0 +1,155 @@
+-~> The layers panel in coder mode: under the open palette sidebar (same
+-~> column and width), with the artist panel's rows, eye, fold, drag to
+-~> reorder (one undo step), blend dropdown and opacity; the header's chevron
+-~> folds it and settings.liz remembers that; the palette's rail takes it
+-~> away; a window too short leaves it out; artist mode still has its own.
+
+use "rig"
+
+let code = "-~> lzdraw 1
+canvas = {\"size\": (480, 320), \"background\": #f6d9a8}
+layer sun
+  circle((360, 90), 34, #fff3c4)
+  circle((360, 90), 56, #f2a65a66)
+layer boat
+  line((150, 214), (150, 170), #3b2a6b, 3)
+layer sky
+  rect((0, 0), (480, 200), #f2a65a)
+"
+
+let size = (640, 480)
+let modules = rig_modules + ["ui/view_panels", "ui/view_canvas", "ui/i18n", "ui/mode_state", "ui/layers_dock", "ui/artist_layout",
+  "ui/artist_route", "ui/artist_layers", "ui/layer_thumbs", "ui/palette_view", "ui/color_state", "ui/blend_menu", "ui/layer_blend"]
+let rig = rig_open(fs.join(fs.home(), "layers-dock-test"), code, size, modules)
+let n = rig.names
+let none = {"shift": false, "alt": false, "cmd": false, "ctrl": false}
+
+function line_of(k) {
+  n.ed_model().lines[k - 1]
+}
+
+function steps() {
+  len(n.ed.undo)
+}
+
+function click(p) {
+  rig_frame(rig, [{"type": "down", "pos": p}, {"type": "up", "pos": p}])
+}
+
+function drag(a, b) {
+  rig_frame(rig, [{"type": "down", "pos": a}])
+  rig_frame(rig, [{"type": "move", "pos": (a.x + (b.x - a.x) / 2, a.y + (b.y - a.y) / 2)}])
+  rig_frame(rig, [{"type": "move", "pos": b}])
+  rig_frame(rig, [{"type": "up", "pos": b}])
+}
+
+function mid(r) {
+  (r[0] + r[2] // 2, r[1] + r[3] // 2)
+}
+
+-~> The layers panel's rows on screen as "line:kind@y".
+function layer_rows() {
+  let out = []
+  let rows = n.la_visible()
+  for (let i = 0; i < len(rows); i += 1) {
+    push(out, str(rows[i].row.line) + ":" + rows[i].row.kind + "@" + str(rows[i].y))
+  }
+  text.join(out, " ")
+}
+
+-~> The point on the row of `line`, dx from the panel's left.
+function on_layer(line, dx) {
+  let rows = n.la_visible()
+  for (let i = 0; i < len(rows); i += 1) {
+    if (rows[i].row.line == line) {
+      return (n.la_rect()[0] + dx, rows[i].y + 9)
+    }
+  }
+  null
+}
+
+function setting() {
+  if (fs.exists(n.settings_path())) {
+    return fs.read(n.settings_path())
+  }
+  ""
+}
+
+puts("-- the rail has no layers panel; the open sidebar has one under it")
+n.pal_set_open(false)
+rig_frame(rig)
+puts(n.view_panel_rects().layers, n.view_panel_names())
+n.pal_set_open(true)
+rig_frame(rig)
+let pr = n.view_panel_rects()
+puts(pr.palette, pr.layers, n.view_panel_names())
+puts(pr.palette[0] == pr.layers[0], pr.palette[2] == pr.layers[2], pr.palette[1] + pr.palette[3] == pr.layers[1], n.la_narrow())
+puts(layer_rows())
+
+puts("-- the same rows: hover ids, select, fold, eye (one undo step each)")
+puts(n.view_hover_at(on_layer(3, 6).x, on_layer(3, 6).y), n.view_hover_at(on_layer(3, 26).x, on_layer(3, 26).y),
+  n.view_hover_at(on_layer(3, 80).x, on_layer(3, 80).y))
+click(on_layer(3, 26))
+puts(layer_rows())
+click(on_layer(6, 80))
+puts(n.ed_model().line)
+let s0 = steps()
+click(on_layer(6, 6))
+puts(line_of(6), steps() - s0)
+n.ed_undo()
+n.view_after()
+rig_frame(rig)
+puts(line_of(6))
+
+puts("-- a drag moves a layer: one undo step")
+s0 = steps()
+let boat = on_layer(6, 80)
+drag(boat, (boat.x, on_layer(3, 80).y - 6))
+puts(line_of(3), steps() - s0)
+n.ed_undo()
+n.view_after()
+rig_frame(rig)
+puts(line_of(3), line_of(6))
+
+puts("-- the blend row: the dropdown and the opacity of the current layer")
+click(on_layer(6, 80))
+let ps = n.la_parts()
+puts(ps.blend, ps.opacity, ps.opicon)
+click(mid(ps.blend))
+puts(n.BM.open, n.blend_menu_open_from("layers"))
+rig_frame(rig, [{"type": "key", "key": "Escape", "mods": none}])
+puts(n.BM.open)
+
+puts("-- the chevron folds the panel to its header; the setting remembers it")
+let r0 = n.la_rect()
+puts(n.view_hover_at(r0[0] + 6, r0[1] + 5))
+click((r0[0] + 6, r0[1] + 5))
+puts(n.view_panel_rects().layers, n.view_panel_rects().palette, text.find(setting(), "let layers_panel = false") >= 0)
+puts(n.view_hover_at(r0[0] + 6, n.la_rect()[1] + 20), n.art_debug().layers)
+click((r0[0] + 6, n.la_rect()[1] + 5))
+puts(n.view_panel_rects().layers, text.find(setting(), "let layers_panel = true") >= 0, n.art_debug().layers[0])
+
+puts("-- the debug state lists the rows in coder mode too")
+puts(len(n.art_debug().layers), n.art_debug().mode)
+
+puts("-- the rail takes both away")
+let pal = n.pal_layout()
+click(mid([pal.x - 5 + 106 - 14, n.pal_rect()[1] + 1, 12, 12]))
+puts(n.pal_is_open(n.V.w), n.view_panel_rects().layers, n.view_panel_names())
+
+puts("-- a window too short leaves it out")
+n.pal_set_open(true)
+rig_frame(rig)
+puts(n.view_panel_rects().layers != null)
+n.V.h = 340
+puts(n.view_panel_rects().layers)
+n.V.h = 480
+
+puts("-- artist mode keeps its own panel")
+n.art_set_mode(true)
+rig_frame(rig)
+puts(n.la_rect(), n.la_narrow(), n.la_present())
+n.art_set_mode(false)
+rig_frame(rig)
+puts(n.view_panel_rects().layers != null)
+puts(rig.ed.error)
