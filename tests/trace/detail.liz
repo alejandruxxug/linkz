@@ -1,0 +1,105 @@
+-~> The adaptive detail of the line-art fills (lineart_detail): a picture with
+-~> a big flat green area with a wobbly edge, and next to it a face patch with
+-~> two small eyes (a blue iris in a dark ring). With `adaptive` on, the irises
+-~> survive and the flat area's edge takes fewer points than with it off;
+-~> with it off the irises, smaller than min_area, are let go. Also the
+-~> detail map itself and the option checks.
+
+use "../../lib/trace/trace"
+use "../../lib/trace/lineart_detail"
+use "../../lib/trace/lineart_mask"
+
+let paper = #fafaf5
+let green = #70c070
+let skin = #f0c8a8
+let blue = #3060d0
+let dark = #101010
+
+-~> The picture: the green area left of a wobbling edge, skin on the right
+-~> with two eyes, paper below.
+function face(p) {
+  let edge = 56 + 3.0 * math.sin(p.y / 3.5)
+  if (p.y > 100) {
+    return paper
+  }
+  if (p.x < edge) {
+    return green
+  }
+  for (let i = 0; i < 2; i += 1) {
+    let d = math.dist(p, (100 + 26 * i, 40))
+    if (d < 5.0) {
+      return blue
+    }
+    if (d < 6.6) {
+      return dark
+    }
+  }
+  skin
+}
+
+function pic(w, h, f) {
+  let px = []
+  for (let y = 0; y < h; y += 1) {
+    for (let x = 0; x < w; x += 1) {
+      push(px, f((x + 0.5, y + 0.5)))
+    }
+  }
+  px
+}
+
+let w = 160
+let h = 120
+let pixels = pic(w, h, face)
+
+-~> How many lines of the code mention a color.
+function uses(code, hex) {
+  let n = 0
+  let rows = text.lines(code)
+  for (let i = 0; i < len(rows); i += 1) {
+    if (text.find(rows[i], hex) >= 0) {
+      n += 1
+    }
+  }
+  n
+}
+
+-~> How many curve pieces the path painted `colors.green` has.
+function green_pieces(code) {
+  let rows = text.lines(code)
+  for (let i = 0; i < len(rows); i += 1) {
+    if (text.find(rows[i], "colors.green)") >= 0) {
+      return len(text.split(rows[i], "[\"c\""))
+    }
+  }
+  0
+}
+
+function run(extra) {
+  trace_pixels((w, h), pixels, hash.merge({"mode": "lineart", "min_area": 60, "colors": 5, "merge": {"cover": false}}, extra))
+}
+
+let off = run({"adaptive": false})
+let on = run({"adaptive": true, "adaptive_strength": 1})
+let none = run({"adaptive": true, "adaptive_strength": 0})
+puts("blue lines: off", uses(off.code, "#3060d0"), "on", uses(on.code, "#3060d0"))
+puts("strength 0 is off:", none.code == off.code)
+puts("green pieces: off", green_pieces(off.code), "on", green_pieces(on.code))
+
+-~> The map: the eyes' cells read higher than the middle of the green.
+let luma = lineart_luma(pixels)
+let m = lineart_mask(pixels, w, h, 0.5, 4)
+let map = lineart_detail_map(luma, m.ink, w, h)
+let at = function(x, y) { map.v[(y // map.cell) * map.gw + x // map.cell] }
+puts("map: eye busier than flat:", at(100, 40) > at(20, 60) + 0.3)
+puts("factors:", lineart_detail_factor(1.0, 1.0), lineart_detail_factor(0.5, 1.0), lineart_detail_factor(0.0, 1.0), lineart_detail_factor(0.0, 0.0))
+
+-~> The option checks.
+let bads = [{"adaptive": 1}, {"adaptive_strength": 2}, {"adaptive_strength": -0.1}]
+for (let i = 0; i < len(bads); i += 1) {
+  try {
+    trace_pixels((w, h), pixels, hash.merge({"mode": "lineart"}, bads[i]))
+    puts("no error for", bads[i])
+  } catch (e) {
+    puts(e.message)
+  }
+}

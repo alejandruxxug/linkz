@@ -1,0 +1,176 @@
+{
+  "mode": "lineart",
+  "rows": [
+    {
+      "image": "clean-arch-tan.jpg",
+      "err": 7.02,
+      "iou": 0.202,
+      "fills": 401,
+      "strokes": 386,
+      "bytes": 544286,
+      "ms": 10530
+    },
+    {
+      "image": "clean-asia-tan.png",
+      "err": 13.97,
+      "iou": 0.158,
+      "fills": 660,
+      "strokes": 446,
+      "bytes": 679794,
+      "ms": 10873
+    },
+    {
+      "image": "clean-copyright-tan.png",
+      "err": 3.53,
+      "iou": 0.605,
+      "fills": 32,
+      "strokes": 116,
+      "bytes": 55023,
+      "ms": 3695
+    },
+    {
+      "image": "clean-fandom-tan.png",
+      "err": 2.55,
+      "iou": 0.521,
+      "fills": 45,
+      "strokes": 146,
+      "bytes": 67606,
+      "ms": 5209
+    },
+    {
+      "image": "clean-kamina-wikipe-tan.png",
+      "err": 7.1,
+      "iou": 0.376,
+      "fills": 129,
+      "strokes": 265,
+      "bytes": 173652,
+      "ms": 4934
+    },
+    {
+      "image": "messy-coriander-concept.jpg",
+      "err": 5.5,
+      "iou": 0.19,
+      "fills": 550,
+      "strokes": 243,
+      "bytes": 650613,
+      "ms": 9638
+    },
+    {
+      "image": "messy-coriander-queen.jpg",
+      "err": 12.72,
+      "iou": 0.13,
+      "fills": 638,
+      "strokes": 590,
+      "bytes": 840362,
+      "ms": 11971
+    },
+    {
+      "image": "messy-hyou-chan.png",
+      "err": 5.19,
+      "iou": 0.22,
+      "fills": 127,
+      "strokes": 128,
+      "bytes": 129058,
+      "ms": 3015
+    },
+    {
+      "image": "messy-magmah-witch.jpg",
+      "err": 8.5,
+      "iou": 0.201,
+      "fills": 791,
+      "strokes": 428,
+      "bytes": 959263,
+      "ms": 12234
+    },
+    {
+      "image": "messy-pepper-portrait.jpg",
+      "err": 8.69,
+      "iou": 0.15,
+      "fills": 374,
+      "strokes": 617,
+      "bytes": 691778,
+      "ms": 12632
+    },
+    {
+      "image": "messy-pepper-rainy-days.jpg",
+      "err": 10.48,
+      "iou": 0.223,
+      "fills": 843,
+      "strokes": 778,
+      "bytes": 921461,
+      "ms": 11234
+    },
+    {
+      "image": "messy-pleroma-fox-tan.png",
+      "err": 3.33,
+      "iou": 0.276,
+      "fills": 156,
+      "strokes": 168,
+      "bytes": 193726,
+      "ms": 6441
+    },
+    {
+      "image": "sorceress-wikipe-tan.png",
+      "err": 12.58,
+      "iou": 0.191,
+      "fills": 833,
+      "strokes": 604,
+      "bytes": 880470,
+      "ms": 12895
+    },
+    {
+      "image": "wikipe-tan-bowing.png",
+      "err": 4.34,
+      "iou": 0.47,
+      "fills": 55,
+      "strokes": 294,
+      "bytes": 75704,
+      "ms": 3987
+    },
+    {
+      "image": "wikipe-tan-casual.png",
+      "err": 5.45,
+      "iou": 0.393,
+      "fills": 112,
+      "strokes": 342,
+      "bytes": 158195,
+      "ms": 5458
+    },
+    {
+      "image": "wikipe-tan-colored.png",
+      "err": 7.98,
+      "iou": 0.334,
+      "fills": 33,
+      "strokes": 182,
+      "bytes": 46594,
+      "ms": 1023
+    },
+    {
+      "image": "wikipe-tan-conducting.png",
+      "err": 10.59,
+      "iou": 0.284,
+      "fills": 144,
+      "strokes": 334,
+      "bytes": 136524,
+      "ms": 2515
+    },
+    {
+      "image": "wikipe-tan-full-length-bw.png",
+      "err": 7.55,
+      "iou": 0.692,
+      "fills": 2,
+      "strokes": 280,
+      "bytes": 33886,
+      "ms": 3238
+    }
+  ],
+  "summary": {
+    "images": 18,
+    "err": 7.62,
+    "iou": 0.312,
+    "fills": 5925,
+    "strokes": 6347,
+    "bytes": 7237995,
+    "ms": 131522
+  }
+}

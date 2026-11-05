@@ -17,6 +17,7 @@
 
 use "lineart_mask"
 use "lineart_palette"
+use "lineart_detail"
 
 -~> The 8 neighbour steps of a padded grid of width w2.
 function lineart_steps8(w2) {
@@ -155,10 +156,13 @@ function lineart_darker_half(pixels, positions, w) {
 -~> The pixels that are neither ink nor next to it are reduced to `colors`
 -~> colors and cut into regions (sides touching); regions under `min_area`
 -~> pixels or nowhere three pixels wide are let go, then the regions grow
--~> over everything left.
+-~> over everything left. With a detail `map` (lineart_detail_map) and a
+-~> `strength`, min_area is scaled by the local detail of each region
+-~> (lineart_detail_factor): smaller where the detail is high, bigger where
+-~> it is low.
 -~> Returns {"label": padded grid of region numbers (-2 on the border),
 -~> "regions": [{"color": palette number}...], "colors", "lab"}.
-function lineart_regions(pixels, mask, w, h, colors, min_area) {
+function lineart_regions(pixels, mask, w, h, colors, min_area, map = null, strength = 0.0) {
   let w2 = w + 2
   let label = []
   for (let i = 0; i < w2 * (h + 2); i += 1) {
@@ -210,7 +214,11 @@ function lineart_regions(pixels, mask, w, h, colors, min_area) {
         }
       }
     }
-    if (len(found) < min_area || !lineart_has_inside(label, found, id, w)) {
+    let least = min_area
+    if (map !== null && strength > 0.0) {
+      least = min_area * lineart_detail_factor(lineart_detail_mean(map, found, w, 4), strength)
+    }
+    if (len(found) < least || !lineart_has_inside(label, found, id, w)) {
       for (let k = 0; k < len(found); k += 1) {
         label[found[k]] = -3
       }

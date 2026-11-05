@@ -44,6 +44,7 @@ use "lineart_outline"
 use "lineart_palette"
 use "lineart_merge"
 use "lineart_gradient"
+use "lineart_detail"
 
 -~> The options of trace(path, {"mode": "lineart", ...}). Anything left out
 -~> takes the value shown.
@@ -93,6 +94,16 @@ use "lineart_gradient"
 -~>                   become one. Higher makes more gradients.
 -~>   detail          how far, in pixels, a fill outline may drift from the
 -~>                   Bezier curves fitted to it.
+-~>   adaptive        true to spend detail where the picture has it: a coarse
+-~>                   map of local contrast and ink (lineart_detail) makes
+-~>                   the fills keep smaller regions and fit their outlines
+-~>                   tighter in busy places (eyes, mouths, hands), and merge
+-~>                   more and fit looser in big flat areas. false treats the
+-~>                   whole picture alike, by `min_area` and `detail`.
+-~>   adaptive_strength  how far adaptive goes, 0 to 1: at 1 the smallest
+-~>                   region and the fit tolerance are a quarter in the
+-~>                   busiest places and four times in the flattest; 0 is
+-~>                   the same as adaptive off.
 -~>   scale           multiplies every coordinate, to make a bigger drawing.
 -~>   max_side        the picture is shrunk until its longer side is at most
 -~>                   this many pixels.
@@ -113,6 +124,8 @@ let lineart_options = {
   "gradients": true,
   "gradient_error": 4,
   "detail": 0.8,
+  "adaptive": true,
+  "adaptive_strength": 0.2,
   "scale": 1,
   "max_side": 1024
 }
@@ -145,6 +158,12 @@ function lineart_settings(options) {
   }
   if (type(out.gradients) != "BOOLEAN") {
     error("trace: gradients must be true or false")
+  }
+  if (type(out.adaptive) != "BOOLEAN") {
+    error("trace: adaptive must be true or false")
+  }
+  if (!(out.adaptive_strength >= 0 && out.adaptive_strength <= 1)) {
+    error("trace: adaptive_strength must be between 0 and 1")
   }
   if (!(out.gradient_error > 0)) {
     error("trace: gradient_error must be more than 0")
@@ -305,7 +324,11 @@ function lineart_trace_fills(pixels, m, dist, w, h, opt, curve) {
     min_area = math.max(4, math.round(w * h / 40000.0))
   }
   let solid = lineart_solid(m, pixels, dist, w, depth)
-  let fill = lineart_regions(pixels, m.mask, w, h, opt.colors, min_area)
+  let map = null
+  if (opt.adaptive && opt.adaptive_strength > 0) {
+    map = lineart_detail_map(m.luma, m.ink, w, h)
+  }
+  let fill = lineart_regions(pixels, m.mask, w, h, opt.colors, min_area, map, opt.adaptive_strength)
   let merged = lineart_merge_regions(fill, w, h, opt.merge)
   let order = merged.order
   let ramps = {"groups": 0, "joined": 0}
@@ -319,10 +342,18 @@ function lineart_trace_fills(pixels, m, dist, w, h, opt, curve) {
     }
   }
   let t0 = time.ms()
+  let busy = null
+  if (map !== null) {
+    busy = lineart_region_detail(fill, map, w, h)
+  }
   let shapes = []
   for (let k = 0; k < len(order.order); k += 1) {
     let id = order.order[k]
-    let s = lineart_region_shapes(fill, order, id, w, h, curve)
+    let own = curve
+    if (busy !== null) {
+      own = hash.merge(curve, {"detail": curve.detail * math.min(1.5, lineart_detail_factor(busy[id], opt.adaptive_strength))})
+    }
+    let s = lineart_region_shapes(fill, order, id, w, h, own)
     if (len(s.outers) > 0) {
       s.color = fill.regions[id].color
       s.paint = lineart_region_paint(fill, id)

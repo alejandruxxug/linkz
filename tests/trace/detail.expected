@@ -1,0 +1,8 @@
+blue lines: off 0 on 1
+strength 0 is off: true
+green pieces: off 17 on 15
+map: eye busier than flat: true
+factors: 0.25 1.0 4.0 1.0
+trace: adaptive must be true or false
+trace: adaptive_strength must be between 0 and 1
+trace: adaptive_strength must be between 0 and 1

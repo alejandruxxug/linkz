@@ -1,0 +1,138 @@
+-~> lineart_detail: where a picture has detail. A coarse grid over the picture
+-~> says, for each cell, how much is going on in it: the local contrast (how
+-~> fast the brightness changes) plus the share of ink. Eyes, mouths, hands
+-~> and small high-contrast parts score high; big flat areas and backgrounds
+-~> score low. The fills then keep smaller regions and fit their outlines
+-~> tighter where the score is high, and merge more and fit looser where it
+-~> is low (the "adaptive" option of lineart, with its "adaptive_strength").
+-~> A cell's score is 0 to 1, scaled so the busiest tenth of the picture
+-~> reads about 1.
+
+-~> The detail map of a picture: {"cell": the side of a cell in pixels, "gw",
+-~> "gh": the grid's size, "v": the scores, row by row, 0 to 1}. `luma` is the
+-~> picture's brightness row by row (lineart_mask's "luma"), `ink` the padded
+-~> positions of the ink pixels.
+function lineart_detail_map(luma, ink, w, h) {
+  let cell = math.max(6, math.round(math.max(w, h) / 64.0))
+  let gw = (w + cell - 1) // cell
+  let gh = (h + cell - 1) // cell
+  let sum = []
+  let count = []
+  let inked = []
+  for (let i = 0; i < gw * gh; i += 1) {
+    push(sum, 0.0)
+    push(count, 0)
+    push(inked, 0)
+  }
+  for (let y = 0; y < h - 1; y += 1) {
+    let row = (y // cell) * gw
+    for (let x = 0; x < w - 1; x += 1) {
+      let p = y * w + x
+      let c = row + x // cell
+      sum[c] += math.abs(luma[p + 1] - luma[p]) + math.abs(luma[p + w] - luma[p])
+      count[c] += 1
+    }
+  }
+  let w2 = w + 2
+  for (let i = 0; i < len(ink); i += 1) {
+    let p = ink[i]
+    inked[((p // w2 - 1) // cell) * gw + (p % w2 - 1) // cell] += 1
+  }
+  let raw = []
+  for (let i = 0; i < gw * gh; i += 1) {
+    let n = math.max(1, count[i])
+    push(raw, sum[i] / n * 4.0 + inked[i] / float(n))
+  }
+  let top = list.sort(raw)[math.min(len(raw) - 1, (len(raw) * 9) // 10)]
+  let v = []
+  for (let i = 0; i < len(raw); i += 1) {
+    if (top > 0.0) {
+      push(v, math.min(1.0, raw[i] / top))
+    } else {
+      push(v, 0.0)
+    }
+  }
+  {"cell": cell, "gw": gw, "gh": gh, "v": lineart_detail_blur(v, gw, gh)}
+}
+
+-~> The scores averaged with their neighbours (3 by 3), so a window of detail
+-~> reaches a little past its cells.
+function lineart_detail_blur(v, gw, gh) {
+  let out = []
+  for (let y = 0; y < gh; y += 1) {
+    for (let x = 0; x < gw; x += 1) {
+      let total = 0.0
+      let n = 0
+      for (let dy = -1; dy <= 1; dy += 1) {
+        for (let dx = -1; dx <= 1; dx += 1) {
+          let xx = x + dx
+          let yy = y + dy
+          if (xx >= 0 && xx < gw && yy >= 0 && yy < gh) {
+            total += v[yy * gw + xx]
+            n += 1
+          }
+        }
+      }
+      push(out, total / n)
+    }
+  }
+  out
+}
+
+-~> The mean score under some padded positions (every `step`th one looked at),
+-~> 0 for none.
+function lineart_detail_mean(map, positions, w, step) {
+  let w2 = w + 2
+  let total = 0.0
+  let n = 0
+  for (let i = 0; i < len(positions); i += step) {
+    let p = positions[i]
+    total += map.v[((p // w2 - 1) // map.cell) * map.gw + (p % w2 - 1) // map.cell]
+    n += 1
+  }
+  if (n == 0) {
+    return 0.0
+  }
+  total / n
+}
+
+-~> The mean score of every region of a fill, looking at every 4th pixel of
+-~> each row and column. Returns a list by region number.
+function lineart_region_detail(fill, map, w, h) {
+  let w2 = w + 2
+  let sum = []
+  let count = []
+  for (let i = 0; i < len(fill.regions); i += 1) {
+    push(sum, 0.0)
+    push(count, 0)
+  }
+  for (let y = 0; y < h; y += 4) {
+    for (let x = 0; x < w; x += 4) {
+      let a = fill.label[(y + 1) * w2 + x + 1]
+      if (a >= 0) {
+        sum[a] += map.v[(y // map.cell) * map.gw + x // map.cell]
+        count[a] += 1
+      }
+    }
+  }
+  let out = []
+  for (let i = 0; i < len(sum); i += 1) {
+    if (count[i] > 0) {
+      push(out, sum[i] / count[i])
+    } else {
+      push(out, 0.0)
+    }
+  }
+  out
+}
+
+-~> How much to scale a size or a tolerance where the score is `d`, at
+-~> `strength` 0 to 1: 1 at strength 0; at strength 1 a quarter where the
+-~> detail is 1 and four times where it is 0. Smaller is finer.
+function lineart_detail_factor(d, strength) {
+  let k = 1.0 - 2.0 * d
+  if (k >= 0) {
+    return 1.0 + 3.0 * strength * k
+  }
+  1.0 / (1.0 - 3.0 * strength * k)
+}
