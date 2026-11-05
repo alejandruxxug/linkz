@@ -7,3 +7,4 @@ __pycache__/
 # The goldens of the parity script are SVGs too.
 !scripts/parity/golden/**/*.svg
 /dist/
+.claude/worktrees/
