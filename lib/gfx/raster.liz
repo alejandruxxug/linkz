@@ -8,6 +8,10 @@
 -~>   raster.stroke(path, width)   spans of a line along a path, round joins and caps
 -~>   raster.brush(points, widths) spans of a smooth stroke with a width per point
 -~>   raster.shape(shape)          {"fill": spans or null, "stroke": spans or null}, cached
+-~>   raster.shape(shape, tol, win) the same with a flattening tolerance and only the rows
+-~>                                win = [first, last] (the other rows are left out); both
+-~>                                may be null. The spans in those rows are exactly the same
+-~>                                (gfx/detail.liz tells the canvas which to ask for)
 -~>   raster.draw(spans, offset, color)
 -~>   raster.paint(shapes, offset) draws a whole drawing, back to front
 -~>   raster.same_look(a, b)       whether two shapes paint the same pixels
@@ -66,7 +70,13 @@ let raster_tolerance = 0.25
 -~> The scanline filler. polys is a list of point lists; each is closed by
 -~> itself. Edges go into buckets by their first row, then one pass over the
 -~> rows keeps the list of edges that cross the row (the active edges).
-function raster_scan(polys, rule) {
+function raster_scan(polys, rule, win = null) {
+  let first = raster_min_row
+  let last = raster_max_row - 1
+  if (win !== null) {
+    first = math.max(win[0], raster_min_row)
+    last = math.min(win[1], raster_max_row - 1)
+  }
   let lo = raster_max_row
   let hi = raster_min_row - 1
   let edges = []
@@ -85,8 +95,8 @@ function raster_scan(polys, rule) {
       }
       if (top.y != bot.y) {
         -~> the rows whose middle lies in [top.y, bot.y)
-        let r0 = math.max(math.ceil(top.y - 0.5), raster_min_row)
-        let r1 = math.min(math.ceil(bot.y - 0.5) - 1, raster_max_row - 1)
+        let r0 = math.max(math.ceil(top.y - 0.5), first)
+        let r1 = math.min(math.ceil(bot.y - 0.5) - 1, last)
         if (r1 >= r0) {
           push(edges, [r0, r1, top.x, (bot.x - top.x) / float(bot.y - top.y), top.y, dir])
           lo = math.min(lo, r0)
@@ -163,15 +173,23 @@ function raster_scan(polys, rule) {
   spans
 }
 
-function raster_fill(path, rule) {
-  let subs = flatten_path(path, raster_tolerance)
+-~> The polygons of a filled path (flattened to the tolerance), ready to scan.
+function raster_fill_polys(path, tol) {
+  if (tol === null) {
+    tol = raster_tolerance
+  }
+  let subs = flatten_path(path, tol)
   let polys = []
   for (let i = 0; i < len(subs); i = i + 1) {
     if (len(subs[i].points) >= 3) {
       push(polys, subs[i].points)
     }
   }
-  raster_scan(polys, rule)
+  polys
+}
+
+function raster_fill(path, rule, tol = null, win = null) {
+  raster_scan(raster_fill_polys(path, tol), rule, win)
 }
 
 -~> Twice the signed area of a polygon. Its sign says which way it turns.
@@ -299,8 +317,12 @@ function raster_sweep(out, points, halves, closed) {
   null
 }
 
-function raster_stroke(path, width) {
-  let subs = flatten_path(path, raster_tolerance)
+-~> The polygons that, joined, make the line along a path.
+function raster_stroke_polys(path, width, tol) {
+  if (tol === null) {
+    tol = raster_tolerance
+  }
+  let subs = flatten_path(path, tol)
   let polys = []
   let half = math.max(width / 2.0, 0.05)
   for (let i = 0; i < len(subs); i = i + 1) {
@@ -311,7 +333,11 @@ function raster_stroke(path, width) {
     }
     raster_sweep(polys, pts, halves, subs[i].closed)
   }
-  raster_scan(polys, "nonzero")
+  polys
+}
+
+function raster_stroke(path, width, tol = null, win = null) {
+  raster_scan(raster_stroke_polys(path, width, tol), "nonzero", win)
 }
 
 -~> A smooth curve through the points (the same one brush() draws), thick by
@@ -342,11 +368,53 @@ function raster_brush(points, widths) {
   raster_scan(polys, "nonzero")
 }
 
-function raster_key(shape) {
-  if (shape.stamp_key != null) {
-    return "stamps|" + shape.stamp_key
+-~> Windowed shapes (raster_shape with rows) are scanned once for each window, but
+-~> flattened and swept only once: the polygons of the last few are kept here,
+-~> by the shape's key without the window.
+let raster_polys_cache = {}
+let raster_polys_size = 0
+let raster_polys_limit = 24
+
+-~> The polygons of a shape's fill, stroke and stamps, for scanning in windows.
+function raster_polys(shape, tol) {
+  let key = raster_key(shape, tol, null)
+  let hit = raster_polys_cache[key]
+  if (hit !== null) {
+    return hit
   }
-  str(shape.path) + "|" + str(shape.width) + "|" + str(shape.widths) + "|" + str(shape.rule) + "|" + str(shape.fill != null) + str(shape.stroke != null)
+  let pre = {"fill": null, "stroke": null, "stamps": null}
+  if (shape.stamps != null) {
+    pre.stamps = []
+    for (let i = 0; i < len(shape.stamps); i += 1) {
+      push(pre.stamps, raster_fill_polys(shape.stamps[i].path, tol))
+    }
+  } elif (shape.fill != null) {
+    pre.fill = raster_fill_polys(shape.path, tol)
+  }
+  if (shape.stamps == null && shape.stroke != null && shape.width > 0) {
+    pre.stroke = raster_stroke_polys(shape.path, shape.width, tol)
+  }
+  if (raster_polys_size >= raster_polys_limit) {
+    raster_polys_cache = {}
+    raster_polys_size = 0
+  }
+  raster_polys_cache[key] = pre
+  raster_polys_size += 1
+  pre
+}
+
+function raster_key(shape, tol = null, win = null) {
+  let extra = ""
+  if (tol !== null) {
+    extra += "|t" + str(tol)
+  }
+  if (win !== null) {
+    extra += "|w" + str(win[0]) + "," + str(win[1])
+  }
+  if (shape.stamp_key != null) {
+    return "stamps|" + shape.stamp_key + extra
+  }
+  extra + str(shape.path) + "|" + str(shape.width) + "|" + str(shape.widths) + "|" + str(shape.rule) + "|" + str(shape.fill != null) + str(shape.stroke != null)
 }
 
 -~> True when two shape records paint the very same pixels: the same path,
@@ -365,8 +433,8 @@ function raster_same_look(a, b) {
 -~> stamp, drawn in order. The result is kept by path
 -~> and widths (by the stamps' key for a stamped one), so a shape that did not change is never rasterized again. A
 -~> shape may carry "rule": "evenodd" (the default is nonzero).
-function raster_shape(shape) {
-  let key = raster_key(shape)
+function raster_shape(shape, tol = null, win = null) {
+  let key = raster_key(shape, tol, win)
   let hit = raster_cache[key]
   if (hit !== null) {
     hit.frame = raster_cache_frame
@@ -377,16 +445,32 @@ function raster_shape(shape) {
     rule = "evenodd"
   }
   let out = {"fill": null, "stroke": null, "stamps": null, "frame": raster_cache_frame}
+  let pre = null
+  if (win !== null) {
+    pre = raster_polys(shape, tol)
+  }
   if (shape.stamps != null) {
     out.stamps = []
     for (let i = 0; i < len(shape.stamps); i += 1) {
-      push(out.stamps, [raster_fill(shape.stamps[i].path, "nonzero"), shape.stamps[i].color])
+      if (pre !== null) {
+        push(out.stamps, [raster_scan(pre.stamps[i], "nonzero", win), shape.stamps[i].color])
+      } else {
+        push(out.stamps, [raster_fill(shape.stamps[i].path, "nonzero", tol, win), shape.stamps[i].color])
+      }
     }
   } elif (shape.fill != null) {
-    out.fill = raster_fill(shape.path, rule)
+    if (pre !== null) {
+      out.fill = raster_scan(pre.fill, rule, win)
+    } else {
+      out.fill = raster_fill(shape.path, rule, tol, win)
+    }
   }
   if (shape.stamps == null && shape.stroke != null && shape.width > 0) {
-    out.stroke = raster_stroke(shape.path, shape.width)
+    if (pre !== null) {
+      out.stroke = raster_scan(pre.stroke, "nonzero", win)
+    } else {
+      out.stroke = raster_stroke(shape.path, shape.width, tol, win)
+    }
   }
   if (raster_cache_size >= raster_cache_limit) {
     raster_cache_sweep()
@@ -407,8 +491,8 @@ function raster_draw(spans, offset, paint) {
 }
 
 -~> One shape: its fill and then its stroke.
-function raster_paint_shape(s, offset) {
-  let r = raster_shape(s)
+function raster_paint_shape(s, offset, tol = null, win = null) {
+  let r = raster_shape(s, tol, win)
   if (r.fill !== null) {
     raster_draw(r.fill, offset, resolve_paint(s, "fill"))
   }
@@ -427,12 +511,12 @@ function raster_paint_shape(s, offset) {
 -~> in a buffer of its own and mixed onto the one below when it is done;
 -~> a layer inside it is mixed inside that buffer. Without such layers the
 -~> shapes are drawn straight on the target.
-function raster_paint(shapes, offset) {
+function raster_paint(shapes, offset, tol = null, win = null) {
   raster_new_frame()
   let ordered = paint_order(shapes)
   if (!any_styled(ordered)) {
     for (let i = 0; i < len(ordered); i = i + 1) {
-      raster_paint_shape(ordered[i], offset)
+      raster_paint_shape(ordered[i], offset, tol, win)
     }
     return null
   }
@@ -440,7 +524,7 @@ function raster_paint(shapes, offset) {
   for (let i = 0; i < len(events); i = i + 1) {
     let kind = events[i][0]
     if (kind == "shape") {
-      raster_paint_shape(events[i][1], offset)
+      raster_paint_shape(events[i][1], offset, tol, win)
     } elif (kind == "open") {
       fb.push_layer()
     } else {

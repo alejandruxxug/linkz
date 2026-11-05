@@ -1,0 +1,65 @@
+-~> detail: how much work the canvas puts into a shape at a zoom. A shape of the
+-~> canvas is already scaled to the zoom, so its pixels are screen pixels; what is
+-~> left to choose is how finely its curves are cut, what is too small to show and
+-~> which rows of a very tall shape are worth rasterizing. Export and the thumbnails
+-~> do not use any of this: they keep raster.liz's own tolerance and whole shapes.
+-~>   detail_tolerance(zoom)       how far a curve may stray from its segments, in pixels
+-~>   detail_tiny(box, margin, s)  whether the shape (its box, grown by margin) is too small to see
+-~>   detail_tall(y0, y1)          whether rows y0 to y1 are too many to rasterize at once
+-~>   detail_window(y0, y1)        the rows [first, last] to rasterize to paint rows y0 to y1
+
+-~> At 100% and more a curve is cut as finely as raster.liz does (0.25 px).
+let detail_fine = 0.25
+
+-~> At 25% and less it is cut as coarsely as this: a shape that small has its
+-~> curve cut into a few pixels, and a bigger error does not show.
+let detail_coarse = 0.4
+
+-~> A shape whose width and height (and stroke) together are under this many
+-~> pixels paints less than half a pixel and is left out.
+let detail_min_size = 0.5
+
+-~> A shape taller than this many rows is rasterized in bands of detail_band rows
+-~> (only the bands being painted), not whole.
+let detail_tall_rows = 1024
+let detail_band = 512
+
+function detail_tolerance(zoom) {
+  if (zoom >= 1) {
+    return detail_fine
+  }
+  if (zoom <= 0.25) {
+    return detail_coarse
+  }
+  detail_fine + (detail_coarse - detail_fine) * (1 - zoom) / 0.75
+}
+
+-~> `box` is [x0, y0, x1, y1] grown by `margin` on each side (as scene_box does);
+-~> s is the scaled shape, whose stroke adds to what shows.
+function detail_tiny(box, margin, s) {
+  if (s.stamps != null || s.stamp_key != null) {
+    return false
+  }
+  let w = box[2] - box[0] - 2 * margin
+  let h = box[3] - box[1] - 2 * margin
+  if (w < -0.001 || h < -0.001) {
+    return false
+  }
+  let line = 0
+  if (s.stroke != null && (type(s.width) == "INTEGER" || type(s.width) == "FLOAT")) {
+    line = s.width
+  }
+  math.max(w, h) + line < detail_min_size
+}
+
+function detail_tall(y0, y1) {
+  y1 - y0 > detail_tall_rows
+}
+
+-~> The whole bands that hold rows y0 to y1. Bands start at multiples of
+-~> detail_band, so painting nearby boxes asks for the same window.
+function detail_window(y0, y1) {
+  let first = math.floor(y0 / float(detail_band)) * detail_band
+  let last = (math.floor(y1 / float(detail_band)) + 1) * detail_band
+  [first, last]
+}

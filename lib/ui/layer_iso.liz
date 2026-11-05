@@ -15,6 +15,7 @@
 -~>   iso_paint(cl, off) dim and layer, over the drawing at off (canvas buffer)
 -~>   iso_chip(cl, x)   the chip under the canvas frame
 
+use "../gfx/detail"
 use "../gfx/raster"
 use "app"
 use "editor_undo"
@@ -23,6 +24,7 @@ use "layer_thumbs"
 use "view_canvas"
 use "view_gfx"
 use "view_layout"
+use "view_scene"
 
 -~> alt: whether Alt is held, as the last event said. cache: the layer's
 -~> shapes scaled to the zoom, kept while nothing they depend on changes.
@@ -74,7 +76,7 @@ function iso_key() {
 }
 
 -~> The isolated layer's shapes at the zoom of cl, made again only when the
--~> layer, the shapes or the zoom change.
+-~> layer, the shapes or the zoom change (ISO.cache.tall: one of them is very tall).
 function iso_shapes(cl) {
   let key = iso_key() + "|" + str(cl.zoom)
   if (ISO.cache.key != key) {
@@ -84,9 +86,20 @@ function iso_shapes(cl) {
     for (let i = 0; i < len(own); i += 1) {
       push(shapes, view_scale_shape(own[i], cl.zoom))
     }
-    ISO.cache = {"key": key, "shapes": shapes}
+    ISO.cache = {"key": key, "shapes": shapes, "tall": iso_any_tall(shapes)}
   }
   ISO.cache.shapes
+}
+
+-~> Whether any of the shapes is so tall that rasterizing it whole costs too much.
+function iso_any_tall(shapes) {
+  for (let i = 0; i < len(shapes); i += 1) {
+    let b = scene_box(shapes[i])
+    if (detail_tall(b[1], b[3])) {
+      return true
+    }
+  }
+  false
 }
 
 -~> Dims the drawing at off (the part inside the current clip) and draws
@@ -96,7 +109,14 @@ function iso_paint(cl, off) {
     return null
   }
   fb.fill((cl.clip[0], cl.clip[1]), (cl.clip[2] - cl.clip[0], cl.clip[3] - cl.clip[1]), iso_dim)
-  raster.paint(iso_shapes(cl), off)
+  -~> same tolerance as the scene, so the layer lies exactly on what it dims; of a tall
+  -~> shape only the rows on screen are rasterized
+  let shapes = iso_shapes(cl)
+  let win = null
+  if (ISO.cache.tall) {
+    win = detail_window(cl.clip[1] - off.y, cl.clip[3] - off.y)
+  }
+  raster.paint(shapes, off, detail_tolerance(cl.zoom), win)
 }
 
 -~> The chip under the canvas frame at x: layer icon, `sun · 3 objects`.

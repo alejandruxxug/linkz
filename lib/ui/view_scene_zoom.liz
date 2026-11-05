@@ -17,7 +17,16 @@
 -~>   hit-testing   uses the old scene, which knows its own zoom (sc.zoom)
 -~>   no old scene, a new background or canvas size: the scene is made at once
 -~>
+-~> The scenes of the last zooms are kept (V.kept, at most zoom_kept_max besides the one
+-~> shown), so that going back to a zoom shows it at once: that scene is taken as the
+-~> one being made, and its tiles, still there, are all it needs. A kept scene is only
+-~> good while nothing changed: an edit, a hidden row, a new background or canvas size
+-~> drops them (zoom_prune, zoom_forget).
+-~>
 -~>   zoom_cancel()                   drops the scene being made
+-~>   zoom_forget()                   drops the kept scenes
+-~>   zoom_prune()                    drops the kept scenes that no longer match the editor
+-~>   zoom_tile_name()                a name for the buffers of a new scene's tiles
 -~>   scene_sync_zoom(sc, cl, rows)   scene_sync's part for a zoom change: gives the old scene
 -~>   scene_show(cl, off)             the scene on the canvas buffer, whole or as far as it got
 -~>   zoom_busy()                     whether a scene is being made
@@ -25,14 +34,103 @@
 
 use "../gfx/tiles"
 use "app"
+use "editor_undo"
 use "view_layout"
 use "view_scene"
 
 -~> About how long (ms) each frame works on the new scene.
 let zoom_budget_ms = 8
 
+-~> How many scenes of other zooms are kept (each holds the tiles it made).
+let zoom_kept_max = 2
+
+-~> The scene shown, the one being made and the kept ones each have buffers of
+-~> their own, named from this many names.
+let zoom_tile_names = 6
+
 function zoom_cancel() {
   V.refine = null
+}
+
+function zoom_kept() {
+  if (V.kept == null) {
+    V.kept = []
+  }
+  V.kept
+}
+
+function zoom_forget() {
+  V.kept = []
+}
+
+-~> Whether a scene still shows what the editor has: the same shapes, hidden rows and
+-~> background, and no tile waiting to be repainted.
+function zoom_fresh(sc) {
+  sc.ver == ed.shapes_ver && sc.hidden == scene_hidden_key(null) && sc.bg == ed.canvas.background &&
+    len(sc.tiles.regions) == 0
+}
+
+function zoom_prune() {
+  let kept = zoom_kept()
+  let keep = []
+  for (let i = 0; i < len(kept); i += 1) {
+    if (zoom_fresh(kept[i])) {
+      push(keep, kept[i])
+    }
+  }
+  V.kept = keep
+}
+
+-~> The first name no scene in use has.
+function zoom_tile_name() {
+  let used = {}
+  if (V.scene != null) {
+    used[V.scene.tiles.name] = true
+  }
+  if (V.refine != null) {
+    used[V.refine.scene.tiles.name] = true
+  }
+  let kept = zoom_kept()
+  for (let i = 0; i < len(kept); i += 1) {
+    used[kept[i].tiles.name] = true
+  }
+  for (let i = 0; i < zoom_tile_names; i += 1) {
+    let name = "canvas" + str(i)
+    if (used[name] == null) {
+      return name
+    }
+  }
+  "canvas0"
+}
+
+-~> The scene that was shown goes to the front of the kept ones (one for each zoom);
+-~> the oldest go when there are too many.
+function zoom_keep(sc) {
+  let kept = [sc]
+  let old = zoom_kept()
+  for (let i = 0; i < len(old); i += 1) {
+    if (old[i].zoom != sc.zoom && len(kept) <= zoom_kept_max && zoom_fresh(old[i])) {
+      push(kept, old[i])
+    }
+  }
+  if (len(kept) > zoom_kept_max) {
+    kept = list.slice(kept, 0, zoom_kept_max)
+  }
+  V.kept = kept
+}
+
+-~> A kept scene made for the zoom and size of cl, taken out of the kept ones, or null.
+function zoom_take(cl) {
+  zoom_prune()
+  let kept = zoom_kept()
+  for (let i = 0; i < len(kept); i += 1) {
+    let k = kept[i]
+    if (k.zoom == cl.zoom && k.size == (cl.sw, cl.sh)) {
+      list.remove(kept, i)
+      return k
+    }
+  }
+  null
 }
 
 function zoom_busy() {
@@ -54,8 +152,13 @@ function scene_sync_zoom(sc, cl, rows) {
   scene_sync_edits(sc, rows)
   let r = V.refine
   if (r == null || r.zoom != cl.zoom || r.size != (cl.sw, cl.sh) || r.ver != sc.ver || r.hidden != sc.hidden) {
+    -~> a scene kept from this zoom is the one to show, or else a new one is begun
+    let again = zoom_take(cl)
+    if (again == null) {
+      again = scene_new(cl, rows, true)
+    }
     V.refine = {
-      "scene": scene_new(cl, rows, true),
+      "scene": again,
       "zoom": cl.zoom,
       "size": (cl.sw, cl.sh),
       "ver": sc.ver,
@@ -89,13 +192,38 @@ function zoom_step(cl) {
     app.needs_paint = true
     return null
   }
-  let left = tiles_render_near(s.tiles, function(box, o) { scene_paint_box(s, box, o) }, zoom_focus(cl), until)
-  if (left > 0) {
+  if (zoom_tiles(s, zoom_focus(cl), until) > 0) {
     app.needs_paint = true
     return null
   }
+  zoom_keep(V.scene)
   V.scene = s
   V.refine = null
+}
+
+-~> Makes the tiles in view of the new scene `s`, the ones nearest `at` first, until time.ms()
+-~> reaches `until`. The rasterizing of a tile's entries is done a few at a time first
+-~> (scene_warm), so a tile with many or big shapes does not use up a frame; the tile is
+-~> painted once they are all ready. Gives how many tiles are left.
+function zoom_tiles(s, at, until) {
+  let t = s.tiles
+  let paint = function(box, o) { scene_paint_box(s, box, o) }
+  while (true) {
+    let todo = tiles_unmade_near(t, at)
+    if (len(todo) == 0) {
+      return 0
+    }
+    let k = todo[0]
+    if (!scene_warm(s, tiles_rect(t, k % t.cols, k // t.cols), until)) {
+      return len(todo)
+    }
+    -~> a time already past makes tiles_render_near paint just the nearest tile
+    tiles_render_near(t, paint, at, 0)
+    if (time.ms() >= until) {
+      return len(todo) - 1
+    }
+  }
+  0
 }
 
 -~> The tiles of the old scene `sc`, scaled to the zoom of cl, at the drawing's

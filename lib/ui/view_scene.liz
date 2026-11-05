@@ -22,6 +22,7 @@
 
 use "../draw/gradient"
 use "../draw/shapes"
+use "../gfx/detail"
 use "../gfx/raster"
 use "../gfx/spatial"
 use "../gfx/tiles"
@@ -35,14 +36,27 @@ use "view_tools"
 let scene_tile = 256
 let scene_cell = 64
 
+-~> How many bands of spans a tall entry keeps.
+let scene_bands_kept = 6
+
 -~> A box of at least 1/scene_scan_share of the drawing finds its entries by
 -~> going through all of them (scene_entries_in).
 let scene_scan_share = 6
 
 -~> == Boxes ==
 
+-~> How far the box of a scaled shape is grown on each side: half its width and
+-~> two pixels.
+function scene_margin(s) {
+  let m = 2.0
+  if (type(s.width) == "INTEGER" || type(s.width) == "FLOAT") {
+    m += s.width / 2.0
+  }
+  m
+}
+
 -~> The box of a scaled shape: the points of its path (a Bezier curve stays
--~> inside its control points), grown by half its width and two pixels.
+-~> inside its control points), grown by scene_margin.
 function scene_box(s) {
   let x0 = null
   let y0 = 0
@@ -68,10 +82,7 @@ function scene_box(s) {
   if (x0 === null) {
     return [0, 0, -1, -1]
   }
-  let m = 2.0
-  if (type(s.width) == "INTEGER" || type(s.width) == "FLOAT") {
-    m += s.width / 2.0
-  }
+  let m = scene_margin(s)
   return [x0 - m, y0 - m, x1 + m, y1 + m]
 }
 
@@ -80,12 +91,18 @@ function scene_box(s) {
 -~> A new entry for a shape of the run, with an id of its own in the index.
 function scene_entry(sc, src, j) {
   let s = view_scale_shape(src, sc.zoom)
+  let box = scene_box(s)
   let e = {
     "id": sc.next_id,
     "j": j,
     "shape": s,
     "src": src,
-    "box": scene_box(s),
+    "box": box,
+    -~> too small to show (detail.liz): painted as nothing
+    "tiny": detail_tiny(box, scene_margin(s), s),
+    -~> a very tall shape keeps the spans of the bands being painted, by first row
+    "tall": detail_tall(box[1], box[3]),
+    "bands": {},
     "ops": null,
     "chain": null,
     "layer": s.layer,
@@ -195,6 +212,7 @@ function scene_entries_in(sc, box) {
 function scene_new(cl, rows, lazy = false) {
   let sc = {
     "zoom": cl.zoom,
+    "tol": detail_tolerance(cl.zoom),
     "size": (cl.sw, cl.sh),
     "bg": ed.canvas.background,
     "ver": ed.shapes_ver,
@@ -206,7 +224,7 @@ function scene_new(cl, rows, lazy = false) {
     "next_id": 0,
     "byid": {},
     "index": spatial_new(scene_cell),
-    "tiles": tiles_new("canvas", (cl.sw, cl.sh), scene_tile)
+    "tiles": tiles_new(zoom_tile_name(), (cl.sw, cl.sh), scene_tile)
   }
   -~> only the part of the drawing on screen is kept as pixels (tiles.liz)
   tiles_set_view(sc.tiles, cl.vis)
@@ -260,6 +278,7 @@ function scene_sync(cl) {
   let sc = V.scene
   if (sc == null || sc.bg != ed.canvas.background) {
     zoom_cancel()
+    zoom_forget()
     V.scene = scene_new(cl, rows)
     return V.scene
   }
@@ -267,7 +286,9 @@ function scene_sync(cl) {
     return scene_sync_zoom(sc, cl, rows)
   }
   zoom_cancel()
+  zoom_prune()
   if (sc.size != (cl.sw, cl.sh)) {
+    zoom_forget()
     V.scene = scene_new(cl, rows)
     return V.scene
   }
@@ -456,8 +477,8 @@ function scene_sync_lite(sc) {
 
 -~> What painting an entry draws, in order: [spans, paint, is_gradient] for
 -~> its fill and then its stroke, flat in one list.
-function scene_ops(e) {
-  let r = raster.shape(e.shape)
+function scene_ops(e, tol, win) {
+  let r = raster.shape(e.shape, tol, win)
   let ops = []
   if (r.fill !== null) {
     let p = resolve_paint(e.shape, "fill")
@@ -481,16 +502,67 @@ function scene_ops(e) {
   ops
 }
 
+-~> The ops of an entry for painting the part `box` of the scene. A tall entry only
+-~> has the bands of rows that box needs (a few kept), so a tile never waits for the
+-~> rest of a shape that is mostly out of view.
+function scene_entry_ops(sc, e, box) {
+  if (!e.tall) {
+    if (e.ops === null) {
+      e.ops = scene_ops(e, sc.tol, null)
+    }
+    return e.ops
+  }
+  let win = detail_window(box[1], box[3])
+  let key = win[0] * 100000 + win[1]
+  let ops = e.bands[key]
+  if (ops == null) {
+    if (len(keys(e.bands)) >= scene_bands_kept) {
+      e.bands = {}
+    }
+    ops = scene_ops(e, sc.tol, win)
+    e.bands[key] = ops
+  }
+  ops
+}
+
+-~> Whether the entry's ops for painting `box` are already worked out.
+function scene_entry_has(e, box) {
+  if (!e.tall) {
+    return e.ops !== null
+  }
+  let win = detail_window(box[1], box[3])
+  e.bands[win[0] * 100000 + win[1]] != null
+}
+
+-~> Works out the ops of the entries in `box` (the rasterizing, which is most of what
+-~> painting a tile costs) until time.ms() reaches `until`, at least one. Gives true
+-~> once they all are, so that painting the box after it is quick.
+function scene_warm(sc, box, until) {
+  let entries = scene_entries_in(sc, box)
+  let done = 0
+  for (let i = 0; i < len(entries); i += 1) {
+    let e = entries[i]
+    if (e.tiny || scene_entry_has(e, box)) {
+      continue
+    }
+    if (done > 0 && time.ms() >= until) {
+      return false
+    }
+    scene_entry_ops(sc, e, box)
+    done += 1
+  }
+  true
+}
+
 -~> One entry: its fill and then its stroke, from its spans (raster.draw).
-function scene_paint_entry(e, off) {
+function scene_paint_entry(sc, e, box, off) {
   if (V.gest != null && view_tools_lite(e.shape, off)) {
     return null
   }
-  let ops = e.ops
-  if (ops === null) {
-    ops = scene_ops(e)
-    e.ops = ops
+  if (e.tiny) {
+    return null
   }
+  let ops = scene_entry_ops(sc, e, box)
   for (let i = 0; i < len(ops); i += 3) {
     if (ops[i + 2]) {
       fb.spans_gradient(ops[i], off, ops[i + 1])
@@ -522,7 +594,7 @@ function scene_paint_box(sc, box, off) {
   let entries = scene_entries_in(sc, box)
   if (!scene_any_styled(entries)) {
     for (let i = 0; i < len(entries); i += 1) {
-      scene_paint_entry(entries[i], off)
+      scene_paint_entry(sc, entries[i], box, off)
     }
     return null
   }
@@ -530,7 +602,7 @@ function scene_paint_box(sc, box, off) {
   for (let i = 0; i < len(events); i += 1) {
     let kind = events[i][0]
     if (kind == "shape") {
-      scene_paint_entry(events[i][1], off)
+      scene_paint_entry(sc, events[i][1], box, off)
     } elif (kind == "open") {
       fb.push_layer()
     } else {

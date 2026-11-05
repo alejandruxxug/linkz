@@ -7,7 +7,7 @@
 -~> (lizardscript test --bench runs it as part of the tests, once each).
 -~> A zoom change shows the old picture scaled at once and becomes sharp a few
 -~> frames later: "_set" is the first frame after the change, "_sharp" the frames
--~> until the picture is sharp.
+-~> until the picture is sharp; "_back" is the same going back to a zoom seen a moment ago.
 
 use "../../lib/app/libs"
 use "../../lib/app/paint"
@@ -118,6 +118,16 @@ for (let s = 0; s < len(sizes); s += 1) {
   n.canvas_zoom_fit()
   rig_frame(rig)
   sharp(rig, k + "fit_sharp")
+
+  -~> and back to a zoom visited before: its scene was kept (view_scene_zoom.liz)
+  bench(rig, k + "zoom_400_back_set", function(_i) {
+    n.canvas_zoom_set(4.0, n.canvas_zoom_centre())
+    []
+  })
+  sharp(rig, k + "zoom_400_back_sharp")
+  n.canvas_zoom_fit()
+  rig_frame(rig)
+  sharp(rig, k + "fit_back_sharp")
 
   n.ed_select(first_shape)
   n.view_after()

@@ -1,0 +1,104 @@
+-~> The scenes of the last zooms are kept (lib/ui/view_scene_zoom.liz): going back to a
+-~> zoom seen a moment ago is sharp on the first frame, and exactly what a full repaint
+-~> paints. An edit, a hidden row or a new canvas size drops them; only the last
+-~> zoom_kept_max are held; each scene has buffers of its own.
+
+use "../../lib/app/libs"
+use "rig"
+
+let dir = fs.join(fs.home(), "zoom-cache-test")
+let code = fs.read(fs.join(libs_root(), "docs", "Batches", "fixtures", "shapes-2k.lzdraw"))
+let modules = rig_modules + ["ui/view_panels", "ui/canvas_zoom", "ui/view_scene_zoom", "ui/view_canvas", "ui/view_scene"]
+let rig = rig_open(fs.join(dir, "a"), code, (800, 500), modules)
+let n = rig.names
+
+function settle(r) {
+  let frames = 0
+  while (r.names.zoom_busy() && frames < 2000) {
+    rig_frame(r)
+    frames += 1
+  }
+  frames
+}
+
+function canvas_shot() {
+  rig_shot(rig, n.view_canvas_layout().crect)
+}
+
+-~> The canvas as it shows, then as a full repaint paints it: the same pixels.
+function same_as_repaint() {
+  let shown = canvas_shot()
+  n.tiles_mark_all(n.V.scene.tiles)
+  n.view_force_all()
+  n.app.needs_paint = true
+  rig_frame(rig)
+  shown == canvas_shot()
+}
+
+function zoom_to(z) {
+  n.canvas_zoom_set(z, n.canvas_zoom_centre())
+  rig_frame(rig)
+}
+
+function kept_zooms() {
+  let out = []
+  for (let i = 0; i < len(n.V.kept); i += 1) {
+    push(out, n.V.kept[i].zoom)
+  }
+  out
+}
+
+rig_frame(rig)
+let fit = n.V.scene.zoom
+
+puts("-- zooming away keeps the scene")
+zoom_to(4.0)
+settle(rig)
+puts("kept: the fit scene", kept_zooms() == [fit])
+zoom_to(8.0)
+settle(rig)
+puts("kept: 4 and the fit scene", kept_zooms() == [4.0, fit])
+zoom_to(2.0)
+settle(rig)
+puts("only two are kept, the newest first", kept_zooms() == [8.0, 4.0])
+let names = {}
+names[n.V.scene.tiles.name] = true
+for (let i = 0; i < len(n.V.kept); i += 1) {
+  names[n.V.kept[i].tiles.name] = true
+}
+puts("each scene has buffers of its own", len(keys(names)) == 3)
+
+puts("-- back to a kept zoom")
+zoom_to(4.0)
+puts("sharp on the first frame:", !n.zoom_busy(), n.V.scene.zoom == 4.0)
+puts("as a full repaint:", same_as_repaint())
+puts("the scene left is kept in turn", kept_zooms() == [2.0, 8.0])
+
+puts("-- one that was not kept is made again, a little each frame")
+zoom_to(16.0)
+puts("busy:", n.zoom_busy())
+puts("frames:", settle(rig) > 1, "as a full repaint:", same_as_repaint())
+
+puts("-- an edit drops them")
+puts("there are some:", len(n.V.kept) > 0)
+n.ed_select(5)
+n.ed_set_prop("r", "25")
+n.view_after()
+rig_frame(rig)
+puts("none left:", len(n.V.kept) == 0)
+zoom_to(4.0)
+puts("busy: ", n.zoom_busy())
+settle(rig)
+puts("as a full repaint:", same_as_repaint())
+
+puts("-- an edit while the kept scene is waiting to be shown")
+zoom_to(8.0)
+settle(rig)
+zoom_to(4.0)
+settle(rig)
+n.ed_set_prop("r", "30")
+n.view_after()
+zoom_to(8.0)
+settle(rig)
+puts("sharp, as a full repaint:", same_as_repaint())
+puts("the picture has the edit:", n.V.scene.ver == n.ed.shapes_ver)

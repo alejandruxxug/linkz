@@ -1,0 +1,55 @@
+-~> How much work the canvas puts into a shape (lib/gfx/detail.liz): the tolerance
+-~> by zoom, the shapes too small to show, and rasterizing only some rows of a shape.
+-~> The rows asked for must be exactly the rows of the whole shape; asking for nothing
+-~> in particular must be what raster.liz always gave (export relies on it).
+
+use "../../lib/draw/geometry"
+use "../../lib/draw/shapes"
+use "../../lib/gfx/detail"
+use "../../lib/gfx/raster"
+
+puts("-- tolerance by zoom")
+let zooms = [8.0, 1.0, 0.75, 0.5, 0.25, 0.1]
+for (let i = 0; i < len(zooms); i += 1) {
+  puts(zooms[i], math.round(detail_tolerance(zooms[i]) * 1000) / 1000.0)
+}
+
+puts("-- too small to show")
+let dot = circle((10, 10), 0.2, #ff0000)
+puts("a dot", detail_tiny([8, 8, 12, 12], 2.0, dot))
+puts("a speck with a wide line", detail_tiny([9, 9, 11, 11], 1.0, {"stroke": #000000, "width": 1.0}))
+puts("a shape of 3 px", detail_tiny([8, 8, 13, 13], 1.0, circle((10, 10), 1.5, #ff0000)))
+puts("a stamped one is never", detail_tiny([0, 0, 0, 0], 0.0, {"stamps": []}))
+
+puts("-- windows are whole bands")
+puts(detail_window(0, 10), detail_window(700, 900), detail_window(512, 513), detail_tall(0, 1024), detail_tall(0, 1025))
+
+puts("-- some rows are the rows of the whole")
+let wave = {
+  "path": [["M", (0, 0)], ["C", (300, -400), (-200, 900), (400, 1500)], ["C", (900, 2000), (100, 2300), (50, 3000)], ["L", (0, 3000)], ["Z"]],
+  "fill": #00aa00,
+  "stroke": #000000,
+  "width": 6.0
+}
+let whole = raster_shape(wave)
+let part = raster_shape(wave, null, [512, 1023])
+function rows_of(spans, lo, hi) {
+  let out = []
+  for (let i = 0; i < len(spans); i += 1) {
+    if (spans[i][0] >= lo && spans[i][0] <= hi) {
+      push(out, spans[i])
+    }
+  }
+  out
+}
+puts("fill", len(part.fill) > 0, len(part.fill) < len(whole.fill), part.fill == rows_of(whole.fill, 512, 1023))
+puts("stroke", len(part.stroke) > 0, part.stroke == rows_of(whole.stroke, 512, 1023))
+let star = {"path": [["M", (50, 0)], ["L", (80, 100)], ["L", (0, 40)], ["L", (100, 40)], ["L", (20, 100)], ["Z"]], "fill": #ff0000, "rule": "evenodd"}
+puts("evenodd", raster_shape(star, null, [30, 60]).fill == rows_of(raster_shape(star).fill, 30, 60))
+puts("a window outside the shape is empty", len(raster_shape(star, null, [500, 600]).fill))
+
+puts("-- the default is what it always was")
+let a = raster_shape(wave)
+let b = raster_shape(wave, raster_tolerance)
+puts("same spans at the default tolerance", a.fill == b.fill, a.stroke == b.stroke)
+puts("coarser cuts a curve in fewer points", len(flatten_path(wave.path, 0.4)[0].points) < len(flatten_path(wave.path, 0.25)[0].points))

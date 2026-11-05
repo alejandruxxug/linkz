@@ -1,0 +1,20 @@
+-- zooming away keeps the scene
+kept: the fit scene true
+kept: 4 and the fit scene true
+only two are kept, the newest first true
+each scene has buffers of its own true
+-- back to a kept zoom
+sharp on the first frame: true true
+as a full repaint: true
+the scene left is kept in turn true
+-- one that was not kept is made again, a little each frame
+busy: true
+frames: true as a full repaint: true
+-- an edit drops them
+there are some: true
+none left: true
+busy:  true
+as a full repaint: true
+-- an edit while the kept scene is waiting to be shown
+sharp, as a full repaint: true
+the picture has the edit: true
