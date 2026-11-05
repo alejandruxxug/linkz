@@ -1,10 +1,41 @@
-# Linkz 🦎
+<p align="center">
+  <img src="docs/Readme/icon.png" width="128" alt="Linkz icon: a lizard holding a paintbrush in its teeth">
+</p>
 
-*lizard inkz*
+<h1 align="center">Linkz 🦎</h1>
+
+<p align="center"><i>lizard inkz</i> · a vector art app where <b>the drawing is code</b></p>
+
+<p align="center">
+  <a href="https://github.com/alejandruxxug/linkz/releases/latest"><img src="https://img.shields.io/github/v/release/alejandruxxug/linkz?include_prereleases&label=download&color=3fa34d" alt="Download"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-e0a526" alt="MIT license"></a>
+  <a href="https://github.com/alejandruxxug/lizard-script"><img src="https://img.shields.io/badge/written%20in-lizard--script-6f5bd8" alt="Written in lizard-script"></a>
+  <img src="https://img.shields.io/badge/macOS%20·%20Windows%20·%20Linux-1d1d1f" alt="macOS, Windows, Linux">
+</p>
+
+<p align="center">
+  <a href="#install">Install</a> ·
+  <a href="#what-it-does">Features</a> ·
+  <a href="#gallery">Gallery</a> ·
+  <a href="#try-it">Run from source</a> ·
+  <a href="docs/Linkz.md">Docs</a>
+</p>
 
 ![Linkz](docs/Art/Previews/banner-final-dark-3x.png)
 
-A vector art app where **the drawing is code**. Every shape you draw, drag or recolor is a line of [lizard-script](https://github.com/alejandruxxug/lizard-script), and every line of code is a shape you can grab. Linkz itself is written entirely in lizard-script too: the editor, the rasterizer, the SVG writer, the image tracer and the app around them, run by `lizardscript`.
+Every shape you draw, drag or recolor is a line of [lizard-script](https://github.com/alejandruxxug/lizard-script), and every line of code is a shape you can grab. Linkz itself is written entirely in lizard-script too: the editor, the rasterizer, the SVG writer, the image tracer and the app around them, run by `lizardscript`.
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/Readme/coder-mode.png" alt="Coder mode: the code is the layers panel"><br><sub><b>Coder mode</b>: the code <i>is</i> the layers panel</sub></td>
+    <td width="50%"><img src="docs/Readme/artist-mode.png" alt="Artist mode with layers and a color picker"><br><sub><b>Artist mode</b>: layers, blend modes, colors</sub></td>
+  </tr>
+  <tr>
+    <td colspan="2"><img src="docs/Readme/brush-creator.png" alt="The brush creator"><br><sub><b>Brush creator</b>: every slider writes the brush's code</sub></td>
+  </tr>
+</table>
+
+A whole drawing is a short program:
 
 ```
 -~> lzdraw 1
@@ -30,6 +61,19 @@ line((20, 100), (380, 100), #1d1d1f, 2)
 - **Zoom** to 3200% without freezing, **export** PNG at any size and SVG.
 - **Agents can draw:** `linkz mcp` speaks the Model Context Protocol, so an AI agent draws by writing lizard-script.
 - English and Spanish.
+
+## Gallery
+
+Drawn in Linkz. Each picture is the SVG Linkz wrote, and the link under it is the drawing's code.
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/Gallery/dune.svg" alt="Dune: sand dunes under a sky gradient"><br><sub><b>Dune</b> · <a href="docs/Gallery/dune.lzdraw">dune.lzdraw</a></sub></td>
+    <td width="50%"><img src="docs/Gallery/purple-hair.svg" alt="A girl with purple hair"><br><sub><b>Purple hair</b> · <a href="docs/Gallery/purple-hair.lzdraw">purple-hair.lzdraw</a></sub></td>
+  </tr>
+</table>
+
+More to play with in [examples/](examples/).
 
 ## Install
 
