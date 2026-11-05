@@ -2,4 +2,4 @@
 -~> machine.liz), since the drawing code may have got faster or slower.
 -~> Release builds write it here.
 
-let linkz_version = "0.1.0"
+let linkz_version = "1.0.0"

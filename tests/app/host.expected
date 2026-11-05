@@ -4,7 +4,7 @@ b.lzdraw $DIR/b.lzdraw 23 INTEGER
 3 []
 2d711642b726b044 true true
 a/b/c a/b /
-~/.linkz true 0.1.0
+~/.linkz true 1.0.0
 -- clock
 FLOAT true true
 -- events
