@@ -18,6 +18,9 @@
 -~> Options:
 -~>   --mode lineart|photo   the tracer's mode (lineart by default; photo
 -~>                          traces at 256 px, its own default size).
+-~>   --set key=value        a tracer option instead of its default (value is
+-~>                          JSON: --set colors=32 --set detail=0.4); max_side
+-~>                          also sets the size the picture is loaded at.
 -~>   --json                 print the result as JSON on stdout instead of the
 -~>                          table (progress and the table go to stderr).
 -~>   --masks DIR            save the ink masks of every picture there to look at.
@@ -265,14 +268,17 @@ function score_save_masks(dir, name, size, a, b) {
 
 -~> Scores one picture: {"image", "err", "iou", "fills", "strokes", "bytes",
 -~> "ms"}.
-function score_one(path, mode, masks) {
+function score_one(path, mode, masks, set = {}) {
   let side = 1024
   if (mode == "photo") {
     side = 256
   }
+  if (set.max_side !== null) {
+    side = set.max_side
+  }
   let loaded = host_img().load(path, side)
   let size = loaded.size
-  let t = trace_pixels(size, loaded.pixels, {"mode": mode}, path)
+  let t = trace_pixels(size, loaded.pixels, hash.merge({"mode": mode}, set), path)
   let run = drawing_run(t.code)
   let bg = run.canvas.background
   let buf = paint_run(t.code + "\nraster.paint(drawing, (0, 0))\n", size)
@@ -439,6 +445,7 @@ function score_main(args) {
   let md_file = null
   let compare = null
   let masks = null
+  let set = {}
   let images = []
   let i = 0
   while (i < len(args)) {
@@ -459,6 +466,10 @@ function score_main(args) {
       i += 1
     } elif (a == "--compare") {
       compare = args[i + 1]
+      i += 1
+    } elif (a == "--set") {
+      let kv = text.split(args[i + 1], "=")
+      set[kv[0]] = json.parse(kv[1])
       i += 1
     } elif (text.slice(a, 0, 2) == "--") {
       io.error("unknown option " + a + "\n")
@@ -482,7 +493,7 @@ function score_main(args) {
   let rows = []
   for (let k = 0; k < len(images); k += 1) {
     io.error("[" + str(k + 1) + "/" + str(len(images)) + "] " + images[k] + " ...\n")
-    let row = score_one(images[k], mode, masks)
+    let row = score_one(images[k], mode, masks, set)
     io.error("    err " + str(row.err) + " iou " + str(row.iou) + " " + str(row.ms) + " ms\n")
     push(rows, row)
   }
