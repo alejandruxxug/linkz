@@ -1,0 +1,130 @@
+-~> A new zoom does not freeze the editor (lib/ui/view_scene_zoom.liz): the frame
+-~> after the change shows the old picture scaled and the scene for the new zoom is
+-~> made a little each frame, the tiles nearest the pointer first. Checked on the 2k
+-~> fixture: the first frame is still the old scene (hit-testing works on it), the
+-~> picture ends up the very pixels a fresh editor paints at that zoom, also after
+-~> an edit or a pan in the middle of it, a zoom in the middle of it, and tiles
+-~> are painted nearest first.
+
+use "../../lib/app/libs"
+use "rig"
+
+let dir = fs.join(fs.home(), "zoom-refine-test")
+let code = fs.read(fs.join(libs_root(), "docs", "Batches", "fixtures", "shapes-2k.lzdraw"))
+let modules = rig_modules + ["ui/view_panels", "ui/canvas_zoom", "ui/view_scene_zoom", "ui/view_canvas", "ui/view_scene"]
+let rig = rig_open(fs.join(dir, "a"), code, (800, 500), modules)
+let n = rig.names
+
+-~> Frames until the picture is sharp; how many it took (a cap stops a loop that never ends).
+function settle(r) {
+  let frames = 0
+  while (r.names.zoom_busy() && frames < 2000) {
+    rig_frame(r)
+    frames += 1
+  }
+  frames
+}
+
+function canvas_shot(r) {
+  rig_shot(r, r.names.view_canvas_layout().crect)
+}
+
+-~> The canvas as it shows, then as a full repaint paints it: the same pixels.
+function same_as_repaint() {
+  let shown = canvas_shot(rig)
+  n.tiles_mark_all(n.V.scene.tiles)
+  n.view_force_all()
+  n.app.needs_paint = true
+  rig_frame(rig)
+  shown == canvas_shot(rig)
+}
+
+-~> A drawing point on screen near the middle of the canvas, as UI pixels.
+function middle() {
+  n.canvas_zoom_centre()
+}
+
+-~> How many different colors the canvas has on a grid of points (0 for a blank one).
+function colors_shown(r) {
+  let shot = window.screenshot(r.win, {"full": true})
+  let cr = r.names.view_canvas_layout().crect
+  let seen = {}
+  for (let i = 1; i < 20; i += 1) {
+    for (let j = 1; j < 20; j += 1) {
+      seen[str(img.get(shot, (cr[0] + cr[2] * i // 20) * 2, (cr[1] + cr[3] * j // 20) * 2))] = true
+    }
+  }
+  len(keys(seen))
+}
+
+puts("-- a new zoom: the first frame keeps the old scene")
+let old_zoom = n.V.scene.zoom
+let before = n.view_hit_shape(n.view_canvas_layout(), n.view_to_drawing(n.view_canvas_layout(), middle().x, middle().y))
+n.canvas_zoom_set(4.0, middle())
+rig_frame(rig)
+puts(n.zoom_busy(), n.V.scene.zoom == old_zoom, n.view_canvas_layout().zoom)
+puts("the old picture shows scaled:", colors_shown(rig) > 3)
+let during = n.view_hit_shape(n.view_canvas_layout(), n.view_to_drawing(n.view_canvas_layout(), middle().x, middle().y))
+puts("hit-testing meanwhile finds the same shape:", (before == null && during == null) || (before != null && during != null && before.line == during.line))
+let frames = settle(rig)
+puts("several frames:", frames > 1, "busy:", n.zoom_busy(), "scene at the zoom:", n.V.scene.zoom == n.view_canvas_layout().zoom)
+puts("sharp, as a full repaint:", same_as_repaint())
+
+puts("-- an edit in the middle of it")
+n.canvas_zoom_set(16.0, middle())
+rig_frame(rig)
+n.ed_select(5)
+n.ed_set_prop("r", "25")
+n.view_after()
+rig_frame(rig)
+puts("busy:", n.zoom_busy(), "old scene has the edit:", n.V.scene.ver == n.ed.shapes_ver)
+puts("frames:", settle(rig) > 1, "busy:", n.zoom_busy())
+puts("sharp, as a full repaint:", same_as_repaint())
+let edited = text.join(n.ed_model().lines, "\n")
+let fresh = rig_open(fs.join(dir, "fresh"), edited, (800, 500), modules)
+fresh.names.canvas_zoom_set(4.0, fresh.names.canvas_zoom_centre())
+fresh.names.canvas_zoom_set(16.0, fresh.names.canvas_zoom_centre())
+fresh.names.ed_select(5)
+fresh.names.view_after()
+rig_frame(fresh)
+settle(fresh)
+puts("as a fresh editor on the edited code:", canvas_shot(rig) == canvas_shot(fresh))
+
+puts("-- a pan in the middle of it")
+n.canvas_zoom_set(4.0, middle())
+rig_frame(rig)
+n.canvas_pan_by(-200, -100)
+rig_frame(rig)
+puts("busy:", n.zoom_busy())
+settle(rig)
+puts("sharp, as a full repaint:", same_as_repaint())
+
+puts("-- a pan and another zoom in the middle of it")
+n.canvas_zoom_set(4.0, middle())
+rig_frame(rig)
+n.canvas_pan_by(-200, -100)
+rig_frame(rig)
+n.canvas_zoom_set(8.0, middle())
+rig_frame(rig)
+puts("busy:", n.zoom_busy())
+settle(rig)
+puts("scene at the zoom:", n.V.scene.zoom == n.view_canvas_layout().zoom, "sharp, as a full repaint:", same_as_repaint())
+
+puts("-- back to the zoom the scene is for")
+n.canvas_zoom_set(2.0, middle())
+rig_frame(rig)
+puts("busy:", n.zoom_busy())
+n.canvas_zoom_set(8.0, middle())
+rig_frame(rig)
+puts("busy:", n.zoom_busy(), "sharp:", same_as_repaint())
+
+puts("-- tiles nearest the point come first")
+let t = n.tiles_new("near", (64, 64), 16)
+n.tiles_set_view(t, [0, 0, 64, 64])
+let order = []
+let left = 99
+while (left > 0 && len(order) < 20) {
+  left = n.tiles_render_near(t, function(box, _o) { push(order, [box[0] // 16, box[1] // 16]) }, (60, 60), 0)
+}
+puts(order[0], order[1], order[2], len(order), left)
+puts("nothing left to paint:", n.tiles_render_near(t, function(_box, _o) { push(order, 0) }, (0, 0), 0), len(order))

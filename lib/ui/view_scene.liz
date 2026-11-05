@@ -9,7 +9,9 @@
 -~>     (rerun_region moved their lines)
 -~>   any other run is lined up with the last one: shapes that paint the same
 -~>     pixels keep their entry (and their spans), the others mark their boxes
--~>   a new zoom, canvas size or background starts over
+-~>   a new canvas size or background starts over
+-~>   a new zoom builds a second scene at the new zoom a little each frame, while this
+-~>     one stays on screen scaled (view_scene_zoom.liz)
 -~> An entry is {"id" (its key in the index), "j" (its place in the paint
 -~> order), "shape" (scaled to the zoom), "src" (the shape of the run), "box"
 -~> (canvas pixels, with a margin for the stroke and the soft edge), "ops"
@@ -27,6 +29,7 @@ use "editor_rows"
 use "editor_undo"
 use "view_canvas"
 use "view_layout"
+use "view_scene_zoom"
 use "view_tools"
 
 let scene_tile = 256
@@ -189,7 +192,7 @@ function scene_entries_in(sc, box) {
 
 -~> == Keeping up with the editor ==
 
-function scene_new(cl, rows) {
+function scene_new(cl, rows, lazy = false) {
   let sc = {
     "zoom": cl.zoom,
     "size": (cl.sw, cl.sh),
@@ -199,6 +202,7 @@ function scene_new(cl, rows) {
     "list": [],
     "pos": [],
     "lite": null,
+    "build": null,
     "next_id": 0,
     "byid": {},
     "index": spatial_new(scene_cell),
@@ -206,22 +210,74 @@ function scene_new(cl, rows) {
   }
   -~> only the part of the drawing on screen is kept as pixels (tiles.liz)
   tiles_set_view(sc.tiles, cl.vis)
+  if (lazy) {
+    -~> the entries are made a few at a time (scene_build_step)
+    scene_build_start(sc, rows)
+    return sc
+  }
   scene_rebuild(sc, rows)
   -~> every tile is unpainted, which counts as dirty: the marks are not needed
   sc.tiles.regions = []
   sc
 }
 
+-~> Starts making the entries of a scene a few at a time: sc.build holds the shapes
+-~> left, in paint order, and the next place.
+function scene_build_start(sc, rows) {
+  let ordered = scene_shapes(sc, rows)
+  sc.build = {"srcs": ordered[0], "next": 0}
+  sc.pos = ordered[1]
+}
+
+-~> Makes entries until time.ms() reaches `until` (at least one). Gives true once
+-~> the scene has all of them.
+function scene_build_step(sc, until) {
+  let b = sc.build
+  if (b === null) {
+    return true
+  }
+  let n = len(b.srcs)
+  let list = sc.list
+  while (b.next < n && (b.next == 0 || time.ms() < until)) {
+    push(list, scene_entry(sc, b.srcs[b.next], b.next))
+    b.next += 1
+  }
+  if (b.next < n) {
+    return false
+  }
+  -~> every tile is unpainted, which counts as dirty: the marks are not needed
+  sc.tiles.regions = []
+  sc.build = null
+  true
+}
+
 -~> Brings the scene up to the editor's shapes, rows and zoom, marking what
--~> must be repainted. Painting and hit-testing call it first.
+-~> must be repainted. Painting and hit-testing call it first. Once the zoom changed
+-~> it gives the scene of the old zoom (its sc.zoom says so) until the one for the
+-~> new zoom is ready (view_scene_zoom.liz).
 function scene_sync(cl) {
   let rows = view_rows()
   let sc = V.scene
-  if (sc == null || sc.zoom != cl.zoom || sc.size != (cl.sw, cl.sh) || sc.bg != ed.canvas.background) {
+  if (sc == null || sc.bg != ed.canvas.background) {
+    zoom_cancel()
+    V.scene = scene_new(cl, rows)
+    return V.scene
+  }
+  if (sc.zoom != cl.zoom) {
+    return scene_sync_zoom(sc, cl, rows)
+  }
+  zoom_cancel()
+  if (sc.size != (cl.sw, cl.sh)) {
     V.scene = scene_new(cl, rows)
     return V.scene
   }
   tiles_set_view(sc.tiles, cl.vis)
+  scene_sync_edits(sc, rows)
+  sc
+}
+
+-~> The scene follows the editor's shapes and rows (not its view).
+function scene_sync_edits(sc, rows) {
   let hidden = scene_hidden_key(rows)
   if (sc.ver != ed.shapes_ver || sc.hidden != hidden) {
     let p = ed.patch
@@ -239,7 +295,6 @@ function scene_sync(cl) {
     sc.ver = ed.shapes_ver
   }
   scene_sync_lite(sc)
-  sc
 }
 
 -~> Where shape i of the run is in the paint order, or -1 (hidden). sc.pos
@@ -296,6 +351,14 @@ function scene_patch_range(sc, p) {
 -~> put in or changed marks its box. A pixel outside every marked box is
 -~> covered by the same shapes, in the same order, as before.
 function scene_rebuild(sc, rows) {
+  let ordered = scene_shapes(sc, rows)
+  sc.list = scene_line_up(sc, sc.list, ordered[0], 0)
+  sc.pos = ordered[1]
+}
+
+-~> The editor's shapes in paint order, and where each one is in it (null when
+-~> that is just the shapes backwards, see scene_pos): [shapes, pos].
+function scene_shapes(sc, rows) {
   let shapes = ed.shapes
   let ordered = scene_order(shapes, rows, sc.hidden)
   let order = ordered[0]
@@ -308,11 +371,10 @@ function scene_rebuild(sc, rows) {
     pos[order[b]] = b
     push(srcs, shapes[order[b]])
   }
-  sc.list = scene_line_up(sc, sc.list, srcs, 0)
-  sc.pos = pos
   if (ordered[1]) {
-    sc.pos = null
+    pos = null
   }
+  [srcs, pos]
 }
 
 -~> The entries for the shapes srcs (in paint order, the first one at place

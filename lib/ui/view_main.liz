@@ -17,6 +17,7 @@ use "layer_card"
 use "layer_iso"
 use "mode_state"
 use "view_canvas"
+use "view_scene_zoom"
 use "view_cursor"
 use "view_gfx"
 use "view_input"
@@ -181,7 +182,7 @@ function view_paint() {
   tr_after_paint()
   V.paints = V.paints + 1
   V.painted_ms = time.ms() - t0
-  if (V.tip_due == 0 && LC.hide_due == 0 && !ed_note_active() && !route_wants_tick() && !tr_wants_paint()) {
+  if (V.tip_due == 0 && LC.hide_due == 0 && !ed_note_active() && !route_wants_tick() && !tr_wants_paint() && !zoom_busy()) {
     app.needs_paint = false
   }
 }

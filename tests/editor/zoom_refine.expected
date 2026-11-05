@@ -1,0 +1,23 @@
+-- a new zoom: the first frame keeps the old scene
+true true 4.0
+the old picture shows scaled: true
+hit-testing meanwhile finds the same shape: true
+several frames: true busy: false scene at the zoom: true
+sharp, as a full repaint: true
+-- an edit in the middle of it
+busy: true old scene has the edit: true
+frames: true busy: false
+sharp, as a full repaint: true
+as a fresh editor on the edited code: true
+-- a pan in the middle of it
+busy: true
+sharp, as a full repaint: true
+-- a pan and another zoom in the middle of it
+busy: true
+scene at the zoom: true sharp, as a full repaint: true
+-- back to the zoom the scene is for
+busy: true
+busy: false sharp: true
+-- tiles nearest the point come first
+[3, 3] [3, 2] [2, 3] 16 0
+nothing left to paint: 0 16

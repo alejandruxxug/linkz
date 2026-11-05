@@ -5,6 +5,9 @@
 -~> drag, property scrub in the context bar and layer row reorder. Run it alone to see the
 -~> table: lizardscript tests/editor/editor_bench.liz [rounds]
 -~> (lizardscript test --bench runs it as part of the tests, once each).
+-~> A zoom change shows the old picture scaled at once and becomes sharp a few
+-~> frames later: "_set" is the first frame after the change, "_sharp" the frames
+-~> until the picture is sharp.
 
 use "../../lib/app/libs"
 use "../../lib/app/paint"
@@ -56,8 +59,23 @@ function bench(rig, name, f, undo = null) {
   }
 }
 
+-~> Runs frames until the scene for the new zoom is ready (the picture is sharp, see
+-~> view_scene_zoom.liz) and reports how many it took and how long they all took.
+function sharp(rig, name) {
+  let frames = 0
+  let start = time.ms()
+  let worst = 0
+  while (rig.names.zoom_busy() && frames < 5000) {
+    let t = time.ms()
+    rig_frame(rig)
+    worst = math.max(worst, time.ms() - t)
+    frames += 1
+  }
+  puts(name, str(frames) + " frames", str(math.round(time.ms() - start)) + " ms", "(slowest frame " + str(math.round(worst * 10) / 10.0) + " ms)")
+}
+
 -~> The modules the artist cases reach into, besides the rig's.
-let bench_modules = rig_modules + ["ui/artist_route", "ui/artist_layers", "ui/view_panels", "ui/view_canvas", "ui/canvas_zoom"]
+let bench_modules = rig_modules + ["ui/artist_route", "ui/artist_layers", "ui/view_panels", "ui/view_canvas", "ui/canvas_zoom", "ui/view_scene_zoom"]
 
 let sizes = [2000, 10000]
 for (let s = 0; s < len(sizes); s += 1) {
@@ -87,6 +105,7 @@ for (let s = 0; s < len(sizes); s += 1) {
       n.canvas_zoom_set(steps[z][1], n.canvas_zoom_centre())
       []
     })
+    sharp(rig, k + steps[z][0] + "_sharp")
     bench(rig, k + steps[z][0] + "_pan", function(_i) {
       let before = n.view_canvas_layout().wx
       n.canvas_pan_by(-48 * dir, -20 * dir)
@@ -98,6 +117,7 @@ for (let s = 0; s < len(sizes); s += 1) {
   }
   n.canvas_zoom_fit()
   rig_frame(rig)
+  sharp(rig, k + "fit_sharp")
 
   n.ed_select(first_shape)
   n.view_after()
@@ -180,6 +200,8 @@ for (let s = 0; s < len(sizes); s += 1) {
   n.ed_select(first_shape)
   n.view_after()
   rig_frame(rig)
+  -~> the layout changed, so did the fit zoom: let the picture become sharp
+  sharp(rig, k + "artist_sharp")
   bench(rig, k + "artist_repaint", function(_i) {
     if (n.V.scene != null) {
       n.tiles_mark_all(n.V.scene.tiles)
@@ -230,6 +252,7 @@ for (let s = 0; s < len(sizes); s += 1) {
   }, undo)
   n.art_set_mode(false)
   rig_frame(rig)
+  sharp(rig, k + "back_sharp")
 }
 
 -~> a stamped brush stroke: 300 points, about 2000 stamps (lib/gfx/tests/stamped_bench.liz)

@@ -1,0 +1,145 @@
+-~> view_scene_zoom: a new zoom without a freeze. The scene (view_scene.liz) is
+-~> made for one zoom, and making the one for another costs from a few hundred
+-~> milliseconds to over a second on a big drawing. So when the zoom changes the
+-~> scene of the old zoom stays (V.scene) and is shown scaled, at once (zoom_placeholder:
+-~> its tiles scaled to the new zoom), while a second scene for the new zoom is made
+-~> in V.refine, a little each frame:
+-~>   1. its entries, a few at a time (scene_build_step)
+-~>   2. its tiles in view, the ones nearest the pointer first (tiles_render_near)
+-~> Each frame spends about zoom_budget_ms on it and asks for another frame
+-~> (app.needs_paint) until the scene is ready; then it takes the old one's place.
+-~> What happens meanwhile:
+-~>   panning       the tiles follow the view; the ones now in view are made next
+-~>   another zoom  the scene being made is dropped and a new one started; the
+-~>                 old scene is still the picture shown
+-~>   an edit       the old scene takes it as it always does (so the picture shown is
+-~>                 right) and the scene being made is dropped and started again
+-~>   hit-testing   uses the old scene, which knows its own zoom (sc.zoom)
+-~>   no old scene, a new background or canvas size: the scene is made at once
+-~>
+-~>   zoom_cancel()                   drops the scene being made
+-~>   scene_sync_zoom(sc, cl, rows)   scene_sync's part for a zoom change: gives the old scene
+-~>   scene_show(cl, off)             the scene on the canvas buffer, whole or as far as it got
+-~>   zoom_busy()                     whether a scene is being made
+-~>   zoom_key()                      changes every frame while one is being made, for the canvas panel's key
+
+use "../gfx/tiles"
+use "app"
+use "view_layout"
+use "view_scene"
+
+-~> About how long (ms) each frame works on the new scene.
+let zoom_budget_ms = 8
+
+function zoom_cancel() {
+  V.refine = null
+}
+
+function zoom_busy() {
+  V.refine != null
+}
+
+-~> What the canvas panel's key adds: the number of the frame while a scene is being
+-~> made, so that every frame of that work is painted.
+function zoom_key() {
+  if (V.refine == null) {
+    return ""
+  }
+  str(V.paints)
+}
+
+-~> The old scene `sc` follows the editor, and the scene for cl's zoom is started
+-~> (or started again if what it was made from changed). Gives sc.
+function scene_sync_zoom(sc, cl, rows) {
+  scene_sync_edits(sc, rows)
+  let r = V.refine
+  if (r == null || r.zoom != cl.zoom || r.size != (cl.sw, cl.sh) || r.ver != sc.ver || r.hidden != sc.hidden) {
+    V.refine = {
+      "scene": scene_new(cl, rows, true),
+      "zoom": cl.zoom,
+      "size": (cl.sw, cl.sh),
+      "ver": sc.ver,
+      "hidden": sc.hidden
+    }
+  }
+  sc
+}
+
+-~> The point of the new picture (pixels at the new zoom) the pointer is over, or
+-~> the middle of the part in view.
+function zoom_focus(cl) {
+  let m = V.mouse
+  if (m != null && view_in_canvas(m.x, m.y)) {
+    return (m.x * 2 - cl.wx, m.y * 2 - cl.wy)
+  }
+  ((cl.vis[0] + cl.vis[2]) / 2.0, (cl.vis[1] + cl.vis[3]) / 2.0)
+}
+
+-~> Works on the new scene for about zoom_budget_ms. When it is ready it takes the
+-~> old one's place.
+function zoom_step(cl) {
+  let r = V.refine
+  if (r == null) {
+    return null
+  }
+  let s = r.scene
+  let until = time.ms() + zoom_budget_ms
+  tiles_set_view(s.tiles, cl.vis)
+  if (!scene_build_step(s, until)) {
+    app.needs_paint = true
+    return null
+  }
+  let left = tiles_render_near(s.tiles, function(box, o) { scene_paint_box(s, box, o) }, zoom_focus(cl), until)
+  if (left > 0) {
+    app.needs_paint = true
+    return null
+  }
+  V.scene = s
+  V.refine = null
+}
+
+-~> The tiles of the old scene `sc`, scaled to the zoom of cl, at the drawing's
+-~> place `off` in the canvas buffer. A tile's edges are rounded to whole pixels
+-~> (the next tile starts where this one ends) so no seam shows; the tiles outside
+-~> the buffer are not drawn.
+function zoom_placeholder(sc, cl, off) {
+  let k = cl.zoom / sc.zoom
+  let ck = cl.clip
+  let t = sc.tiles
+  let c = tiles_view_cells(t)
+  for (let row = c[1]; row < c[3]; row += 1) {
+    for (let col = c[0]; col < c[2]; col += 1) {
+      let key = tiles_key(t, col, row)
+      if (t.made[key] != true) {
+        continue
+      }
+      let r = tiles_rect(t, col, row)
+      let x0 = math.floor(r[0] * k) + off.x
+      let y0 = math.floor(r[1] * k) + off.y
+      let x1 = math.floor(r[2] * k) + off.x
+      let y1 = math.floor(r[3] * k) + off.y
+      if (x1 <= ck[0] || x0 >= ck[2] || y1 <= ck[1] || y0 >= ck[3]) {
+        continue
+      }
+      -~> the larger of the two scales, so a rounded edge never leaves a gap
+      let w = r[2] - r[0]
+      let h = r[3] - r[1]
+      let scale = math.max((x1 - x0) / float(w), (y1 - y0) / float(h))
+      fb.blit(tiles_buffer(t, key), (x0, y0), (math.ceil(w * scale), math.ceil(h * scale)))
+    }
+  }
+}
+
+-~> The drawing on the canvas buffer: the scene of the zoom when it is ready,
+-~> else the old scene scaled with the tiles made so far over it. Works on the new
+-~> scene first (zoom_step).
+function scene_show(cl, off) {
+  let sc = scene_sync(cl)
+  zoom_step(cl)
+  if (V.refine == null) {
+    return scene_paint(V.scene, off)
+  }
+  scene_render(sc)
+  zoom_placeholder(sc, cl, off)
+  tiles_blit(V.refine.scene.tiles, off)
+}

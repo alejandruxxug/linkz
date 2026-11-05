@@ -96,7 +96,7 @@ function select_handle_at(cl, ux, uy) {
 -~> are inside a drawing box (`touch`: that touch it). Returns their lines.
 function select_lines_in(cl, lo, hi, touch) {
   let sc = scene_sync(cl)
-  let k = cl.zoom
+  let k = sc.zoom
   let found = scene_entries_in(sc, [lo.x * k, lo.y * k, hi.x * k, hi.y * k])
   let rows = view_rows()
   let seen = {}

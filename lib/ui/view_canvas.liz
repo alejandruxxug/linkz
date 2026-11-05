@@ -20,6 +20,7 @@ use "tool_route"
 use "view_gfx"
 use "view_layout"
 use "view_scene"
+use "view_scene_zoom"
 use "view_tools"
 use "overlay_rules"
 
@@ -286,7 +287,7 @@ function view_canvas_key() {
     anchor = str(V.hover_anchor.line) + "." + str(V.hover_anchor.i) + "." + str(V.hover_anchor.anchor)
   }
   str(V.run_id) + "|" + str(ed.runs) + "|" + sel + "|" + str(ed.stale) + "|" + str(len(ed.errors)) + "|" + anchor + "|" + str(cl.zoom) + "|" + str(cl.wx) + "," + str(cl.wy) + "|" +
-    str(cl.crect) + "|" + str(V.live_n) + str(V.sel_anchor) + "|" + str(V.w) + "x" + str(V.h) + "|" + str(V.pw) + "|" + str(ed_canvas_size()) + "|" + route_canvas_key() + "|" + str(V.tool == "brush") + "|" + iso_key()
+    str(cl.crect) + "|" + str(V.live_n) + str(V.sel_anchor) + "|" + str(V.w) + "x" + str(V.h) + "|" + str(V.pw) + "|" + str(ed_canvas_size()) + "|" + route_canvas_key() + "|" + str(V.tool == "brush") + "|" + iso_key() + "|" + zoom_key()
 }
 
 function view_paint_canvas_ui(cl) {
@@ -385,14 +386,16 @@ function view_paint_canvas_now(forced) {
   let key = view_canvas_layout_key(cl)
   let last = V.canvas_last
   let live = V.live != null
+  let busy = zoom_busy()
   let overlay = view_overlay_box(cl)
   let part = null
-  if (!forced && !live && last != null && !last.live && last.key == key) {
+  -~> while a scene for a new zoom is being made, every frame paints the whole panel
+  if (!forced && !live && !busy && last != null && !last.live && !last.busy && last.key == key) {
     part = view_paint_canvas_part(cl, last.overlay, overlay)
   } else {
     view_paint_canvas_all(cl)
   }
-  V.canvas_last = {"key": key, "live": live, "overlay": overlay}
+  V.canvas_last = {"key": key, "live": live, "busy": busy, "overlay": overlay}
   part
 }
 
@@ -406,12 +409,11 @@ function view_paint_canvas_all(cl) {
   V.host_origin = (cr[0], cr[1])
   g_canvas((cr[0], cr[1]))
   fb.unclip()
-  let sc = scene_sync(cl)
   fb.clear((0, 0), (cr[2] * 2, cr[3] * 2))
   let off = cl.offset
   let ck = cl.clip
   fb.clip((ck[0], ck[1]), (ck[2] - ck[0], ck[3] - ck[1]))
-  scene_paint(sc, off)
+  scene_show(cl, off)
   iso_paint(cl, off)
   view_tools_paint(cl, off)
   if (ed.stale && len(ed.errors) > 0) {

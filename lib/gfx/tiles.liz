@@ -23,6 +23,11 @@
 -~> painted and is in view counts as dirty, and tiles_blit draws only the tiles in
 -~> view. Tiles far from the view are given up (tiles_evict), so the memory held
 -~> follows the screen, not the picture.
+-~> tiles_render_near(t, paint, at, until)   the same for a picture whose tiles are all
+-~>                                 still unpainted (a new zoom): paints the tiles in
+-~>                                 view one by one, the ones nearest the picture point
+-~>                                 `at` first, and stops once time.ms() reaches `until`
+-~>                                 (after at least one tile). Gives how many are left
 -~> After tiles_render, t.painted is how many tiles it repainted, t.regions_painted
 -~> how many regions, t.area how many pixels and t.box the box around them all
 -~> (null when nothing was dirty).
@@ -303,6 +308,52 @@ function tiles_render(t, paint) {
     tiles_evict(t)
   }
   null
+}
+
+-~> The tiles in view that were never painted, nearest to the picture point `at`
+-~> first, as tile numbers.
+function tiles_unmade_near(t, at) {
+  let c = tiles_view_cells(t)
+  let found = []
+  for (let row = c[1]; row < c[3]; row += 1) {
+    for (let col = c[0]; col < c[2]; col += 1) {
+      let k = tiles_key(t, col, row)
+      if (t.made[k] != true) {
+        let r = tiles_rect(t, col, row)
+        push(found, [math.dist(at, ((r[0] + r[2]) / 2.0, (r[1] + r[3]) / 2.0)), k])
+      }
+    }
+  }
+  let sorted = list.sort(found, function(a, b) { a[0] < b[0] })
+  let out = []
+  for (let i = 0; i < len(sorted); i += 1) {
+    push(out, sorted[i][1])
+  }
+  out
+}
+
+function tiles_render_near(t, paint, at, until) {
+  t.painted = 0
+  t.regions_painted = 0
+  t.area = 0
+  t.box = null
+  let todo = tiles_unmade_near(t, at)
+  let done = 0
+  while (done < len(todo) && (done == 0 || time.ms() < until)) {
+    let k = todo[done]
+    let box = tiles_rect(t, k % t.cols, k // t.cols)
+    fb.offscreen((box[2] - box[0], box[3] - box[1]))
+    paint(box, -(box[0], box[1]))
+    fb.keep(tiles_buffer(t, k))
+    t.made[k] = true
+    t.painted += 1
+    t.regions_painted += 1
+    t.area += tiles_area(box)
+    t.box = tiles_union(t.box, box)
+    done += 1
+  }
+  tiles_evict(t)
+  len(todo) - done
 }
 
 function tiles_region_buffer(t, i) {
