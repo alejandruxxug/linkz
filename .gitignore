@@ -10,3 +10,5 @@ __pycache__/
 .claude/worktrees/
 __pycache__/
 *.pyc
+# The README gallery shows the SVGs Linkz wrote.
+!docs/Gallery/*.svg
