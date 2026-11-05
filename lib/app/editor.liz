@@ -75,7 +75,7 @@ function editor_load(win, path, settings, machine, modules = editor_modules, sta
   })
   -~> The tracer (lib/trace) for the Trace image dialog, loaded when it is asked for.
   around.linkz.trace_engine = function() {
-    libs_load(libs_draw + libs_trace + ["trace/lineart"], {"img": around.img, "time": around.time})
+    libs_load(libs_draw + libs_trace + ["trace/lineart", "trace/trace_quality"], {"img": around.img, "time": around.time})
   }
   around.src.run = function(code) {
     let r = drawing_run(code)

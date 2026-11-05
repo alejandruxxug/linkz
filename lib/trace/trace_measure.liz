@@ -1,0 +1,229 @@
+-~> trace_measure: how close a trace is to its picture. The yardstick of
+-~> tools/trace_score.liz and of the Auto quality (trace_auto): the traced
+-~> code is drawn at the picture's size and compared with the picture on two
+-~> numbers:
+-~>   err   the mean color error: |dR|+|dG|+|dB| / 3 over every pixel
+-~>         (0 to 255), original against the drawing.
+-~>   iou   ink IoU: the ink of the original and the ink of the drawing,
+-~>         overlap over union (1 is the same lines in the same places).
+-~>
+-~> THE INK RULE. "Ink" of a picture is decided by one fixed rule, the same
+-~> for the original and for the drawing, and written here so the tracer can
+-~> change without moving the yardstick (it is not the tracer's own mask, and
+-~> not the frozen one from before B062, which sees no ink in blue lines):
+-~>   1. Paper: the picture is cut into cells of `cell` pixels (the longer
+-~>      side / 128, at least 4). The paper of a cell is its lightest pixel
+-~>      (by r+g+b), and the paper of a pixel is the lightest paper among its
+-~>      cell and the 8 around it. So a colored line on white has white paper
+-~>      and a line on a pale tint has the tint.
+-~>   2. Far: a pixel is far when its CIE Lab distance from its paper is 25
+-~>      or more. That is how a blue, red or gray line on white qualifies; a
+-~>      pale shadow (distance under 25) does not.
+-~>   3. Thin: a far pixel is ink only when its run of far pixels, along the
+-~>      row or along the column, is at most `thin` pixels (the longer side
+-~>      / 100, at least 5). Wide dark areas (hair, a navy skirt) are fills,
+-~>      not ink; a line is thin on at least one axis whatever its slope.
+-~> The Lab here is D65 Lab with gamma 2 for the linear light, written out in
+-~> this file (distances are within a few percent of exact sRGB).
+
+use "../app/drawing"
+use "../app/paint"
+
+let measure_far = 25.0
+
+-~> The cube root of t, by Newton steps (t from 0 to 1.1).
+function measure_cbrt(t) {
+  if (t <= 0.0) {
+    return 0.0
+  }
+  let x = 0.7
+  for (let k = 0; k < 8; k += 1) {
+    x = (2.0 * x + t / (x * x)) / 3.0
+  }
+  x
+}
+
+-~> One channel (0 to 255) as linear light, with gamma 2 (close to sRGB).
+function measure_linear(v) {
+  let c = v / 255.0
+  c * c
+}
+
+-~> The Lab color [L, a, b] of an r, g, b color (D65 white).
+function measure_lab(r, g, b) {
+  let lr = measure_linear(r)
+  let lg = measure_linear(g)
+  let lb = measure_linear(b)
+  let fx = measure_cbrt((0.4124 * lr + 0.3576 * lg + 0.1805 * lb) / 0.95047)
+  let fy = measure_cbrt(0.2126 * lr + 0.7152 * lg + 0.0722 * lb)
+  let fz = measure_cbrt((0.0193 * lr + 0.1192 * lg + 0.9505 * lb) / 1.08883)
+  [116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz)]
+}
+
+-~> The ink of a picture (flat list of colors, w by h) by the rule in the
+-~> header: a list of 0 and 1, row by row.
+function measure_ink(pixels, w, h) {
+  let cell = math.max(4, math.round(math.max(w, h) / 128.0))
+  let thin = math.max(5, math.round(math.max(w, h) / 100.0))
+  let cw = math.ceil(w * 1.0 / cell)
+  let ch = math.ceil(h * 1.0 / cell)
+  -~> the lightest pixel of every cell
+  let best = []
+  for (let c = 0; c < cw * ch; c += 1) {
+    push(best, -1)
+  }
+  for (let y = 0; y < h; y += 1) {
+    for (let x = 0; x < w; x += 1) {
+      let c = math.floor(y / cell) * cw + math.floor(x / cell)
+      let p = pixels[y * w + x]
+      let b = best[c]
+      if (b < 0 || p.r + p.g + p.b > pixels[b].r + pixels[b].g + pixels[b].b) {
+        best[c] = y * w + x
+      }
+    }
+  }
+  -~> the paper of every cell: the lightest of it and its 8 neighbours
+  let paper = []
+  for (let cy = 0; cy < ch; cy += 1) {
+    for (let cx = 0; cx < cw; cx += 1) {
+      let top = -1
+      let sum = -1
+      for (let dy = -1; dy <= 1; dy += 1) {
+        for (let dx = -1; dx <= 1; dx += 1) {
+          let nx = cx + dx
+          let ny = cy + dy
+          if (nx >= 0 && ny >= 0 && nx < cw && ny < ch) {
+            let p = pixels[best[ny * cw + nx]]
+            if (p.r + p.g + p.b > sum) {
+              sum = p.r + p.g + p.b
+              top = best[ny * cw + nx]
+            }
+          }
+        }
+      }
+      let p = pixels[top]
+      push(paper, {"r": p.r, "g": p.g, "b": p.b, "lab": measure_lab(p.r, p.g, p.b)})
+    }
+  }
+  -~> far pixels
+  let far = []
+  for (let y = 0; y < h; y += 1) {
+    let cy = math.floor(y / cell)
+    for (let x = 0; x < w; x += 1) {
+      let q = paper[cy * cw + math.floor(x / cell)]
+      let p = pixels[y * w + x]
+      let is_far = 0
+      if (math.abs(p.r - q.r) + math.abs(p.g - q.g) + math.abs(p.b - q.b) >= 24) {
+        let lab = measure_lab(p.r, p.g, p.b)
+        let d0 = lab[0] - q.lab[0]
+        let d1 = lab[1] - q.lab[1]
+        let d2 = lab[2] - q.lab[2]
+        if (d0 * d0 + d1 * d1 + d2 * d2 >= measure_far * measure_far) {
+          is_far = 1
+        }
+      }
+      push(far, is_far)
+    }
+  }
+  -~> thin: the run of far pixels is short along the row or along the column
+  let across = []
+  for (let i = 0; i < w * h; i += 1) {
+    push(across, 0)
+  }
+  for (let y = 0; y < h; y += 1) {
+    let x = 0
+    while (x < w) {
+      if (far[y * w + x] == 0) {
+        x += 1
+        continue
+      }
+      let e = x
+      while (e < w && far[y * w + e] == 1) {
+        e += 1
+      }
+      if (e - x <= thin) {
+        for (let k = x; k < e; k += 1) {
+          across[y * w + k] = 1
+        }
+      }
+      x = e
+    }
+  }
+  for (let x = 0; x < w; x += 1) {
+    let y = 0
+    while (y < h) {
+      if (far[y * w + x] == 0) {
+        y += 1
+        continue
+      }
+      let e = y
+      while (e < h && far[e * w + x] == 1) {
+        e += 1
+      }
+      if (e - y <= thin) {
+        for (let k = y; k < e; k += 1) {
+          across[k * w + x] = 1
+        }
+      }
+      y = e
+    }
+  }
+  across
+}
+
+-~> Ink IoU of two masks, 0 to 1 (1 when neither has any ink).
+function measure_iou(a, b) {
+  let both = 0
+  let either = 0
+  for (let i = 0; i < len(a); i += 1) {
+    if (a[i] == 1 && b[i] == 1) { both += 1 }
+    if (a[i] == 1 || b[i] == 1) { either += 1 }
+  }
+  if (either == 0) {
+    return 1.0
+  }
+  both * 1.0 / either
+}
+
+-~> Rounds x to `places` decimals.
+function measure_round(x, places) {
+  let k = 1
+  for (let i = 0; i < places; i += 1) {
+    k = k * 10
+  }
+  if (places == 0) {
+    return math.round(x)
+  }
+  math.round(x * k) / (k * 1.0)
+}
+
+-~> Measures traced `code` against the picture it came from: `pixels` is the
+-~> flat list of colors (opaque, row by row) of size `size`, as host_img gives.
+-~> Returns {"err", "iou", "ink_original", "ink_drawing"}: the two numbers
+-~> unrounded and the two ink masks (lists of 0 and 1, row by row).
+function measure_code(code, size, pixels) {
+  let run = drawing_run(code)
+  let bg = run.canvas.background
+  let buf = paint_run(code + "\nraster.paint(drawing, (0, 0))\n", size)
+  let px = img.pixels(buf)
+  let flat = []
+  let err = 0.0
+  for (let i = 0; i < len(px); i += 1) {
+    let c = px[i]
+    let a = c.a / 255.0
+    let r = math.round(c.r * a + bg.r * (1 - a))
+    let g = math.round(c.g * a + bg.g * (1 - a))
+    let b = math.round(c.b * a + bg.b * (1 - a))
+    push(flat, rgb(r, g, b))
+    let o = pixels[i]
+    err = err + (math.abs(r - o.r) + math.abs(g - o.g) + math.abs(b - o.b)) / 3.0
+  }
+  let ink_a = measure_ink(pixels, size.x, size.y)
+  let ink_b = measure_ink(flat, size.x, size.y)
+  {
+    "err": err / len(px),
+    "iou": measure_iou(ink_a, ink_b),
+    "ink_original": ink_a,
+    "ink_drawing": ink_b
+  }
+}

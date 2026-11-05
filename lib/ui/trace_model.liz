@@ -19,16 +19,38 @@ let trace_sliders = [
   {"key": "colors", "label": "trace.colors", "lo": 2, "hi": 32, "step": 1, "dec": 0, "unit": "", "modes": ["photo", "lineart"]},
   {"key": "detail", "label": "trace.detail", "lo": 0.3, "hi": 4.0, "step": 0.1, "dec": 1, "unit": " px", "modes": ["photo", "lineart"]},
   {"key": "snap", "label": "trace.snap", "lo": 0.0, "hi": 4.0, "step": 0.1, "dec": 1, "unit": " px", "modes": ["lineart"]},
-  {"key": "flow", "label": "trace.flow", "lo": 0.0, "hi": 1.0, "step": 0.05, "dec": 2, "unit": "", "modes": ["lineart"]}
+  {"key": "flow", "label": "trace.flow", "lo": 0.0, "hi": 1.0, "step": 0.05, "dec": 2, "unit": "", "modes": ["lineart"]},
+  {"key": "gradients", "label": "trace.gradients", "lo": 0, "hi": 10, "step": 1, "dec": 0, "unit": "", "modes": ["lineart"]}
 ]
+
+-~> The quality choices of the dialog's row, in order; "custom" is not one of
+-~> them (a preset with a slider moved) and shows as no button pressed.
+let trace_qualities = ["light", "balanced", "detailed", "max", "auto"]
+
+-~> The options the presets set that a slider shows: the trace options Auto
+-~> must not pin, or its three presets would trace alike.
+let trace_preset_keys = ["colors", "detail", "snap", "gradients", "gradient_error"]
 
 -~> The longest side of the picture while the preview is traced.
 let trace_preview_side = 160
 
+-~> The value of the Gradients slider for line-art options: 0 when gradients
+-~> are off, else the gradient_error (1 to 10; the engine's own is 4).
+function trace_gradients_value(opts) {
+  if (opts.gradients === false) {
+    return 0
+  }
+  let v = opts.gradient_error
+  if (v == null) {
+    return 4
+  }
+  math.max(1, math.round(v))
+}
+
 -~> A new dialog's state. known: the option names the engine takes, per mode
 -~> ({"photo": [...], "lineart": [...]}); defaults: the engine's default
--~> options per mode.
-function trace_new(known, defaults) {
+-~> options per mode; presets: the quality presets (options by name).
+function trace_new(known, defaults, presets = {}) {
   let vals = {"photo": {}, "lineart": {}}
   let modes = ["photo", "lineart"]
   for (let m = 0; m < len(modes); m += 1) {
@@ -36,6 +58,9 @@ function trace_new(known, defaults) {
       let s = trace_sliders[i]
       if (list.index(s.modes, modes[m]) >= 0) {
         let v = defaults[modes[m]][s.key]
+        if (s.key == "gradients") {
+          v = trace_gradients_value(defaults[modes[m]])
+        }
         if (v == null) {
           v = s.lo
         }
@@ -46,6 +71,10 @@ function trace_new(known, defaults) {
   {
     "mode": "lineart",
     "vals": vals,
+    "defaults": defaults,
+    "presets": presets,
+    "quality": "balanced",
+    "base": "balanced",
     "lines": true,
     "fills": true,
     "known": known,
@@ -135,35 +164,116 @@ function trace_value_at(s, f) {
 
 -~> Sets slider `key` of the current mode to v (inside its range).
 function trace_set(d, key, v) {
+  trace_set_in(d, d.mode, key, v)
+}
+
+-~> Sets slider `key` of `mode` to v (inside its range).
+function trace_set_in(d, mode, key, v) {
   for (let i = 0; i < len(trace_sliders); i += 1) {
     if (trace_sliders[i].key == key) {
       let s = trace_sliders[i]
-      d.vals[d.mode][key] = math.max(s.lo, math.min(s.hi, v))
+      d.vals[mode][key] = math.max(s.lo, math.min(s.hi, v))
     }
   }
   d
 }
 
--~> The options of trace() from the dialog: the mode's sliders and the extra
--~> ones given (max_side, scale). The lines and fills toggles don't change the
--~> trace; they only leave a layer out of its code (trace_filter).
-function trace_options(d, extra = {}) {
+-~> The options of trace() from the dialog: the mode's sliders, the quality
+-~> and the extra ones given (max_side, scale). The lines and fills toggles
+-~> don't change the trace; they only leave a layer out of its code
+-~> (trace_filter). In line art the quality goes in as the preset the sliders
+-~> started from (the options of the sliders then win over it); Auto goes in
+-~> as "auto" only when `auto` is true (the full-size job), with the options
+-~> the presets set left out, and traces as the sliders say in the preview.
+function trace_options(d, extra = {}, auto = false) {
   let out = {}
-  if (d.mode == "lineart") {
+  let lineart = d.mode == "lineart"
+  if (lineart) {
     out.mode = "lineart"
   }
   let shown = trace_visible(d)
+  let pinned = !(lineart && d.quality == "auto" && auto)
   for (let i = 0; i < len(shown); i += 1) {
     let key = shown[i].key
+    if (!pinned && list.index(trace_preset_keys, key) >= 0) {
+      continue
+    }
+    if (key == "gradients") {
+      let g = d.vals[d.mode][key]
+      out.gradients = g > 0
+      if (g > 0) {
+        out.gradient_error = g
+      }
+      continue
+    }
     out[key] = d.vals[d.mode][key]
   }
   if (out.colors != null) {
     out.colors = math.round(out.colors)
   }
-  if (d.mode == "lineart" && len(d.boxes) > 0) {
+  if (lineart && len(d.boxes) > 0) {
     out.focus = d.boxes
   }
+  if (lineart && d.quality == "auto" && auto) {
+    out.quality = "auto"
+  } elif (lineart && trace_base_quality(d) != "balanced") {
+    out.quality = trace_base_quality(d)
+  }
   hash.merge(out, extra)
+}
+
+-~> The preset the options start from: the chosen one, or, with a slider
+-~> moved ("custom") or Auto in the preview, the last one chosen.
+function trace_base_quality(d) {
+  if (d.quality == "custom" || d.quality == "auto") {
+    return d.base
+  }
+  d.quality
+}
+
+-~> Chooses the quality `name` (one of trace_qualities). A preset puts its
+-~> values on the sliders; Auto leaves them as they are.
+function trace_pick_quality(d, name) {
+  d.quality = name
+  if (name == "auto") {
+    return d
+  }
+  trace_show_preset(d, name)
+}
+
+-~> Puts the values of preset `name` on the sliders and makes it the base the
+-~> options start from, without changing the quality chosen (Auto uses it to
+-~> show what it kept).
+function trace_show_preset(d, name) {
+  d.base = name
+  let opts = hash.merge(d.defaults.lineart, d.presets[name])
+  let keys = ["colors", "detail", "snap"]
+  for (let i = 0; i < len(keys); i += 1) {
+    if (opts[keys[i]] != null) {
+      trace_set_in(d, "lineart", keys[i], opts[keys[i]])
+    }
+  }
+  trace_set_in(d, "lineart", "gradients", trace_gradients_value(opts))
+  d
+}
+
+-~> A slider was moved by the user: a preset becomes "custom" (and Auto too,
+-~> its base being the preset it kept, or balanced before it kept one).
+function trace_moved(d) {
+  if (d.mode == "lineart" && d.quality != "custom") {
+    d.quality = "custom"
+  }
+  d
+}
+
+-~> The longest side the traced picture gets: the preset's when it sets one
+-~> (Max), else `fallback` (the engine's default).
+function trace_max_side(d, fallback) {
+  let preset = d.presets[trace_base_quality(d)]
+  if (d.mode == "lineart" && preset != null && preset.max_side != null) {
+    return preset.max_side
+  }
+  fallback
 }
 
 -~> The size the picture has once it is shrunk to a longest side of at most

@@ -8,8 +8,15 @@
 -~> "stats", "error"} with the state "running", "done" or "failed". The state
 -~> of all of them is `f` (trace_full_new), kept in the dialog's state; this
 -~> file knows nothing of the dialog's look.
+-~>
+-~> The Auto quality (options.quality == "auto") is a job of three tasks, one
+-~> per preset ("parts"), that ends when all three did: the best one is the
+-~> job's code and "picked" says which and why (lib/app/trace_auto). Auto at
+-~> a scale other than 1 follows the job at scale 1 (the presets are measured
+-~> at the picture's own size), then traces the winner once more at the scale.
 
 use "trace_task"
+use "../app/trace_auto" as auto_lib
 
 -~> What task.start names below (by module and function name, so a built
 -~> program needs the `use` above to carry the file).
@@ -30,12 +37,22 @@ function trace_full_new() {
 function trace_full_cancel(f) {
   for (let i = 0; i < len(f.jobs); i += 1) {
     if (f.jobs[i].state == "running") {
-      f.jobs[i].task.cancel()
+      trace_full_stop(f.jobs[i])
     }
   }
   f.jobs = []
   f.due = 0
   f.shown = false
+}
+
+-~> Cancels the tasks of a job.
+function trace_full_stop(job) {
+  if (job.task != null) {
+    job.task.cancel()
+  }
+  for (let i = 0; i < len(job.parts); i += 1) {
+    job.parts[i].task.cancel()
+  }
 }
 
 -~> Asks for a start `wait` ms from now.
@@ -56,7 +73,22 @@ function trace_full_job(f, scale) {
 -~> Starts the job for the picture at `path` with `options` (trace()'s, as
 -~> the dialog sets them) at `scale`. Without tasks the state is broken.
 function trace_full_start(f, path, options, scale) {
-  let job = {"scale": scale, "options": options, "task": null, "state": "running", "raw": null, "stats": null, "error": ""}
+  let job = {
+    "scale": scale,
+    "options": options,
+    "path": path,
+    "task": null,
+    "parts": [],
+    "follow": null,
+    "picked": null,
+    "state": "running",
+    "raw": null,
+    "stats": null,
+    "error": ""
+  }
+  if (options.quality == "auto") {
+    return trace_full_start_auto(f, job)
+  }
   try {
     job.task = task.start("trace_task", "trace_task_run", [path, options])
   } catch (e) {
@@ -68,17 +100,112 @@ function trace_full_start(f, path, options, scale) {
   job
 }
 
+-~> Starts an Auto job: its three tasks at scale 1, or, at another scale, it
+-~> follows the job at scale 1 (started here when it is not there yet).
+function trace_full_start_auto(f, job) {
+  try {
+    if (job.scale == 1) {
+      job.parts = auto_lib.trace_auto_start(job.path, job.options)
+    } else {
+      let base = trace_full_job(f, 1)
+      if (base == null) {
+        base = trace_full_start(f, job.path, job.options, 1)
+      }
+      if (base == null) {
+        return null
+      }
+      job.follow = base
+    }
+  } catch (e) {
+    f.broken = true
+    f.error = e.message
+    return null
+  }
+  push(f.jobs, job)
+  job
+}
+
+-~> How far an Auto job is: {"done", "total"} tasks ended (a job that follows
+-~> another counts the other's).
+function trace_full_progress(job) {
+  if (job.follow != null) {
+    return trace_full_progress(job.follow)
+  }
+  let done = 0
+  for (let i = 0; i < len(job.parts); i += 1) {
+    if (job.parts[i].task.done()) {
+      done += 1
+    }
+  }
+  {"done": done, "total": len(job.parts)}
+}
+
+-~> Moves an Auto job along: when its three tasks ended, picks the best; a
+-~> follower starts its scaled trace once the job it follows picked. True
+-~> when the job changed.
+function trace_full_poll_auto(job) {
+  if (job.follow != null && job.task == null) {
+    if (job.follow.state == "failed") {
+      job.state = "failed"
+      job.error = job.follow.error
+      return true
+    }
+    if (job.follow.state != "done") {
+      return false
+    }
+    job.picked = job.follow.picked
+    let again = auto_lib.trace_auto_scaled_options(job.options, job.picked)
+    try {
+      job.task = task.start("trace_task", "trace_task_run", [job.path, again])
+    } catch (e) {
+      job.state = "failed"
+      job.error = e.message
+    }
+    return true
+  }
+  if (len(job.parts) == 0 || trace_full_progress(job).done < len(job.parts)) {
+    return false
+  }
+  let rows = []
+  let failure = ""
+  for (let i = 0; i < len(job.parts); i += 1) {
+    try {
+      push(rows, job.parts[i].task.result())
+    } catch (e) {
+      failure = e.message
+    }
+  }
+  if (len(rows) == 0) {
+    job.state = "failed"
+    job.error = failure
+    return true
+  }
+  let win = auto_lib.trace_auto_finish(rows)
+  job.raw = win.code
+  job.stats = win.stats
+  job.picked = win.picked
+  job.state = "done"
+  true
+}
+
 -~> Collects the jobs that ended. True when one did.
 function trace_full_poll(f) {
   let changed = false
   for (let i = 0; i < len(f.jobs); i += 1) {
     let job = f.jobs[i]
-    if (job.state == "running" && job.task.done()) {
+    if (job.state == "running" && (len(job.parts) > 0 || job.follow != null) && job.task == null) {
+      if (trace_full_poll_auto(job)) {
+        changed = true
+      }
+    } elif (job.state == "running" && job.task.done()) {
       changed = true
       try {
         let r = job.task.result()
         job.raw = r.code
         job.stats = r.stats
+        if (job.picked != null) {
+          job.stats.picked = job.picked
+        }
         job.state = "done"
       } catch (e) {
         job.state = "failed"

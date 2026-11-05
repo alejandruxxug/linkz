@@ -1,13 +1,13 @@
 -- closed at first; Cmd+Shift+T opens it, nothing else gets the keys
 false
-true lineart idle [30, 34, 452, 270]
+true lineart idle [30, 23, 452, 335]
 true x
 -- the path, Enter: the preview waits, shows tracing, then runs
 wait false (64, 48) (240, 180)
 run
 idle true true
 4 strokes, 2 fills, 4 primitives
-line_threshold colors detail snap flow
+line_threshold colors detail snap flow gradients
 -- a slider: a click on its track sets it, a drag moves it, a trace follows
 0.45 wait
 idle true

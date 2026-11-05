@@ -1,0 +1,135 @@
+-~> The quality presets of the line-art tracer (lib/trace/trace_quality):
+-~> each preset is the option set it names, balanced is the tracer's defaults
+-~> exactly (the same code with and without it), options given next to a
+-~> preset win, the checks of bad names and of photo mode; the score Auto ranks
+-~> by (a big painting does not pay MBs for a small gain, a clean picture
+-~> pays a few KB for a clear one); and Auto itself (trace_auto, three tasks)
+-~> on two small pictures made here: one with many colors and short strokes,
+-~> where detailed is clearly better, and a flat one, where the same error at
+-~> a smaller size wins.
+
+use "../../lib/app/trace_auto"
+use "../../lib/trace/trace"
+use "../../lib/trace/trace_quality"
+
+-~> == The presets are their option sets ==
+for (let i = 0; i < len(quality_names); i += 1) {
+  let name = quality_names[i]
+  puts(name, quality_options(name) == quality_presets[name], json.write(quality_resolve({"mode": "lineart", "quality": name})))
+}
+puts(json.write(quality_options("light")))
+puts(json.write(quality_options("detailed")))
+puts(json.write(quality_options("max")))
+
+-~> == Explicit options win; the rest comes from the preset ==
+puts(json.write(quality_resolve({"mode": "lineart", "quality": "detailed", "colors": 20, "max_side": 512})))
+puts(json.write(quality_resolve({"mode": "lineart", "colors": 5})))
+
+-~> == Bad ones ==
+let bad = [
+  {"mode": "lineart", "quality": "huge"},
+  {"mode": "photo", "quality": "light"},
+  {"quality": "light"},
+  {"mode": "lineart", "quality": "auto"}
+]
+for (let i = 0; i < len(bad); i += 1) {
+  try {
+    quality_resolve(bad[i])
+  } catch (e) {
+    puts(e.message)
+  }
+}
+
+-~> == Balanced is byte-identical to no preset ==
+function cel(w, h, f) {
+  let px = []
+  for (let y = 0; y < h; y += 1) {
+    for (let x = 0; x < w; x += 1) {
+      push(px, f((x + 0.5, y + 0.5)))
+    }
+  }
+  {"size": (w, h), "pixels": px}
+}
+
+-~> A disc with an ink ring and two bars, on paper.
+let disc = cel(64, 64, function(p) {
+  let d = math.dist(p, (32, 32))
+  if (d >= 19 && d <= 22) {
+    return #141414
+  }
+  if (d < 19) {
+    return #d23c32
+  }
+  if (p.y > 56 && p.y < 59 && p.x > 8 && p.x < 56) {
+    return #141414
+  }
+  #fafaf5
+})
+let plain = trace_pixels(disc.size, disc.pixels, {"mode": "lineart"})
+let balanced = trace_pixels(disc.size, disc.pixels, {"mode": "lineart", "quality": "balanced"})
+puts(plain.code == balanced.code, len(plain.code) > 100)
+let light = trace_pixels(disc.size, disc.pixels, {"mode": "lineart", "quality": "light"})
+let by_hand = trace_pixels(disc.size, disc.pixels, hash.merge({"mode": "lineart"}, quality_options("light")))
+puts(light.code == by_hand.code)
+let override = trace_pixels(disc.size, disc.pixels, {"mode": "lineart", "quality": "light", "colors": 16, "detail": 0.8, "line_min": 6, "snap": 1.5, "gradient_error": 4})
+puts(override.code == plain.code)
+
+-~> == The score ==
+-~> A big painting: 3 MB more code for 0.2 less error is not worth it; a
+-~> clean picture: 0.15 MB more for 0.7 less error is.
+let painting = [
+  {"quality": "light", "err": 8.4, "bytes": 2000000},
+  {"quality": "balanced", "err": 8.0, "bytes": 3000000},
+  {"quality": "detailed", "err": 7.8, "bytes": 6000000}
+]
+let clean = [
+  {"quality": "light", "err": 11.1, "bytes": 98000},
+  {"quality": "balanced", "err": 10.6, "bytes": 137000},
+  {"quality": "detailed", "err": 9.9, "bytes": 306000}
+]
+puts(quality_pick(painting).quality, quality_pick(clean).quality)
+puts(json.write(quality_why(quality_pick(clean), clean)))
+puts(json.write(quality_why(quality_pick(painting), painting)))
+puts(quality_pick([{"quality": "light", "err": 5.0, "bytes": 10}, {"quality": "balanced", "err": 5.0, "bytes": 10}]).quality)
+
+-~> == Auto, on pictures saved as PNG ==
+function save(name, pic) {
+  let path = fs.join(fs.home(), name)
+  img.save(img.from_pixels(pic.size, pic.pixels), path)
+  path
+}
+
+-~> Many pastel patches (more colors than light or balanced keep) cut by thin
+-~> ink lines, and short ink dashes: small code, so the size costs nothing.
+let patches = cel(96, 72, function(p) {
+  let cx = math.floor(p.x / 12)
+  let cy = math.floor(p.y / 12)
+  if (math.abs(p.x - cx * 12) < 0.6 || math.abs(p.y - cy * 12) < 0.6) {
+    return #202020
+  }
+  let n = cy * 8 + cx
+  rgb(120 + (n * 37) % 120, 120 + (n * 59) % 120, 120 + (n * 83) % 120)
+})
+-~> One flat color and one ink circle: all three give the same drawing.
+let flat = cel(96, 72, function(p) {
+  let d = math.dist(p, (48, 36))
+  if (d >= 20 && d <= 22) {
+    return #202020
+  }
+  #f4f0e0
+})
+
+for (let i = 0; i < 2; i += 1) {
+  let pic = [patches, flat][i]
+  let r = trace_auto(save("auto" + str(i) + ".png", pic), {"mode": "lineart"})
+  let rows = r.stats.picked.rows
+  let names = []
+  for (let k = 0; k < len(rows); k += 1) {
+    push(names, rows[k].quality)
+  }
+  puts(r.stats.picked.quality, text.join(names, ","), len(r.code) > 100)
+  -~> the sizes carry the file's path, which changes from run to run
+  for (let k = 0; k < len(rows); k += 1) {
+    puts(rows[k].quality, rows[k].err, rows[k].iou, rows[k].bytes > 100)
+  }
+}

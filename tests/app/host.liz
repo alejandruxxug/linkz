@@ -65,7 +65,9 @@ puts(trace_args(["in.png", "out.lzdraw", "--colors", "4", "--detail", "1.5", "--
 puts(trace_args(["a", "b", "--mode", "lineart", "--line-threshold", "0.4", "--line-min", "8", "--continuation", "40.0",
   "--radius", "5", "--fills", "false", "--solid", "3"]))
 puts(trace_args(["a", "b", "--mode", "lineart", "--focus", "10,20,30,40", "--focus", "0,0,5.5,6,0.5"]))
-let bad = [["a", "b", "--focus", "1,2,3"], ["a", "b", "--focus", "1,2,x,4"], ["in.png"], ["a", "b", "--colours", "4"], ["a", "b", "--colors", "x"], ["a", "b", "--colors"],
+puts(trace_args(["a", "b", "--quality", "detailed", "--colors", "20"]))
+puts(trace_args(["a", "b", "--quality", "auto"]))
+let bad = [["a", "b", "--quality", "huge"], ["a", "b", "--mode", "photo", "--quality", "light"], ["a", "b", "--focus", "1,2,3"], ["a", "b", "--focus", "1,2,x,4"], ["in.png"], ["a", "b", "--colours", "4"], ["a", "b", "--colors", "x"], ["a", "b", "--colors"],
   ["a", "b", "--mode", "ink"], ["a", "b", "--fills", "maybe"], ["a", "b", "--mode"]]
 for (let i = 0; i < len(bad); i += 1) {
   try {

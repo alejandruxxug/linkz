@@ -17,6 +17,7 @@
 use "../draw/geometry"
 use "../draw/svg"
 use "lineart"
+use "trace_quality"
 
 -~> The options of trace(path, options). Anything left out takes the value shown.
 -~>   colors      how many colors the picture is reduced to (2 and up). More colors,
@@ -543,6 +544,7 @@ function trace_mode(options) {
 -~> {colors, regions, holes, points, ms, size, stages}}. `stages` has the
 -~> milliseconds of each step. `name` says where the picture came from.
 function trace_pixels(size, pixels, options = {}, name = "a picture") {
+  options = quality_resolve(options)
   let mode = trace_mode(options)
   if (mode == "lineart") {
     return lineart_pixels(size, pixels, options, name)
@@ -674,10 +676,12 @@ function trace_focus_options(path, options, to) {
 -~> {"code": the .lzdraw source, "stats": {colors, regions, holes, points,
 -~> ms, ...}}. Save the code as a .lzdraw and it is a drawing like any other.
 -~> options: see trace_options, for example {"colors": 6, "detail": 2}, or
--~> {"mode": "lineart"} and lineart_options for inked drawings. A line-art
+-~> {"mode": "lineart"} and lineart_options for inked drawings, which also take
+-~> a "quality" preset (trace_quality) under the options given. A line-art
 -~> "focus" is given in pixels of the picture at its own size.
 -~> example: trace("photo.png", {"colors": 6})
 function trace(path, options = {}) {
+  options = quality_resolve(options)
   let t0 = time.ms()
   let max_side = trace_options.max_side
   if (trace_mode(options) == "lineart") {

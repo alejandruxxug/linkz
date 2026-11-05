@@ -5,9 +5,12 @@
 use "host"
 use "libs"
 use "settings"
+use "trace_auto"
 
 function mcp_command(_args) {
   let around = hash.merge(host_globals(img.new(1, 1)), {"settings": settings_load()})
+  -~> Auto quality: three traces in tasks of the program, which the libraries can't start.
+  around.linkz = hash.merge(around.linkz, {"trace_auto": trace_auto})
   let names = libs_load(libs_draw + libs_gfx + libs_trace + libs_mcp, around)
   names.mcp_serve()
 }

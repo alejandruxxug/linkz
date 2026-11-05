@@ -18,6 +18,11 @@
 -~> being drawn: the frame that follows a change says "tracing…", the next
 -~> one runs the trace, like the New drawing dialog's measuring.
 -~>
+-~> In line art a Quality row (Light, Balanced, Detailed, Max, Auto) sets the
+-~> sliders to a preset's values (lib/trace/trace_quality); moving a slider
+-~> after that marks the quality "custom". Auto traces three presets in tasks
+-~> and says which it kept and why (trace_full, lib/app/trace_auto).
+-~>
 -~> In line art the Detail tool draws boxes on the preview where the trace
 -~> should have more or less detail (trace_focus, trace_focus_view); every
 -~> change to them traces again, as a slider does, and Insert as layer writes
@@ -81,7 +86,7 @@ function tr_open(size, host, dim = true) {
   let n = tr_names()
   let known = {"photo": keys(n.trace_options), "lineart": keys(n.lineart_options)}
   let defaults = {"photo": n.trace_options, "lineart": n.lineart_options}
-  T.d = trace_new(known, defaults)
+  T.d = trace_new(known, defaults, n.quality_presets)
   T.host = host
   T.size = size
   T.hover = ""
@@ -131,15 +136,35 @@ function tr_in(r, x, y) {
   r != null && x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h
 }
 
+-~> The quality buttons of line art laid out from (rx, y) in a column `rw`
+-~> wide, wrapping to a new row when the next does not fit: {"buttons":
+-~> [{"name", "x", "y", "w", "h"}], "rows"}. Photo has none.
+function tr_quality_buttons(d, rx, rw, y) {
+  let buttons = []
+  if (d.mode != "lineart") {
+    return {"buttons": buttons, "rows": 0}
+  }
+  let x = 0
+  let row = 0
+  for (let i = 0; i < len(trace_qualities); i += 1) {
+    let name = trace_qualities[i]
+    let w = g_text_w(t("trace.q_" + name)) + 10
+    if (x > 0 && x + w > rw) {
+      x = 0
+      row += 1
+    }
+    push(buttons, {"name": name, "x": rx + x, "y": y + row * 17, "w": w, "h": 15})
+    x += w + 2
+  }
+  {"buttons": buttons, "rows": row + 1}
+}
+
 -~> Every part of the dialog, in UI pixels, for the mode now.
 function tr_layout() {
   let d = T.d
   let size = T.size
   let x0 = math.max(2, (size.x - tr_w) // 2)
   let y0 = tr_top
-  if (y0 + tr_h + 2 > size.y) {
-    y0 = math.max(2, size.y - tr_h - 2)
-  }
   let px = x0 + 6
   let py = y0 + 21
   let rx = x0 + 257
@@ -147,8 +172,19 @@ function tr_layout() {
   let change_w = g_text_w(t("trace.change")) + 10
   let sliders = []
   let shown = trace_visible(d)
+  let quality = tr_quality_buttons(d, rx, rw, y0 + 68)
+  let dq = 0
+  let ext = 0
+  if (d.mode == "lineart") {
+    dq = 13 + quality.rows * 17
+    ext = dq + math.max(0, len(shown) - 5) * 18
+  }
+  if (y0 + tr_h + ext + 2 > size.y) {
+    y0 = math.max(2, size.y - tr_h - ext - 2)
+    quality = tr_quality_buttons(d, rx, rw, y0 + 68)
+  }
   for (let i = 0; i < len(shown); i += 1) {
-    let sy = y0 + 57 + i * 18
+    let sy = y0 + 57 + dq + i * 18
     push(sliders, {
       "s": shown[i],
       "y": sy,
@@ -156,20 +192,23 @@ function tr_layout() {
       "hit": {"x": rx + 100, "y": sy, "w": 46, "h": 15}
     })
   }
-  let ty = y0 + 57 + len(shown) * 18 + 2
+  let ty = y0 + 57 + dq + len(shown) * 18 + 2
   let half = rw // 2
   let detail = null
   if (d.mode == "lineart" && d.image != null) {
     detail = {"x": px + 2, "y": py + tr_prev_h - 16, "w": g_text_w(t("trace.focus_tool")) + 18, "h": 14}
   }
   {
-    "box": {"x": x0, "y": y0, "w": tr_w, "h": tr_h},
+    "box": {"x": x0, "y": y0, "w": tr_w, "h": tr_h + ext},
     "close": {"x": x0 + tr_w - 15, "y": y0 + 1, "w": 13, "h": 13},
     "pre": {"x": px, "y": py, "w": tr_prev_w, "h": tr_prev_h},
     "detail": detail,
     "path": {"x": px, "y": py + 184, "w": tr_prev_w - change_w - 4, "h": 16},
     "change": {"x": px + tr_prev_w - change_w, "y": py + 184, "w": change_w, "h": 16},
     "hint_y": py + 204,
+    "note_y": py + 220,
+    "quality_y": y0 + 55,
+    "quality": quality.buttons,
     "rx": rx,
     "rw": rw,
     "mode_y": y0 + 22,
@@ -178,11 +217,11 @@ function tr_layout() {
     "sliders": sliders,
     "lines": {"x": rx, "y": ty, "w": 110, "h": 14},
     "fills": {"x": rx, "y": ty + 16, "w": 110, "h": 14},
-    "rule": y0 + 184,
-    "stats_y": y0 + 189,
-    "foot": y0 + 240,
-    "insert": {"x": x0 + tr_w - 12 - 118 - 6 - 130, "y": y0 + 247, "w": 130, "h": 16},
-    "open": {"x": x0 + tr_w - 12 - 118, "y": y0 + 247, "w": 118, "h": 16}
+    "rule": y0 + 184 + ext,
+    "stats_y": y0 + 189 + ext,
+    "foot": y0 + 240 + ext,
+    "insert": {"x": x0 + tr_w - 12 - 118 - 6 - 130, "y": y0 + 247 + ext, "w": 130, "h": 16},
+    "open": {"x": x0 + tr_w - 12 - 118, "y": y0 + 247 + ext, "w": 118, "h": 16}
   }
 }
 
@@ -206,6 +245,11 @@ function tr_hit(x, y) {
   for (let i = 0; i < len(g.sliders); i += 1) {
     if (tr_in(g.sliders[i].hit, x, y)) {
       return "slider:" + g.sliders[i].s.key
+    }
+  }
+  for (let i = 0; i < len(g.quality); i += 1) {
+    if (tr_in(g.quality[i], x, y)) {
+      return "q:" + g.quality[i].name
     }
   }
   if (d.mode == "lineart") {
@@ -332,6 +376,9 @@ function tr_paint_slider(row, d) {
   g_rect(kx - 1, tk.y - 2, 6, tk.h + 4, P.void)
   g_rect(kx, tk.y - 1, 4, tk.h + 2, P.bright)
   let shown = trace_format(s, v)
+  if (s.key == "gradients" && math.round(v) == 0) {
+    shown = t("trace.off")
+  }
   g_text(shown, T.lx + T.lw - g_text_w(shown), row.y, P.amber)
 }
 
@@ -364,6 +411,36 @@ function tr_paint_stats(l, d) {
     g_text(word, l.rx + x + g_text_w(n) + 4, l.stats_y + row * 14, P.mute)
     x += w + 14
   }
+}
+
+-~> What Auto says: while it traces "trying 3… 1/3", then which preset it
+-~> kept and why ("Detailed: 12% less error, +1.2 MB"); "" for any other
+-~> quality.
+function tr_auto_note(d) {
+  if (d.mode != "lineart" || d.quality != "auto" || d.image == null || d.error != "") {
+    return ""
+  }
+  let job = trace_full_job(d.full, tr_full_scale())
+  if (job == null || job.state == "failed") {
+    return t("trace.auto_trying", {"done": "0", "total": "3"})
+  }
+  if (job.picked == null) {
+    let p = trace_full_progress(job)
+    return t("trace.auto_trying", {"done": str(p.done), "total": str(p.total)})
+  }
+  let pk = job.picked
+  let name = t("trace.q_" + pk.quality)
+  if (pk.quality == "balanced") {
+    return t("trace.auto_default", {"name": name})
+  }
+  let mb = str(pk.more_mb)
+  if (pk.more_mb >= 0) {
+    mb = "+" + mb
+  }
+  if (pk.less_error >= 0) {
+    return t("trace.auto_less", {"name": name, "pct": str(pk.less_error), "mb": mb})
+  }
+  t("trace.auto_more", {"name": name, "pct": str(-pk.less_error), "mb": mb})
 }
 
 -~> Draws the dialog (the dim behind it too, when asked) into the current
@@ -447,6 +524,26 @@ function tr_draw() {
       ms = "hover"
     }
     g_button(r.x, r.y, r.w, r.h, "", t("trace." + modes[i]), ms)
+  }
+  if (d.mode == "lineart") {
+    g_text(t("trace.quality"), l.rx, l.quality_y, P.mute)
+    if (d.quality == "custom") {
+      g_text(t("trace.custom"), l.rx + g_text_w(t("trace.quality")) + 8, l.quality_y, P.amber)
+    }
+    for (let i = 0; i < len(l.quality); i += 1) {
+      let r = l.quality[i]
+      let qs = "normal"
+      if (d.quality == r.name) {
+        qs = "active"
+      } elif (T.hover == "q:" + r.name) {
+        qs = "hover"
+      }
+      g_button(r.x, r.y, r.w, r.h, "", t("trace.q_" + r.name), qs)
+    }
+    let note = tr_auto_note(d)
+    if (note != "") {
+      g_text(g_fit_words(note, tr_prev_w), l.pre.x, l.note_y, P.amber)
+    }
   }
   for (let i = 0; i < len(l.sliders); i += 1) {
     tr_paint_slider(l.sliders[i], d)
@@ -614,7 +711,7 @@ function tr_scale_extra(scale) {
 -~> Starts the job at `scale` unless there is one.
 function tr_full_start(d, scale) {
   if (trace_full_job(d.full, scale) == null) {
-    trace_full_start(d.full, d.path, trace_options(d, tr_scale_extra(scale)), scale)
+    trace_full_start(d.full, d.path, trace_options(d, tr_scale_extra(scale), true), scale)
   }
 }
 
@@ -624,6 +721,9 @@ function tr_show_full(d, job) {
   try {
     d.raw = job.raw
     d.result = job.stats
+    if (d.quality == "auto" && job.picked != null) {
+      trace_show_preset(d, job.picked.quality)
+    }
     tr_render(trace_filter(d.raw, d.lines, d.fills))
   } catch (e) {
     d.error = t("trace.failed", {"message": e.message})
@@ -778,7 +878,7 @@ function tr_insert_scale() {
     table = n.lineart_options
   }
   let canvas = T.host.canvas()
-  trace_fit_scale(trace_shrunk(d.image.size, table.max_side), canvas)
+  trace_fit_scale(trace_shrunk(d.image.size, trace_max_side(d, table.max_side)), canvas)
 }
 
 -~> Insert as layer: with the full-size trace if it ended, else after it.
@@ -924,6 +1024,7 @@ function tr_drag_slider(key, x) {
       let v = trace_value_at(rows[i].s, (x - tk.x - 3) / float(tk.w - 8))
       if (v != tr_slider_value(d, rows[i].s)) {
         d.vals[d.mode][key] = v
+        trace_moved(d)
         tr_schedule(d)
       }
     }
@@ -965,6 +1066,9 @@ function tr_click(hit, x) {
   } elif (hit == "fills") {
     d.fills = !d.fills
     tr_schedule(d, false)
+  } elif (text.starts(hit, "q:")) {
+    trace_pick_quality(d, text.slice(hit, 2, len(hit)))
+    tr_schedule(d)
   } elif (hit == "detail") {
     d.tool = !d.tool
   } elif (hit == "preview") {
@@ -1188,9 +1292,17 @@ function tr_debug_state() {
     let s = g.sliders[i]
     push(rows, {"key": s.s.key, "value": tr_slider_value(d, s.s), "track": [s.track.x, s.track.y, s.track.w, s.track.h]})
   }
+  let qs = {}
+  for (let i = 0; i < len(g.quality); i += 1) {
+    qs[g.quality[i].name] = [g.quality[i].x, g.quality[i].y, g.quality[i].w, g.quality[i].h]
+  }
   {
     "open": true,
     "mode": d.mode,
+    "quality": d.quality,
+    "base": d.base,
+    "quality_buttons": qs,
+    "note": tr_auto_note(d),
     "path": d.path,
     "text": d.text,
     "error": d.error,

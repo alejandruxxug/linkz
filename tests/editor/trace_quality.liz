@@ -1,0 +1,202 @@
+-~> The Quality row of the Trace image dialog (line art): a preset puts its
+-~> values on the sliders and in the options, moving a slider marks it custom
+-~> (the preset stays the base), Max asks for a bigger picture, the row is not
+-~> there in Photo, and Auto traces three presets in tasks, says "trying 3…"
+-~> and then which it kept and why, and Insert uses that result without
+-~> tracing again (at the canvas scale too, which traces the winner once
+-~> more). The tasks are real; the pauses are skipped.
+
+use "rig"
+
+let code = "-~> lzdraw 1
+canvas = {\"size\": (480, 320), \"background\": #f6d9a8}
+layer sun
+  circle((360, 90), 34, #fff3c4)
+"
+
+let dir = fs.join(fs.home(), "trace-quality-test")
+fs.mkdir(dir)
+let pic_path = fs.join(dir, "head.png")
+let pic = img.new(64, 48)
+img.fill(pic, [0, 0, 64, 48], #dbe4f0)
+img.fill(pic, [12, 20, 40, 28], #5a3d8c)
+img.fill(pic, [20, 8, 24, 30], #f6d9c8)
+img.fill(pic, [26, 18, 4, 4], #2a5cb0)
+img.fill(pic, [34, 18, 4, 4], #2a5cb0)
+img.save(pic, pic_path)
+
+let size = (512, 480)
+let modules = rig_modules + ["ui/view_panels", "ui/view_canvas", "ui/view_popups", "ui/i18n", "ui/home_view", "ui/app_screens",
+  "ui/trace_model", "ui/trace_view", "ui/trace_editor"]
+let rig = rig_open(fs.join(dir, "editor"), code, size, modules, {"tutorial_done": true, "drawings_dir": fs.join(dir, "drawings")})
+let n = rig.names
+let none = {"shift": false, "alt": false, "cmd": false, "ctrl": false}
+
+function frame(events = []) {
+  rig_frame(rig, events)
+}
+
+function click(p) {
+  frame([{"type": "down", "pos": p}, {"type": "up", "pos": p}])
+}
+
+function mid(r) {
+  (r[0] + r[2] // 2, r[1] + r[3] // 2)
+}
+
+function state() {
+  n.tr_debug_state()
+}
+
+-~> Frames until `done()` is true, with real time passing for the tasks.
+function until(done) {
+  for (let i = 0; i < 1500; i += 1) {
+    if (done()) {
+      return true
+    }
+    frame()
+    time.sleep(10)
+  }
+  false
+}
+
+-~> Frames until the preview ran (the debounce skipped).
+function preview() {
+  for (let i = 0; i < 8; i += 1) {
+    if (n.T.d.phase == "wait") {
+      n.T.d.due = 0
+    }
+    frame()
+    if (n.T.d.phase == "idle") {
+      break
+    }
+  }
+}
+
+function open_dialog() {
+  frame([{"type": "key", "key": "T", "mods": {"shift": true, "alt": false, "cmd": true, "ctrl": false}}])
+  frame([{"type": "type", "text": pic_path}])
+  frame([{"type": "key", "key": "Enter", "mods": none}])
+  preview()
+}
+
+function pick(name) {
+  click(mid(state().quality_buttons[name]))
+  preview()
+}
+
+function value(key) {
+  let all = state().sliders
+  for (let i = 0; i < len(all); i += 1) {
+    if (all[i].key == key) {
+      return all[i].value
+    }
+  }
+  null
+}
+
+-~> The sliders a preset sets, as "colors detail snap gradients".
+function dials() {
+  text.join([str(value("colors")), str(value("detail")), str(value("snap")), str(value("gradients"))], " ")
+}
+
+puts("-- the row: five choices, Balanced first, the sliders at the defaults")
+open_dialog()
+puts(keys(state().quality_buttons), state().quality, dials())
+puts(json.write(n.trace_options(n.T.d)))
+
+puts("-- a preset sets the sliders and goes into the options")
+pick("detailed")
+puts(state().quality, dials())
+puts(json.write(n.trace_options(n.T.d)))
+pick("light")
+puts(state().quality, dials())
+puts(n.trace_options(n.T.d).quality, n.trace_options(n.T.d).gradient_error)
+pick("balanced")
+puts(state().quality, dials(), n.trace_options(n.T.d).quality)
+
+puts("-- moving a slider marks it custom; the preset stays the base")
+pick("detailed")
+let colors = state().sliders[1]
+click((colors.track[0] + 4, colors.track[1] + 3))
+preview()
+puts(state().quality, state().base, value("colors") < 32, n.trace_options(n.T.d).quality)
+pick("detailed")
+puts(state().quality, value("colors"))
+
+puts("-- Max asks for a bigger picture")
+pick("max")
+puts(state().quality, dials(), n.trace_max_side(n.T.d, 1024))
+pick("balanced")
+puts(n.trace_max_side(n.T.d, 1024))
+
+puts("-- Photo has no quality row")
+click(mid(state().photo))
+preview()
+puts(len(keys(state().quality_buttons)), n.trace_options(n.T.d).quality)
+click(mid(state().lineart))
+preview()
+
+puts("-- Auto: the options leave the preset's values out, the preview traces as the sliders say")
+pick("auto")
+puts(state().quality, json.write(n.trace_options(n.T.d, {}, true)))
+puts(json.write(n.trace_options(n.T.d)))
+puts(state().note)
+
+-~> The full-size job at a scale, or null.
+function job_at(scale) {
+  let jobs = n.T.d.full.jobs
+  for (let i = 0; i < len(jobs); i += 1) {
+    if (jobs[i].scale == scale) {
+      return jobs[i]
+    }
+  }
+  null
+}
+
+puts("-- Auto traces three presets in tasks and says which it kept")
+n.T.d.full.due = 1
+puts(until(function() { n.T.d.full.shown }), n.T.d.full.broken)
+let job = job_at(1)
+puts(len(job.parts), job.state, job.picked != null)
+let rows = job.picked.rows
+let names = []
+for (let i = 0; i < len(rows); i += 1) {
+  push(names, rows[i].quality)
+}
+puts(text.join(names, " "))
+puts(state().note == n.tr_auto_note(n.T.d), len(state().note) > 10, text.find(state().note, "MB") >= 0 || text.find(state().note, "best") >= 0)
+puts(job.stats.picked.quality == job.picked.quality)
+puts("-- Auto shows what it kept on the sliders")
+let kept = n.T.d.presets[job.picked.quality]
+puts(state().quality, state().base == job.picked.quality, value("colors") == n.T.d.defaults.lineart.colors || value("colors") == kept.colors)
+
+puts("-- the note in Spanish")
+n.lang_use("es")
+puts(n.t("trace.q_auto"), n.t("trace.auto_trying", {"done": "1", "total": "3"}))
+puts(n.t("trace.auto_less", {"name": "Detallada", "pct": "12", "mb": "+1.2"}))
+n.lang_use("en")
+puts(n.t("trace.auto_less", {"name": "Detailed", "pct": "12", "mb": "+1.2"}))
+
+puts("-- Insert uses the result: no trace is made in the dialog's process, and the winner is traced at the canvas scale")
+let made = {"count": 0}
+let engine = n.tr_names()
+let real_trace = engine.trace
+engine.trace = function(path, options) {
+  made.count += 1
+  real_trace(path, options)
+}
+let steps = len(n.ed.undo)
+click(mid(state().insert))
+puts(until(function() { !n.tr_is_open() }), made.count, len(n.ed.undo) - steps)
+puts(list.index(n.ed_model().lines, "layer traced") >= 0)
+n.ed_undo()
+
+puts("-- a slider moved while Auto runs stops it and makes it custom")
+open_dialog()
+pick("auto")
+n.T.d.full.due = 1
+until(function() { len(n.T.d.full.jobs) > 0 })
+let thr = state().sliders[0]
+click((thr.track[0] + 15, thr.track[1] + 3))
+puts(state().quality, state().base, len(n.T.d.full.jobs))

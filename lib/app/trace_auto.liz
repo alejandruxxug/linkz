@@ -1,0 +1,112 @@
+-~> trace_auto: the Auto quality of line-art tracing. The picture is traced
+-~> with light, balanced and detailed at the same time, each in a task of its
+-~> own (they use the machine's processors), every result is drawn and
+-~> compared with the picture (trace_measure), and the one with the lowest
+-~> score is kept (quality_score in trace_quality: error plus a price per MB
+-~> of code).
+-~>
+-~> trace_auto() waits for the three (the CLI and the MCP tool); the Trace
+-~> image dialog starts them itself (trace_full) and uses trace_auto_start,
+-~> trace_auto_finish and trace_auto_scaled_options, so the window keeps
+-~> answering.
+-~>
+-~> A row is what one task gives back: {"quality", "code", "stats", "err",
+-~> "iou", "bytes"}. Only data crosses a task, so the task loads the picture
+-~> by its path.
+
+use "drawing"
+use "host_img"
+use "libs"
+use "../trace/trace_measure"
+use "../trace/trace_quality"
+
+-~> The step budget of a task: drawing a big trace takes millions of steps.
+let trace_auto_steps = 200000000
+
+-~> The options a preset is traced with for Auto: the user's, without the
+-~> quality (the task sets it) and without scale (the measure is made at the
+-~> picture's own size; a bigger drawing is traced again once the winner is
+-~> known, trace_auto_scaled_options).
+function trace_auto_base(options) {
+  let out = hash.copy(options)
+  hash.remove(out, "quality")
+  hash.remove(out, "scale")
+  hash.merge(out, {"mode": "lineart"})
+}
+
+-~> The task: traces the picture at `path` with the preset `quality` over
+-~> `options`, draws the code at the picture's size and measures it. Gives
+-~> the row of the preset.
+function trace_auto_task(path, quality, options) {
+  drawing_steps = trace_auto_steps
+  let opt = quality_resolve(hash.merge(trace_auto_base(options), {"quality": quality}))
+  let names = libs_load(libs_draw + libs_trace, {"img": host_img(), "time": time})
+  let t = names.trace(path, opt)
+  let side = 1024
+  if (opt.max_side !== null) {
+    side = opt.max_side
+  }
+  let loaded = host_img().load(path, side)
+  let m = measure_code(t.code, loaded.size, loaded.pixels)
+  {"quality": quality, "code": t.code, "stats": t.stats, "err": m.err, "iou": m.iou, "bytes": len(t.code)}
+}
+
+-~> Starts the tasks, one per preset Auto tries: [{"quality", "task"}...].
+function trace_auto_start(path, options) {
+  let jobs = []
+  for (let i = 0; i < len(quality_auto_names); i += 1) {
+    let q = quality_auto_names[i]
+    push(jobs, {"quality": q, "task": task.start("trace_auto", "trace_auto_task", [path, q, options])})
+  }
+  jobs
+}
+
+-~> The winner of the rows: {"code", "stats", "picked"}. stats is the winner's
+-~> with "picked" added, {"quality", "less_error", "more_mb", "rows"}: why it
+-~> won (against balanced) and the numbers of every preset tried.
+function trace_auto_finish(rows) {
+  let best = quality_pick(rows)
+  let why = quality_why(best, rows)
+  let seen = []
+  for (let i = 0; i < len(rows); i += 1) {
+    push(seen, {
+      "quality": rows[i].quality,
+      "err": measure_round(rows[i].err, 2),
+      "iou": measure_round(rows[i].iou, 3),
+      "bytes": rows[i].bytes,
+      "score": measure_round(quality_score(rows[i].err, rows[i].bytes), 2)
+    })
+  }
+  why.rows = seen
+  let stats = hash.merge(best.stats, {"picked": why})
+  {"code": best.code, "stats": stats, "picked": why}
+}
+
+-~> The options for tracing the winner again at the user's scale: the
+-~> options with the winner's quality; null when the user asked for no scale
+-~> (the winner's code is the answer).
+function trace_auto_scaled_options(options, picked) {
+  if (options.scale === null || options.scale == 1) {
+    return null
+  }
+  hash.merge(trace_auto_base(options), {"quality": picked.quality, "scale": options.scale})
+}
+
+-~> Traces the picture at `path` the Auto way and waits for it: {"code",
+-~> "stats"} like trace(), the stats saying what was picked and why.
+function trace_auto(path, options = {}) {
+  let jobs = trace_auto_start(path, options)
+  let rows = []
+  for (let i = 0; i < len(jobs); i += 1) {
+    push(rows, jobs[i].task.result())
+  }
+  let result = trace_auto_finish(rows)
+  let again = trace_auto_scaled_options(options, result.picked)
+  if (again !== null) {
+    let names = libs_load(libs_draw + libs_trace, {"img": host_img(), "time": time})
+    let t = names.trace(path, again)
+    t.stats.picked = result.picked
+    return {"code": t.code, "stats": t.stats}
+  }
+  {"code": result.code, "stats": result.stats}
+}

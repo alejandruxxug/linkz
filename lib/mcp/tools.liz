@@ -12,6 +12,7 @@ use "../draw/svg"
 use "../gfx/raster"
 use "json"
 use "../trace/trace"
+use "../trace/trace_quality"
 
 -~> ---- results ----
 
@@ -594,6 +595,18 @@ function mcp_tool_trace(args) {
   if (args.focus !== null) {
     options.focus = mcp_trace_focus(args.focus)
   }
+  if (args.quality !== null) {
+    if (args.quality != "auto" && list.index(quality_names, args.quality) < 0) {
+      error("the argument quality must be one of " + text.join(quality_names, ", ") + " or auto")
+    }
+    if (options.mode === null) {
+      options.mode = "lineart"
+    }
+    if (options.mode != "lineart") {
+      error("the argument quality is for mode \"lineart\"")
+    }
+    options.quality = args.quality
+  }
   mcp_result(linkz.with_steps(mcp_trace_step_limit, function() { mcp_trace_items(path, options) }))
 }
 
@@ -620,7 +633,12 @@ function mcp_trace_focus(focus) {
 
 -~> The items of a trace: the code, the stats and a render of the code.
 function mcp_trace_items(path, options) {
-  let result = trace(path, options)
+  let result = null
+  if (options.quality == "auto") {
+    result = linkz.trace_auto(path, options)
+  } else {
+    result = trace(path, options)
+  }
   let items = [mcp_text(result.code), mcp_text(json.stringify(result.stats))]
   let pic = mcp_render_items(result.code, null, null)
   for (let i = 0; i < len(pic); i += 1) {
@@ -685,6 +703,7 @@ function mcp_tools() {
         "radius": {"type": "integer", "minimum": 0, "maximum": 100, "description": "Lineart: half side in pixels of the neighbourhood a pixel is compared with; 0 picks it from the picture size. Default 0."},
         "fills": {"type": "boolean", "description": "Lineart: false to trace only the lines, on the paper color. Default true."},
         "solid": {"type": "integer", "minimum": 0, "maximum": 100000, "description": "Lineart: ink at least this many pixels from the paper all round is a solid fill, not a stroke; 0 picks it from the size. Default 0."},
+        "quality": {"type": "string", "enum": ["light", "balanced", "detailed", "max", "auto"], "description": "Lineart: a preset of options. light: smaller code, a little more error; balanced: the defaults; detailed: more colors and tighter outlines (about 2x the code); max: detailed on a picture up to 1600 px (slow, big); auto: traces light, balanced and detailed in parallel, scores each against the picture and keeps the best (the stats say which, under picked). Options given too win over the preset. Implies mode lineart."},
         "focus": {"type": "array", "items": {"type": "object", "properties": {"box": {"type": "array", "items": {"type": "number"}, "minItems": 4, "maxItems": 4, "description": "[x, y, w, h] in pixels of the picture at its own size."}, "detail": {"type": "number", "minimum": 0.25, "maximum": 4, "description": "Above 1 for more detail, below 1 for less. Default 2."}}, "required": ["box"]}, "description": "Lineart: boxes where the trace should have more detail (detail above 1) or less (below 1), for example [{\"box\": [40, 30, 60, 60], \"detail\": 2}]."}
       }, ["path"])
     },

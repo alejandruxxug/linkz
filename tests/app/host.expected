@@ -22,9 +22,13 @@ unknown flag --fast (usage: linkz edit [--no-splash] [--slow-splash] [file.lzdra
 {"files": ["in.png", "out.lzdraw"], "options": {"colors": 4, "detail": 1.5, "max_side": 64}}
 {"files": ["a", "b"], "options": {"mode": "lineart", "line_threshold": 0.4, "line_min": 8, "continuation": 40, "radius": 5, "fills": false, "solid": 3}}
 {"files": ["a", "b"], "options": {"mode": "lineart", "focus": [{"box": [10, 20, 30, 40], "detail": 2}, {"box": [0, 0, 5.5, 6], "detail": 0.5}]}}
+{"files": ["a", "b"], "options": {"quality": "detailed", "colors": 20, "mode": "lineart"}}
+{"files": ["a", "b"], "options": {"quality": "auto", "mode": "lineart"}}
+--quality must be one of light, balanced, detailed, max or auto, got "huge"
+--quality is for --mode lineart
 --focus needs x,y,w,h or x,y,w,h,f, got "1,2,3"
 --focus needs numbers, got "1,2,x,4"
-usage: linkz trace in.png out.lzdraw [--colors 8] [--detail 1.5] [--min-area 8] [--max-side 256] [--scale 1] [--corner 55] [--mode photo|lineart] [--line-threshold 0.5] [--line-min 6] [--continuation 35] [--radius 0] [--fills true|false] [--solid 0] [--focus x,y,w,h[,f]]...
+usage: linkz trace in.png out.lzdraw [--colors 8] [--detail 1.5] [--min-area 8] [--max-side 256] [--scale 1] [--corner 55] [--mode photo|lineart] [--line-threshold 0.5] [--line-min 6] [--continuation 35] [--radius 0] [--fills true|false] [--solid 0] [--quality light|balanced|detailed|max|auto] [--focus x,y,w,h[,f]]...
 bad option --colours
 --colors needs a number, got "x"
 bad option --colors

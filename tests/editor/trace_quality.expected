@@ -1,0 +1,38 @@
+-- the row: five choices, Balanced first, the sliders at the defaults
+["light", "balanced", "detailed", "max", "auto"] balanced 16 0.8 1.5 4
+{"mode":"lineart","line_threshold":0.5,"colors":16,"detail":0.8,"snap":1.5,"flow":0.6,"gradients":true,"gradient_error":4}
+-- a preset sets the sliders and goes into the options
+detailed 32 0.4 0.8 6
+{"mode":"lineart","line_threshold":0.5,"colors":32,"detail":0.4,"snap":0.8,"flow":0.6,"gradients":true,"gradient_error":6,"quality":"detailed"}
+light 14 1.4 2.0 7
+light 7
+balanced 16 0.8 1.5 4 null
+-- moving a slider marks it custom; the preset stays the base
+custom detailed true detailed
+detailed 32
+-- Max asks for a bigger picture
+max 32 0.4 0.8 6 1600
+1024
+-- Photo has no quality row
+0 null
+-- Auto: the options leave the preset's values out, the preview traces as the sliders say
+auto {"mode":"lineart","line_threshold":0.5,"flow":0.6,"quality":"auto"}
+{"mode":"lineart","line_threshold":0.5,"colors":16,"detail":0.8,"snap":1.5,"flow":0.6,"gradients":true,"gradient_error":4}
+trying 3… 0/3
+-- Auto traces three presets in tasks and says which it kept
+true false
+3 done true
+light balanced detailed
+true true true
+true
+-- Auto shows what it kept on the sliders
+auto true true
+-- the note in Spanish
+Auto probando 3… 1/3
+Detallada: 12% menos error, +1.2 MB
+Detailed: 12% less error, +1.2 MB
+-- Insert uses the result: no trace is made in the dialog's process, and the winner is traced at the canvas scale
+true 0 1
+true
+-- a slider moved while Auto runs stops it and makes it custom
+custom balanced 0

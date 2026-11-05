@@ -1,0 +1,28 @@
+light true {"colors":14,"detail":1.4,"line_min":10,"snap":2.0,"gradient_error":7,"mode":"lineart"}
+balanced true {"mode":"lineart"}
+detailed true {"colors":32,"detail":0.4,"line_min":3,"snap":0.8,"gradient_error":6,"mode":"lineart"}
+max true {"colors":32,"detail":0.4,"line_min":3,"snap":0.8,"gradient_error":6,"max_side":1600,"mode":"lineart"}
+{"colors":14,"detail":1.4,"line_min":10,"snap":2.0,"gradient_error":7}
+{"colors":32,"detail":0.4,"line_min":3,"snap":0.8,"gradient_error":6}
+{"colors":32,"detail":0.4,"line_min":3,"snap":0.8,"gradient_error":6,"max_side":1600}
+{"colors":20,"detail":0.4,"line_min":3,"snap":0.8,"gradient_error":6,"mode":"lineart","max_side":512}
+{"mode":"lineart","colors":5}
+trace: quality must be one of light, balanced, detailed, max or auto, not "huge"
+trace: quality is for mode "lineart"
+trace: quality is for mode "lineart"
+trace: quality "auto" needs trace_auto (it traces three times); give a preset here
+true true
+true
+true
+light detailed
+{"quality":"detailed","less_error":7,"more_mb":0.2}
+{"quality":"light","less_error":-5,"more_mb":-1.0}
+light
+detailed light,balanced,detailed true
+light 10.12 0.392 true
+balanced 9.02 0.523 true
+detailed 5.61 0.74 true
+light light,balanced,detailed true
+light 3.98 0.603 true
+balanced 3.98 0.603 true
+detailed 3.98 0.603 true

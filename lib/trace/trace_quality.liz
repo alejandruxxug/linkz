@@ -1,0 +1,101 @@
+-~> trace_quality: the quality presets of line-art tracing, one word for a set
+-~> of options: {"mode": "lineart", "quality": "detailed"}.
+-~>
+-~>   light     fewer colors and looser outlines: the code shrinks clearly
+-~>             for a little more error
+-~>   balanced  the tracer's own defaults, exactly (no options at all)
+-~>   detailed  more colors, tighter outlines, shorter strokes and a closer
+-~>             snap: less error, a bigger drawing
+-~>   max       detailed, on a picture up to 1600 px instead of 1024
+-~> and "auto", which is not a set of options: it traces light, balanced and
+-~> detailed, scores each against the picture and keeps the best
+-~> (quality_score; trace_auto runs it).
+-~>
+-~> Options given next to a preset win over it. The measured table (error, ink
+-~> IoU, size, time on the reference pictures) is in docs/Art/Checks/v1.2/
+-~> trace-quality/.
+
+-~> The presets, by name: the options each one sets over the defaults.
+let quality_presets = {
+  "light": {"colors": 14, "detail": 1.4, "line_min": 10, "snap": 2.0, "gradient_error": 7},
+  "balanced": {},
+  "detailed": {"colors": 32, "detail": 0.4, "line_min": 3, "snap": 0.8, "gradient_error": 6},
+  "max": {"colors": 32, "detail": 0.4, "line_min": 3, "snap": 0.8, "gradient_error": 6, "max_side": 1600}
+}
+
+-~> The names a user can pick, in the order of the dialog.
+let quality_names = ["light", "balanced", "detailed", "max"]
+
+-~> The presets Auto tries.
+let quality_auto_names = ["light", "balanced", "detailed"]
+
+-~> What a megabyte of code costs Auto, in color levels of error: a preset's
+-~> score is its error plus this times the size of its code in MB, and the
+-~> lowest wins (the reasoning is in docs/Art/Checks/v1.2/trace-quality/).
+let quality_mb_cost = 0.5
+
+-~> The options of the preset `name` (a copy), or an error for another name.
+function quality_options(name) {
+  if (type(name) != "STRING" || quality_presets[name] === null) {
+    error("trace: quality must be one of " + text.join(quality_names, ", ") + " or auto, not " + json.write(name))
+  }
+  hash.copy(quality_presets[name])
+}
+
+-~> The options with "quality" turned into the options it stands for: the
+-~> preset's, then the options given on top. Without "quality" the options
+-~> come back as they were. Only line art has presets; "auto" is not a preset
+-~> (trace_auto decides it).
+function quality_resolve(options) {
+  if (type(options) != "HASH" || options.quality === null) {
+    return options
+  }
+  if (options.quality == "auto") {
+    error("trace: quality \"auto\" needs trace_auto (it traces three times); give a preset here")
+  }
+  if (options.mode != "lineart") {
+    error("trace: quality is for mode \"lineart\"")
+  }
+  let rest = hash.copy(options)
+  hash.remove(rest, "quality")
+  hash.merge(quality_options(options.quality), rest)
+}
+
+-~> The score Auto ranks a result by, lower is better: the error plus
+-~> quality_mb_cost for every MB of code.
+function quality_score(err, bytes) {
+  err + quality_mb_cost * (bytes / 1000000.0)
+}
+
+-~> The row Auto keeps, from rows {"quality", "err", "bytes", ...}: the one
+-~> with the lowest score (the first, in the order given, on a tie).
+function quality_pick(rows) {
+  let best = rows[0]
+  for (let i = 1; i < len(rows); i += 1) {
+    if (quality_score(rows[i].err, rows[i].bytes) < quality_score(best.err, best.bytes) - 0.000001) {
+      best = rows[i]
+    }
+  }
+  best
+}
+
+-~> Why `best` was picked, against the balanced row of `rows`: {"quality",
+-~> "less_error": percent of error gone (negative: gained), "more_mb": MB of
+-~> code added (negative: saved)}. Both zero when it is balanced itself.
+function quality_why(best, rows) {
+  let base = rows[0]
+  for (let i = 0; i < len(rows); i += 1) {
+    if (rows[i].quality == "balanced") {
+      base = rows[i]
+    }
+  }
+  let less = 0
+  if (base.err > 0) {
+    less = math.round(100.0 * (base.err - best.err) / base.err)
+  }
+  {
+    "quality": best.quality,
+    "less_error": less,
+    "more_mb": math.round((best.bytes - base.bytes) / 100000.0) / 10.0
+  }
+}

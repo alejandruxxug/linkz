@@ -4,12 +4,17 @@
 -~> inked drawings as strokes and fills (--line-threshold, --line-min,
 -~> --continuation, --radius, --fills, --solid). --focus x,y,w,h[,f] (any
 -~> number of times, line art) asks for more detail (f above 1, default 2) or
--~> less (below 1) inside a box of the picture, in its own pixels.
+-~> less (below 1) inside a box of the picture, in its own pixels. --quality
+-~> light|balanced|detailed|max (line art) takes a preset of options
+-~> (lib/trace/trace_quality); options given too win over it. --quality auto
+-~> traces three presets in parallel tasks and keeps the best (trace_auto).
 
 use "host_img"
 use "libs"
+use "trace_auto"
+use "../trace/trace_quality"
 
-let trace_usage = "usage: linkz trace in.png out.lzdraw [--colors 8] [--detail 1.5] [--min-area 8] [--max-side 256] [--scale 1] [--corner 55] [--mode photo|lineart] [--line-threshold 0.5] [--line-min 6] [--continuation 35] [--radius 0] [--fills true|false] [--solid 0] [--focus x,y,w,h[,f]]..."
+let trace_usage = "usage: linkz trace in.png out.lzdraw [--colors 8] [--detail 1.5] [--min-area 8] [--max-side 256] [--scale 1] [--corner 55] [--mode photo|lineart] [--line-threshold 0.5] [--line-min 6] [--continuation 35] [--radius 0] [--fills true|false] [--solid 0] [--quality light|balanced|detailed|max|auto] [--focus x,y,w,h[,f]]..."
 
 -~> The options the command takes, by flag, and the key of trace's options.
 let trace_flags = {
@@ -67,7 +72,7 @@ function trace_args(args) {
     }
     let name = text.slice(args[i], 2, len(args[i]))
     let key = trace_flags[name]
-    let word = name == "mode" || name == "fills" || name == "focus"
+    let word = name == "mode" || name == "fills" || name == "focus" || name == "quality"
     if ((key == null && !word) || i + 1 >= len(args)) {
       error("bad option " + args[i] + "\n" + trace_usage)
     }
@@ -77,6 +82,13 @@ function trace_args(args) {
         error("--mode must be photo or lineart, got " + json.write(args[i]))
       }
       options.mode = args[i]
+      continue
+    }
+    if (name == "quality") {
+      if (args[i] != "auto" && list.index(quality_names, args[i]) < 0) {
+        error("--quality must be one of " + text.join(quality_names, ", ") + " or auto, got " + json.write(args[i]))
+      }
+      options.quality = args[i]
       continue
     }
     if (name == "focus") {
@@ -102,11 +114,22 @@ function trace_args(args) {
   if (len(files) != 2) {
     error(trace_usage)
   }
+  if (options.quality != null) {
+    if (options.mode == null) {
+      options.mode = "lineart"
+    }
+    if (options.mode != "lineart") {
+      error("--quality is for --mode lineart")
+    }
+  }
   {"files": files, "options": options}
 }
 
 -~> The code and the stats of tracing the picture at path.
 function trace_file(path, options) {
+  if (options.quality == "auto") {
+    return trace_auto(path, options)
+  }
   let names = libs_load(libs_draw + libs_trace, {"img": host_img(), "time": time})
   names.trace(path, options)
 }
@@ -121,6 +144,10 @@ function trace_command(args) {
   let result = trace_file(a.files[0], a.options)
   fs.write(a.files[1], result.code)
   let st = result.stats
+  if (st.picked != null) {
+    let p = st.picked
+    puts("auto picked " + p.quality + ": " + str(p.less_error) + "% less error than balanced, " + str(p.more_mb) + " MB more code")
+  }
   if (st.mode == "lineart") {
     puts("wrote " + a.files[1] + ": " + trace_show(st.strokes) + " strokes, " + trace_show(st.fills) + " fills, " +
       trace_show(st.tips) + " tips, " + trace_show(st.junctions) + " junctions, " + str(math.round(st.ms)) + " ms")

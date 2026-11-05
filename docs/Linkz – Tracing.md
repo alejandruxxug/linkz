@@ -103,6 +103,7 @@ Result: 216 regions, 1 727 points, 20.7 KB of code. At `max_side` 256 (8 colors)
 | `--fills true\|false` | `fills` | true | false traces only the lines. |
 | `--solid n` | `solid` | 0 | Ink this far (px) from the paper all round is a solid fill, not a stroke; 0 picks it from the size. |
 | `--focus x,y,w,h[,f]` | `focus` | none | A box of the picture (in its own pixels) with more detail (`f` above 1, 2 if left out) or less (`f` below 1); repeat the flag for more boxes. |
+| `--quality name` | `quality` | none | A preset of options (line art; implies `--mode lineart`): `light`, `balanced` (the defaults), `detailed`, `max` (detailed on a picture up to 1600 px) or `auto` (traces light, balanced and detailed in parallel tasks, scores each against the picture and keeps the best; the stats say which, under `picked`). Options given too win over the preset. See `docs/Art/Checks/v1.2/trace-quality/`. |
 
 Focus boxes (Tracing v3 step 5b): from lizard, `{"focus": [{"box": [x, y, w, h], "detail": f}, ...]}`. `f` is kept between 0.25 and 4. Inside a box the smallest region a fill keeps is 1/f squared of what it would be, and the fit tolerance of its outlines 1/f (a later box wins where two meet). It works with `adaptive` off too. The Trace image dialog draws the boxes with its Detail tool, and Insert as layer writes them in a `-~> trace focus [...]` comment above the layer.
 
