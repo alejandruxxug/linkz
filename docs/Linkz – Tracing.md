@@ -103,6 +103,8 @@ Result: 216 regions, 1 727 points, 20.7 KB of code. At `max_side` 256 (8 colors)
 | `--fills true\|false` | `fills` | true | false traces only the lines. |
 | `--solid n` | `solid` | 0 | Ink this far (px) from the paper all round is a solid fill, not a stroke; 0 picks it from the size. |
 
+The merge pass (`lineart_merge`, Tracing v3 step 1) runs on the fills before their outlines are made: `snap` (palette colors under 2 apart in Lab become one), `join` (touching regions of one color become one shape), `stack` (a region with islands is drawn whole with the islands on top, not with holes), `absorb` (a region of the color of the shape under it is given to that shape) and `cover` (shapes hidden by later shapes are dropped). From lizard: `{"merge": false}` for none, or `{"merge": {"stack": false}}` to turn single steps off (the others stay on); no CLI flag yet. The stats have `merge: {snapped, joined, stacked, absorbed, covered}`.
+
 `--colors` (default 16 here), `--min-area`, `--detail` (0.8), `--scale` and `--max-side` (1024) also apply, with their line-art defaults. The line-art flags are an error in photo mode. The summary line then reads `N strokes, N fills, N tips, N junctions, N ms`, followed by the time of each stage (the `stages` of the stats).
 
 ## Next: line art

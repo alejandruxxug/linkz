@@ -1,0 +1,17 @@
+snap: near-equal reds are one color: fills 2 holes 0 colors 1 merge {"snapped": 1, "joined": 0, "stacked": 0, "absorbed": 0, "covered": 0} same colors -
+snap off: two colors: fills 2 holes 0 colors 2 merge {"snapped": 0, "joined": 0, "stacked": 0, "absorbed": 0, "covered": 0} same colors -
+join: the halves are one shape: fills 1 holes 0 colors 1 merge {"snapped": 0, "joined": 1, "stacked": 0, "absorbed": 0, "covered": 0} same colors true
+join off: two shapes: fills 2 holes 0 colors 1 merge {"snapped": 0, "joined": 0, "stacked": 0, "absorbed": 0, "covered": 0} same colors true
+stack: a disc and a dot in a ring, no hole: fills 3 holes 0 colors 3 merge {"snapped": 0, "joined": 0, "stacked": 1, "absorbed": 0, "covered": 0} same colors true
+stack off: the ring has a hole: fills 3 holes 1 colors 3 merge {"snapped": 0, "joined": 0, "stacked": 0, "absorbed": 0, "covered": 0} same colors true
+absorb: the pink inside the arcs goes: fills 3 holes 1 colors 3 merge {"snapped": 0, "joined": 0, "stacked": 0, "absorbed": 1, "covered": 0} same colors true
+absorb off: it stays: fills 4 holes 1 colors 3 merge {"snapped": 0, "joined": 0, "stacked": 0, "absorbed": 0, "covered": 0} same colors true
+merge off: all steps off: fills 3 holes 1 colors 3 merge {"snapped": 0, "joined": 0, "stacked": 0, "absorbed": 0, "covered": 0} same colors true
+cover: a small shape under a big one goes: 1 1
+cover: a small shape over a big one stays: 2 0
+cover: a shape in the hole of a later one stays: 2 0
+cover: half hidden stays: 2 0
+trace: merge must be true, false or a hash of steps (snap, join, stack, absorb, cover)
+trace: unknown merge step "glue" (known: snap, join, stack, absorb, cover)
+trace: merge step "snap" must be true or false
+steps: {"snap": true, "join": false, "stack": true, "absorb": true, "cover": true}

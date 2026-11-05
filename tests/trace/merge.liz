@@ -1,0 +1,153 @@
+-~> The merge pass of the line-art fills (lineart_merge), a picture for each
+-~> step, run with the step on and off: near-equal colors snapped, touching
+-~> regions of one color joined, a ring around a disc drawn whole with the
+-~> disc on top (no holes), a region of the color under it absorbed, and
+-~> shapes that later shapes hide dropped. Each picture is also drawn from
+-~> the code and compared with the original at some probe points, to check
+-~> that the draw order is exact.
+
+use "../../lib/app/drawing"
+use "../../lib/app/paint"
+use "../../lib/app/libs"
+use "../../lib/draw/geometry"
+use "../../lib/trace/trace"
+use "../../lib/trace/lineart_merge"
+
+-~> A picture from a function of the pixel center, 4 samples per pixel.
+function cel(w, h, f) {
+  let px = []
+  for (let y = 0; y < h; y += 1) {
+    for (let x = 0; x < w; x += 1) {
+      let s = [0, 0, 0]
+      for (let k = 0; k < 4; k += 1) {
+        let c = f((x + 0.25 + 0.5 * (k % 2), y + 0.25 + 0.5 * (k // 2)))
+        s = [s[0] + c.r, s[1] + c.g, s[2] + c.b]
+      }
+      push(px, rgb(math.round(s[0] / 4.0), math.round(s[1] / 4.0), math.round(s[2] / 4.0)))
+    }
+  }
+  {"size": (w, h), "pixels": px}
+}
+
+let paper = #fafaf5
+let pink = #f0a0a0
+let blue = #90b4f0
+let green = #90d890
+let dark = #101010
+
+-~> Two squares of nearly one red, far apart: 0.6 apart in Lab.
+let twins = cel(70, 30, function(p) {
+  if (p.x > 6 && p.x < 28 && p.y > 6 && p.y < 24) { return #c72828 }
+  if (p.x > 42 && p.x < 64 && p.y > 6 && p.y < 24) { return #c82828 }
+  paper
+})
+-~> Two squares of one color parted by a dark line.
+let parted = cel(64, 40, function(p) {
+  if (p.x < 6 || p.x > 58 || p.y < 6 || p.y > 34) { return paper }
+  if (math.abs(p.x - 32) < 1.5) { return dark }
+  pink
+})
+-~> A ring (r 15 to 19) round a disc (r 15) that has a dot (r 4) at its middle.
+let ringed = cel(60, 60, function(p) {
+  let d = math.dist(p, (30, 30))
+  if (d < 4) { return green }
+  if (d < 15) { return blue }
+  if (d < 19) { return pink }
+  paper
+})
+-~> A pink square, a ring in it of two arcs (blue left, green right) and pink
+-~> inside the ring: the inner pink is the color under it.
+let arcs = cel(70, 70, function(p) {
+  if (p.x < 5 || p.x > 65 || p.y < 5 || p.y > 65) { return paper }
+  let d = math.dist(p, (35, 35))
+  if (d < 11) { return pink }
+  if (d < 17) {
+    if (p.x < 35) { return blue }
+    return green
+  }
+  pink
+})
+
+-~> Counts in the code: fills, holes (paths with a hole list), colors.
+function counts(result) {
+  let holes = 0
+  let rows = text.lines(result.code)
+  for (let i = 0; i < len(rows); i += 1) {
+    if (text.find(rows[i], ", true, true, [") >= 0) {
+      holes += 1
+    }
+  }
+  {"fills": result.stats.fills, "holes": holes, "colors": result.stats.colors}
+}
+
+-~> The largest color difference (|dR| + |dG| + |dB|) between the picture
+-~> and the drawing of the code, at some probe points.
+function worst(pic, result, probes) {
+  let at = img.pixels(paint_run(result.code + "\nraster.paint(drawing, (0, 0))\n", pic.size))
+  let top = 0
+  for (let i = 0; i < len(probes); i += 1) {
+    let p = probes[i]
+    let a = pic.pixels[p[1] * pic.size.x + p[0]]
+    let b = at[p[1] * pic.size.x + p[0]]
+    top = math.max(top, math.abs(a.r - b.r) + math.abs(a.g - b.g) + math.abs(a.b - b.b))
+  }
+  top
+}
+
+-~> [name, picture, options, probe points]
+let cases = [
+  ["snap: near-equal reds are one color", twins, {"merge": true}, []],
+  ["snap off: two colors", twins, {"merge": {"snap": false}}, []],
+  ["join: the halves are one shape", parted, {"merge": true}, [[15, 20], [48, 20]]],
+  ["join off: two shapes", parted, {"merge": {"join": false, "absorb": false}}, [[15, 20], [48, 20]]],
+  ["stack: a disc and a dot in a ring, no hole", ringed, {"merge": true, "snap": 0}, [[30, 30], [30, 38], [30, 48]]],
+  ["stack off: the ring has a hole", ringed, {"merge": {"stack": false}, "snap": 0}, [[30, 30], [30, 38], [30, 48]]],
+  ["absorb: the pink inside the arcs goes", arcs, {"merge": true, "snap": 0}, [[35, 35], [20, 35], [50, 35]]],
+  ["absorb off: it stays", arcs, {"merge": {"absorb": false}, "snap": 0}, [[35, 35], [20, 35], [50, 35]]],
+  ["merge off: all steps off", ringed, {"merge": false, "snap": 0}, [[30, 30], [30, 38], [30, 48]]]
+]
+for (let i = 0; i < len(cases); i += 1) {
+  let c = cases[i]
+  let opts = hash.merge({"mode": "lineart"}, c[2])
+  let result = trace_pixels(c[1].size, c[1].pixels, opts, "merge")
+  let n = counts(result)
+  let off = "-"
+  if (len(c[3]) > 0) {
+    off = str(worst(c[1], result, c[3]) < 60)
+  }
+  puts(c[0] + ":", "fills", n.fills, "holes", n.holes, "colors", n.colors, "merge", result.stats.merge, "same colors", off)
+}
+
+-~> Step 5 on shapes made here: a square, the same square again later, a small
+-~> square in a big one, a big one in a small one (stays), and a square that
+-~> lies in a hole of a later shape (stays).
+function sq(x0, y0, x1, y1) {
+  [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
+}
+function shape(outer, hole) {
+  let holes = []
+  if (hole !== null) {
+    holes = [hole]
+  }
+  {"color": 0, "outers": [outer], "holes": [holes], "prims": [null], "outer_curves": [[]], "hole_curves": [[]]}
+}
+let hidden = lineart_merge_cover([shape(sq(2, 2, 6, 6), null), shape(sq(0, 0, 10, 10), null)])
+puts("cover: a small shape under a big one goes:", len(hidden.shapes), hidden.covered)
+hidden = lineart_merge_cover([shape(sq(0, 0, 10, 10), null), shape(sq(2, 2, 6, 6), null)])
+puts("cover: a small shape over a big one stays:", len(hidden.shapes), hidden.covered)
+hidden = lineart_merge_cover([shape(sq(2, 2, 6, 6), null), shape(sq(0, 0, 10, 10), sq(1, 1, 7, 7))])
+puts("cover: a shape in the hole of a later one stays:", len(hidden.shapes), hidden.covered)
+hidden = lineart_merge_cover([shape(sq(2, 2, 6, 6), null), shape(sq(5, 5, 20, 20), null)])
+puts("cover: half hidden stays:", len(hidden.shapes), hidden.covered)
+
+-~> The option checks.
+let bads = [{"merge": 3}, {"merge": {"glue": true}}, {"merge": {"snap": 1}}]
+for (let i = 0; i < len(bads); i += 1) {
+  try {
+    trace_pixels(parted.size, parted.pixels, hash.merge({"mode": "lineart"}, bads[i]))
+    puts("no error for", bads[i])
+  } catch (e) {
+    puts(e.message)
+  }
+}
+puts("steps:", lineart_merge_steps({"join": false}))

@@ -1,0 +1,488 @@
+-~> lineart_merge: fewer, simpler fill shapes for the same picture. It runs
+-~> after the regions are cut (lineart_regions) and before their outlines are
+-~> made, in five steps, each of which can be turned off (the `merge` option):
+-~>   1. snap     palette colors less than 2 apart in Lab (ΔE) become one
+-~>               entry, the one that covers more of the picture
+-~>   2. join     regions of one color that touch (across a line that parted
+-~>               them) become one region, so one outline
+-~>   3. stack    a region with islands of other colors is drawn whole and the
+-~>               islands go on top, instead of cutting holes: the order of
+-~>               drawing becomes "what encloses comes before what is
+-~>               enclosed", then biggest first. An island of the canvas
+-~>               color stays a hole (the canvas is not drawn)
+-~>   4. absorb   a region whose color is the color of the shape right under
+-~>               it (the last one drawn that covers it) is given to that
+-~>               shape: it would add nothing
+-~>   5. cover    shapes that later shapes hide completely are dropped
+-~>               (lineart_merge_cover, on the finished outlines)
+-~> Steps 1 to 4 only move labels and the order, so the picture keeps its
+-~> colors: a shape is drawn with the regions drawn after it that touch it,
+-~> and with the holes that hold only regions drawn after it, so any order
+-~> of the regions draws every pixel in the color of its region.
+
+use "lineart_fills"
+use "lineart_outline"
+
+-~> The five steps and their names. Anything left out of a `merge` hash is on.
+let lineart_merge_names = ["snap", "join", "stack", "absorb", "cover"]
+
+-~> The steps from the merge option: true or false for all of them, or a hash
+-~> with some of the names (the others stay on). Returns {name: bool...}.
+function lineart_merge_steps(value) {
+  let steps = {}
+  for (let i = 0; i < len(lineart_merge_names); i += 1) {
+    steps[lineart_merge_names[i]] = true
+  }
+  if (type(value) == "BOOLEAN") {
+    for (let i = 0; i < len(lineart_merge_names); i += 1) {
+      steps[lineart_merge_names[i]] = value
+    }
+    return steps
+  }
+  if (type(value) != "HASH") {
+    error("trace: merge must be true, false or a hash of steps (" + text.join(lineart_merge_names, ", ") + ")")
+  }
+  let given = keys(value)
+  for (let i = 0; i < len(given); i += 1) {
+    if (list.index(lineart_merge_names, given[i]) < 0) {
+      error("trace: unknown merge step \"" + given[i] + "\" (known: " + text.join(lineart_merge_names, ", ") + ")")
+    }
+    if (type(value[given[i]]) != "BOOLEAN") {
+      error("trace: merge step \"" + given[i] + "\" must be true or false")
+    }
+    steps[given[i]] = value[given[i]]
+  }
+  steps
+}
+
+-~> Steps 1 to 4 on `fill` (lineart_regions' result, changed: its colors, regions
+-~> and label). `steps` is lineart_merge_steps' result. Returns {"order":
+-~> lineart_order's result, the drawing order changed by step 3, "stats":
+-~> {"snapped": palette entries given up, "joined": regions joined into one,
+-~> "stacked": regions that now come after what encloses them, "absorbed":
+-~> regions given to the shape under them}}.
+function lineart_merge_regions(fill, w, h, steps) {
+  let stats = {"snapped": 0, "joined": 0, "stacked": 0, "absorbed": 0}
+  let order = lineart_order(fill, w, h)
+  if (steps.snap) {
+    stats.snapped = lineart_merge_snap(fill, order)
+    if (stats.snapped > 0) {
+      order = lineart_order(fill, w, h)
+    }
+  }
+  if (steps.join) {
+    stats.joined = lineart_merge_join(fill, order)
+    if (stats.joined > 0) {
+      order = lineart_order(fill, w, h)
+    }
+  }
+  let inside = null
+  if (steps.stack || steps.absorb) {
+    inside = lineart_enclosers(fill, order, w, h)
+  }
+  if (steps.stack) {
+    stats.stacked = lineart_merge_stack(order, inside)
+  }
+  if (steps.absorb) {
+    stats.absorbed = lineart_merge_absorb(fill, order, inside, steps.stack)
+    if (stats.absorbed > 0) {
+      order = lineart_order(fill, w, h)
+      if (steps.stack) {
+        lineart_merge_stack(order, lineart_enclosers(fill, order, w, h))
+      }
+    }
+  }
+  {"order": order, "stats": stats}
+}
+
+-~> Step 1: palette colors closer than 2 in Lab (ΔE76) are one. Each color
+-~> goes to the first color before it, taken from the one that covers most
+-~> pixels, that is within 2. Changes the regions' colors. Returns how many
+-~> palette entries were given up.
+function lineart_merge_snap(fill, order) {
+  let n = len(fill.colors)
+  let pixels = []
+  for (let c = 0; c < n; c += 1) {
+    push(pixels, 0)
+  }
+  for (let i = 0; i < len(fill.regions); i += 1) {
+    pixels[fill.regions[i].color] += order.area[i]
+  }
+  let ranked = []
+  for (let c = 0; c < n; c += 1) {
+    if (pixels[c] > 0) {
+      push(ranked, c)
+    }
+  }
+  ranked = list.sort(ranked, function(a, b) { pixels[a] > pixels[b] || (pixels[a] == pixels[b] && a < b) })
+  let into = []
+  for (let c = 0; c < n; c += 1) {
+    push(into, c)
+  }
+  let kept = []
+  let given = 0
+  for (let k = 0; k < len(ranked); k += 1) {
+    let c = ranked[k]
+    let found = -1
+    for (let j = 0; j < len(kept) && found < 0; j += 1) {
+      if (lineart_delta_e(fill.lab[c], fill.lab[kept[j]]) < 2.0) {
+        found = kept[j]
+      }
+    }
+    if (found < 0) {
+      push(kept, c)
+    } else {
+      into[c] = found
+      given += 1
+    }
+  }
+  if (given > 0) {
+    for (let i = 0; i < len(fill.regions); i += 1) {
+      fill.regions[i].color = into[fill.regions[i].color]
+    }
+  }
+  given
+}
+
+-~> The distance between two Lab colors [L, a, b].
+function lineart_delta_e(a, b) {
+  let dl = a[0] - b[0]
+  let da = a[1] - b[1]
+  let db = a[2] - b[2]
+  math.sqrt(dl * dl + da * da + db * db)
+}
+
+-~> Step 2: regions of one color that touch become one region. Changes fill
+-~> (labels and regions). Returns how many regions went.
+function lineart_merge_join(fill, order) {
+  let n = len(fill.regions)
+  let root = lineart_roots(n)
+  for (let a = 0; a < n; a += 1) {
+    let near = keys(order.near[a])
+    for (let k = 0; k < len(near); k += 1) {
+      let b = near[k]
+      if (fill.regions[a].color == fill.regions[b].color) {
+        lineart_union(root, a, b)
+      }
+    }
+  }
+  lineart_relabel(fill, root)
+}
+
+-~> Step 3: the drawing order, what encloses first. `inside` is
+-~> lineart_enclosers' result. Changes order.order and order.rank; returns
+-~> how many regions were drawn before something that encloses them and now
+-~> come after it.
+function lineart_merge_stack(order, inside) {
+  let before = list.copy(order.rank)
+  let area = order.area
+  let depth = inside.depth
+  order.order = list.sort(order.order, function(a, b) {
+    depth[a] < depth[b] || (depth[a] == depth[b] && (area[a] > area[b] || (area[a] == area[b] && a < b)))
+  })
+  for (let k = 0; k < len(order.order); k += 1) {
+    order.rank[order.order[k]] = k
+  }
+  let moved = 0
+  for (let i = 0; i < len(inside.of); i += 1) {
+    let late = false
+    for (let k = 0; k < len(inside.of[i]); k += 1) {
+      if (before[inside.of[i][k]] > before[i]) {
+        late = true
+      }
+    }
+    if (late) {
+      moved += 1
+    }
+  }
+  moved
+}
+
+-~> Step 4: a region whose shape would add nothing, since the shape right
+-~> under it (the last one drawn before it that covers it: a neighbour drawn
+-~> earlier, or what encloses it when `holes_filled` says the enclosing shape
+-~> is drawn whole) has the same color, goes to that shape's region. Changes
+-~> fill. Returns how many regions went.
+function lineart_merge_absorb(fill, order, inside, holes_filled) {
+  let n = len(fill.regions)
+  let root = lineart_roots(n)
+  for (let k = 0; k < len(order.order); k += 1) {
+    let r = order.order[k]
+    let under = -1
+    let near = keys(order.near[r])
+    for (let j = 0; j < len(near); j += 1) {
+      let e = near[j]
+      if (order.rank[e] >= 0 && order.rank[e] < k && (under < 0 || order.rank[e] > order.rank[under])) {
+        under = e
+      }
+    }
+    if (holes_filled) {
+      for (let j = 0; j < len(inside.of[r]); j += 1) {
+        let e = inside.of[r][j]
+        if (order.rank[e] >= 0 && order.rank[e] < k && (under < 0 || order.rank[e] > order.rank[under])) {
+          under = e
+        }
+      }
+    }
+    if (under >= 0 && fill.regions[under].color == fill.regions[r].color) {
+      lineart_union(root, r, under)
+    }
+  }
+  lineart_relabel(fill, root)
+}
+
+-~> The regions that enclose each region: E encloses R when every way from R
+-~> to the edge of the picture (or to the canvas color, which is not drawn)
+-~> goes through E, so R lies in a hole of E's outline. Found as the cut
+-~> points of the graph of touching regions (one depth-first walk, from a
+-~> node that stands for everything outside). Returns {"of": [list of the
+-~> enclosing regions, for each region], "depth": [how many enclose it]}.
+function lineart_enclosers(fill, order, w, h) {
+  let n = len(fill.regions)
+  let outside = n
+  let adj = []
+  for (let i = 0; i < n; i += 1) {
+    push(adj, keys(order.near[i]))
+  }
+  push(adj, [])
+  let touches = lineart_border_regions(fill, w, h)
+  for (let i = 0; i < n; i += 1) {
+    if (touches[i] || fill.regions[i].color == order.background) {
+      push(adj[i], outside)
+      push(adj[outside], i)
+    }
+  }
+  let disc = []
+  let low = []
+  let parent = []
+  let next = []
+  let cut = []
+  for (let i = 0; i <= n; i += 1) {
+    push(disc, -1)
+    push(low, -1)
+    push(parent, -1)
+    push(next, 0)
+    push(cut, false)
+  }
+  let seq = [outside]
+  let stack = [outside]
+  disc[outside] = 0
+  low[outside] = 0
+  let clock = 1
+  while (len(stack) > 0) {
+    let v = stack[len(stack) - 1]
+    if (next[v] < len(adj[v])) {
+      let u = adj[v][next[v]]
+      next[v] += 1
+      if (disc[u] < 0) {
+        parent[u] = v
+        disc[u] = clock
+        low[u] = clock
+        clock += 1
+        push(stack, u)
+        push(seq, u)
+      } elif (u != parent[v]) {
+        low[v] = math.min(low[v], disc[u])
+      }
+    } else {
+      pop(stack)
+      let p = parent[v]
+      if (p >= 0) {
+        low[p] = math.min(low[p], low[v])
+        if (p != outside && low[v] >= disc[p] && fill.regions[p].color != order.background) {
+          cut[v] = true
+        }
+      }
+    }
+  }
+  let of = []
+  for (let i = 0; i < n; i += 1) {
+    push(of, [])
+  }
+  for (let k = 1; k < len(seq); k += 1) {
+    let v = seq[k]
+    let p = parent[v]
+    if (p != outside) {
+      of[v] = list.copy(of[p])
+      if (cut[v]) {
+        push(of[v], p)
+      }
+    }
+  }
+  let depth = []
+  for (let i = 0; i < n; i += 1) {
+    push(depth, len(of[i]))
+  }
+  {"of": of, "depth": depth}
+}
+
+-~> For each region, whether it has a pixel on the edge of the picture.
+function lineart_border_regions(fill, w, h) {
+  let w2 = w + 2
+  let touches = []
+  for (let i = 0; i < len(fill.regions); i += 1) {
+    push(touches, false)
+  }
+  for (let x = 0; x < w; x += 1) {
+    lineart_mark_region(fill.label[w2 + x + 1], touches)
+    lineart_mark_region(fill.label[h * w2 + x + 1], touches)
+  }
+  for (let y = 0; y < h; y += 1) {
+    lineart_mark_region(fill.label[(y + 1) * w2 + 1], touches)
+    lineart_mark_region(fill.label[(y + 1) * w2 + w], touches)
+  }
+  touches
+}
+
+-~> Marks region `id` in `flags` (nothing for a pixel with no region).
+function lineart_mark_region(id, flags) {
+  if (id >= 0) {
+    flags[id] = true
+  }
+}
+
+-~> A union-find forest of n singletons.
+function lineart_roots(n) {
+  let root = []
+  for (let i = 0; i < n; i += 1) {
+    push(root, i)
+  }
+  root
+}
+
+-~> The root of a in the forest, with the path shortened.
+function lineart_find(root, a) {
+  let r = a
+  while (root[r] != r) {
+    r = root[r]
+  }
+  while (root[a] != r) {
+    let up = root[a]
+    root[a] = r
+    a = up
+  }
+  r
+}
+
+-~> Joins the sets of a and b; the smaller number is the root, so the older
+-~> region keeps its place.
+function lineart_union(root, a, b) {
+  let ra = lineart_find(root, a)
+  let rb = lineart_find(root, b)
+  if (ra < rb) {
+    root[rb] = ra
+  } elif (rb < ra) {
+    root[ra] = rb
+  }
+}
+
+-~> Gives every region the number of its set (numbers 0 up, in the order the
+-~> sets first appear) in fill.label and fill.regions. Returns how many
+-~> regions went.
+function lineart_relabel(fill, root) {
+  let n = len(fill.regions)
+  let number = []
+  let regions = []
+  for (let i = 0; i < n; i += 1) {
+    let r = lineart_find(root, i)
+    if (r == i) {
+      push(number, len(regions))
+      push(regions, fill.regions[i])
+    } else {
+      push(number, number[r])
+    }
+  }
+  if (len(regions) == n) {
+    return 0
+  }
+  let label = fill.label
+  for (let p = 0; p < len(label); p += 1) {
+    if (label[p] >= 0) {
+      label[p] = number[label[p]]
+    }
+  }
+  fill.regions = regions
+  n - len(regions)
+}
+
+-~> Step 5: the shapes (lineart_trace_fills' list, drawn first to last) with
+-~> the outlines that a later shape hides completely taken out: every point
+-~> of the outline lies inside one later outline and not in its holes. A
+-~> shape with no outline left goes. Returns {"shapes", "covered": how many
+-~> outlines went}.
+function lineart_merge_cover(shapes) {
+  let boxes = []
+  let rings = []
+  for (let i = 0; i < len(shapes); i += 1) {
+    let s = shapes[i]
+    for (let k = 0; k < len(s.outers); k += 1) {
+      push(rings, [i, k])
+      push(boxes, lineart_box_of(s.outers[k]))
+    }
+  }
+  let covered = {}
+  let count = 0
+  for (let a = 0; a < len(rings); a += 1) {
+    let sa = rings[a][0]
+    let pts = shapes[sa].outers[rings[a][1]]
+    let ba = boxes[a]
+    for (let b = a + 1; b < len(rings) && covered[a] === null; b += 1) {
+      let sb = rings[b][0]
+      let bb = boxes[b]
+      if (sb > sa && bb[0] <= ba[0] && bb[1] <= ba[1] && bb[2] >= ba[2] && bb[3] >= ba[3] &&
+        lineart_ring_hides(shapes[sb], rings[b][1], pts)) {
+          covered[a] = true
+          count += 1
+        }
+    }
+  }
+  if (count == 0) {
+    return {"shapes": shapes, "covered": 0}
+  }
+  let kept = []
+  let at = 0
+  for (let i = 0; i < len(shapes); i += 1) {
+    let s = shapes[i]
+    let out = {"color": s.color, "outers": [], "holes": [], "prims": [], "outer_curves": [], "hole_curves": []}
+    for (let k = 0; k < len(s.outers); k += 1) {
+      if (covered[at] === null) {
+        push(out.outers, s.outers[k])
+        push(out.holes, s.holes[k])
+        push(out.prims, s.prims[k])
+        push(out.outer_curves, s.outer_curves[k])
+        push(out.hole_curves, s.hole_curves[k])
+      }
+      at += 1
+    }
+    if (len(out.outers) > 0) {
+      push(kept, out)
+    }
+  }
+  {"shapes": kept, "covered": count}
+}
+
+-~> The box [x0, y0, x1, y1] round some points.
+function lineart_box_of(points) {
+  let b = [points[0].x, points[0].y, points[0].x, points[0].y]
+  for (let i = 1; i < len(points); i += 1) {
+    let p = points[i]
+    b = [math.min(b[0], p.x), math.min(b[1], p.y), math.max(b[2], p.x), math.max(b[3], p.y)]
+  }
+  b
+}
+
+-~> Whether the outline number `k` of `shape`, with its holes, covers all of
+-~> the points `pts`.
+function lineart_ring_hides(shape, k, pts) {
+  for (let i = 0; i < len(pts); i += 1) {
+    if (!lineart_inside(pts[i], shape.outers[k])) {
+      return false
+    }
+    for (let j = 0; j < len(shape.holes[k]); j += 1) {
+      if (lineart_inside(pts[i], shape.holes[k][j])) {
+        return false
+      }
+    }
+  }
+  true
+}

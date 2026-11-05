@@ -42,6 +42,7 @@ use "lineart_snap"
 use "lineart_fills"
 use "lineart_outline"
 use "lineart_palette"
+use "lineart_merge"
 
 -~> The options of trace(path, {"mode": "lineart", ...}). Anything left out
 -~> takes the value shown.
@@ -70,6 +71,17 @@ use "lineart_palette"
 -~>                   to their neighbours; 0 picks it from the picture's size.
 -~>   solid           ink at least this far (px) from the paper all round is
 -~>                   a solid fill, not a stroke; 0 picks it from the size.
+-~>   merge           true or false for the five merge steps (lineart_merge)
+-~>                   together, or a hash to pick: {"snap": true, "join": true,
+-~>                   "stack": true, "absorb": true, "cover": true}, a step
+-~>                   left out of the hash staying on.
+-~>                     snap    palette colors under 2 apart (Lab) become one
+-~>                     join    touching regions of one color become one shape
+-~>                     stack   a region with islands is drawn whole and the
+-~>                             islands on top, not with holes cut out
+-~>                     absorb  a region of the color of the shape under it
+-~>                             is given to that shape
+-~>                     cover   shapes that later shapes hide are dropped
 -~>   detail          how far, in pixels, a fill outline may drift from the
 -~>                   Bezier curves fitted to it.
 -~>   scale           multiplies every coordinate, to make a bigger drawing.
@@ -88,6 +100,7 @@ let lineart_options = {
   "colors": 16,
   "min_area": 0,
   "solid": 0,
+  "merge": true,
   "detail": 0.8,
   "scale": 1,
   "max_side": 1024
@@ -119,6 +132,7 @@ function lineart_settings(options) {
   if (!(out.snap >= 0)) {
     error("trace: snap must be 0 or more pixels")
   }
+  out.merge = lineart_merge_steps(out.merge)
   out
 }
 
@@ -222,6 +236,7 @@ function lineart_pixels(size, pixels, options, name) {
       "fills": made.fills,
       "colors": len(made.names),
       "solid": fills.solid,
+      "merge": fills.merge,
       "points": made.points,
       "primitives": made.primitives,
       "curved": made.curved,
@@ -253,11 +268,11 @@ function lineart_pixels(size, pixels, options, name) {
 -~> the regions, and the shapes of each one to draw, biggest first
 -~> (`curve`: the settings of lineart_outline_points).
 -~> Returns {"shapes": [{"color": palette number, "outers", "holes",
--~> "prims"}...],
+-~> "prims"}...], "merge": what each merge step did (lineart_merge),
 -~> "colors", "lab", "background" (palette number or -1), "solid": solid
 -~> pixels taken, "outline_ms"}.
 function lineart_trace_fills(pixels, m, dist, w, h, opt, curve) {
-  let none = {"shapes": [], "colors": [], "lab": [], "background": -1, "solid": 0, "outline_ms": 0}
+  let none = {"shapes": [], "merge": {}, "colors": [], "lab": [], "background": -1, "solid": 0, "outline_ms": 0}
   if (!opt.fills) {
     return none
   }
@@ -273,7 +288,8 @@ function lineart_trace_fills(pixels, m, dist, w, h, opt, curve) {
   }
   let solid = lineart_solid(m, pixels, dist, w, depth)
   let fill = lineart_regions(pixels, m.mask, w, h, opt.colors, min_area)
-  let order = lineart_order(fill, w, h)
+  let merged = lineart_merge_regions(fill, w, h, opt.merge)
+  let order = merged.order
   let t0 = time.ms()
   let shapes = []
   for (let k = 0; k < len(order.order); k += 1) {
@@ -284,8 +300,16 @@ function lineart_trace_fills(pixels, m, dist, w, h, opt, curve) {
       push(shapes, s)
     }
   }
+  let merge = merged.stats
+  merge.covered = 0
+  if (opt.merge.cover) {
+    let hidden = lineart_merge_cover(shapes)
+    shapes = hidden.shapes
+    merge.covered = hidden.covered
+  }
   {
     "shapes": shapes,
+    "merge": merge,
     "colors": fill.colors,
     "lab": fill.lab,
     "background": order.background,
