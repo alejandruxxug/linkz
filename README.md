@@ -2,23 +2,41 @@
 
 *lizard inkz*
 
-Vector art you write in [lizard-script](https://github.com/alejandruxxug/lizard-script). Linkz itself is a lizard-script program: the shapes, the SVG writer, the editor and the app around them are all lizard code, run by `lizardscript`.
+![Linkz](docs/Art/Previews/banner-final-dark-3x.png)
+
+A vector art app where **the drawing is code**. Every shape you draw, drag or recolor is a line of [lizard-script](https://github.com/alejandruxxug/lizard-script), and every line of code is a shape you can grab. Linkz itself is written entirely in lizard-script too: the editor, the rasterizer, the SVG writer, the image tracer and the app around them, run by `lizardscript`.
 
 ```
 -~> lzdraw 1
-canvas = {"width": 400, "height": 200, "background": "#f4f1e8"}
-line(20, 100, 380, 100)
+-~> A row of growing circles on a line.
+
+canvas = {"size": (400, 200), "background": #f4f1e8}
+
 for (let i = 0; i < 6; i = i + 1) {
-  circle(40 + i * 64, 100, 6 + i * 4)
+  let c = circle((40 + i * 64, 100), 6 + i * 4, #3fa34d)
+  if (i % 2 == 1) {
+    c.fill = #e0a526
+  }
 }
+line((20, 100), (380, 100), #1d1d1f, 2)
 ```
+
+## What it does
+
+- **Two-way editing:** draw with the pencil or the brush, move anchors, recolor, and the code updates; edit the code and the canvas follows. One undo step per gesture.
+- **Coder and artist modes**, layers with blend modes and opacity, gradients (linear, radial, stepped), a color wheel with harmonies, select, move and lasso.
+- **Brushes:** pressure-sensitive pens, stamped brushes (spray, chalk, leaf, image tips; paper, canvas and hatch grain), a brush creator, `.lzbrush` files you can share.
+- **Trace:** turn a picture into editable code. Line art becomes strokes with real widths, flat colors become fills under them, smooth shading becomes gradients; quality presets, an Auto mode, and boxes to ask for more detail where it matters.
+- **Zoom** to 3200% without freezing, **export** PNG at any size and SVG.
+- **Agents can draw:** `linkz mcp` speaks the Model Context Protocol, so an AI agent draws by writing lizard-script.
+- English and Spanish.
 
 ## Install
 
-From a release (once one is public; while the repo is private, set `GITHUB_TOKEN` to a token that can read it):
+Download the archive for your system from the [latest release](https://github.com/alejandruxxug/linkz/releases/latest), or use the install script (it checks the sha256):
 
 ```bash
-# macOS / Linux: installs to ~/.local/bin (add --system for /usr/local/bin)
+# macOS / Linux: installs to ~/.local/bin (add --system for /usr/local/bin); on macOS, Linkz.app goes to ~/Applications
 scripts/install.sh
 ```
 
@@ -27,7 +45,9 @@ scripts/install.sh
 .\scripts\install.ps1
 ```
 
-Both download the archive for your system from the latest release, check its sha256, and install `linkz`. To install an archive you already downloaded: `scripts/install.sh --from-file linkz_<version>_<os>_<arch>.tar.gz --checksums checksums.txt`. Builds: macOS (Apple Silicon and Intel), Windows (amd64), Linux (amd64).
+To install an archive you already downloaded: `scripts/install.sh --from-file linkz_<version>_<os>_<arch>.tar.gz --checksums checksums.txt`. Builds: macOS (Apple Silicon and Intel), Windows (amd64), Linux (amd64).
+
+**macOS:** the app is not notarized yet, so the first time, right-click `Linkz.app` → **Open** → **Open**. **Windows and Linux** builds are new and less tested than the Mac one; reports are welcome.
 
 ## Try it
 

@@ -65,7 +65,7 @@ Nothing is published until a person pushes a tag and publishes the draft. The pi
 
 **Flow:** `git tag v0.1.0 && git push origin v0.1.0` → release workflow → draft release with the four archives and `checksums.txt` → read it, then publish it on GitHub.
 
-**Version:** `linkz_version` is `0.1.0-dev` in source and set by the release workflow from the tag. A new version makes Linkz measure the machine again.
+**Version:** `linkz_version` is the release version (`0.1.0`); between releases it may say `-dev`. A new version makes Linkz measure the machine again.
 
 **Private repo:** while `alejandruxxug/linkz` is private, `install.sh` / `install.ps1` only work with `GITHUB_TOKEN` set to a token that can read it; once a release is public they work without one.
 
