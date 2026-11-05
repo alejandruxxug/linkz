@@ -43,6 +43,7 @@ use "lineart_fills"
 use "lineart_outline"
 use "lineart_palette"
 use "lineart_merge"
+use "lineart_gradient"
 
 -~> The options of trace(path, {"mode": "lineart", ...}). Anything left out
 -~> takes the value shown.
@@ -82,6 +83,14 @@ use "lineart_merge"
 -~>                     absorb  a region of the color of the shape under it
 -~>                             is given to that shape
 -~>                     cover   shapes that later shapes hide are dropped
+-~>   gradients       true to turn groups of neighbouring regions whose colors
+-~>                   ramp smoothly into one shape with a linear or radial
+-~>                   gradient fill (lineart_gradient), or with `steps` when
+-~>                   the bands are few and even. A hard cel shadow (two flat
+-~>                   tones) stays flat. false keeps every band flat.
+-~>   gradient_error  the most a gradient may differ from the picture, on
+-~>                   average, in color levels (0 to 255), for a group to
+-~>                   become one. Higher makes more gradients.
 -~>   detail          how far, in pixels, a fill outline may drift from the
 -~>                   Bezier curves fitted to it.
 -~>   scale           multiplies every coordinate, to make a bigger drawing.
@@ -101,6 +110,8 @@ let lineart_options = {
   "min_area": 0,
   "solid": 0,
   "merge": true,
+  "gradients": true,
+  "gradient_error": 4,
   "detail": 0.8,
   "scale": 1,
   "max_side": 1024
@@ -131,6 +142,12 @@ function lineart_settings(options) {
   }
   if (!(out.snap >= 0)) {
     error("trace: snap must be 0 or more pixels")
+  }
+  if (type(out.gradients) != "BOOLEAN") {
+    error("trace: gradients must be true or false")
+  }
+  if (!(out.gradient_error > 0)) {
+    error("trace: gradient_error must be more than 0")
   }
   out.merge = lineart_merge_steps(out.merge)
   out
@@ -236,6 +253,7 @@ function lineart_pixels(size, pixels, options, name) {
       "fills": made.fills,
       "colors": len(made.names),
       "solid": fills.solid,
+      "gradients": fills.gradients,
       "merge": fills.merge,
       "points": made.points,
       "primitives": made.primitives,
@@ -272,7 +290,7 @@ function lineart_pixels(size, pixels, options, name) {
 -~> "colors", "lab", "background" (palette number or -1), "solid": solid
 -~> pixels taken, "outline_ms"}.
 function lineart_trace_fills(pixels, m, dist, w, h, opt, curve) {
-  let none = {"shapes": [], "merge": {}, "colors": [], "lab": [], "background": -1, "solid": 0, "outline_ms": 0}
+  let none = {"shapes": [], "merge": {}, "colors": [], "lab": [], "background": -1, "solid": 0, "gradients": 0, "outline_ms": 0}
   if (!opt.fills) {
     return none
   }
@@ -290,6 +308,16 @@ function lineart_trace_fills(pixels, m, dist, w, h, opt, curve) {
   let fill = lineart_regions(pixels, m.mask, w, h, opt.colors, min_area)
   let merged = lineart_merge_regions(fill, w, h, opt.merge)
   let order = merged.order
+  let ramps = {"groups": 0, "joined": 0}
+  if (opt.gradients) {
+    ramps = lineart_gradients(fill, order, m.mask, pixels, w, h, opt.gradient_error)
+    if (ramps.joined > 0) {
+      order = lineart_order(fill, w, h, order.background)
+      if (opt.merge.stack) {
+        lineart_merge_stack(order, lineart_enclosers(fill, order, w, h))
+      }
+    }
+  }
   let t0 = time.ms()
   let shapes = []
   for (let k = 0; k < len(order.order); k += 1) {
@@ -297,6 +325,7 @@ function lineart_trace_fills(pixels, m, dist, w, h, opt, curve) {
     let s = lineart_region_shapes(fill, order, id, w, h, curve)
     if (len(s.outers) > 0) {
       s.color = fill.regions[id].color
+      s.paint = lineart_region_paint(fill, id)
       push(shapes, s)
     }
   }
@@ -314,6 +343,7 @@ function lineart_trace_fills(pixels, m, dist, w, h, opt, curve) {
     "lab": fill.lab,
     "background": order.background,
     "solid": solid,
+    "gradients": ramps.groups,
     "outline_ms": time.ms() - t0
   }
 }
@@ -427,7 +457,12 @@ function lineart_code(source_name, w, h, m, strokes, fills, scale) {
     for (let i = len(fills.shapes) - 1; i >= 0; i -= 1) {
       let s = fills.shapes[i]
       for (let k = 0; k < len(s.outers); k += 1) {
-        let fill = "colors." + name_of[s.color]
+        let fill = ""
+        if (s.paint !== null) {
+          fill = lineart_paint_text(s.paint, scale)
+        } else {
+          fill = "colors." + name_of[s.color]
+        }
         if (s.prims[k] !== null) {
           push(lines, "  " + lineart_prim_line(s.prims[k], fill, scale))
           points += lineart_prim_points(s.prims[k])
@@ -566,6 +601,9 @@ function lineart_used_colors(fills) {
   let used = []
   for (let i = 0; i < len(fills.shapes); i += 1) {
     let c = fills.shapes[i].color
+    if (fills.shapes[i].paint !== null) {
+      continue
+    }
     if (count[c] === null) {
       count[c] = 0
       push(used, c)

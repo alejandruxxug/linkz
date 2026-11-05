@@ -280,7 +280,7 @@ function lineart_grow(label, w, h) {
 -~> each drawn region's place from the biggest (0) to the smallest, -1 for
 -~> the background. Returns {"area", "box", "near", "background", "rank",
 -~> "order": drawn region numbers, biggest first}.
-function lineart_order(fill, w, h) {
+function lineart_order(fill, w, h, background = -2) {
   let w2 = w + 2
   let label = fill.label
   let n = len(fill.regions)
@@ -324,12 +324,14 @@ function lineart_order(fill, w, h) {
       }
     }
   }
-  let background = -1
-  let most = 0
-  for (let c = 0; c < len(edge); c += 1) {
-    if (edge[c] > most) {
-      most = edge[c]
-      background = c
+  if (background == -2) {
+    background = -1
+    let most = 0
+    for (let c = 0; c < len(edge); c += 1) {
+      if (edge[c] > most) {
+        most = edge[c]
+        background = c
+      }
     }
   }
   let ids = []

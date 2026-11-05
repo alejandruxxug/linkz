@@ -1,0 +1,131 @@
+-~> The gradient stage of the line-art fills (lineart_gradient): a linear
+-~> ramp, a radial one and a stepped one each become one shape with a
+-~> gradient fill whose render is close to the picture; a hard two-tone
+-~> shadow stays two flat shapes. Each is drawn from the code and compared
+-~> with the original (mean difference per channel inside the frame).
+
+use "../../lib/app/drawing"
+use "../../lib/app/paint"
+use "../../lib/app/libs"
+use "../../lib/draw/geometry"
+use "../../lib/trace/trace"
+
+-~> A picture from a function of the pixel center.
+function pic(w, h, f) {
+  let px = []
+  for (let y = 0; y < h; y += 1) {
+    for (let x = 0; x < w; x += 1) {
+      push(px, f((x + 0.5, y + 0.5)))
+    }
+  }
+  {"size": (w, h), "pixels": px}
+}
+
+let paper = #fafaf5
+let dark = #101010
+
+-~> The color a fraction f of the way from a to b.
+function mix(a, b, f) {
+  rgb(math.round(a.r + (b.r - a.r) * f), math.round(a.g + (b.g - a.g) * f), math.round(a.b + (b.b - a.b) * f))
+}
+
+-~> A box on paper with a dark line round it; `inner` colors the inside.
+function framed(p, inner) {
+  if (p.x < 10 || p.x > 110 || p.y < 10 || p.y > 70) { return paper }
+  if (p.x < 13 || p.x > 107 || p.y < 13 || p.y > 67) { return dark }
+  inner(p)
+}
+
+let linear_ramp = pic(120, 80, function(p) {
+  framed(p, function(p) { mix(#e8b878, #3c5078, (p.x - 13) / 94.0) })
+})
+let radial_ramp = pic(120, 80, function(p) {
+  framed(p, function(p) { mix(#fff0a0, #b03030, math.min(1.0, math.dist(p, (60, 40)) / 50.0)) })
+})
+let stepped_ramp = pic(120, 80, function(p) {
+  framed(p, function(p) { mix(#e8b878, #3c5078, math.min(4, math.floor((p.x - 13) / 94.0 * 5)) / 4.0) })
+})
+let shadow = pic(120, 80, function(p) {
+  framed(p, function(p) {
+    if (p.x < 60) { return #e8b878 }
+    #b08850
+  })
+})
+
+-~> The mean difference per channel between the picture and the drawing of the
+-~> code, over a lattice of pixels inside the frame.
+function mean_error(picture, result) {
+  let at = img.pixels(paint_run(result.code + "\nraster.paint(drawing, (0, 0))\n", picture.size))
+  let total = 0.0
+  let n = 0
+  for (let y = 16; y < 64; y += 3) {
+    for (let x = 16; x < 104; x += 3) {
+      let a = picture.pixels[y * picture.size.x + x]
+      let b = at[y * picture.size.x + x]
+      total += (math.abs(a.r - b.r) + math.abs(a.g - b.g) + math.abs(a.b - b.b)) / 3.0
+      n += 1
+    }
+  }
+  total / n
+}
+
+-~> The rows of the code that draw a gradient fill.
+function gradient_rows(result) {
+  let rows = text.lines(result.code)
+  let found = []
+  for (let i = 0; i < len(rows); i += 1) {
+    if (text.find(rows[i], "linear(") >= 0 || text.find(rows[i], "radial(") >= 0) {
+      push(found, rows[i])
+    }
+  }
+  found
+}
+
+-~> "linear" or "radial", the kind of the gradient a row draws.
+function gradient_kind(row) {
+  if (text.find(row, "linear(") >= 0) {
+    return "linear"
+  }
+  "radial"
+}
+
+-~> The steps of the gradient a row draws: the number after the stops, or 0.
+function gradient_steps(row) {
+  let rest = text.replace(text.replace(text.replace(text.replace(row, "[[", ""), "]", ""), ")", ""), " ", "")
+  let parts = text.split(rest, ",")
+  let last = parts[len(parts) - 1]
+  if (text.find(last, "#") >= 0 || text.find(last, ".") >= 0 || last == "0") {
+    return 0
+  }
+  int(last)
+}
+
+-~> [name, picture, options]
+let cases = [
+  ["linear ramp", linear_ramp, {}],
+  ["radial ramp", radial_ramp, {}],
+  ["stepped ramp", stepped_ramp, {}],
+  ["hard shadow", shadow, {}],
+  ["linear ramp, gradients off", linear_ramp, {"gradients": false}]
+]
+for (let i = 0; i < len(cases); i += 1) {
+  let c = cases[i]
+  let opts = hash.merge({"mode": "lineart", "colors": 8}, c[2])
+  let result = trace_pixels(c[1].size, c[1].pixels, opts, "gradient")
+  let rows = gradient_rows(result)
+  puts(c[0] + ":", "fills", result.stats.fills, "gradients", result.stats.gradients, "close", mean_error(c[1], result) < 8)
+  for (let k = 0; k < len(rows); k += 1) {
+    puts("  ", gradient_kind(rows[k]), "steps", gradient_steps(rows[k]))
+  }
+}
+
+-~> The option checks.
+let bads = [{"gradients": 1}, {"gradient_error": 0}]
+for (let i = 0; i < len(bads); i += 1) {
+  try {
+    trace_pixels(shadow.size, shadow.pixels, hash.merge({"mode": "lineart"}, bads[i]))
+    puts("no error for", bads[i])
+  } catch (e) {
+    puts(e.message)
+  }
+}

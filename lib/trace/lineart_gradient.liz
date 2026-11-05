@@ -1,0 +1,656 @@
+-~> lineart_gradient: smooth ramps drawn as one gradient shape instead of a
+-~> staircase of flat bands. It runs after the merge (lineart_merge) and
+-~> before the outlines are made:
+-~>   1. groups   regions that touch, not across ink, and whose palette colors
+-~>               are near each other (a ramp cut into bands) form a candidate
+-~>               group
+-~>   2. fit      from the real pixels inside the group (smoothed over their
+-~>               neighbours in the group, so paint texture does not count) a
+-~>               linear gradient is fitted: the direction of the ramp from a
+-~>               least-squares plane per channel, then the mean color of
+-~>               slices across that direction as stops. A radial one is
+-~>               fitted the same way from a few centers, and the better of
+-~>               the two is kept
+-~>   3. steps    when the group is 4 or more bands and n flat bands of one
+-~>               width match the pixels about as well as the smooth ramp
+-~>               does (a staircase, not a slope), the gradient is written
+-~>               with `steps = n` (the cel look)
+-~>   4. accept   the group becomes one region (so one outline) filled with
+-~>               the gradient when its error is under the limit and better
+-~>               than the flat bands it replaces. A group that does not fit
+-~>               loses its worst region and is tried again. Two flat tones
+-~>               (a hard shadow) are never a group: a ramp needs 3 bands
+-~> A region that gets a gradient has `paint` set (see lineart_paint_text).
+
+use "../draw/svg"
+use "lineart_fills"
+use "lineart_merge"
+
+-~> The largest palette distance (Lab) between two touching bands of a ramp.
+let lineart_ramp_step = 22.0
+
+-~> The fewest ink-free boundary pixels for two regions to count as touching.
+let lineart_ramp_touch = 4
+
+-~> The fewest pixels a group needs, and the number of pixels sampled from it.
+let lineart_ramp_min_area = 100
+let lineart_ramp_samples_max = 1000
+
+-~> The smallest change of color (max over channels, 0 to 255) from one end of
+-~> a ramp to the other: less is a flat color, not a gradient.
+let lineart_ramp_min_range = 10.0
+
+-~> Finds the ramps in `fill` (lineart_regions' result after the merge, with
+-~> `order` from lineart_order) and joins the regions of each into one region
+-~> with a gradient. `mask` is the padded ink grid, `pixels` the picture and
+-~> `limit` the largest mean error, in levels of 0 to 255, a gradient may
+-~> have against the smoothed pixels. Changes fill (labels, regions: `paint`
+-~> on the kept region). Returns {"groups": gradients made, "joined":
+-~> regions that went into them}.
+function lineart_gradients(fill, order, mask, pixels, w, h, limit) {
+  let n = len(fill.regions)
+  let edges = lineart_ramp_edges(fill, mask, w, h)
+  let adj = []
+  for (let i = 0; i < n; i += 1) {
+    push(adj, [])
+  }
+  let roots = lineart_roots(n)
+  let ids = keys(edges)
+  for (let i = 0; i < len(ids); i += 1) {
+    let a = ids[i] // n
+    let b = ids[i] % n
+    if (edges[ids[i]] >= lineart_ramp_touch && lineart_ramp_drawn(fill, order, a) && lineart_ramp_drawn(fill, order, b) &&
+      lineart_delta_e(fill.lab[fill.regions[a].color], fill.lab[fill.regions[b].color]) <= lineart_ramp_step) {
+        push(adj[a], b)
+        push(adj[b], a)
+        lineart_union(roots, a, b)
+      }
+  }
+  let groups = {}
+  for (let i = 0; i < n; i += 1) {
+    if (len(adj[i]) > 0) {
+      let r = lineart_find(roots, i)
+      if (groups[r] === null) {
+        groups[r] = []
+      }
+      push(groups[r], i)
+    }
+  }
+  let ctx = {
+    "fill": fill,
+    "order": order,
+    "mask": mask,
+    "clean": {},
+    "pixels": pixels,
+    "w": w,
+    "h": h,
+    "limit": limit,
+    "blur": math.max(1, math.round(math.max(w, h) / 300.0))
+  }
+  let joined = lineart_roots(n)
+  let made = 0
+  let heads = keys(groups)
+  for (let g = 0; g < len(heads); g += 1) {
+    let members = groups[heads[g]]
+    let tries = 0
+    while (len(members) >= 3 && tries < 6) {
+      tries += 1
+      if (lineart_ramp_area(order, members) < lineart_ramp_min_area) {
+        break
+      }
+      let fit = lineart_ramp_fit(ctx, members)
+      if (fit !== null && fit.ok) {
+        for (let k = 1; k < len(members); k += 1) {
+          lineart_union(joined, members[0], members[k])
+        }
+        let keep = fill.regions[lineart_find(joined, members[0])]
+        keep["paint"] = fit.paint
+        keep.color = fill.regions[lineart_ramp_biggest(order, members)].color
+        made += 1
+        break
+      }
+      if (fit === null) {
+        break
+      }
+      members = lineart_ramp_peel(members, adj, order, fit.worst)
+    }
+  }
+  {"groups": made, "joined": lineart_relabel(fill, joined)}
+}
+
+-~> Whether a region is drawn (not the canvas color, not empty).
+function lineart_ramp_drawn(fill, order, id) {
+  order.rank[id] >= 0
+}
+
+-~> The biggest of some regions.
+function lineart_ramp_biggest(order, members) {
+  let best = members[0]
+  for (let i = 1; i < len(members); i += 1) {
+    if (order.area[members[i]] > order.area[best]) {
+      best = members[i]
+    }
+  }
+  best
+}
+
+-~> The pixels of some regions together.
+function lineart_ramp_area(order, members) {
+  let a = 0
+  for (let i = 0; i < len(members); i += 1) {
+    a += order.area[members[i]]
+  }
+  a
+}
+
+-~> The members without region `worst`, cut down to the biggest part that is
+-~> still connected through `adj`.
+function lineart_ramp_peel(members, adj, order, worst) {
+  let left = []
+  let in_left = {}
+  for (let i = 0; i < len(members); i += 1) {
+    if (members[i] != worst) {
+      push(left, members[i])
+      in_left[members[i]] = true
+    }
+  }
+  let seen = {}
+  let best = []
+  let best_area = -1
+  for (let i = 0; i < len(left); i += 1) {
+    if (seen[left[i]] !== null) {
+      continue
+    }
+    let part = [left[i]]
+    seen[left[i]] = true
+    let head = 0
+    while (head < len(part)) {
+      let a = part[head]
+      head += 1
+      for (let k = 0; k < len(adj[a]); k += 1) {
+        let b = adj[a][k]
+        if (in_left[b] !== null && seen[b] === null) {
+          seen[b] = true
+          push(part, b)
+        }
+      }
+    }
+    let area = lineart_ramp_area(order, part)
+    if (area > best_area) {
+      best = part
+      best_area = area
+    }
+  }
+  best
+}
+
+-~> How many pixel pairs of two regions touch away from the ink, as a hash
+-~> {a * n + b: count} with a < b. Pixels with ink in their 8 neighbours do
+-~> not count: there the regions meet under a line.
+function lineart_ramp_edges(fill, mask, w, h) {
+  let w2 = w + 2
+  let label = fill.label
+  let n = len(fill.regions)
+  let count = {}
+  for (let y = 0; y < h; y += 1) {
+    for (let x = 0; x < w; x += 1) {
+      let p = (y + 1) * w2 + x + 1
+      let a = label[p]
+      if (a < 0) {
+        continue
+      }
+      for (let s = 0; s < 2; s += 1) {
+        let q = p + 1
+        if (s == 1) {
+          q = p + w2
+        }
+        let b = label[q]
+        if (b >= 0 && b != a && lineart_ramp_clear(mask, p, w2) && lineart_ramp_clear(mask, q, w2)) {
+          let key = math.min(a, b) * n + math.max(a, b)
+          if (count[key] === null) {
+            count[key] = 0
+          }
+          count[key] += 1
+        }
+      }
+    }
+  }
+  count
+}
+
+-~> Whether the pixel at a padded position and its 8 neighbours have no ink.
+function lineart_ramp_clear(mask, p, w2) {
+  mask[p - 1] + mask[p] + mask[p + 1] + mask[p - w2 - 1] + mask[p - w2] + mask[p - w2 + 1] + mask[p + w2 - 1] +
+    mask[p + w2] + mask[p + w2 + 1] == 0
+}
+
+-~> Whether a padded position is clear of ink, itself and its 8 neighbours
+-~> (kept in ctx.clean once looked at).
+function lineart_ramp_clean(ctx, p) {
+  let known = ctx.clean[p]
+  if (known === null) {
+    known = lineart_ramp_clear(ctx.mask, p, ctx.w + 2)
+    ctx.clean[p] = known
+  }
+  known
+}
+
+-~> Samples of a group, on a lattice: {"x", "y" (pixel centers), "r" (the
+-~> region), "c": [r, g, b] smoothed over the neighbours in the group, "flat":
+-~> the palette color of its region as [r, g, b]}, each a list.
+function lineart_ramp_samples(ctx, members) {
+  let fill = ctx.fill
+  let w = ctx.w
+  let h = ctx.h
+  let w2 = w + 2
+  let label = fill.label
+  let flag = []
+  for (let i = 0; i < len(fill.regions); i += 1) {
+    push(flag, false)
+  }
+  let box = [w, h, -1, -1]
+  let area = 0
+  for (let i = 0; i < len(members); i += 1) {
+    let m = members[i]
+    flag[m] = true
+    let b = ctx.order.box[m]
+    box = [math.min(box[0], b[0]), math.min(box[1], b[1]), math.max(box[2], b[2]), math.max(box[3], b[3])]
+    area += ctx.order.area[m]
+  }
+  let stride = math.max(1, math.ceil(math.sqrt(area / float(lineart_ramp_samples_max))))
+  let bs = ctx.blur
+  let out = {"x": [], "y": [], "r": [], "c": [], "flat": []}
+  for (let y = box[1] + stride // 2; y <= box[3]; y += stride) {
+    for (let x = box[0] + stride // 2; x <= box[2]; x += stride) {
+      let r = label[(y + 1) * w2 + x + 1]
+      if (r < 0 || !flag[r] || !lineart_ramp_clean(ctx, (y + 1) * w2 + x + 1)) {
+        continue
+      }
+      let sr = 0
+      let sg = 0
+      let sb = 0
+      let k = 0
+      for (let dy = -2; dy <= 2; dy += 1) {
+        let qy = y + dy * bs
+        if (qy < 0 || qy >= h) {
+          continue
+        }
+        for (let dx = -2; dx <= 2; dx += 1) {
+          let qx = x + dx * bs
+          if (qx >= 0 && qx < w) {
+            let lq = label[(qy + 1) * w2 + qx + 1]
+            if (lq >= 0 && flag[lq] && lineart_ramp_clean(ctx, (qy + 1) * w2 + qx + 1)) {
+              let c = ctx.pixels[qy * w + qx]
+              sr += c.r
+              sg += c.g
+              sb += c.b
+              k += 1
+            }
+          }
+        }
+      }
+      let f = fill.colors[fill.regions[r].color]
+      push(out.x, x + 0.5)
+      push(out.y, y + 0.5)
+      push(out.r, r)
+      push(out.c, [sr / float(k), sg / float(k), sb / float(k)])
+      push(out.flat, [f.r, f.g, f.b])
+    }
+  }
+  out
+}
+
+-~> The mean difference between two colors [r, g, b], over the channels.
+function lineart_ramp_diff(a, b) {
+  (math.abs(a[0] - b[0]) + math.abs(a[1] - b[1]) + math.abs(a[2] - b[2])) / 3.0
+}
+
+-~> Fits a gradient to a group of regions. Returns null when the group is too
+-~> small or has no direction; else {"ok": whether it is accepted, "paint":
+-~> the gradient, "err": its mean error, "flat": the error of the flat bands,
+-~> "worst": the region that fits worst (to drop and try again)}.
+function lineart_ramp_fit(ctx, members) {
+  let s = lineart_ramp_samples(ctx, members)
+  let count = len(s.x)
+  if (count < 40) {
+    return null
+  }
+  let cx = 0.0
+  let cy = 0.0
+  for (let i = 0; i < count; i += 1) {
+    cx += s.x[i]
+    cy += s.y[i]
+  }
+  cx = cx / count
+  cy = cy / count
+  let flat = 0.0
+  for (let i = 0; i < count; i += 1) {
+    flat += lineart_ramp_diff(s.c[i], s.flat[i])
+  }
+  flat = flat / count
+  let dir = lineart_ramp_direction(s, cx, cy)
+  if (dir === null) {
+    return null
+  }
+  let nb = math.max(5, math.min(12, len(members) * 2))
+  let best = null
+  let us = []
+  for (let i = 0; i < count; i += 1) {
+    push(us, (s.x[i] - cx) * dir[0] + (s.y[i] - cy) * dir[1])
+  }
+  let lin = lineart_ramp_bins(us, s.c, nb)
+  if (lin !== null) {
+    best = {"kind": "linear", "fit": lin, "us": us, "origin": (cx, cy), "dir": dir}
+  }
+  let centers = lineart_ramp_centers(s, cx, cy)
+  let rival = 1.0
+  if (best !== null && best.kind == "linear") {
+    rival = 0.85
+  }
+  for (let k = 0; k < len(centers); k += 1) {
+    let ru = []
+    for (let i = 0; i < count; i += 1) {
+      push(ru, math.dist((s.x[i], s.y[i]), centers[k]))
+    }
+    let rad = lineart_ramp_bins(ru, s.c, nb)
+    if (rad !== null && (best === null || rad.err < best.fit.err * rival)) {
+      best = {"kind": "radial", "fit": rad, "us": ru, "origin": centers[k], "dir": dir}
+    }
+  }
+  if (best === null) {
+    return null
+  }
+  let stepped = null
+  let lo = 0.0
+  if (best.kind == "linear") {
+    lo = best.fit.lo
+  }
+  if (len(members) >= 4 && len(members) <= 12) {
+    stepped = lineart_ramp_steps(best.us, s.c, len(members), lo, best.fit.hi)
+  }
+  let err = best.fit.err
+  let res = best.fit.res
+  let paint = null
+  let ok = false
+  let gain = 0.85
+  if (stepped !== null && stepped.err <= err * 1.35 + 0.4 && stepped.err <= flat * 1.1 + 1.0) {
+    gain = 1.1
+    err = stepped.err
+    res = stepped.res
+    paint = lineart_ramp_paint(best, stepped.colors, len(members), lo, best.fit.hi)
+  } else {
+    paint = lineart_ramp_paint(best, null, 0, 0.0, 0.0)
+  }
+  let first = paint.stops[0]
+  let last = paint.stops[len(paint.stops) - 1]
+  let span = math.max(math.abs(first[1] - last[1]), math.abs(first[2] - last[2]), math.abs(first[3] - last[3]))
+  if (err < ctx.limit && err < flat * gain + 0.5 && span >= lineart_ramp_min_range && paint.ok) {
+    ok = true
+  }
+  let sums = {}
+  let seen = {}
+  for (let i = 0; i < count; i += 1) {
+    if (sums[s.r[i]] === null) {
+      sums[s.r[i]] = 0.0
+      seen[s.r[i]] = 0
+    }
+    sums[s.r[i]] += res[i]
+    seen[s.r[i]] += 1
+  }
+  let worst = members[0]
+  let worst_err = -1.0
+  for (let i = 0; i < len(members); i += 1) {
+    let m = members[i]
+    if (seen[m] !== null && sums[m] / seen[m] > worst_err) {
+      worst_err = sums[m] / seen[m]
+      worst = m
+    }
+  }
+  if (worst_err > ctx.limit * 2.0) {
+    ok = false
+  }
+  {"ok": ok, "paint": paint, "err": err, "flat": flat, "worst": worst}
+}
+
+-~> The direction [dx, dy] a group's colors change most in: a least-squares
+-~> plane per channel (color against x and y), and the main axis of the three
+-~> slopes together. null when the samples lie on a line or the colors don't
+-~> change.
+function lineart_ramp_direction(s, cx, cy) {
+  let count = len(s.x)
+  let sxx = 0.0
+  let sxy = 0.0
+  let syy = 0.0
+  let sxv = [0.0, 0.0, 0.0]
+  let syv = [0.0, 0.0, 0.0]
+  for (let i = 0; i < count; i += 1) {
+    let dx = s.x[i] - cx
+    let dy = s.y[i] - cy
+    sxx += dx * dx
+    sxy += dx * dy
+    syy += dy * dy
+    for (let c = 0; c < 3; c += 1) {
+      sxv[c] += dx * s.c[i][c]
+      syv[c] += dy * s.c[i][c]
+    }
+  }
+  let det = sxx * syy - sxy * sxy
+  if (det < 1e-6 * (sxx + syy) * (sxx + syy)) {
+    return null
+  }
+  let a = 0.0
+  let b = 0.0
+  let d = 0.0
+  for (let c = 0; c < 3; c += 1) {
+    let gx = (sxv[c] * syy - syv[c] * sxy) / det
+    let gy = (syv[c] * sxx - sxv[c] * sxy) / det
+    a += gx * gx
+    b += gx * gy
+    d += gy * gy
+  }
+  if (a + d < 1e-12) {
+    return null
+  }
+  let theta = 0.5 * math.atan2(2.0 * b, a - d)
+  [math.cos(theta), math.sin(theta)]
+}
+
+-~> Where the rings of a radial gradient may be centered: the middle of the
+-~> samples, and the places of the lightest and darkest samples (the glow or
+-~> the core of a shade).
+function lineart_ramp_centers(s, cx, cy) {
+  let light = 0
+  let dark = 0
+  let lo = 1e9
+  let hi = -1e9
+  for (let i = 0; i < len(s.x); i += 1) {
+    let v = s.c[i][0] + s.c[i][1] + s.c[i][2]
+    if (v < lo) {
+      lo = v
+      dark = i
+    }
+    if (v > hi) {
+      hi = v
+      light = i
+    }
+  }
+  [(cx, cy), (s.x[light], s.y[light]), (s.x[dark], s.y[dark])]
+}
+
+-~> Slices the samples by their position `us` into `nb` equal parts and takes
+-~> the mean color of each: the stops of a gradient. Returns {"stops":
+-~> [[u, r, g, b]...], "lo", "hi": the range of us, "err": mean error of the
+-~> stops as a ramp, "res": the error of each sample}, or null when all
+-~> positions are the same.
+function lineart_ramp_bins(us, cols, nb) {
+  let lo = us[0]
+  let hi = us[0]
+  for (let i = 1; i < len(us); i += 1) {
+    lo = math.min(lo, us[i])
+    hi = math.max(hi, us[i])
+  }
+  if (hi - lo < 2.0) {
+    return null
+  }
+  let sums = []
+  for (let k = 0; k < nb; k += 1) {
+    push(sums, [0, 0.0, 0.0, 0.0, 0.0])
+  }
+  for (let i = 0; i < len(us); i += 1) {
+    let k = math.min(nb - 1, math.floor((us[i] - lo) / (hi - lo) * nb))
+    let b = sums[k]
+    b[0] += 1
+    b[1] += us[i]
+    b[2] += cols[i][0]
+    b[3] += cols[i][1]
+    b[4] += cols[i][2]
+  }
+  let stops = []
+  for (let k = 0; k < nb; k += 1) {
+    let b = sums[k]
+    if (b[0] > 0) {
+      push(stops, [b[1] / b[0], b[2] / b[0], b[3] / b[0], b[4] / b[0]])
+    }
+  }
+  if (len(stops) < 2 || stops[len(stops) - 1][0] - stops[0][0] < 1.0) {
+    return null
+  }
+  let res = []
+  let total = 0.0
+  for (let i = 0; i < len(us); i += 1) {
+    let e = lineart_ramp_diff(cols[i], lineart_ramp_at(stops, us[i]))
+    push(res, e)
+    total += e
+  }
+  {"stops": stops, "lo": lo, "hi": hi, "err": total / len(us), "res": res}
+}
+
+-~> The color [r, g, b] of some stops [[u, r, g, b]...] at u, blended between
+-~> the two stops round it and held past the ends.
+function lineart_ramp_at(stops, u) {
+  let last = len(stops) - 1
+  if (u <= stops[0][0]) {
+    return [stops[0][1], stops[0][2], stops[0][3]]
+  }
+  if (u >= stops[last][0]) {
+    return [stops[last][1], stops[last][2], stops[last][3]]
+  }
+  let j = 1
+  while (stops[j][0] < u) {
+    j += 1
+  }
+  let a = stops[j - 1]
+  let b = stops[j]
+  let f = (u - a[0]) / (b[0] - a[0])
+  [a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f, a[3] + (b[3] - a[3]) * f]
+}
+
+-~> The samples cut into `n` bands of one width from `lo` to `hi`, each one
+-~> flat at its mean color. Returns {"colors": [[r, g, b]...], "err", "res"}
+-~> or null when a band has no sample.
+function lineart_ramp_steps(us, cols, n, lo, hi) {
+  if (hi - lo < 2.0) {
+    return null
+  }
+  let sums = []
+  for (let k = 0; k < n; k += 1) {
+    push(sums, [0, 0.0, 0.0, 0.0])
+  }
+  let band = []
+  for (let i = 0; i < len(us); i += 1) {
+    let k = math.max(0, math.min(n - 1, math.floor((us[i] - lo) / (hi - lo) * n)))
+    push(band, k)
+    sums[k][0] += 1
+    sums[k][1] += cols[i][0]
+    sums[k][2] += cols[i][1]
+    sums[k][3] += cols[i][2]
+  }
+  let colors = []
+  for (let k = 0; k < n; k += 1) {
+    if (sums[k][0] == 0) {
+      return null
+    }
+    push(colors, [sums[k][1] / sums[k][0], sums[k][2] / sums[k][0], sums[k][3] / sums[k][0]])
+  }
+  let res = []
+  let total = 0.0
+  for (let i = 0; i < len(us); i += 1) {
+    let e = lineart_ramp_diff(cols[i], colors[band[i]])
+    push(res, e)
+    total += e
+  }
+  {"colors": colors, "err": total / len(us), "res": res}
+}
+
+-~> The gradient of a fit as data: {"ok", "kind", "a", "b" (linear: from and
+-~> to), "center", "r" (radial), "stops": [[t, r, g, b]...], "steps"}. With
+-~> `bands` (n flat colors) it is stepped over lo to hi; else smooth, from
+-~> the first stop to the last. `ok` is false when the two ends would be the
+-~> same point.
+function lineart_ramp_paint(best, bands, n, lo, hi) {
+  let stops = []
+  let u0 = 0.0
+  let u1 = 0.0
+  let steps = 0
+  if (bands !== null) {
+    steps = n
+    u0 = lo
+    u1 = hi
+    for (let k = 0; k < n; k += 1) {
+      push(stops, [k / (n - 1.0), math.round(bands[k][0]), math.round(bands[k][1]), math.round(bands[k][2])])
+    }
+  } else {
+    let st = best.fit.stops
+    u0 = st[0][0]
+    u1 = st[len(st) - 1][0]
+    for (let k = 0; k < len(st); k += 1) {
+      push(stops, [(st[k][0] - u0) / (u1 - u0), math.round(st[k][1]), math.round(st[k][2]), math.round(st[k][3])])
+    }
+  }
+  let o = best.origin
+  let paint = {"ok": u1 - u0 >= 1.0, "kind": best.kind, "stops": stops, "steps": steps}
+  if (best.kind == "linear") {
+    paint["a"] = (o.x + best.dir[0] * u0, o.y + best.dir[1] * u0)
+    paint["b"] = (o.x + best.dir[0] * u1, o.y + best.dir[1] * u1)
+  } else {
+    paint["center"] = o
+    paint["r"] = u1
+  }
+  paint
+}
+
+-~> A gradient (see lineart_ramp_paint) as source text, coordinates times
+-~> `scale`: linear((x, y), (x, y), [[0, #rrggbb], ...]) or radial(...), with
+-~> the number of steps at the end when it has some.
+function lineart_paint_text(paint, scale) {
+  let parts = []
+  for (let k = 0; k < len(paint.stops); k += 1) {
+    let st = paint.stops[k]
+    push(parts, "[" + svg_num(math.round(st[0] * 1000) / 1000.0) + ", " + color_hex(rgb(st[1], st[2], st[3])) + "]")
+  }
+  let stops = "[" + text.join(parts, ", ") + "]"
+  let tail = ""
+  if (paint.steps >= 2) {
+    tail = ", " + str(paint.steps)
+  }
+  if (paint.kind == "linear") {
+    return "linear(" + lineart_gradient_point(paint.a, scale) + ", " + lineart_gradient_point(paint.b, scale) + ", " +
+      stops + tail + ")"
+  }
+  "radial(" + lineart_gradient_point(paint.center, scale) + ", " + svg_num(math.round(paint.r * scale * 10) / 10.0) + ", " +
+    stops + tail + ")"
+}
+
+-~> A point as source text, one decimal: (1.5, 2).
+function lineart_gradient_point(p, scale) {
+  "(" + svg_num(math.round(p.x * scale * 10) / 10.0) + ", " + svg_num(math.round(p.y * scale * 10) / 10.0) + ")"
+}
+
+-~> The gradient of a region, or null when it is a flat color.
+function lineart_region_paint(fill, id) {
+  let r = fill.regions[id]
+  if (hash.has(r, "paint")) {
+    return r.paint
+  }
+  null
+}

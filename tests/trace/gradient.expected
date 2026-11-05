@@ -1,0 +1,10 @@
+linear ramp: fills 1 gradients 1 close true
+   linear steps 0
+radial ramp: fills 1 gradients 1 close true
+   radial steps 0
+stepped ramp: fills 1 gradients 1 close true
+   linear steps 5
+hard shadow: fills 2 gradients 0 close true
+linear ramp, gradients off: fills 7 gradients 0 close true
+trace: gradients must be true or false
+trace: gradient_error must be more than 0
