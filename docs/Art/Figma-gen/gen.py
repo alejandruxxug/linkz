@@ -2,7 +2,7 @@
 import json, re, math, os, sys
 from xml.sax.saxutils import escape
 
-ROOT = "/Users/urrexx/Documents/Uni/4th Semester/Langs&Compilers/linkz"
+ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".."))
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "out")
 os.makedirs(OUT, exist_ok=True)
 S = 2  # one UI pixel = 2 screen pixels

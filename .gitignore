@@ -8,3 +8,5 @@ __pycache__/
 !scripts/parity/golden/**/*.svg
 /dist/
 .claude/worktrees/
+__pycache__/
+*.pyc

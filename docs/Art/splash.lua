@@ -1,6 +1,7 @@
 -- Builds docs/Art/splash.aseprite and the PNG frames/previews for the Linkz
 -- splash. Run through the aseprite MCP: dofile(this file).
-local ROOT = "/Users/urrexx/Documents/Uni/4th Semester/Langs&Compilers/linkz/"
+-- The repo root: set LINKZ_ROOT, or run from the repo folder.
+local ROOT = (os.getenv("LINKZ_ROOT") or ".") .. "/"
 local ART = ROOT .. "docs/Art/"
 local PREV = ART .. "Previews/"
 

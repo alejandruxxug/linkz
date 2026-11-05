@@ -2,7 +2,7 @@
 # and R003 (select, lasso, color wheel + harmonies). Builds on r002.py / gen.py.
 # Usage: python3 gen_r002b.py <outdir> [keys...]
 import os, sys, math, colorsys
-GEN = "/Users/urrexx/Documents/Uni/4th Semester/Langs&Compilers/linkz/docs/Art/Figma-gen"
+GEN = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, GEN)
 import gen, r002
 from gen import (R, G, T, I, C, tw, button, field, frame_lines, svg_doc, W, H, S, ROW_H, MAIN_Y, STATUS_Y, TOP_H, TAB_H,
