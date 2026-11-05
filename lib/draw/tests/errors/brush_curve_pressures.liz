@@ -1,0 +1,5 @@
+-~> A brush with a curve item has one pressure for each item (each ends at
+-~> one point), not one for each control.
+use "../../pens"
+use "../../shapes"
+brush([(0, 0), ["c", (5, 5), (9, 9), (20, 0)]], [1, 1, 1, 1], #000, pens.ink)

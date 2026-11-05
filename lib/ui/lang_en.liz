@@ -51,6 +51,7 @@ lang_register("en", {
   "refuse.no_arg": "that value is not in the row",
   "refuse.no_points": "that shape has no list of points",
   "refuse.min_points": "a curve needs at least one point",
+  "refuse.curved_brush": "a stroke with curves keeps its points as they are: change them in the code",
   "refuse.no_props": "this row has no properties",
   "refuse.no_field": "there is no property called {name}",
   "refuse.empty_value": "write a value first",

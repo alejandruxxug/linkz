@@ -51,6 +51,7 @@ lang_register("es", {
   "refuse.no_arg": "ese valor no está en la fila",
   "refuse.no_points": "esa forma no tiene una lista de puntos",
   "refuse.min_points": "una curva necesita al menos un punto",
+  "refuse.curved_brush": "un trazo con curvas conserva sus puntos: cámbialos en el código",
   "refuse.no_props": "esta fila no tiene propiedades",
   "refuse.no_field": "no hay ninguna propiedad llamada {name}",
   "refuse.empty_value": "escribe un valor primero",

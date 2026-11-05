@@ -1,5 +1,6 @@
 ok draw/tests/blend.liz
 ok draw/tests/brush.liz
+ok draw/tests/brush_curve.liz
 ok draw/tests/budget.liz
 ok draw/tests/geometry.liz
 ok draw/tests/gradient.liz
@@ -14,6 +15,8 @@ ok draw/tests/svg_stamps.liz
 ok draw/tests/svg_stamps_more.liz
 ok draw/tests/errors/blend_mode.liz
 ok draw/tests/errors/blend_outside.liz
+ok draw/tests/errors/brush_curve_pressures.liz
+ok draw/tests/errors/brush_item_short.liz
 ok draw/tests/errors/brush_pen.liz
 ok draw/tests/errors/brush_pressures.liz
 ok draw/tests/errors/canvas_background.liz

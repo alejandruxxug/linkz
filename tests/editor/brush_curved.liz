@@ -1,0 +1,54 @@
+-~> A brush with curve items in the editor's window (Select tool): clicking
+-~> the stroke selects its row, dragging it moves its points and its curves
+-~> together in one undo step, undo puts them back, and the code stays a
+-~> valid drawing all the way.
+
+use "../../lib/app/editor"
+use "../../lib/app/drawing"
+use "rig"
+
+let dir = fs.join(fs.home(), "brush-curved-test")
+let code = "canvas = {\"size\": (400, 300), \"background\": #ffffff}
+brush([(60, 200), [\"c\", (60, 60), (200, 60), (200, 200)], [\"q\", (260, 280), (330, 200)]], [0.6, 0.9, 0.6], #1d1d1f, pens.marker)
+"
+let rig = rig_open(dir, code, editor_size, rig_modules + ["ui/view_panels", "ui/select_model", "ui/tool_select", "ui/tool_lasso"])
+let n = rig.names
+let cmds = rig.ed.app.debug_commands
+let plain = {"shift": false, "alt": false, "cmd": false, "ctrl": false}
+
+-~> A point of the drawing as a UI point of the window.
+function at(p) {
+  n.view_to_window(n.view_canvas_layout(), p) * 0.5
+}
+
+function drag(a, b, steps = 4) {
+  rig_frame(rig, [{"type": "down", "pos": at(a), "mods": plain}])
+  for (let i = 1; i <= steps; i += 1) {
+    rig_frame(rig, [{"type": "move", "pos": at(a + (b - a) * (i / float(steps))), "mods": plain}])
+  }
+  rig_frame(rig, [{"type": "up", "pos": at(b), "mods": plain}])
+}
+
+function row() {
+  text.trim(n.ed_model().lines[1])
+}
+
+-~> Whether the code runs without errors.
+function valid() {
+  len(drawing_run(text.join(n.ed_model().lines, "\n")).errors) == 0
+}
+
+puts(cmds.Tool(["select"]).tool)
+puts(row())
+puts("-- a drag on the curve moves the whole stroke, curves included, in one undo step")
+let undo0 = len(n.ed.undo)
+rig_frame(rig, [{"type": "down", "pos": at((130, 95)), "mods": plain}, {"type": "up", "pos": at((130, 95)), "mods": plain}])
+puts(n.pick_lines())
+drag((130, 95), (150, 115))
+puts(row())
+puts(len(n.ed.undo) - undo0, valid())
+puts("-- undo puts every point back")
+n.view_undo()
+rig_frame(rig)
+puts(row())
+puts(valid())

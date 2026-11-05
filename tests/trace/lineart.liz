@@ -39,12 +39,17 @@ function ink(w, h, parts) {
   {"size": (w, h), "pixels": px, "parts": parts}
 }
 
--~> The points a stroke is drawn through: a brush's, or a line's two ends.
+-~> The points a stroke is drawn through: a brush's on-curve points, or a
+-~> line's two ends.
 function stroke_points(shape) {
   if (shape.kind == "line") {
     return [shape.args[0], shape.args[1]]
   }
-  shape.args[0]
+  let out = []
+  for (let i = 0; i < len(shape.args[0]); i += 1) {
+    push(out, item_end(shape.args[0][i]))
+  }
+  out
 }
 
 -~> The farthest any stroke point is from the segments drawn.
@@ -488,3 +493,44 @@ for (let k = 0; k < len(blue_run.shapes); k += 1) {
   }
 }
 puts("the blue lines become strokes:", blue_strokes >= 2, "errors", blue_run.errors)
+
+-~> Strokes as curves: a wavy tapered line is written as one brush() whose
+-~> points are a first point and curve items, with one pressure for each, and
+-~> its drawing still covers the original (the share of the original's dark
+-~> pixels the drawing's ink covers, and the other way round, stay high).
+let wave_parts = []
+for (let i = 0; i < 40; i += 1) {
+  let a = 8 + i * 2.0
+  let b = a + 2.0
+  let w = 3.0 - 1.8 * i / 40.0
+  push(wave_parts, [(a, 25 + 10 * math.sin(a / 9.0)), (b, 25 + 10 * math.sin(b / 9.0)), w, w - 0.045])
+}
+let wave = ink(100, 50, wave_parts)
+let wave_code = trace_pixels(wave.size, wave.pixels, {"mode": "lineart"}, "wave").code
+let wave_run = drawing_run(wave_code)
+let wave_brush = null
+for (let k = 0; k < len(wave_run.shapes); k += 1) {
+  if (wave_run.shapes[k].kind == "brush") {
+    wave_brush = wave_run.shapes[k]
+  }
+}
+let items_c = 0
+for (let i = 0; i < len(wave_brush.args[0]); i += 1) {
+  if (type(wave_brush.args[0][i]) == "ARRAY") {
+    items_c += 1
+  }
+}
+puts("a wavy line: curve items", items_c >= 1, "first is a point", type(wave_brush.args[0][0]) == "POINT",
+  "one pressure each", len(wave_brush.args[1]) == len(wave_brush.args[0]), "errors", wave_run.errors)
+let wave_px = img.pixels(paint_run(wave_code + "\nraster.paint(drawing, (0, 0))\n", wave.size))
+let both = 0
+let dark = 0
+let drawn = 0
+for (let i = 0; i < len(wave_px); i += 1) {
+  let o = wave.pixels[i].r < 135
+  let d = wave_px[i].a > 0 && wave_px[i].r < 135
+  if (o) { dark += 1 }
+  if (d) { drawn += 1 }
+  if (o && d) { both += 1 }
+}
+puts("the look is the same:", both / float(dark) > 0.7, both / float(drawn) > 0.9)

@@ -14,6 +14,7 @@
 -~> Positions are points and colors are colors: circle((256, 256), 40, #3fa34d).
 
 use "check"
+use "fit"
 use "geometry"
 use "gradient"
 use "here"
@@ -240,22 +241,151 @@ function stroke(points, color, width) {
   make_shape("stroke", [points, color, width], smooth_path(points), null, color, width, anchors_of(points))
 }
 
+-~> The on-curve points of a brush's items: the item itself for a point, else
+-~> the end of the curve item. A brush has one width and pressure for each.
+function brush_ends(items) {
+  let out = []
+  for (let i = 0; i < len(items); i = i + 1) {
+    push(out, item_end(items[i]))
+  }
+  out
+}
+
+-~> Whether some item of a brush is a curve item.
+function brush_has_curves(items) {
+  for (let i = 0; i < len(items); i = i + 1) {
+    if (type(items[i]) != "POINT") {
+      return true
+    }
+  }
+  false
+}
+
+-~> The slope of a number measured at each on-curve point (per piece, not
+-~> per pixel), for a smooth blend between them: the average of the two
+-~> slopes beside it, held back so the blend never overshoots a neighbour,
+-~> and flat where the value turns round.
+function brush_slopes(values) {
+  let n = len(values)
+  let out = []
+  for (let i = 0; i < n; i = i + 1) {
+    let before = 0.0
+    let after = 0.0
+    if (i > 0) {
+      before = values[i] - values[i - 1]
+    }
+    if (i < n - 1) {
+      after = values[i + 1] - values[i]
+    }
+    if (i == 0) {
+      push(out, after)
+    } elif (i == n - 1) {
+      push(out, before)
+    } elif (before * after <= 0) {
+      push(out, 0.0)
+    } else {
+      let m = (before + after) / 2.0
+      let cap = 3.0 * math.min(math.abs(before), math.abs(after))
+      if (m > 0) {
+        push(out, math.min(m, cap))
+      } else {
+        push(out, math.max(m, -cap))
+      }
+    }
+  }
+  out
+}
+
+-~> The value at t (0 to 1) between values[i] and values[i + 1], following the
+-~> slopes (a cubic Hermite blend).
+function brush_blend(values, slopes, i, t) {
+  let t2 = t * t
+  let t3 = t2 * t
+  (2 * t3 - 3 * t2 + 1) * values[i] + (t3 - 2 * t2 + t) * slopes[i] + (3 * t2 - 2 * t3) * values[i + 1] + (t3 - t2) * slopes[i + 1]
+}
+
+-~> The two controls of the cubic a brush item is, from the point before it.
+function brush_item_cubic(start, it) {
+  if (it[0] == "c") {
+    return [it[1], it[2]]
+  }
+  quad_cubic(start, it[1], it[2])
+}
+
+-~> The t values along a curve item where a brush takes samples: where the
+-~> curve is flat enough (flatten_cubic), and at least 8 to a piece, so the
+-~> width and opacity have places to follow.
+function brush_curve_ts(p1, c1, c2, p2) {
+  let out = []
+  let ts = []
+  flatten_cubic(p1, c1, c2, p2, flatten_tolerance, out, ts, 0.0, 1.0, 0)
+  let all = []
+  let last = 0.0
+  for (let k = 0; k < len(ts); k = k + 1) {
+    let extra = math.ceil((ts[k] - last) * 8) - 1
+    for (let e = 1; e <= extra; e = e + 1) {
+      push(all, last + (ts[k] - last) * e / (extra + 1))
+    }
+    push(all, ts[k])
+    last = ts[k]
+  }
+  all
+}
+
 -~> Where the outline of a brush stroke gets its points: a list of
--~> {"pos", "w" (width), "op" (opacity)} along the smooth curve, 8 per piece.
+-~> {"pos", "w" (width), "op" (opacity)} along the stroke, which is a smooth
+-~> curve through the points (8 samples per piece) and exactly the curve
+-~> items among them (see path()), with the points next to a curve as sharp
+-~> ends. `widths` and `opacities` have one entry for each on-curve point.
+-~> A stroke with curve items blends them smoothly along each piece (so
+-~> there is no kink where two pieces meet); one of plain points blends
+-~> them in a straight line, as it always did.
 -~> `extra` (optional) is one more number for each point, kept as "x".
-function brush_samples(points, widths, opacities, extra = null) {
+function brush_samples(items, widths, opacities, extra = null) {
+  let points = brush_ends(items)
   let n = len(points)
   let steps = 8
   let samples = []
-  let pieces = catmull_rom(points)
-  for (let i = 0; i < len(pieces); i = i + 1) {
-    let piece = pieces[i]
-    for (let s = 0; s < steps; s = s + 1) {
-      let t = s / float(steps)
+  let smooth = brush_has_curves(items)
+  let w_slopes = brush_slopes(widths)
+  let o_slopes = brush_slopes(opacities)
+  for (let i = 0; i < n - 1; i = i + 1) {
+    let it = items[i + 1]
+    let p1 = points[i]
+    let p2 = points[i + 1]
+    let controls = null
+    let ts = []
+    if (type(it) == "POINT") {
+      let p0 = points[math.max(i - 1, 0)]
+      if (i > 0 && type(items[i]) != "POINT") {
+        p0 = p1
+      }
+      let p3 = points[math.min(i + 2, n - 1)]
+      if (i + 2 < n && type(items[i + 2]) != "POINT") {
+        p3 = p2
+      }
+      controls = [p1 + (p2 - p0) / 6.0, p2 - (p3 - p1) / 6.0]
+      for (let s = 0; s < steps; s = s + 1) {
+        push(ts, s / float(steps))
+      }
+    } else {
+      controls = brush_item_cubic(p1, it)
+      push(ts, 0.0)
+      ts = ts + brush_curve_ts(p1, controls[0], controls[1], p2)
+      pop(ts)
+    }
+    for (let k = 0; k < len(ts); k = k + 1) {
+      let t = ts[k]
+      let w = lerp(widths[i], widths[i + 1], t)
+      let op = lerp(opacities[i], opacities[i + 1], t)
+      if (smooth) {
+        w = math.max(0.0, brush_blend(widths, w_slopes, i, t))
+        op = math.max(0.0, brush_blend(opacities, o_slopes, i, t))
+      }
       push(samples, {
-        "pos": bezier_point(points[i], piece[0], piece[1], piece[2], t),
-        "w": lerp(widths[i], widths[i + 1], t),
-        "op": lerp(opacities[i], opacities[i + 1], t),
+        "pos": bezier_point(p1, controls[0], controls[1], p2, t),
+        "w": w,
+        "op": op,
         "x": stamp_extra(extra, i, i + 1, t)
       })
     }
@@ -273,9 +403,27 @@ function unit_vector(v) {
   v / l
 }
 
+-~> Adds the rest of a side of an outline to it, after its first point: a line
+-~> to each point, or (`fitted`) a few cubic Beziers within 0.3 px of them.
+function brush_side(outline, line, fitted) {
+  if (fitted) {
+    let curves = fit_line(line, 0.3)
+    for (let i = 0; i < len(curves); i = i + 1) {
+      push(outline, ["C", curves[i][1], curves[i][2], curves[i][3]])
+    }
+    return null
+  }
+  for (let i = 1; i < len(line); i = i + 1) {
+    push(outline, ["L", line[i]])
+  }
+}
+
 -~> The filled outline of a variable-width stroke: down the left side, round
 -~> around the end, back up the right side, round around the start.
-function brush_outline(samples, pen) {
+-~> With `fitted` (a stroke with curve items; not a grainy pen, whose edge is
+-~> rough on purpose) the two sides are cubic Beziers instead of lines.
+function brush_outline(samples, pen, fitted = false) {
+  fitted = fitted && !(is_number(pen.grain) && pen.grain > 0)
   let n = len(samples)
   let along = [0.0]
   for (let i = 1; i < n; i = i + 1) {
@@ -307,18 +455,15 @@ function brush_outline(samples, pen) {
   }
 
   let outline = [["M", left[0]]]
-  for (let i = 1; i < n; i = i + 1) {
-    push(outline, ["L", left[i]])
-  }
+  brush_side(outline, left, fitted)
   let end = samples[n - 1].pos
   let endn = (-tangents[n - 1].y, tangents[n - 1].x)
   for (let j = 1; j < 6; j = j + 1) {
     let a = j / 6.0 * math.pi
     push(outline, ["L", end + (endn * math.cos(a) + tangents[n - 1] * math.sin(a)) * halves[n - 1]])
   }
-  for (let i = n - 1; i >= 0; i = i - 1) {
-    push(outline, ["L", right[i]])
-  }
+  push(outline, ["L", right[n - 1]])
+  brush_side(outline, list.reverse(right), fitted)
   let begin = samples[0].pos
   let beginn = (-tangents[0].y, tangents[0].x)
   for (let j = 1; j < 6; j = j + 1) {
@@ -334,16 +479,48 @@ function fade_color(color, op) {
   rgba(color.r, color.g, color.b, math.round(color.a * math.max(0.0, math.min(1.0, op))))
 }
 
+-~> The direction a brush goes at on-curve point i, in radians: along the
+-~> chord between its neighbours for plain points, else along the curves
+-~> that arrive at it and leave it (their controls), blended.
+function brush_angle(items, points, i) {
+  let n = len(points)
+  let back = points[i] - points[math.max(i - 1, 0)]
+  let ahead = points[math.min(i + 1, n - 1)] - points[i]
+  if (i > 0 && type(items[i]) != "POINT") {
+    let c = items[i][len(items[i]) - 2]
+    if (c != points[i]) {
+      back = points[i] - c
+    }
+  }
+  if (i < n - 1 && type(items[i + 1]) != "POINT") {
+    let c = items[i + 1][1]
+    if (c != points[i]) {
+      ahead = c - points[i]
+    }
+  }
+  let a = unit_vector(back) + unit_vector(ahead)
+  if (a.x == 0 && a.y == 0) {
+    return 0.0
+  }
+  math.atan2(a.y, a.x)
+}
+
 -~> Draws a smooth curve whose width and opacity follow the pressure of the
 -~> pen that drew it. The raw pressures are kept, so a different pen restyles
 -~> the same stroke.
--~> points: the spots the curve goes through, a list of points
--~> pressures: one number from 0 to 1 for each point
+-~> The list may also hold curve items like path() does (["c", c1, c2, p] and
+-~> ["q", c, p]): they are drawn exactly, and the width between two points
+-~> follows the curve smoothly. There is one pressure for each point or
+-~> curve item (each ends at one on-curve point), so a curve item takes the
+-~> pressure at its end. The taper and stamps follow the curves too.
+-~> points: the spots the curve goes through, a list of points and curve items
+-~> pressures: one number from 0 to 1 for each point or curve item
 -~> color: the color of the ink
 -~> pen: a pen style such as pens.ink, pens.pencil or pens.calligraphy
 -~> example: brush([(40, 300), (120, 210), (260, 240)], [0.2, 0.9, 0.4], #1d1d1f, pens.ink)
+-~> example: brush([(40, 300), ["c", (80, 200), (200, 200), (260, 240)]], [0.2, 0.8], #1d1d1f, pens.ink)
 function brush(points, pressures, color, pen) {
-  need_points("brush", "points", points)
+  need_path_items("brush", "points", points)
   if (type(pressures) != "ARRAY" || len(pressures) != len(points)) {
     reject("brush", "pressures must be a list with one number for each point")
   }
@@ -355,15 +532,21 @@ function brush(points, pressures, color, pen) {
     reject("brush", "pen must be a pen style like pens.ink")
   }
 
-  let n = len(points)
+  let ends = brush_ends(points)
+  let curved = brush_has_curves(points)
+  let n = len(ends)
   let widths = []
   let opacities = []
-  let ps = pen_prepare(pen, points, pressures)
+  let ps = pen_prepare(pen, ends, pressures)
   for (let i = 0; i < n; i = i + 1) {
-    let a = points[math.min(i + 1, n - 1)] - points[math.max(i - 1, 0)]
     let angle = 0.0
-    if (a.x != 0 || a.y != 0) {
-      angle = math.atan2(a.y, a.x)
+    if (curved) {
+      angle = brush_angle(points, ends, i)
+    } else {
+      let a = ends[math.min(i + 1, n - 1)] - ends[math.max(i - 1, 0)]
+      if (a.x != 0 || a.y != 0) {
+        angle = math.atan2(a.y, a.x)
+      }
     }
     let r = pen_response(pen, ps[i], angle)
     push(widths, r[0])
@@ -379,16 +562,16 @@ function brush(points, pressures, color, pen) {
 
   let outline = null
   if (n == 1) {
-    outline = ellipse_path(points[0], (math.max(0.1, widths[0] / 2.0), math.max(0.1, widths[0] / 2.0)))
+    outline = ellipse_path(ends[0], (math.max(0.1, widths[0] / 2.0), math.max(0.1, widths[0] / 2.0)))
   } else {
-    outline = brush_outline(brush_samples(points, widths, opacities), pen)
+    outline = brush_outline(brush_samples(points, widths, opacities), pen, curved)
   }
   let shape = make_shape("brush", [points, pressures, color, pen], outline, fade_color(color, mean), null, widest, anchors_of(points))
   shape.widths = widths
   shape.opacities = opacities
   if (stamp_is(pen)) {
     -~> The outline stays as the shape's hit area; the stamps are what is drawn.
-    shape.stamps = stamp_stroke(brush_samples(points, widths, opacities, stamp_speeds(points)), color, pen, stamp_seed(points))
+    shape.stamps = stamp_stroke(brush_samples(points, widths, opacities, stamp_speeds(ends)), color, pen, stamp_seed(ends))
     shape.stamp_key = str(points) + str(widths) + str(opacities) + str(color) + str(pen)
   }
   shape

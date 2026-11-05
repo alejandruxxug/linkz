@@ -1,0 +1,9 @@
+select
+brush([(60, 200), ["c", (60, 60), (200, 60), (200, 200)], ["q", (260, 280), (330, 200)]], [0.6, 0.9, 0.6], #1d1d1f, pens.marker)
+-- a drag on the curve moves the whole stroke, curves included, in one undo step
+[2]
+brush([(80, 221), ["c", (80, 81), (220, 81), (220, 221)], ["q", (280, 301), (350, 221)]], [0.6, 0.9, 0.6], #1d1d1f, pens.marker)
+1 true
+-- undo puts every point back
+brush([(60, 200), ["c", (60, 60), (200, 60), (200, 200)], ["q", (260, 280), (330, 200)]], [0.6, 0.9, 0.6], #1d1d1f, pens.marker)
+true

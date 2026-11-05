@@ -1,0 +1,17 @@
+-~> Brush strokes with curve items, one row each: a plain-point stroke for
+-~> reference, a curved one (cubic and quadratic items), a tapered curve, a
+-~> stamped curve. Golden picture: lib/draw/tests/golden/brush_curve.png
+-~> (linkz paint lib/gfx/tests/brush_curve.liz lib/draw/tests/golden/brush_curve.png 240x240).
+fb.fill((0, 0), (240, 240), #ffffff)
+
+let wave = function(y) {
+  [(20, y + 20), ["c", (20, y - 30), (110, y - 30), (110, y + 20)], ["q", (150, y + 70), (190, y + 20)], (220, y + 20)]
+}
+let fat = [0.9, 0.9, 0.9, 0.9]
+let swell = [0.2, 0.9, 0.3, 0.8]
+raster.paint([
+  brush([(20, 40), (65, 10), (110, 40), (150, 60), (190, 40), (220, 40)], [0.2, 0.9, 0.6, 0.4, 0.9, 0.5], #1d1d1f, pens.marker),
+  brush(wave(50), swell, #1d1d1f, pens.marker),
+  brush(wave(110), fat, #223344, pens.ink),
+  brush(wave(170), fat, #aa2200, pens.chalk)
+], (0, 0))

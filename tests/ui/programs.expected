@@ -23,5 +23,6 @@ ok ui/tests/stabilize.liz
 ok ui/tests/tools.liz
 ok ui/tests/trace_model.liz
 ok ui/tests/twoway.liz
+ok ui/tests/twoway_curved.liz
 ok ui/tests/undo.liz
 ok ui/tests/undo_actions.liz

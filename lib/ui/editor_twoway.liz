@@ -148,7 +148,52 @@ function move_anchor(m, shape, anchor, new_pos) {
   twoway_apply(m, edits)
 }
 
--~> Moves a whole shape by delta: its "move" anchor, or else every point of it.
+-~> The edits that put every point inside the curve items of a brush (the
+-~> controls and the end of each ["c", ...] or ["q", ...]) at map(point). They
+-~> have no anchors of their own, so whatever moves the brush's plain points
+-~> must move these too, or the curves would bend. No edits for any other
+-~> shape. A refusal when one of those points is not a literal.
+function twoway_curve_edits(row, shape, map) {
+  let edits = []
+  if (shape.kind != "brush") {
+    return edits
+  }
+  let arr = row_stmt(row).args[0]
+  for (let k = 0; k < len(shape.args[0]); k = k + 1) {
+    let item = shape.args[0][k]
+    if (type(item) != "ARRAY") {
+      continue
+    }
+    if (arr.kind != "array" || arr.items[k].kind != "array" || len(arr.items[k].items) != len(item)) {
+      return {"refused": t("refuse.points", {"expr": arr.text})}
+    }
+    for (let j = 1; j < len(item); j = j + 1) {
+      let e = twoway_point_edits(arr.items[k].items[j], map(item[j]))
+      if (is_refusal(e)) {
+        return e
+      }
+      edits = edits + e
+    }
+  }
+  edits
+}
+
+-~> Whether a brush has curve items among its points (these are not edited by
+-~> adding or removing points, see insert_point).
+function twoway_has_curves(shape) {
+  if (shape.kind != "brush") {
+    return false
+  }
+  for (let k = 0; k < len(shape.args[0]); k = k + 1) {
+    if (type(shape.args[0][k]) == "ARRAY") {
+      return true
+    }
+  }
+  false
+}
+
+-~> Moves a whole shape by delta: its "move" anchor, or else every point of it
+-~> (the curve items of a brush too).
 -~> All or nothing: one expression among the literals refuses the move.
 function move_shape(m, shape, delta) {
   let row = twoway_shape_row(m, shape)
@@ -172,6 +217,13 @@ function move_shape(m, shape, delta) {
       edits = edits + e
     }
   }
+  if (role == "point") {
+    let curves = twoway_curve_edits(row, shape, function(p) { p + delta })
+    if (is_refusal(curves)) {
+      return curves
+    }
+    edits = edits + curves
+  }
   twoway_apply(m, edits)
 }
 
@@ -185,6 +237,9 @@ function twoway_point_lists(m, shape) {
   }
   if (shape.kind != "stroke" && shape.kind != "polygon" && shape.kind != "brush") {
     return {"refused": t("refuse.no_points")}
+  }
+  if (twoway_has_curves(shape)) {
+    return {"refused": t("refuse.curved_brush")}
   }
   let args = row_stmt(row).args
   if (len(args) == 0 || args[0].kind != "array") {

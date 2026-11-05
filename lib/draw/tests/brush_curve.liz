@@ -1,0 +1,76 @@
+-~> Brush strokes with curve items: widths follow the curve smoothly, the
+-~> outline is made of real curves, taper and stamps follow the curve.
+use "../geometry"
+use "../pens"
+use "../shapes"
+use "../svg"
+
+let curved = [(40, 160), ["c", (40, 40), (200, 40), (200, 160)], ["q", (260, 260), (320, 160)]]
+let press = [0.6, 0.9, 0.6]
+
+-~> Anchors are the plain points; the pressures are one for each on-curve point.
+let b = brush(curved, press, #1d1d1f, pens.ink)
+puts(b.kind, len(b.args[0]), len(b.widths), len(b.opacities), len(b.anchors), b.anchors[0].item)
+puts(b.path[0][0], b.path[len(b.path) - 1][0])
+
+-~> The outline sides are cubics: far fewer commands than the lines they follow.
+let cubics = 0
+let lines = 0
+for (let i = 0; i < len(b.path); i += 1) {
+  if (b.path[i][0] == "C") {
+    cubics += 1
+  }
+  if (b.path[i][0] == "L") {
+    lines += 1
+  }
+}
+puts(cubics > 0, cubics < 40, lines)
+
+-~> The width at the middle of the curve is between the widths at its ends,
+-~> and the stroke passes through its on-curve points.
+puts(point_in_path(b.path, (40, 160)), point_in_path(b.path, (200, 160)), point_in_path(b.path, (320, 160)))
+puts(point_in_path(b.path, bezier_point((40, 160), (40, 40), (200, 40), (200, 160), 0.5)), point_in_path(b.path, (120, 160)))
+
+-~> The width follows the curve smoothly: no jump at an on-curve point.
+let samples = brush_samples(curved, b.widths, b.opacities)
+let worst = 0.0
+for (let i = 1; i < len(samples); i += 1) {
+  worst = math.max(worst, math.abs(samples[i].w - samples[i - 1].w))
+}
+puts(len(samples) > 20, worst < 1.0)
+let slopes = brush_slopes([1.0, 5.0, 5.0, 2.0])
+puts(slopes)
+puts(brush_blend([1.0, 5.0], brush_slopes([1.0, 5.0]), 0, 0.5))
+
+-~> Plain points still give the same lines as always.
+let plain = brush([(40, 160), (120, 40), (200, 160)], [0.2, 0.9, 0.4], #1d1d1f, pens.ink)
+let kinds = {}
+for (let i = 0; i < len(plain.path); i += 1) {
+  kinds[plain.path[i][0]] = true
+}
+puts(keys(kinds))
+
+-~> A grainy pen keeps a rough edge of lines.
+let pc = brush(curved, press, #1d1d1f, pens.pencil)
+puts(pc.path[1][0])
+
+-~> A tapered pen thins at the tips along the curve.
+let tapered = brush(curved, [0.8, 0.8, 0.8], #1d1d1f, pens.ink)
+let ts = brush_samples(curved, tapered.widths, tapered.opacities)
+puts(point_in_path(tapered.path, (200, 160)), len(ts) > 20)
+
+-~> A stamped pen places stamps along the curve.
+let stamped = brush(curved, press, #aa2200, pens.chalk)
+puts(len(stamped.stamps) > 10, stamped.stamp_key != "")
+let stamped_flat = brush([(40, 160), (200, 160), (320, 160)], press, #aa2200, pens.chalk)
+puts(len(stamped.stamps) != len(stamped_flat.stamps))
+
+-~> A one-point list with nothing else is still a dot.
+puts(brush([(5, 5)], [0.5], #000, pens.ink).kind)
+
+-~> SVG: the outline has C commands and the curved stroke is far shorter than
+-~> the same outline in lines.
+canvas = {"size": (360, 300), "background": #ffffff}
+puts(svg_document(canvas, [b]))
+let doc = svg_document(canvas, [b])
+puts(len(doc) < 2500)

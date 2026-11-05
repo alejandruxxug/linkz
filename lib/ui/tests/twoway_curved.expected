@@ -1,0 +1,12 @@
+0 2 brush 1
+brush([(50, 150), ["c", (40, 40), (200, 40), (200, 160)], ["q", (260, 260), (320, 160)]], [0.6, 0.9, 0.6], #1d1d1f, pens.ink) true
+brush([(50, 155), ["c", (50, 35), (210, 35), (210, 155)], ["q", (270, 255), (330, 155)]], [0.6, 0.9, 0.6], #1d1d1f, pens.ink) true
+brush([(80, 80), ["c", (80, 20), (400, 20), (400, 80)], ["q", (520, 130), (640, 80)]], [0.6, 0.9, 0.6], #1d1d1f, pens.ink) true
+brush([(-40, -160), ["c", (-40, -40), (-200, -40), (-200, -160)], ["q", (-260, -260), (-320, -160)]], [0.6, 0.9, 0.6], #1d1d1f, pens.ink) true
+a stroke with curves keeps its points as they are: change them in the code
+a stroke with curves keeps its points as they are: change them in the code
+a stroke with curves keeps its points as they are: change them in the code
+true
+position comes from `k`
+brush([(0, 0), (5, 5), (10, 10), (20, 0)], [0.2, 0.55, 0.9, 0.4], #1d1d1f, pens.ink)
+brush([(0, 0), (20, 0)], [0.2, 0.4], #1d1d1f, pens.ink)

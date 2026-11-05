@@ -1,0 +1,28 @@
+-~> Brush strokes with curve items (lib/gfx/tests/brush_curve.liz) painted to
+-~> pixels against the golden picture lib/draw/tests/golden/brush_curve.png.
+-~> To make the golden again after a change that is meant to alter the pictures:
+-~> lizardscript run --vm . paint lib/gfx/tests/brush_curve.liz
+-~> lib/draw/tests/golden/brush_curve.png 240x240.
+
+use "../../lib/app/libs"
+use "../../lib/app/paint"
+
+let size = (240, 240)
+let got = paint_run(fs.read(fs.join(libs_dir(), "gfx", "tests", "brush_curve.liz")), size)
+let want = img.load(fs.join(libs_dir(), "draw", "tests", "golden", "brush_curve.png"))
+let a = img.pixels(got)
+let b = img.pixels(want)
+let wrong = 0
+for (let i = 0; i < len(a); i += 1) {
+  if (a[i] != b[i]) {
+    wrong += 1
+  }
+}
+puts("size", img.size(got) == img.size(want), "pixels that differ:", wrong)
+let inked = 0
+for (let i = 0; i < len(a); i += 1) {
+  if (a[i] != #ffffff) {
+    inked += 1
+  }
+}
+puts("inked:", inked > 1000)

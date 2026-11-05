@@ -63,10 +63,10 @@ let docs_es = {
     }
   },
   "brush": {
-    "summary": "Dibuja una curva suave cuyo grosor y opacidad siguen la presión del lápiz que la trazó. Se guardan las presiones originales, así que otro lápiz puede cambiar el estilo del mismo trazo.",
+    "summary": "Dibuja una curva suave cuyo grosor y opacidad siguen la presión del lápiz que la trazó. Se guardan las presiones originales, así que otro lápiz puede cambiar el estilo del mismo trazo. La lista puede llevar también curvas como path() ([\"c\", c1, c2, p] y [\"q\", c, p]): se dibujan exactas, y el grosor entre dos puntos sigue la curva con suavidad. Hay una presión por cada punto o curva (cada una termina en un punto de la curva), así que una curva toma la presión de su final. El afinado y los sellos también siguen las curvas.",
     "params": {
-      "points": "los sitios por donde pasa la curva, una lista de puntos",
-      "pressures": "un número de 0 a 1 por cada punto",
+      "points": "los sitios por donde pasa la curva, una lista de puntos y curvas",
+      "pressures": "un número de 0 a 1 por cada punto o curva",
       "color": "el color de la tinta",
       "pen": "un estilo de lápiz como pens.ink, pens.pencil o pens.calligraphy"
     }
@@ -154,9 +154,17 @@ let docs_es = {
   "reject": {"summary": "Detiene el dibujo con un mensaje que nombra la llamada que falló.", "params": {}},
   "ellipse_path": {"summary": "El trazado cerrado de una elipse como cuatro Beziers cúbicas (0.5523 es la constante que las hace redondas).", "params": {}},
   "paint_order": {"summary": "Las figuras en el orden en que se pintan, del fondo al frente. Las filas más abajo en el archivo quedan detrás; las de una misma fila (un bucle o una función) conservan su orden de creación, así que las últimas quedan encima.", "params": {}},
-  "brush_samples": {"summary": "De dónde sale el contorno de un trazo de pincel: una lista de {pos, w, op} a lo largo de la curva suave, 8 por trozo.", "params": {}},
+  "brush_samples": {"summary": "De dónde sale el contorno de un trazo de pincel: una lista de {pos, w, op} a lo largo del trazo, que es una curva suave por los puntos (8 muestras por trozo) y exactamente las curvas que haya entre ellos. Con curvas, el grosor y la opacidad se mezclan con suavidad en cada trozo.", "params": {}},
+  "brush_ends": {"summary": "Los puntos de la curva de los elementos de un pincel: el elemento si es un punto, o el final de la curva.", "params": {}},
+  "brush_has_curves": {"summary": "Verdadero si algún elemento de un pincel es una curva.", "params": {}},
+  "brush_slopes": {"summary": "La pendiente de un número medido en cada punto de la curva, para mezclarlos con suavidad sin pasarse de los vecinos.", "params": {}},
+  "brush_blend": {"summary": "El valor en t (0 a 1) entre values[i] y values[i + 1], siguiendo las pendientes (mezcla cúbica de Hermite).", "params": {}},
+  "brush_item_cubic": {"summary": "Los dos controles de la cúbica que es un elemento curvo de un pincel, desde el punto anterior.", "params": {}},
+  "brush_curve_ts": {"summary": "Los valores de t de una curva donde un pincel toma muestras: donde la curva es lo bastante plana y al menos 8 por trozo.", "params": {}},
+  "brush_side": {"summary": "Agrega el resto de un lado de un contorno: una línea a cada punto o, con `fitted`, unas pocas Beziers cúbicas a menos de 0.3 px de ellos.", "params": {}},
+  "brush_angle": {"summary": "La dirección de un pincel en el punto i, en radianes: a lo largo de la cuerda entre sus vecinos para puntos simples, o por las curvas que llegan y salen de él.", "params": {}},
   "unit_vector": {"summary": "El vector unitario en la dirección de v, o (1, 0) si v no tiene largo.", "params": {}},
-  "brush_outline": {"summary": "El contorno relleno de un trazo de grosor variable: baja por la izquierda, redondea el final, sube por la derecha y redondea el inicio.", "params": {}},
+  "brush_outline": {"summary": "El contorno relleno de un trazo de grosor variable: baja por la izquierda, redondea el final, sube por la derecha y redondea el inicio. Con `fitted` (un trazo con curvas, que no sea de un lápiz con grano) los dos lados son Beziers cúbicas en vez de líneas.", "params": {}},
   "fade_color": {"summary": "El color con su opacidad multiplicada por `op` (0 a 1).", "params": {}},
   "add_styles": {"summary": "Le da a una figura los estilos de su ruta de capas. Devuelve la figura.", "params": {}},
   "layer_key": {"summary": "La clave de una ruta de capas en layer_styles: los primeros `depth` nombres unidos con \"/\".", "params": {}},

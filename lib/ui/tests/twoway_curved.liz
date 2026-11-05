@@ -1,0 +1,56 @@
+-~> Editing a brush that has curve items ["c", c1, c2, p] and ["q", c, p]: a
+-~> plain point drags like any, the curve items follow when the whole stroke
+-~> moves, scales or turns, and adding or removing points is refused (it would
+-~> change the curves under it). Nothing written is ever a syntax error.
+use "../editor_doc"
+use "../editor_twoway"
+use "../select_edit"
+use "../lang_en"
+use "../lang_es"
+let code = "brush([(40, 160), [\"c\", (40, 40), (200, 40), (200, 160)], [\"q\", (260, 260), (320, 160)]], [0.6, 0.9, 0.6], #1d1d1f, pens.ink)
+brush([(0, 0), (10, 10), (20, 0)], [0.2, 0.9, 0.4], #1d1d1f, pens.ink)
+"
+let m = doc_new(code)
+let run = src.run(code)
+puts(len(run.errors), len(run.shapes), run.shapes[0].kind, len(run.shapes[0].anchors))
+let br = run.shapes[0]
+function line_of(model, n) {
+  model.lines[n - 1]
+}
+function fits(model) {
+  len(src.run(text.join(model.lines, "\n")).errors) == 0
+}
+
+-~> The first point is an anchor: dragging it changes that literal only.
+let dragged = move_anchor(m, br, br.anchors[0], (50, 150))
+puts(line_of(dragged, 1), fits(dragged))
+
+-~> Moving the whole stroke moves the controls and ends of the curves too.
+let moved = move_shape(m, br, (10, -5))
+puts(line_of(moved, 1), fits(moved))
+
+-~> Scaling and turning a selection do the same.
+let scaled = scale_many(m, [br], (0, 0), 2.0, 0.5)
+puts(line_of(scaled, 1), fits(scaled))
+let turned = turn_many(m, [br], (0, 0), math.pi)
+puts(line_of(turned, 1), fits(turned))
+
+-~> Adding or removing a point is refused with a reason.
+puts(insert_point(m, br, 0, (5, 5)).refused)
+puts(insert_point_near(m, br, (120, 70)).refused)
+puts(remove_point(m, br, 1).refused)
+puts(is_refusal(remove_point(m, br, 0)))
+
+-~> A control that is an expression refuses the move, and the file stays as it was.
+let calc = doc_new("let k = 40
+brush([(40, 160), [\"c\", (k, 40), (200, 40), (200, 160)]], [0.6, 0.9], #1d1d1f, pens.ink)
+")
+let crun = src.run("let k = 40
+brush([(40, 160), [\"c\", (k, 40), (200, 40), (200, 160)]], [0.6, 0.9], #1d1d1f, pens.ink)
+")
+puts(move_shape(calc, crun.shapes[0], (1, 1)).refused)
+
+-~> A brush of plain points still gains and loses points.
+let plain = run.shapes[1]
+puts(line_of(insert_point(m, plain, 0, (5, 5)), 2))
+puts(line_of(remove_point(m, plain, 1), 2))

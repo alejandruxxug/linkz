@@ -228,16 +228,21 @@ function lineart_smooth(values, r, closed, zero) {
   out
 }
 
+-~> How far a fitted centerline may be from the smoothed pixels, in pixels. Tighter
+-~> than the simplified points' 1 px: a line only one or two pixels wide has
+-~> no room for a whole pixel of error (at 1 px the picture got worse than with
+-~> the points; at 0.5 it is the same or better).
+let lineart_curve_tol = 0.5
+
 -~> A chain of centerline pixels as a stroke: positions smoothed (pixel
 -~> centers, unpadded), widths from the distance transform (2d - 1.5, which
 -~> best matches the ink of the reference drawings: the mask takes in half
 -~> the soft edge of a line), blunt tips given their full width back, then
 -~> simplified to the points where the line or its width bends (tolerance
 -~> `tol` px, `wtol` px of width). The centerline is also fitted with
--~> Bezier curves ("curves", see lineart_fit_stroke) for when brush() takes
--~> them; until then the simplified points are written, since brush() draws
--~> its own smooth curve through them, and on the reference drawings they
--~> keep closer to the ink than points sampled off the fit.
+-~> Bezier curves ("curves", see lineart_fit_stroke), which is what the code
+-~> writes (brush() takes them with a width at each end); the points stay for
+-~> the tips, the length and the strokes too small to fit.
 -~> `joined` says, for the start and the end, whether it ends on another
 -~> line (at a junction, or at a corner where the stroke was cut).
 function lineart_stroke(chain, joined, dist, w, tol, wtol) {
@@ -280,7 +285,7 @@ function lineart_stroke(chain, joined, dist, w, tol, wtol) {
     "closed": closed,
     "tips": tips,
     "length": lineart_length(points),
-    "curves": lineart_fit_stroke(pos, widths, closed, tol, wtol)
+    "curves": lineart_fit_stroke(pos, widths, closed, lineart_curve_tol, wtol)
   }
 }
 

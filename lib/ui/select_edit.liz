@@ -103,6 +103,13 @@ function xf_shape_edits(m, shape, xf) {
       edits = edits + e
     }
   }
+  if (!moving) {
+    let curves = twoway_curve_edits(row, shape, xf.map)
+    if (is_refusal(curves)) {
+      return curves
+    }
+    edits = edits + curves
+  }
   edits
 }
 

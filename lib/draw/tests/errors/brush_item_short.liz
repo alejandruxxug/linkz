@@ -1,0 +1,4 @@
+-~> A curve item of a brush needs the same points as in path().
+use "../../pens"
+use "../../shapes"
+brush([(0, 0), ["c", (5, 5), (9, 9)]], [1, 1], #000, pens.ink)

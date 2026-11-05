@@ -42,3 +42,5 @@ a long stroke along each edge of the band: true true errors []
 the band is maroon, the trousers navy: true true
 blue lines are ink, the inside of the blue block is not: true true true true
 the blue lines become strokes: true errors []
+a wavy line: curve items true first is a point true one pressure each true errors []
+the look is the same: true true

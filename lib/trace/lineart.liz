@@ -17,7 +17,9 @@
 -~>                        fitted with Bezier curves (lineart_curves); a
 -~>                        straight one of even width snaps to a line
 -~>   7. lineart_code      one brush() (or line()) per stroke, pen widths from
--~>                        the thinnest and thickest ink
+-~>                        the thinnest and thickest ink; a brush's items are the
+-~>                        fitted curves (a width at each end) when they take
+-~>                        no more code than the plain points, else the points
 -~> and, for the fills (lineart_fills, lineart_outline), before the thinning:
 -~>   a. lineart_solid     ink wide all round (a pupil, dark trousers) leaves
 -~>                        the mask, to be a fill instead of a stroke
@@ -177,9 +179,15 @@ function lineart_pixels(size, pixels, options, name) {
       let s = lineart_stroke(c, ends, dist, w, 1.0, 0.75)
       if (c.tip[0] !== null) {
         s.points[0] = c.tip[0]
+        if (len(s.curves) > 0) {
+          s.curves[0].curve[0] = c.tip[0]
+        }
       }
       if (c.tip[1] !== null) {
         s.points[len(s.points) - 1] = c.tip[1]
+        if (len(s.curves) > 0) {
+          s.curves[len(s.curves) - 1].curve[3] = c.tip[1]
+        }
       }
       if (s.length + lineart_widest(s.widths) >= opt.line_min) {
         s.prim = lineart_snap_stroke(s, opt.snap)
@@ -216,6 +224,7 @@ function lineart_pixels(size, pixels, options, name) {
       "solid": fills.solid,
       "points": made.points,
       "primitives": made.primitives,
+      "curved": made.curved,
       "bridged": len(bridges),
       "tips": made.tips,
       "junctions": junctions,
@@ -326,7 +335,7 @@ function lineart_pen_range(strokes) {
 -~> A stroke or a fill shape that snapped to a primitive is written as
 -~> that call. The canvas is the background's color. Returns {"code",
 -~> "points", "tips": {spiky, blunt, joined}, "pen_min", "pen_max",
--~> "fills", "primitives", "names"}.
+-~> "fills", "primitives", "curved" (strokes written with curve items), "names"}.
 function lineart_code(source_name, w, h, m, strokes, fills, scale) {
   let range = lineart_pen_range(strokes)
   let lo = range[0] * scale
@@ -359,17 +368,17 @@ function lineart_code(source_name, w, h, m, strokes, fills, scale) {
   let points = 0
   let count = 0
   let prims = 0
+  let curved = 0
   push(lines, "layer lines")
   let tips = {"spiky": 0, "blunt": 0, "joined": 0}
   for (let i = 0; i < len(strokes); i += 1) {
     let s = strokes[i]
-    let pts = []
+    let items = lineart_stroke_items(s, scale)
     let ps = []
-    for (let k = 0; k < len(s.points); k += 1) {
-      push(pts, "(" + lineart_num(s.points[k].x * scale) + ", " + lineart_num(s.points[k].y * scale) + ")")
+    for (let k = 0; k < len(items.widths); k += 1) {
       let p = 1.0
       if (range[1] > range[0]) {
-        p = math.max(0.0, math.min(1.0, (s.widths[k] - range[0]) / (range[1] - range[0])))
+        p = math.max(0.0, math.min(1.0, (items.widths[k] - range[0]) / (range[1] - range[0])))
       }
       push(ps, svg_num(p))
     }
@@ -382,8 +391,11 @@ function lineart_code(source_name, w, h, m, strokes, fills, scale) {
       points += 2
       prims += 1
     } else {
-      points += len(pts)
-      push(lines, "  brush([" + text.join(pts, ", ") + "], [" + text.join(ps, ", ") + "], colors.ink, pens.traced)")
+      points += len(ps)
+      if (items.curved) {
+        curved += 1
+      }
+      push(lines, "  brush([" + text.join(items.parts, ",") + "],[" + text.join(ps, ",") + "],colors.ink,pens.traced)")
     }
   }
   if (len(fills.shapes) > 0) {
@@ -412,8 +424,71 @@ function lineart_code(source_name, w, h, m, strokes, fills, scale) {
     "pen_max": hi,
     "fills": count,
     "primitives": prims,
+    "curved": curved,
     "names": names
   }
+}
+
+-~> A point as compact source text, "(x,y)" at one decimal: strokes are the
+-~> bulk of a traced file's lines, and every byte counts there.
+function lineart_tuple_text(p, scale) {
+  "(" + lineart_num(p.x * scale) + "," + lineart_num(p.y * scale) + ")"
+}
+
+-~> The control of the quadratic Bezier that is the cubic [p0, c1, c2, p3] to
+-~> within a tenth of a pixel, or null when it is not one: a quadratic item
+-~> is a third shorter in the code.
+function lineart_as_quad(c) {
+  let q = (c[1] * 3.0 + c[2] * 3.0 - c[0] - c[3]) / 4.0
+  let up1 = c[0] + (q - c[0]) * (2.0 / 3.0)
+  let up2 = c[3] + (q - c[3]) * (2.0 / 3.0)
+  if (math.max(math.dist(up1, c[1]), math.dist(up2, c[2])) * 0.75 <= 0.1) {
+    return q
+  }
+  null
+}
+
+-~> How much longer than the plain points the fitted curves of a stroke may
+-~> be and still get written (see lineart_stroke_items): a curve costs three
+-~> points, so a thin line that the points follow well stays points.
+let lineart_curve_cost = 1.0
+
+-~> The items of a stroke's brush() as compact source text, with the width at
+-~> each on-curve point. The fitted curves (a first point, then ["c",c1,c2,p]
+-~> or ["q",c,p] for each piece) are written when they take no more room than
+-~> the stroke's plain points (times lineart_curve_cost, each item counting
+-~> its pressure too), else the points: a long smooth stroke is the curves,
+-~> a short or thin one the points. Returns {"parts": [text...], "widths":
+-~> [px...], "curved": whether they are the curves}.
+function lineart_stroke_items(s, scale) {
+  let plain = {"parts": [], "widths": [], "curved": false}
+  for (let k = 0; k < len(s.points); k += 1) {
+    push(plain.parts, lineart_tuple_text(s.points[k], scale))
+    push(plain.widths, s.widths[k])
+  }
+  if (len(s.curves) == 0) {
+    return plain
+  }
+  let curved = {"parts": [lineart_tuple_text(s.curves[0].curve[0], scale)], "widths": [s.curves[0].widths[0]], "curved": true}
+  for (let k = 0; k < len(s.curves); k += 1) {
+    let c = s.curves[k].curve
+    let q = lineart_as_quad(c)
+    if (q !== null) {
+      push(curved.parts, "[\"q\"," + lineart_tuple_text(q, scale) + "," + lineart_tuple_text(c[3], scale) + "]")
+    } else {
+      push(curved.parts, "[\"c\"," + lineart_tuple_text(c[1], scale) + "," + lineart_tuple_text(c[2], scale) + "," + lineart_tuple_text(c[3], scale) + "]")
+    }
+    push(curved.widths, s.curves[k].widths[1])
+  }
+  if (lineart_items_cost(curved) <= lineart_items_cost(plain) * lineart_curve_cost) {
+    return curved
+  }
+  plain
+}
+
+-~> The bytes a stroke's items take in the code: their text and a pressure each.
+function lineart_items_cost(items) {
+  len(text.join(items.parts, ",")) + 5 * len(items.widths)
 }
 
 -~> A primitive (see lineart_snap) as a call: circle, ellipse, rect, polygon
