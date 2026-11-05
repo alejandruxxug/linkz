@@ -407,7 +407,7 @@ function home_trace_open(stem, code) {
 function home_trace_dialog() {
   home.menu = null
   home.dialog = null
-  tr_open(home.size, {"canvas": function() { null }, "insert": function(_code) { "" }, "open": home_trace_open})
+  tr_open(home.size, {"canvas": function() { null }, "insert": function(_code, _boxes) { "" }, "open": home_trace_open})
   home_dirty()
 }
 

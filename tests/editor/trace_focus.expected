@@ -1,0 +1,48 @@
+-- the button is there once there is a picture, in line art, and starts off
+null
+true false [] true
+-- with the tool off a drag in the preview moves the split, no box
+[] 0.75
+-- the tool on: a drag draws a box of more detail (2) and a trace follows
+true
+[{"box": [6, 5, 26, 24], "detail": 2}] wait
+idle true true
+-- the options handed to the trace carry the box (picture pixels), not for photo
+lineart [{"box": [6, 5, 26, 24], "detail": 2}]
+lineart true
+-- Alt-drag draws a box of less detail; a click or a tiny drag draws nothing
+[{"box": [6, 5, 26, 24], "detail": 2}, {"box": [38, 24, 23, 22], "detail": 0.5}]
+2
+-- a box is dragged to move it, and stays inside the picture
+[6, 5, 26, 24] [14, 8, 26, 24] true true
+true true 2
+-- the corner handle resizes it, never below the least size
+[0, 0, 26, 24] [0, 0, 28, 25] true true
+true true
+64 48 (64, 48)
+-- right-click cycles the strength: 2, 4, 0.5, 2
+[4, 0.5, 2, 4] 2 wait
+-- colors: sky for more detail, mute for less
+true true
+-- the boxes stay in picture coordinates when the window changes size
+true
+-- Insert as layer writes the boxes in a comment above the layer
+false 1 true
+-~> trace focus [{"box": [0, 0, 64, 48], "detail": 4}, {"box": [38, 24, 23, 22], "detail": 0.5}]
+0
+true
+-- the × takes a box away and traces again
+2
+1 [38, 24, 23, 22]
+wait
+0
+-- an Insert without boxes writes no comment
+false 1 false
+-- Photo has no Detail button and no focus option; the boxes wait for line art
+photo null 1 null []
+lineart [{"box": [13, 10, 25, 19], "detail": 2}]
+-- a new picture forgets the boxes
+0
+-- Spanish
+Detalle Arrastra: más. Alt: menos
+false

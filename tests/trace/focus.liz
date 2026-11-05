@@ -1,0 +1,128 @@
+-~> The focus boxes of the line-art tracer (lineart_detail): on the picture of
+-~> detail.liz, two small eyes and a big flat green area with a wobbly edge,
+-~> `adaptive` off. A "more detail" box round the left eye keeps its iris and
+-~> not the right eye's, outside the box; a "less detail" box over the green
+-~> edge simplifies it. Also the clamp of the strength and the option checks.
+
+use "../../lib/trace/trace"
+use "../../lib/trace/lineart_detail"
+
+let paper = #fafaf5
+let green = #70c070
+let skin = #f0c8a8
+let blue = #3060d0
+let dark = #101010
+
+-~> The picture: green left of a wobbling edge, skin on the right with two
+-~> eyes, paper below.
+function face(p) {
+  let edge = 56 + 3.0 * math.sin(p.y / 3.5)
+  if (p.y > 100) {
+    return paper
+  }
+  if (p.x < edge) {
+    return green
+  }
+  for (let i = 0; i < 2; i += 1) {
+    let d = math.dist(p, (100 + 26 * i, 40))
+    if (d < 5.0) {
+      return blue
+    }
+    if (d < 6.6) {
+      return dark
+    }
+  }
+  skin
+}
+
+let w = 160
+let h = 120
+let pixels = []
+for (let y = 0; y < h; y += 1) {
+  for (let x = 0; x < w; x += 1) {
+    push(pixels, face((x + 0.5, y + 0.5)))
+  }
+}
+
+-~> How many lines of the code mention a color.
+function uses(code, hex) {
+  let n = 0
+  let rows = text.lines(code)
+  for (let i = 0; i < len(rows); i += 1) {
+    if (text.find(rows[i], hex) >= 0) {
+      n += 1
+    }
+  }
+  n
+}
+
+-~> How many curve pieces the path painted `colors.green` has.
+function green_pieces(code) {
+  let rows = text.lines(code)
+  for (let i = 0; i < len(rows); i += 1) {
+    if (text.find(rows[i], "colors.green)") >= 0) {
+      return len(text.split(rows[i], "[\"c\""))
+    }
+  }
+  0
+}
+
+function run(focus) {
+  trace_pixels((w, h), pixels, {
+    "mode": "lineart",
+    "min_area": 60,
+    "colors": 5,
+    "adaptive": false,
+    "detail": 0.3,
+    "merge": {"cover": false},
+    "focus": focus
+  })
+}
+
+let plain = run([])
+let eye = run([{"box": [88, 28, 24, 24], "detail": 4}])
+let both = run([{"box": [88, 28, 50, 24], "detail": 4}])
+puts("blue shapes: none", uses(plain.code, "colors.purple)"), "box on one eye", uses(eye.code, "colors.purple)"),
+  "box on both", uses(both.code, "colors.purple)"))
+
+-~> A less-detail box over the green edge, which wobbles from y 0 to 100.
+let coarse = run([{"box": [40, 0, 40, 100], "detail": 0.25}])
+puts("green pieces: plain", green_pieces(plain.code), "less detail", green_pieces(coarse.code))
+puts("less detail is smaller:", green_pieces(coarse.code) < green_pieces(plain.code))
+
+-~> The strength is clamped to 0.25 to 4.
+puts("clamped:", run([{"box": [88, 28, 24, 24], "detail": 100}]).code == eye.code)
+
+-~> The boxes as the tracer keeps them.
+let boxes = lineart_focus_boxes([{"box": [1, 2, 3, 4], "detail": 9}, {"box": [0, 0, 5, 5], "detail": 0.01}])
+puts("boxes:", boxes[0].x0, boxes[0].y0, boxes[0].x1, boxes[0].y1, boxes[0].f, boxes[1].f)
+puts("at:", lineart_focus_at(boxes, 2, 3), lineart_focus_at(boxes, 5, 5), lineart_focus_at(boxes, 3, 3), lineart_focus_at(boxes, 9, 9))
+
+-~> The option checks.
+let bads = [
+  1,
+  [1],
+  [{"detail": 2}],
+  [{"box": [0, 0, 5], "detail": 2}],
+  [{"box": [0, 0, 0, 5], "detail": 2}],
+  [{"box": [0, "a", 5, 5], "detail": 2}],
+  [{"box": [0, 0, 5, 5]}],
+  [{"box": [0, 0, 5, 5], "detail": 0}]
+]
+for (let i = 0; i < len(bads); i += 1) {
+  try {
+    trace_pixels((w, h), pixels, {"mode": "lineart", "focus": bads[i]})
+    puts("no error for", bads[i])
+  } catch (e) {
+    puts(e.message)
+  }
+}
+
+-~> trace() takes the boxes at the picture's own size: a 200 by 100 picture
+-~> traced at 100 by 50 halves them. Boxes that are not well formed pass
+-~> through, for the option check to say; photo mode is left alone.
+let boxed = {"mode": "lineart", "focus": [{"box": [100, 50, 40, 20], "detail": 2}]}
+puts("scaled:", trace_focus_scaled(boxed, (200, 100), (100, 50)).focus[0].box)
+puts("same size:", trace_focus_scaled(boxed, (200, 100), (200, 100)).focus[0].box)
+puts("bad box passes:", trace_focus_scaled({"mode": "lineart", "focus": [{"box": [1]}]}, (200, 100), (100, 50)).focus[0].box)
+puts("photo untouched:", trace_focus_scaled({"focus": [{"box": [100, 50, 40, 20]}]}, (200, 100), (100, 50)).focus[0].box)

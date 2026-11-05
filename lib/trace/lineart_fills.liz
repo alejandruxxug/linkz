@@ -159,7 +159,8 @@ function lineart_darker_half(pixels, positions, w) {
 -~> over everything left. With a detail `map` (lineart_detail_map) and a
 -~> `strength`, min_area is scaled by the local detail of each region
 -~> (lineart_detail_factor): smaller where the detail is high, bigger where
--~> it is low.
+-~> it is low. The map's "focus" boxes (lineart_focus_boxes) scale it too, by
+-~> 1/f squared inside a box, with or without a strength.
 -~> Returns {"label": padded grid of region numbers (-2 on the border),
 -~> "regions": [{"color": palette number}...], "colors", "lab"}.
 function lineart_regions(pixels, mask, w, h, colors, min_area, map = null, strength = 0.0) {
@@ -217,6 +218,10 @@ function lineart_regions(pixels, mask, w, h, colors, min_area, map = null, stren
     let least = min_area
     if (map !== null && strength > 0.0) {
       least = min_area * lineart_detail_factor(lineart_detail_mean(map, found, w, 4), strength)
+    }
+    if (map !== null && len(map.focus) > 0) {
+      let f = lineart_focus_mean(map.focus, found, w, 4)
+      least = least / (f * f)
     }
     if (len(found) < least || !lineart_has_inside(label, found, id, w)) {
       for (let k = 0; k < len(found); k += 1) {

@@ -1,0 +1,190 @@
+-~> trace_focus_view: how the Trace image dialog shows and handles the boxes of
+-~> more or less detail (trace_focus) on its preview: thin outlines with a
+-~> small × in the top right corner and a handle in the bottom right one,
+-~> `sky` for more detail and `mute` for less.
+-~>
+-~> It knows nothing of the dialog's other parts: every function takes the
+-~> dialog's state `d` (its "boxes", "gesture" and "live") and the picture's
+-~> place `p`, {"x", "y", "w", "h": where the picture is in UI pixels, "pw",
+-~> "ph": its own size}. The gesture in `d` is null or one of
+-~> {"kind": "draw", "ax", "ay", "f"}, {"kind": "move", "i", "gx", "gy"},
+-~> {"kind": "resize", "i"} and `live` is the box being drawn.
+
+use "trace_focus"
+use "view_gfx"
+
+-~> The size of the × and of the handle, in UI pixels.
+let tfv_mark = 7
+
+-~> A UI x as a picture x (a float, kept inside the picture).
+function tfv_px(p, x) {
+  tf_clamp((x - p.x) * p.pw / float(p.w), 0.0, float(p.pw))
+}
+
+-~> A UI y as a picture y.
+function tfv_py(p, y) {
+  tf_clamp((y - p.y) * p.ph / float(p.h), 0.0, float(p.ph))
+}
+
+-~> The least a box may measure, in picture pixels (tf_least on screen).
+function tfv_least(p) {
+  math.max(1, math.round(tf_least * p.pw / float(p.w)))
+}
+
+-~> A box's rectangle on the screen, {"x", "y", "w", "h"} in UI pixels.
+function tfv_rect(p, item) {
+  let b = item.box
+  let x0 = p.x + math.round(b[0] * p.w / float(p.pw))
+  let y0 = p.y + math.round(b[1] * p.h / float(p.ph))
+  let x1 = p.x + math.round((b[0] + b[2]) * p.w / float(p.pw))
+  let y1 = p.y + math.round((b[1] + b[3]) * p.h / float(p.ph))
+  {"x": x0, "y": y0, "w": x1 - x0, "h": y1 - y0}
+}
+
+-~> The × of a box on the screen: inside its top right corner.
+function tfv_close_rect(r) {
+  {"x": r.x + r.w - tfv_mark - 1, "y": r.y + 1, "w": tfv_mark, "h": tfv_mark}
+}
+
+-~> The handle of a box on the screen: inside its bottom right corner.
+function tfv_handle_rect(r) {
+  {"x": r.x + r.w - tfv_mark - 1, "y": r.y + r.h - tfv_mark - 1, "w": tfv_mark, "h": tfv_mark}
+}
+
+function tfv_in(r, x, y) {
+  x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h
+}
+
+-~> What a point is on, looking at the boxes from the last one: {"kind":
+-~> "close" | "resize" | "move", "i": the box} or {"kind": "none"}.
+function tfv_hit(p, boxes, x, y) {
+  for (let i = len(boxes) - 1; i >= 0; i -= 1) {
+    let r = tfv_rect(p, boxes[i])
+    if (tfv_in(r, x, y)) {
+      if (tfv_in(tfv_close_rect(r), x, y)) {
+        return {"kind": "close", "i": i}
+      }
+      if (tfv_in(tfv_handle_rect(r), x, y)) {
+        return {"kind": "resize", "i": i}
+      }
+      return {"kind": "move", "i": i}
+    }
+  }
+  {"kind": "none"}
+}
+
+-~> The color of a box: sky for more detail, mute for less.
+function tfv_color(item) {
+  if (tf_is_more(item)) {
+    return P.sky
+  }
+  P.mute
+}
+
+-~> Draws one box: the outline, the × and the handle.
+function tfv_paint_one(p, item) {
+  let r = tfv_rect(p, item)
+  let c = tfv_color(item)
+  g_frame(r.x, r.y, r.w, r.h, c)
+  let x = tfv_close_rect(r)
+  g_rect(x.x - 1, x.y - 1, x.w + 2, x.h + 2, P.void)
+  g_icon("close", x.x, x.y, c)
+  let h = tfv_handle_rect(r)
+  g_rect(h.x + 2, h.y + 2, h.w - 2, h.h - 2, c)
+}
+
+-~> Draws every box, and the one being drawn, over the picture (the caller
+-~> clips to the picture).
+function tfv_paint(d, p) {
+  for (let i = 0; i < len(d.boxes); i += 1) {
+    tfv_paint_one(p, d.boxes[i])
+  }
+  if (d.live != null) {
+    tfv_paint_one(p, d.live)
+  }
+}
+
+-~> A press at (x, y) with the Detail tool on: on a ×, the box goes (true is
+-~> returned: the boxes changed); on a handle or a box, a resize or a move
+-~> starts; anywhere on the picture a new box starts (less detail with `alt`).
+-~> Returns whether the boxes changed.
+function tfv_down(d, p, x, y, alt) {
+  let hit = tfv_hit(p, d.boxes, x, y)
+  if (hit.kind == "close") {
+    d.boxes = list.slice(d.boxes, 0, hit.i) + list.slice(d.boxes, hit.i + 1, len(d.boxes))
+    d.gesture = null
+    return true
+  }
+  if (hit.kind == "resize") {
+    d.gesture = {"kind": "resize", "i": hit.i}
+    return false
+  }
+  if (hit.kind == "move") {
+    let b = d.boxes[hit.i].box
+    d.gesture = {"kind": "move", "i": hit.i, "gx": tfv_px(p, x) - b[0], "gy": tfv_py(p, y) - b[1]}
+    return false
+  }
+  if (!tfv_in(p, x, y)) {
+    d.gesture = null
+    return false
+  }
+  let f = tf_more
+  if (alt) {
+    f = tf_less
+  }
+  d.gesture = {"kind": "draw", "ax": tfv_px(p, x), "ay": tfv_py(p, y), "f": f}
+  d.live = null
+  false
+}
+
+-~> The pointer moved to (x, y) during a gesture.
+function tfv_move(d, p, x, y) {
+  let gest = d.gesture
+  if (gest == null) {
+    return null
+  }
+  let size = (p.pw, p.ph)
+  if (gest.kind == "draw") {
+    d.live = tf_between(gest.ax, gest.ay, tfv_px(p, x), tfv_py(p, y), size, gest.f)
+  } elif (gest.kind == "move") {
+    d.boxes[gest.i] = tf_moved(d.boxes[gest.i], tfv_px(p, x) - gest.gx, tfv_py(p, y) - gest.gy, size)
+  } else {
+    d.boxes[gest.i] = tf_resized(d.boxes[gest.i], tfv_px(p, x), tfv_py(p, y), size, tfv_least(p))
+  }
+}
+
+-~> The button went up: a drawn box that is big enough joins the others. Returns
+-~> whether the boxes changed (a move or resize did; a click that drew
+-~> nothing didn't).
+function tfv_up(d, p) {
+  let gest = d.gesture
+  let live = d.live
+  d.gesture = null
+  d.live = null
+  if (gest == null) {
+    return false
+  }
+  if (gest.kind != "draw") {
+    return true
+  }
+  if (live == null) {
+    return false
+  }
+  let least = tfv_least(p)
+  if (live.box[2] < least || live.box[3] < least) {
+    return false
+  }
+  push(d.boxes, live)
+  true
+}
+
+-~> A right-click at (x, y): the strength of the box there goes round
+-~> (2, 4, 0.5). Returns whether a box was there.
+function tfv_cycle(d, p, x, y) {
+  let hit = tfv_hit(p, d.boxes, x, y)
+  if (hit.kind == "none") {
+    return false
+  }
+  d.boxes[hit.i] = {"box": d.boxes[hit.i].box, "detail": tf_next(d.boxes[hit.i].detail)}
+  true
+}

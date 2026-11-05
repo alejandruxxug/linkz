@@ -1,0 +1,84 @@
+-~> trace_focus: the boxes of more or less detail the Trace image dialog lets
+-~> the user draw on the preview, apart from how they look (trace_focus_view).
+-~>
+-~> A box is {"box": [x, y, w, h], "detail": f} in whole pixels of the picture
+-~> at its own size, which is what the "focus" option of the line-art tracer
+-~> takes, so the boxes stay put when the preview changes size. `detail` is
+-~> 2, 4 or 0.5 (a drag makes 2, or 0.5 with Alt; a right-click cycles them).
+
+-~> The strengths a right-click goes through, and the two a drag makes.
+let tf_cycle = [2, 4, 0.5]
+let tf_more = 2
+let tf_less = 0.5
+
+-~> The least a box may measure on screen, in UI pixels, so it has room for
+-~> its × and its handle.
+let tf_least = 14
+
+-~> The strength after `f` in the cycle (2 after anything else).
+function tf_next(f) {
+  let at = list.index(tf_cycle, f)
+  if (at < 0) {
+    return tf_cycle[0]
+  }
+  tf_cycle[(at + 1) % len(tf_cycle)]
+}
+
+-~> Whether a box is for more detail (above 1), else less.
+function tf_is_more(box) {
+  box.detail >= 1
+}
+
+-~> A number kept between lo and hi.
+function tf_clamp(v, lo, hi) {
+  math.max(lo, math.min(hi, v))
+}
+
+-~> The box between two corners (picture pixels, in any order) of a picture
+-~> of `size`, whole numbers, inside the picture.
+function tf_between(ax, ay, bx, by, size, f) {
+  let x0 = tf_clamp(math.round(math.min(ax, bx)), 0, size.x)
+  let y0 = tf_clamp(math.round(math.min(ay, by)), 0, size.y)
+  let x1 = tf_clamp(math.round(math.max(ax, bx)), 0, size.x)
+  let y1 = tf_clamp(math.round(math.max(ay, by)), 0, size.y)
+  {"box": [x0, y0, x1 - x0, y1 - y0], "detail": f}
+}
+
+-~> The box moved so its top left is at (x, y), kept inside a picture of `size`.
+function tf_moved(item, x, y, size) {
+  let b = item.box
+  {
+    "box": [tf_clamp(math.round(x), 0, size.x - b[2]), tf_clamp(math.round(y), 0, size.y - b[3]), b[2], b[3]],
+    "detail": item.detail
+  }
+}
+
+-~> The box with its bottom right corner moved to (x, y), at least `least`
+-~> picture pixels each way and inside a picture of `size`.
+function tf_resized(item, x, y, size, least) {
+  let b = item.box
+  let w = tf_clamp(math.round(x) - b[0], math.min(least, size.x - b[0]), size.x - b[0])
+  let h = tf_clamp(math.round(y) - b[1], math.min(least, size.y - b[1]), size.y - b[1])
+  {"box": [b[0], b[1], w, h], "detail": item.detail}
+}
+
+-~> A number as written in a comment: 2, 0.5.
+function tf_number(v) {
+  str(v)
+}
+
+-~> The comment that says how a picture was traced, for the line above the
+-~> traced layer: `-~> trace focus [{"box": [x, y, w, h], "detail": f}, ...]`.
+-~> "" when there are no boxes.
+function tf_comment(boxes) {
+  if (boxes == null || len(boxes) == 0) {
+    return ""
+  }
+  let parts = []
+  for (let i = 0; i < len(boxes); i += 1) {
+    let b = boxes[i].box
+    push(parts, "{\"box\": [" + tf_number(b[0]) + ", " + tf_number(b[1]) + ", " + tf_number(b[2]) + ", " +
+      tf_number(b[3]) + "], \"detail\": " + tf_number(boxes[i].detail) + "}")
+  }
+  "-~> trace focus [" + text.join(parts, ", ") + "]"
+}

@@ -2,12 +2,14 @@
 -~> [--min-area 8] [--max-side 256] [--scale 1] [--corner 55] turns a picture
 -~> into drawing code (lib/trace) and says what it made. --mode lineart traces
 -~> inked drawings as strokes and fills (--line-threshold, --line-min,
--~> --continuation, --radius, --fills, --solid).
+-~> --continuation, --radius, --fills, --solid). --focus x,y,w,h[,f] (any
+-~> number of times, line art) asks for more detail (f above 1, default 2) or
+-~> less (below 1) inside a box of the picture, in its own pixels.
 
 use "host_img"
 use "libs"
 
-let trace_usage = "usage: linkz trace in.png out.lzdraw [--colors 8] [--detail 1.5] [--min-area 8] [--max-side 256] [--scale 1] [--corner 55] [--mode photo|lineart] [--line-threshold 0.5] [--line-min 6] [--continuation 35] [--radius 0] [--fills true|false] [--solid 0]"
+let trace_usage = "usage: linkz trace in.png out.lzdraw [--colors 8] [--detail 1.5] [--min-area 8] [--max-side 256] [--scale 1] [--corner 55] [--mode photo|lineart] [--line-threshold 0.5] [--line-min 6] [--continuation 35] [--radius 0] [--fills true|false] [--solid 0] [--focus x,y,w,h[,f]]..."
 
 -~> The options the command takes, by flag, and the key of trace's options.
 let trace_flags = {
@@ -32,6 +34,28 @@ function trace_number(v) {
   v
 }
 
+-~> One --focus value, "x,y,w,h" or "x,y,w,h,f", as a focus box (f is 2
+-~> without it).
+function trace_focus_flag(value) {
+  let parts = text.split(value, ",")
+  if (len(parts) != 4 && len(parts) != 5) {
+    error("--focus needs x,y,w,h or x,y,w,h,f, got " + json.write(value))
+  }
+  let nums = []
+  for (let i = 0; i < len(parts); i += 1) {
+    let n = text.number(text.trim(parts[i]))
+    if (n == null) {
+      error("--focus needs numbers, got " + json.write(value))
+    }
+    push(nums, trace_number(n))
+  }
+  let f = 2
+  if (len(nums) == 5) {
+    f = nums[4]
+  }
+  {"box": [nums[0], nums[1], nums[2], nums[3]], "detail": f}
+}
+
 -~> {"files": [in, out], "options": {...}} from the arguments.
 function trace_args(args) {
   let files = []
@@ -43,7 +67,7 @@ function trace_args(args) {
     }
     let name = text.slice(args[i], 2, len(args[i]))
     let key = trace_flags[name]
-    let word = name == "mode" || name == "fills"
+    let word = name == "mode" || name == "fills" || name == "focus"
     if ((key == null && !word) || i + 1 >= len(args)) {
       error("bad option " + args[i] + "\n" + trace_usage)
     }
@@ -53,6 +77,13 @@ function trace_args(args) {
         error("--mode must be photo or lineart, got " + json.write(args[i]))
       }
       options.mode = args[i]
+      continue
+    }
+    if (name == "focus") {
+      if (options.focus == null) {
+        options.focus = []
+      }
+      push(options.focus, trace_focus_flag(args[i]))
       continue
     }
     if (name == "fills") {

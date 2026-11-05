@@ -3,9 +3,19 @@
 -~> most max_side, as {"size": (w, h), "pixels": [COLOR, ...]}: one flat list,
 -~> row by row from the top left, so the pixel (x, y) is pixels[y * w + x].
 -~> Transparent pixels are laid over white, so every color is opaque.
+-~> img.size(path) is the picture's own size, before any shrinking.
 
 function host_img() {
-  {"load": host_img_load}
+  {"load": host_img_load, "size": host_img_size}
+}
+
+-~> The size of a picture file as it is, (w, h).
+function host_img_size(path) {
+  try {
+    return img.size(img.load(path))
+  } catch (e) {
+    error("img.size: " + e.message)
+  }
 }
 
 function host_img_load(path, max_side = 256) {

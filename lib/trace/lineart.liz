@@ -104,6 +104,13 @@ use "lineart_detail"
 -~>                   region and the fit tolerance are a quarter in the
 -~>                   busiest places and four times in the flattest; 0 is
 -~>                   the same as adaptive off.
+-~>   focus           boxes where the user wants more or less detail:
+-~>                   [{"box": [x, y, w, h], "detail": f}...], in pixels of
+-~>                   the picture as traced (after max_side). f above 1 is
+-~>                   more detail, below 1 less, kept between 0.25 and 4.
+-~>                   Inside a box the smallest region is 1/f squared and the
+-~>                   fit tolerance 1/f times what they would be (a later
+-~>                   box wins where two meet). Works with adaptive off.
 -~>   scale           multiplies every coordinate, to make a bigger drawing.
 -~>   max_side        the picture is shrunk until its longer side is at most
 -~>                   this many pixels.
@@ -126,6 +133,7 @@ let lineart_options = {
   "detail": 0.8,
   "adaptive": true,
   "adaptive_strength": 0.2,
+  "focus": [],
   "scale": 1,
   "max_side": 1024
 }
@@ -165,6 +173,7 @@ function lineart_settings(options) {
   if (!(out.adaptive_strength >= 0 && out.adaptive_strength <= 1)) {
     error("trace: adaptive_strength must be between 0 and 1")
   }
+  out.focus = lineart_focus_boxes(out.focus)
   if (!(out.gradient_error > 0)) {
     error("trace: gradient_error must be more than 0")
   }
@@ -324,11 +333,16 @@ function lineart_trace_fills(pixels, m, dist, w, h, opt, curve) {
     min_area = math.max(4, math.round(w * h / 40000.0))
   }
   let solid = lineart_solid(m, pixels, dist, w, depth)
-  let map = null
-  if (opt.adaptive && opt.adaptive_strength > 0) {
-    map = lineart_detail_map(m.luma, m.ink, w, h)
+  let strength = 0.0
+  if (opt.adaptive) {
+    strength = opt.adaptive_strength
   }
-  let fill = lineart_regions(pixels, m.mask, w, h, opt.colors, min_area, map, opt.adaptive_strength)
+  let map = null
+  if (strength > 0 || len(opt.focus) > 0) {
+    map = lineart_detail_map(m.luma, m.ink, w, h)
+    map.focus = opt.focus
+  }
+  let fill = lineart_regions(pixels, m.mask, w, h, opt.colors, min_area, map, strength)
   let merged = lineart_merge_regions(fill, w, h, opt.merge)
   let order = merged.order
   let ramps = {"groups": 0, "joined": 0}
@@ -343,15 +357,19 @@ function lineart_trace_fills(pixels, m, dist, w, h, opt, curve) {
   }
   let t0 = time.ms()
   let busy = null
+  let focus = null
   if (map !== null) {
     busy = lineart_region_detail(fill, map, w, h)
+    focus = lineart_region_focus(fill, opt.focus, w, h)
   }
   let shapes = []
   for (let k = 0; k < len(order.order); k += 1) {
     let id = order.order[k]
     let own = curve
     if (busy !== null) {
-      own = hash.merge(curve, {"detail": curve.detail * math.min(1.5, lineart_detail_factor(busy[id], opt.adaptive_strength))})
+      own = hash.merge(curve, {
+        "detail": curve.detail * math.min(1.5, lineart_detail_factor(busy[id], strength)) / focus[id]
+      })
     }
     let s = lineart_region_shapes(fill, order, id, w, h, own)
     if (len(s.outers) > 0) {

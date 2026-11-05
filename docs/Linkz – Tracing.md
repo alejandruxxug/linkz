@@ -6,7 +6,7 @@ Turns a picture (PNG or JPEG) into **editable lizard-script**: a `.lzdraw` with 
 
 ```bash
 linkz trace photo.png out.lzdraw [--colors 8] [--detail 1.5] [--min-area 8] [--max-side 256] [--scale 1] [--corner 55]
-linkz trace sketch.png out.lzdraw --mode lineart [--line-threshold 0.5] [--line-min 6] [--continuation 35] [--fills true|false] [--solid 0]
+linkz trace sketch.png out.lzdraw --mode lineart [--line-threshold 0.5] [--line-min 6] [--continuation 35] [--fills true|false] [--solid 0] [--focus x,y,w,h[,f]]
 linkz render out.lzdraw            # writes out.svg
 ```
 
@@ -102,6 +102,9 @@ Result: 216 regions, 1 727 points, 20.7 KB of code. At `max_side` 256 (8 colors)
 | `--radius n` | `radius` | 0 | Half side of the neighbourhood a pixel is compared with; 0 picks it from the picture size. |
 | `--fills true\|false` | `fills` | true | false traces only the lines. |
 | `--solid n` | `solid` | 0 | Ink this far (px) from the paper all round is a solid fill, not a stroke; 0 picks it from the size. |
+| `--focus x,y,w,h[,f]` | `focus` | none | A box of the picture (in its own pixels) with more detail (`f` above 1, 2 if left out) or less (`f` below 1); repeat the flag for more boxes. |
+
+Focus boxes (Tracing v3 step 5b): from lizard, `{"focus": [{"box": [x, y, w, h], "detail": f}, ...]}`. `f` is kept between 0.25 and 4. Inside a box the smallest region a fill keeps is 1/f squared of what it would be, and the fit tolerance of its outlines 1/f (a later box wins where two meet). It works with `adaptive` off too. The Trace image dialog draws the boxes with its Detail tool, and Insert as layer writes them in a `-~> trace focus [...]` comment above the layer.
 
 The merge pass (`lineart_merge`, Tracing v3 step 1) runs on the fills before their outlines are made: `snap` (palette colors under 2 apart in Lab become one), `join` (touching regions of one color become one shape), `stack` (a region with islands is drawn whole with the islands on top, not with holes), `absorb` (a region of the color of the shape under it is given to that shape) and `cover` (shapes hidden by later shapes are dropped). From lizard: `{"merge": false}` for none, or `{"merge": {"stack": false}}` to turn single steps off (the others stay on); no CLI flag yet. The stats have `merge: {snapped, joined, stacked, absorbed, covered}`.
 

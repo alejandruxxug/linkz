@@ -52,7 +52,7 @@ function lineart_detail_map(luma, ink, w, h) {
       push(v, 0.0)
     }
   }
-  {"cell": cell, "gw": gw, "gh": gh, "v": lineart_detail_blur(v, gw, gh)}
+  {"cell": cell, "gw": gw, "gh": gh, "v": lineart_detail_blur(v, gw, gh), "focus": []}
 }
 
 -~> The scores averaged with their neighbours (3 by 3), so a window of detail
@@ -135,4 +135,105 @@ function lineart_detail_factor(d, strength) {
     return 1.0 + 3.0 * strength * k
   }
   1.0 / (1.0 - 3.0 * strength * k)
+}
+
+-~> The focus boxes of the "focus" option, tidied: [{"box": [x, y, w, h],
+-~> "detail": f}...] becomes [{"x0", "y0", "x1", "y1", "f"}...], with f kept
+-~> between 0.25 and 4. A box that isn't four numbers (the last two above 0),
+-~> or a detail that isn't a number above 0, is an error.
+function lineart_focus_boxes(focus) {
+  if (type(focus) != "ARRAY") {
+    error("trace: focus must be a list of {\"box\": [x, y, w, h], \"detail\": f}")
+  }
+  let out = []
+  for (let i = 0; i < len(focus); i += 1) {
+    let item = focus[i]
+    if (type(item) != "HASH" || type(item.box) != "ARRAY" || len(item.box) != 4) {
+      error("trace: each focus needs a \"box\" of four numbers [x, y, w, h]")
+    }
+    for (let k = 0; k < 4; k += 1) {
+      if (type(item.box[k]) != "INTEGER" && type(item.box[k]) != "FLOAT") {
+        error("trace: the box of a focus must hold numbers")
+      }
+    }
+    if (!(item.box[2] > 0 && item.box[3] > 0)) {
+      error("trace: the box of a focus needs a width and a height above 0")
+    }
+    let f = item.detail
+    if ((type(f) != "INTEGER" && type(f) != "FLOAT") || !(f > 0)) {
+      error("trace: the detail of a focus must be a number above 0")
+    }
+    push(out, {
+      "x0": item.box[0],
+      "y0": item.box[1],
+      "x1": item.box[0] + item.box[2],
+      "y1": item.box[1] + item.box[3],
+      "f": math.min(4.0, math.max(0.25, float(f)))
+    })
+  }
+  out
+}
+
+-~> The focus factor at pixel (x, y): the `f` of the last box
+-~> (lineart_focus_boxes) that holds it, 1 where there is none.
+function lineart_focus_at(boxes, x, y) {
+  let f = 1.0
+  for (let i = 0; i < len(boxes); i += 1) {
+    let b = boxes[i]
+    if (x >= b.x0 && x < b.x1 && y >= b.y0 && y < b.y1) {
+      f = b.f
+    }
+  }
+  f
+}
+
+-~> The mean focus factor under some padded positions (every `step`th one
+-~> looked at), 1 for none or without boxes.
+function lineart_focus_mean(boxes, positions, w, step) {
+  if (len(boxes) == 0) {
+    return 1.0
+  }
+  let w2 = w + 2
+  let total = 0.0
+  let n = 0
+  for (let i = 0; i < len(positions); i += step) {
+    let p = positions[i]
+    total += lineart_focus_at(boxes, p % w2 - 1, p // w2 - 1)
+    n += 1
+  }
+  if (n == 0) {
+    return 1.0
+  }
+  total / n
+}
+
+-~> The mean focus factor of every region of a fill, looking at every 2nd
+-~> pixel of each row and column. A region too small to be seen that way
+-~> reads 1.
+function lineart_region_focus(fill, boxes, w, h) {
+  let w2 = w + 2
+  let sum = []
+  let count = []
+  for (let i = 0; i < len(fill.regions); i += 1) {
+    push(sum, 0.0)
+    push(count, 0)
+  }
+  for (let y = 0; y < h; y += 2) {
+    for (let x = 0; x < w; x += 2) {
+      let a = fill.label[(y + 1) * w2 + x + 1]
+      if (a >= 0) {
+        sum[a] += lineart_focus_at(boxes, x, y)
+        count[a] += 1
+      }
+    }
+  }
+  let out = []
+  for (let i = 0; i < len(sum); i += 1) {
+    if (count[i] > 0) {
+      push(out, sum[i] / count[i])
+    } else {
+      push(out, 1.0)
+    }
+  }
+  out
 }

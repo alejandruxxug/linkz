@@ -8,6 +8,7 @@
 -~> option names the engine takes, and trace_visible() hides the others.
 -~> The labels are language keys; the view turns them into words.
 
+use "trace_focus"
 use "trace_full"
 
 -~> The sliders: the key (also the option's name), the language key of the
@@ -62,6 +63,10 @@ function trace_new(known, defaults) {
     "preview": null,
     "raw": null,
     "retrace": false,
+    "tool": false,
+    "boxes": [],
+    "gesture": null,
+    "live": null,
     "full": trace_full_new(),
     "want": null
   }
@@ -154,6 +159,9 @@ function trace_options(d, extra = {}) {
   }
   if (out.colors != null) {
     out.colors = math.round(out.colors)
+  }
+  if (d.mode == "lineart" && len(d.boxes) > 0) {
+    out.focus = d.boxes
   }
   hash.merge(out, extra)
 }
@@ -467,12 +475,21 @@ function trace_insert_at(lines) {
 }
 
 -~> The rows of a drawing with the traced layer inserted: {"lines", "line"}
--~> where line is the 1-based row of `layer traced` in the result.
-function trace_insert(lines, code) {
+-~> where line is the 1-based row of `layer traced` in the result. With
+-~> `boxes` (the dialog's focus boxes, line art only) a comment above the
+-~> layer says how it was traced (tf_comment).
+function trace_insert(lines, code, boxes = []) {
   let made = trace_as_layer(code, text.join(lines, "\n"))
+  let rows = made.lines
+  let layer = made.layer
+  let note = tf_comment(boxes)
+  if (note != "") {
+    rows = list.slice(rows, 0, layer) + [note] + list.slice(rows, layer, len(rows))
+    layer += 1
+  }
   let at = trace_insert_at(lines)
-  let out = list.slice(lines, 0, at) + made.lines + list.slice(lines, at, len(lines))
-  {"lines": out, "line": at + made.layer + 1}
+  let out = list.slice(lines, 0, at) + rows + list.slice(lines, at, len(lines))
+  {"lines": out, "line": at + layer + 1}
 }
 
 -~> The name for a drawing opened from a picture's path: the file's name

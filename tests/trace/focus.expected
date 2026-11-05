@@ -1,0 +1,18 @@
+blue shapes: none 0 box on one eye 1 box on both 2
+green pieces: plain 32 less detail 24
+less detail is smaller: true
+clamped: true
+boxes: 1 2 4 6 4.0 0.25
+at: 0.25 1.0 0.25 1.0
+trace: focus must be a list of {"box": [x, y, w, h], "detail": f}
+trace: each focus needs a "box" of four numbers [x, y, w, h]
+trace: each focus needs a "box" of four numbers [x, y, w, h]
+trace: each focus needs a "box" of four numbers [x, y, w, h]
+trace: the box of a focus needs a width and a height above 0
+trace: the box of a focus must hold numbers
+trace: the detail of a focus must be a number above 0
+trace: the detail of a focus must be a number above 0
+scaled: [50.0, 25.0, 20.0, 10.0]
+same size: [100.0, 50.0, 40.0, 20.0]
+bad box passes: [1]
+photo untouched: [100, 50, 40, 20]

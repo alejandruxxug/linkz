@@ -362,6 +362,8 @@ lang_register("es", {
   "trace.inserted": "Capa calcada insertada",
   "trace.tracing_full": "calcando a tamaño completo…",
   "trace.full_size": "tamaño completo",
+  "trace.focus_tool": "Detalle",
+  "trace.focus_hint": "Arrastra: más. Alt: menos",
   "budget.mac": "este Mac",
   "budget.mac_s": "este Mac",
   "budget.pc": "este computador",

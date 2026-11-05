@@ -362,6 +362,8 @@ lang_register("en", {
   "trace.inserted": "Inserted the traced layer",
   "trace.tracing_full": "tracing full size…",
   "trace.full_size": "full size",
+  "trace.focus_tool": "Detail",
+  "trace.focus_hint": "Drag: more detail. Alt: less",
   "budget.mac": "this Mac",
   "budget.mac_s": "this Mac's",
   "budget.pc": "this computer",

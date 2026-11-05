@@ -1,0 +1,256 @@
+-~> The Detail tool of the Trace image dialog in a headless editor: the button,
+-~> a drag on the preview draws a box of more detail (Alt: less), a box moves
+-~> when dragged and resizes from its corner, the × takes it away, a
+-~> right-click cycles its strength (2, 4, 0.5), every change traces again,
+-~> the boxes stay in picture coordinates when the window changes size, they
+-~> go to the trace as the "focus" option (line art only), and Insert as layer
+-~> writes them in a comment above the traced layer. The picture is a small
+-~> one made here.
+
+use "rig"
+
+let code = "-~> lzdraw 1
+canvas = {\"size\": (480, 320), \"background\": #f6d9a8}
+layer sun
+  circle((360, 90), 34, #fff3c4)
+"
+
+let dir = fs.join(fs.home(), "trace-focus-test")
+fs.mkdir(dir)
+let pic_path = fs.join(dir, "head.png")
+let pic = img.new(64, 48)
+img.fill(pic, [0, 0, 64, 48], #dbe4f0)
+img.fill(pic, [12, 20, 40, 28], #5a3d8c)
+img.fill(pic, [20, 8, 24, 30], #f6d9c8)
+img.fill(pic, [26, 18, 4, 4], #2a5cb0)
+img.fill(pic, [34, 18, 4, 4], #2a5cb0)
+img.fill(pic, [20, 8, 24, 2], #222222)
+img.fill(pic, [20, 36, 24, 2], #222222)
+img.save(pic, pic_path)
+
+let size = (512, 360)
+let modules = rig_modules + ["ui/view_panels", "ui/view_canvas", "ui/view_popups", "ui/i18n", "ui/home_view", "ui/app_screens",
+  "ui/view_gfx", "ui/trace_model", "ui/trace_focus", "ui/trace_focus_view", "ui/trace_view", "ui/trace_editor"]
+let rig = rig_open(fs.join(dir, "editor"), code, size, modules, {"tutorial_done": true, "drawings_dir": fs.join(dir, "drawings")})
+let n = rig.names
+let none = {"shift": false, "alt": false, "cmd": false, "ctrl": false}
+let alt = {"shift": false, "alt": true, "cmd": false, "ctrl": false}
+
+function frame(events = []) {
+  rig_frame(rig, events)
+}
+
+function click(p) {
+  frame([{"type": "down", "pos": p}, {"type": "up", "pos": p}])
+}
+
+function state() {
+  n.tr_debug_state()
+}
+
+function mid(r) {
+  (r[0] + r[2] // 2, r[1] + r[3] // 2)
+}
+
+-~> Frames until the trace that was waiting has run (the pause is skipped).
+function settle() {
+  for (let i = 0; i < 8; i += 1) {
+    if (n.T.d != null && n.T.d.phase == "wait") {
+      n.T.d.due = 0
+    }
+    frame()
+    if (n.T.d == null || n.T.d.phase == "idle") {
+      break
+    }
+  }
+}
+
+-~> Frames until the button that was pressed has run (a task makes the
+-~> full-size trace: real time passes).
+function finish() {
+  for (let i = 0; i < 400; i += 1) {
+    if (n.T.d == null || n.T.d.want == null) {
+      break
+    }
+    frame()
+    time.sleep(10)
+  }
+}
+
+-~> A point of the picture (0 to 1 across and down) on the screen.
+function at(fx, fy) {
+  let p = n.tr_place()
+  (p.x + math.round(fx * p.w), p.y + math.round(fy * p.h))
+}
+
+-~> A drag from one place to another, the pointer moving in between.
+function drag(a, b, mods = none) {
+  frame([{"type": "down", "pos": a, "button": "left", "mods": mods}])
+  frame([{"type": "move", "pos": ((a.x + b.x) // 2, (a.y + b.y) // 2)}])
+  frame([{"type": "move", "pos": b}])
+  frame([{"type": "up", "pos": b, "button": "left"}])
+}
+
+function boxes() {
+  state().boxes
+}
+
+-~> The corners of box i on the screen: its rectangle, the × and the handle.
+function rect_of(i) {
+  n.tfv_rect(n.tr_place(), boxes()[i])
+}
+
+function close_of(i) {
+  let r = n.tfv_close_rect(rect_of(i))
+  (r.x + 3, r.y + 3)
+}
+
+function handle_of(i) {
+  let r = n.tfv_handle_rect(rect_of(i))
+  (r.x + 3, r.y + 3)
+}
+
+puts("-- the button is there once there is a picture, in line art, and starts off")
+frame([{"type": "key", "key": "T", "mods": {"shift": true, "alt": false, "cmd": true, "ctrl": false}}])
+puts(state().detail_button)
+frame([{"type": "type", "text": pic_path}])
+frame([{"type": "key", "key": "Enter", "mods": none}])
+settle()
+puts(state().detail_button != null, state().tool, boxes(), state().traced)
+
+puts("-- with the tool off a drag in the preview moves the split, no box")
+let pre = state().preview
+drag((pre[0] + 60, pre[1] + 50), (pre[0] + 180, pre[1] + 120))
+puts(boxes(), state().split)
+settle()
+
+puts("-- the tool on: a drag draws a box of more detail (2) and a trace follows")
+click(mid(state().detail_button))
+puts(state().tool)
+let before = n.T.d.raw
+drag(at(0.1, 0.1), at(0.5, 0.6))
+puts(boxes(), state().phase)
+settle()
+puts(state().phase, state().traced, n.T.d.raw != before)
+
+puts("-- the options handed to the trace carry the box (picture pixels), not for photo")
+let opts = n.trace_options(n.T.d, {"max_side": 160})
+puts(opts.mode, opts.focus)
+puts(n.T.d.mode, n.tr_focus_boxes() == boxes())
+
+puts("-- Alt-drag draws a box of less detail; a click or a tiny drag draws nothing")
+drag(at(0.6, 0.5), at(0.95, 0.95), alt)
+puts(boxes())
+settle()
+click(at(0.55, 0.1))
+drag(at(0.7, 0.1), at(0.71, 0.11))
+puts(len(boxes()))
+
+puts("-- a box is dragged to move it, and stays inside the picture")
+let first = boxes()[0].box
+let r0 = rect_of(0)
+drag((r0.x + 6, r0.y + r0.h // 2), (r0.x + 6 + 30, r0.y + r0.h // 2 + 12))
+puts(first, boxes()[0].box, boxes()[0].box[2] == first[2], boxes()[0].box[3] == first[3])
+r0 = rect_of(0)
+drag((r0.x + 6, r0.y + r0.h // 2), (r0.x - 400, r0.y - 400))
+puts(boxes()[0].box[0] >= 0, boxes()[0].box[1] >= 0, len(boxes()))
+settle()
+
+puts("-- the corner handle resizes it, never below the least size")
+let moved = boxes()[0].box
+let h0 = handle_of(0)
+drag(h0, (h0.x + 12, h0.y + 8))
+puts(moved, boxes()[0].box, boxes()[0].box[0] == moved[0], boxes()[0].box[1] == moved[1])
+let h1 = handle_of(0)
+drag(h1, (h1.x - 1000, h1.y - 1000))
+puts(boxes()[0].box[2] >= n.tfv_least(n.tr_place()), boxes()[0].box[3] >= n.tfv_least(n.tr_place()))
+let h2 = handle_of(0)
+drag(h2, (h2.x + 1000, h2.y + 1000))
+puts(boxes()[0].box[0] + boxes()[0].box[2], boxes()[0].box[1] + boxes()[0].box[3], n.T.d.image.size)
+settle()
+
+puts("-- right-click cycles the strength: 2, 4, 0.5, 2")
+let c = (rect_of(0).x + 10, rect_of(0).y + 10)
+let seen = []
+for (let i = 0; i < 4; i += 1) {
+  frame([{"type": "down", "pos": c, "button": "right"}, {"type": "up", "pos": c, "button": "right"}])
+  push(seen, boxes()[0].detail)
+}
+puts(seen, len(boxes()), state().phase)
+settle()
+
+puts("-- colors: sky for more detail, mute for less")
+puts(n.tfv_color({"box": [0, 0, 1, 1], "detail": 4}) == n.P.sky, n.tfv_color({"box": [0, 0, 1, 1], "detail": 0.5}) == n.P.mute)
+
+puts("-- the boxes stay in picture coordinates when the window changes size")
+let keep = boxes()
+frame([{"type": "resize", "size": (700, 500)}])
+puts(boxes() == keep)
+frame([{"type": "resize", "size": size}])
+
+puts("-- Insert as layer writes the boxes in a comment above the layer")
+let s0 = len(n.ed.undo)
+click(mid(state().insert))
+finish()
+let rows = n.ed_model().lines
+let at_layer = list.index(rows, "layer traced")
+puts(n.tr_is_open(), len(n.ed.undo) - s0, at_layer > 0 && text.starts(rows[at_layer - 1], "-~> trace focus ["))
+puts(rows[at_layer - 1])
+puts(len(n.ed.errors))
+n.ed_undo()
+puts(n.ed_model().lines == text.split(code, "\n"))
+
+puts("-- the × takes a box away and traces again")
+frame([{"type": "key", "key": "T", "mods": {"shift": true, "alt": false, "cmd": true, "ctrl": false}}])
+frame([{"type": "type", "text": pic_path}])
+frame([{"type": "key", "key": "Enter", "mods": none}])
+settle()
+click(mid(state().detail_button))
+drag(at(0.1, 0.1), at(0.5, 0.6))
+drag(at(0.6, 0.5), at(0.95, 0.95))
+settle()
+puts(len(boxes()))
+click(close_of(0))
+puts(len(boxes()), boxes()[0].box)
+puts(state().phase)
+settle()
+click(close_of(0))
+puts(len(boxes()))
+settle()
+
+puts("-- an Insert without boxes writes no comment")
+s0 = len(n.ed.undo)
+click(mid(state().insert))
+finish()
+rows = n.ed_model().lines
+at_layer = list.index(rows, "layer traced")
+puts(n.tr_is_open(), len(n.ed.undo) - s0, text.starts(rows[at_layer - 1], "-~> trace focus"))
+n.ed_undo()
+
+puts("-- Photo has no Detail button and no focus option; the boxes wait for line art")
+frame([{"type": "key", "key": "T", "mods": {"shift": true, "alt": false, "cmd": true, "ctrl": false}}])
+frame([{"type": "type", "text": pic_path}])
+frame([{"type": "key", "key": "Enter", "mods": none}])
+settle()
+click(mid(state().detail_button))
+drag(at(0.2, 0.2), at(0.6, 0.6))
+settle()
+click(mid(state().photo))
+settle()
+puts(state().mode, state().detail_button, len(boxes()), n.trace_options(n.T.d).focus, n.tr_focus_boxes())
+click(mid(state().lineart))
+settle()
+puts(state().mode, n.trace_options(n.T.d).focus)
+
+puts("-- a new picture forgets the boxes")
+frame([{"type": "drop", "pos": (100, 100), "paths": [pic_path]}])
+settle()
+puts(len(boxes()))
+
+puts("-- Spanish")
+n.lang_use("es")
+frame()
+puts(n.t("trace.focus_tool"), n.t("trace.focus_hint"))
+n.lang_use("en")
+frame([{"type": "key", "key": "Escape", "mods": none}])
+puts(n.tr_is_open())

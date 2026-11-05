@@ -64,10 +64,10 @@ function tr_editor_frame() {
 
 -~> Insert as layer: the traced code goes into the file as one undo step.
 -~> "" when it did, else what went wrong.
-function tr_editor_insert(code) {
+function tr_editor_insert(code, boxes = []) {
   view_commit_focus()
   let m = ed_model()
-  let r = trace_insert(m.lines, code)
+  let r = trace_insert(m.lines, code, boxes)
   ed_label("trace_layer")
   ed_apply(doc_with(m, r.lines, r.line, 0), null)
   view_prepare()

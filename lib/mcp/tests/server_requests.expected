@@ -17,7 +17,7 @@ run object ["code"] ["code"] true
 render object ["code"] ["code", "width", "height"] true
 svg object ["code"] ["code"] true
 save object ["path", "code"] ["path", "code", "overwrite"] true
-trace object ["path"] ["path", "colors", "detail", "max_side", "min_area", "corner", "background", "mode", "line_threshold", "line_min", "continuation", "radius", "fills", "solid"] true
+trace object ["path"] ["path", "colors", "detail", "max_side", "min_area", "corner", "background", "mode", "line_threshold", "line_min", "continuation", "radius", "fills", "solid", "focus"] true
 open object ["path"] ["path"] true
 {"jsonrpc":"2.0","id":7,"error":{"code":-32601,"message":"method not found: no/such/method"}}
 {"jsonrpc":"2.0","id":8,"error":{"code":-32602,"message":"tools/call needs params.name, the name of a tool"}}
