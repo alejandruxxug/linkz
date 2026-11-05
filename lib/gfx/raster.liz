@@ -22,10 +22,13 @@ use "../draw/shapes"
 
 let raster = {}
 
--~> Rows outside this range are never produced, so a huge shape stays cheap.
--~> The host cuts what is outside the buffer anyway.
+-~> Rows outside this range are never produced, so a shape absurdly far away stays
+-~> cheap. The host cuts what is outside the buffer anyway. The last row is past the
+-~> biggest picture anything paints: the largest canvas (16384, svg.liz) at the
+-~> canvas's highest zoom (32, canvas_zoom.liz), whose scene rows are this far down;
+-~> a lower cap leaves the bottom of a deep zoom or a big export blank.
 let raster_min_row = -64
-let raster_max_row = 4096
+let raster_max_row = 16384 * 32
 
 -~> Finished shapes, kept by the shape's path and widths (not its colors).
 let raster_cache = {}

@@ -1,0 +1,130 @@
+-~> A deep zoom shows the whole drawing (lib/gfx/raster.liz): at 1600% to 3200% the
+-~> scene's rows go past 4096, and the canvas must still be what a fresh render of
+-~> the drawing scaled to that zoom paints, in every corner. The drawing has a big
+-~> shape under everything, shapes on top in three layers and a shape taller than
+-~> 1024 rows at these zooms (painted in bands, view_scene.liz).
+
+use "rig"
+
+let dir = fs.join(fs.home(), "zoom-deep-test")
+let code = "-~> lzdraw 1
+canvas = {\"size\": (400, 300), \"background\": #ffffff}
+
+layer top
+  circle((300, 240), 12, #c0392b)
+  rect((40, 250), (30, 20), #2d6a8f)
+  stroke([(20, 280), (120, 260), (380, 290)], #3b2a6b, 3)
+
+layer middle
+  circle((200, 150), 30, #3fa34d)
+  polygon([(320, 200), (390, 220), (340, 295)], #e0a526)
+  rect((350, 10), (20, 280), #8a3a9a)
+
+layer ground
+  rect((0, 0), (400, 300), #f2a65a)
+"
+let modules = rig_modules + ["ui/view_panels", "ui/canvas_zoom", "ui/view_scene_zoom", "ui/view_canvas", "ui/view_scene",
+  "draw/shapes", "gfx/raster"]
+let rig = rig_open(fs.join(dir, "a"), code, (800, 500), modules)
+let n = rig.names
+
+-~> Frames until the picture is sharp (a cap stops a loop that never ends).
+function settle() {
+  let frames = 0
+  while (n.zoom_busy() && frames < 4000) {
+    rig_frame(rig)
+    frames += 1
+  }
+}
+
+-~> Shape s scaled by k and moved by -at: the part in view starts at (0, 0), so the
+-~> reference never paints a far row.
+function moved(s, k, at) {
+  let t = n.view_scale_shape(s, k)
+  let out = hash.merge(t, {})
+  let path = []
+  for (let i = 0; i < len(t.path); i += 1) {
+    let c = t.path[i]
+    let d = [c[0]]
+    for (let j = 1; j < len(c); j += 1) {
+      push(d, c[j] - at)
+    }
+    push(path, d)
+  }
+  out.path = path
+  out
+}
+
+-~> The part in view as a fresh full render of the scaled drawing paints it.
+function reference(cl) {
+  let v = cl.vis
+  let w = v[2] - v[0]
+  let h = v[3] - v[1]
+  let pic = img.new(w, h)
+  img.fill(pic, [0, 0, w, h], n.ed.canvas.background)
+  let order = n.paint_order(n.ed.shapes)
+  for (let i = 0; i < len(order); i += 1) {
+    let s = moved(order[i], cl.zoom, (v[0], v[1]))
+    let r = n.raster_shape(s)
+    if (r.fill !== null) {
+      img.spans(pic, r.fill, s.fill, (0, 0))
+    }
+    if (r.stroke !== null) {
+      img.spans(pic, r.stroke, s.stroke, (0, 0))
+    }
+  }
+  pic
+}
+
+-~> Whether two pixels are clearly different colors (a soft edge may differ a little).
+function far(a, b) {
+  math.max(math.abs(a.r - b.r), math.max(math.abs(a.g - b.g), math.abs(a.b - b.b))) > 40
+}
+
+-~> Whether the canvas shows what the reference paints, on a grid of points (a
+-~> pixel or two of soft edge may round the other way).
+function as_reference(cl) {
+  let shot = window.screenshot(rig.win, {"full": true})
+  let ref = reference(cl)
+  let v = cl.vis
+  let x0 = cl.crect[0] * 2 + cl.clip[0]
+  let y0 = cl.crect[1] * 2 + cl.clip[1]
+  let bad = 0
+  for (let y = 0; y < v[3] - v[1]; y += 7) {
+    for (let x = 0; x < v[2] - v[0]; x += 7) {
+      if (far(img.get(shot, x0 + x, y0 + y), img.get(ref, x, y))) {
+        bad += 1
+      }
+    }
+  }
+  bad <= 2
+}
+
+-~> Zooms to z with the drawing point `at` (a share of its width and height) in the
+-~> middle of the canvas, and waits for the picture to be sharp.
+function look(z, at) {
+  n.canvas_zoom_set(z, n.canvas_zoom_centre())
+  rig_frame(rig)
+  settle()
+  let cl = n.view_canvas_layout()
+  let want = (cl.sw * at.x, cl.sh * at.y)
+  let now = ((cl.vis[0] + cl.vis[2]) / 2.0, (cl.vis[1] + cl.vis[3]) / 2.0)
+  n.canvas_pan_by(math.round(now.x - want.x), math.round(now.y - want.y))
+  rig_frame(rig)
+  settle()
+  n.view_canvas_layout()
+}
+
+rig_frame(rig)
+let corners = [(0.5, 0.5), (0.1, 0.1), (0.9, 0.1), (0.1, 0.9), (0.9, 0.9)]
+let zooms = [8.0, 16.0, 32.0]
+for (let i = 0; i < len(zooms); i += 1) {
+  let shown = []
+  let deepest = 0
+  for (let j = 0; j < len(corners); j += 1) {
+    let cl = look(zooms[i], corners[j])
+    deepest = math.max(deepest, cl.vis[3])
+    push(shown, as_reference(cl))
+  }
+  puts(str(int(zooms[i] * 100)) + "%: rows past 4096:", deepest > 4096, "as a fresh render:", shown)
+}

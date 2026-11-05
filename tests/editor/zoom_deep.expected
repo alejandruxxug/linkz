@@ -1,0 +1,3 @@
+800%: rows past 4096: false as a fresh render: [true, true, true, true, true]
+1600%: rows past 4096: true as a fresh render: [true, true, true, true, true]
+3200%: rows past 4096: true as a fresh render: [true, true, true, true, true]
