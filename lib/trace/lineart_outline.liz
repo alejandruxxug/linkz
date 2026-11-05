@@ -230,53 +230,62 @@ function lineart_region_mask(fill, order, id, w, h) {
   let y0 = b[1] - 2
   let gw = b[2] - b[0] + 5
   let gh = b[3] - b[1] + 5
+  -~> the columns of the grid that are on the picture: i0 up to i1
+  let i0 = math.max(0, -x0)
+  let i1 = math.min(gw, w - x0)
   let grid = []
-  let lab = []
   for (let j = 0; j < gh; j += 1) {
     let y = y0 + j
-    for (let i = 0; i < gw; i += 1) {
-      let x = x0 + i
-      if (x < 0 || y < 0 || x >= w || y >= h) {
+    if (y < 0 || y >= h) {
+      for (let i = 0; i < gw; i += 1) {
         push(grid, 0)
-        push(lab, -1)
-        continue
       }
-      let l = label[(y + 1) * w2 + x + 1]
-      push(lab, l)
-      if (take[l] !== null) {
+      continue
+    }
+    let row = (y + 1) * w2 + x0 + 1
+    for (let i = 0; i < i0; i += 1) {
+      push(grid, 0)
+    }
+    for (let i = i0; i < i1; i += 1) {
+      if (take[label[row + i]] !== null) {
         push(grid, 1)
       } else {
         push(grid, 0)
       }
     }
+    for (let i = i1; i < gw; i += 1) {
+      push(grid, 0)
+    }
   }
-  lineart_fill_holes(grid, lab, gw, rank, mine)
+  lineart_fill_holes(grid, gw, label, (y0 + 1) * w2 + x0 + 1, w2, rank, mine)
   {"grid": grid, "w": gw, "h": gh, "x0": x0, "y0": y0}
 }
 
 -~> Fills the holes of a mask that hold only regions ranked after `mine`
--~> (changes grid). `lab` has the region of each cell (-1 off the picture).
-function lineart_fill_holes(grid, lab, gw, rank, mine) {
+-~> (changes grid). The cell q of the grid is the cell
+-~> `base + q // gw * w2 + q % gw` of `label`, the region grid (w2 wide); the
+-~> cells off the picture are all in the margin, which is no hole.
+function lineart_fill_holes(grid, gw, label, base, w2, rank, mine) {
   let side = [-1, 1, -gw, gw]
+  let n = len(grid)
   let todo = [0]
   grid[0] = 2
   let head = 0
+  -~> The margin is two cells wide all round, so a step left from the first
+  -~> column lands on the last cell of the row above, also margin: the flood
+  -~> reaches the same cells without checking the sides.
   while (head < len(todo)) {
     let q = todo[head]
     head += 1
-    let qx = q % gw
     for (let s = 0; s < 4; s += 1) {
       let r = q + side[s]
-      if (r < 0 || r >= len(grid) || (s == 0 && qx == 0) || (s == 1 && qx == gw - 1)) {
-        continue
-      }
-      if (grid[r] == 0) {
+      if (r >= 0 && r < n && grid[r] == 0) {
         grid[r] = 2
         push(todo, r)
       }
     }
   }
-  for (let p = 0; p < len(grid); p += 1) {
+  for (let p = 0; p < n; p += 1) {
     if (grid[p] != 0) {
       continue
     }
@@ -287,7 +296,7 @@ function lineart_fill_holes(grid, lab, gw, rank, mine) {
     while (k < len(hole)) {
       let q = hole[k]
       k += 1
-      let l = lab[q]
+      let l = label[base + q // gw * w2 + q % gw]
       if (l < 0 || rank[l] <= mine) {
         later = false
       }
@@ -307,7 +316,7 @@ function lineart_fill_holes(grid, lab, gw, rank, mine) {
       grid[hole[i]] = to
     }
   }
-  for (let p = 0; p < len(grid); p += 1) {
+  for (let p = 0; p < n; p += 1) {
     if (grid[p] == 2) {
       grid[p] = 0
     }
@@ -319,31 +328,22 @@ function lineart_fill_holes(grid, lab, gw, rank, mine) {
 function lineart_blur(grid, gw, gh) {
   let across = []
   for (let j = 0; j < gh; j += 1) {
-    for (let i = 0; i < gw; i += 1) {
-      let p = j * gw + i
-      let v = 2.0 * grid[p]
-      if (i > 0) {
-        v += grid[p - 1]
-      }
-      if (i < gw - 1) {
-        v += grid[p + 1]
-      }
-      push(across, v)
+    let row = j * gw
+    push(across, 2.0 * grid[row] + grid[row + 1])
+    for (let p = row + 1; p < row + gw - 1; p += 1) {
+      push(across, 2.0 * grid[p] + grid[p - 1] + grid[p + 1])
     }
+    push(across, 2.0 * grid[row + gw - 1] + grid[row + gw - 2])
   }
   let out = []
-  for (let j = 0; j < gh; j += 1) {
-    for (let i = 0; i < gw; i += 1) {
-      let p = j * gw + i
-      let v = 2.0 * across[p]
-      if (j > 0) {
-        v += across[p - gw]
-      }
-      if (j < gh - 1) {
-        v += across[p + gw]
-      }
-      push(out, v / 16.0)
-    }
+  for (let p = 0; p < gw; p += 1) {
+    push(out, (2.0 * across[p] + across[p + gw]) / 16.0)
+  }
+  for (let p = gw; p < (gh - 1) * gw; p += 1) {
+    push(out, (2.0 * across[p] + across[p - gw] + across[p + gw]) / 16.0)
+  }
+  for (let p = (gh - 1) * gw; p < gh * gw; p += 1) {
+    push(out, (2.0 * across[p] + across[p - gw]) / 16.0)
   }
   out
 }

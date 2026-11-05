@@ -1,0 +1,7 @@
+sums side by side are the sums here: true 2 true
+jobs false never use tasks: false
+the same code with and without tasks: true true
+the mask is the same: true true
+no regions, no shapes: []
+trace: parallel must be true or false
+parallel must be true or false: true

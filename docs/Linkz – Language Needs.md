@@ -44,6 +44,14 @@ Measured with `go run . paint lib/gfx/tests/timing.liz out.png 512x512` (Apple s
 
 So a typical shape costs a few ms and is rasterized once (`raster.shape` caches by path and widths); redoing a long stroke or brush on every mouse move would cost 50 to 70 ms a frame, so the editor should cache or cut samples while dragging. Faster sorting of crossings or less per-edge work in lizard would help; Go is not an option (rule 1).
 
+**Tracing speed (v3 step 4).** The trace now fans its independent work out to `task`s (see *Tracing v3*), and three things in the language would make that simpler or let it reach the editor:
+
+| Need | Why | Today |
+|---|---|---|
+| A task can start tasks | The Trace image dialog runs the whole trace in one `task` (so the window keeps drawing), and inside a task `task` is the error `not available inside a task`, so the trace's own fan-out is off in the editor | The editor traces serially (about 40 percent slower than `linkz trace` on a big picture) |
+| `os.cpus()` (the processor count) | The number of pieces to cut the work in, and the choice to stay serial on one processor, are guesses | A fixed 12 pieces; tasks beyond the free processors wait their turn |
+| A list of n copies: `list.fill(n, value)` | Every grid of the tracer is built by n calls of `push`, a good part of its time | `push` in a loop |
+
 | Tokens don't know which file they came from | `src.run` tells library errors from user errors | The host pads library sources with 100,000 blank lines and treats any line ≥ 100,000 as library | Medium (a `source` name on tokens/errors removes the hack) |
 | Optional/default parameters | `t()` + `tf()` in i18n | Two functions | B014 in progress |
 | try/catch | Failed file writes kill the call | `fs.exists` guards | B014 in progress |
@@ -59,3 +67,4 @@ So a typical shape costs a few ms and is rasterized once (`raster.shape` caches 
 | 2026-11-03 | `use` cycles, live modules in `lizard.run`, run and lookup speed, unix time, hash, scaled blit | Found porting Linkz to lizard (B041): see the rows above |
 | 2026-11-03 | Pin f34d1ac: cycles, live `use`, module cache, `hook_source`, epoch, digest, scaled blit, recovery | B042: all used, the workarounds removed. New: first syntax error only, token hashes, scanner speed, function bodies in `on_statement`, check without host names |
 | 2026-11-03 | Pin a2c3768: `r.errors`, column tokens, VM token loops, `hook_functions`, check project files | B042: all used; the Go host deleted (M11 done) |
+| 2026-11-04 | Tracing speed: tasks inside tasks, `os.cpus()`, `list.fill` | v3 step 4: the trace fans out to tasks outside a task only; see the table under *Speed* |

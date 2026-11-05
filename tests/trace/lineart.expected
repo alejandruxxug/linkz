@@ -16,7 +16,7 @@ no seam under the ring: true
 layers: lines in front of fills: true
 header: -~> lzdraw 1 | let colors = {"paper":  | pens.traced = {"name": "traced" | layer lines
 photo by name is the same: true
-true trace: unknown option "refine" for line art (known: mode, line_threshold, line_min, continuation, flow, corner, snap, radius, fills, colors, min_area, solid, merge, gradients, gradient_error, detail, adaptive, adaptive_strength, focus, scale, max_side)
+true trace: unknown option "refine" for line art (known: mode, line_threshold, line_min, continuation, flow, corner, snap, radius, fills, colors, min_area, solid, merge, gradients, gradient_error, detail, adaptive, adaptive_strength, focus, parallel, scale, max_side)
 true trace: line_threshold must be between 0 and 1
 true trace: colors must be from 2 to 64
 true trace: mode must be "photo" or "lineart", not vector

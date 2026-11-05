@@ -1,0 +1,36 @@
+-~> lineart_task: the pieces of a line-art trace that can run on their own,
+-~> given only data, so they can run in a task (see lineart_parallel) or
+-~> right here, one after another, with the same code and so the same result.
+-~> Every piece is a call [name, args] to lineart_task_run.
+
+use "lineart_mask"
+use "lineart_outline"
+
+-~> Runs one piece of work. The names:
+-~>   "box_sums"  args [values, w, h, r]: lineart_box_sums of them
+-~>   "shapes"    args [label, order, ids, details, w, h, curve]: the
+-~>               lineart_region_shapes of every region of `ids`, each one
+-~>               with its own fit tolerance from `details`; a list of results
+function lineart_task_run(name, args) {
+  if (name == "box_sums") {
+    return lineart_box_sums(args[0], args[1], args[2], args[3])
+  }
+  if (name == "shapes") {
+    return lineart_task_shapes(args[0], args[1], args[2], args[3], args[4], args[5], args[6])
+  }
+  error("lineart_task: unknown piece of work \"" + str(name) + "\"")
+}
+
+-~> The shapes of the regions `ids` (see lineart_region_shapes), in that
+-~> order. `label` is the region grid of lineart_regions and `order` is
+-~> lineart_order's result: all a region's shape needs of the fill.
+-~> details[i] is the fit tolerance of region ids[i], in place of curve.detail.
+function lineart_task_shapes(label, order, ids, details, w, h, curve) {
+  let fill = {"label": label}
+  let out = []
+  for (let i = 0; i < len(ids); i += 1) {
+    let own = hash.merge(curve, {"detail": details[i]})
+    push(out, lineart_region_shapes(fill, order, ids[i], w, h, own))
+  }
+  out
+}

@@ -40,11 +40,11 @@ use "lineart_strokes"
 use "lineart_flow"
 use "lineart_snap"
 use "lineart_fills"
-use "lineart_outline"
 use "lineart_palette"
 use "lineart_merge"
 use "lineart_gradient"
 use "lineart_detail"
+use "lineart_parallel"
 
 -~> The options of trace(path, {"mode": "lineart", ...}). Anything left out
 -~> takes the value shown.
@@ -111,6 +111,12 @@ use "lineart_detail"
 -~>                   Inside a box the smallest region is 1/f squared and the
 -~>                   fit tolerance 1/f times what they would be (a later
 -~>                   box wins where two meet). Works with adaptive off.
+-~>   parallel        true to run the independent per-pixel and per-region work
+-~>                   (the sums behind the mask, the outline of each fill
+-~>                   region) side by side in tasks, which gives the same
+-~>                   drawing sooner; false to run it all here. Where tasks
+-~>                   aren't there (inside a task, a sandbox without them) it
+-~>                   is false whatever is asked.
 -~>   scale           multiplies every coordinate, to make a bigger drawing.
 -~>   max_side        the picture is shrunk until its longer side is at most
 -~>                   this many pixels.
@@ -134,6 +140,7 @@ let lineart_options = {
   "adaptive": true,
   "adaptive_strength": 0.2,
   "focus": [],
+  "parallel": true,
   "scale": 1,
   "max_side": 1024
 }
@@ -170,6 +177,9 @@ function lineart_settings(options) {
   if (type(out.adaptive) != "BOOLEAN") {
     error("trace: adaptive must be true or false")
   }
+  if (type(out.parallel) != "BOOLEAN") {
+    error("trace: parallel must be true or false")
+  }
   if (!(out.adaptive_strength >= 0 && out.adaptive_strength <= 1)) {
     error("trace: adaptive_strength must be between 0 and 1")
   }
@@ -194,7 +204,8 @@ function lineart_pixels(size, pixels, options, name) {
   if (radius <= 0) {
     radius = math.max(4, math.round(math.max(w, h) / 128.0))
   }
-  let m = lineart_mask(pixels, w, h, opt.line_threshold, radius)
+  let jobs = lineart_jobs(opt.parallel)
+  let m = lineart_mask(pixels, w, h, opt.line_threshold, radius, jobs)
   let t1 = time.ms()
   let dist = lineart_distance(m.mask, m.ink, w)
   let t2 = time.ms()
@@ -209,7 +220,7 @@ function lineart_pixels(size, pixels, options, name) {
     "r": radius,
     "half": 1.0
   }
-  let fills = lineart_trace_fills(pixels, m, dist, w, h, opt, curve)
+  let fills = lineart_trace_fills(pixels, m, dist, w, h, opt, curve, jobs)
   if (fills.solid > 0) {
     dist = lineart_distance(m.mask, m.ink, w)
   }
@@ -297,8 +308,10 @@ function lineart_pixels(size, pixels, options, name) {
       "size": size,
       "stages": {
         "mask": t1 - t0,
+        "mask_stages": m.stages,
         "distance": t2 - t1,
         "fills": t2f - t2 - fills.outline_ms,
+        "fill_stages": fills.stages,
         "outlines": fills.outline_ms,
         "thin": t3 - t2f,
         "graph": t4 - t3,
@@ -312,13 +325,16 @@ function lineart_pixels(size, pixels, options, name) {
 -~> The fills of a picture whose ink is `m` (lineart_mask's result, with
 -~> `dist` its distance transform): solid ink taken out of m first, then
 -~> the regions, and the shapes of each one to draw, biggest first
--~> (`curve`: the settings of lineart_outline_points).
+-~> (`curve`: the settings of lineart_outline_points; `jobs`: lineart_jobs, which
+-~> may cut the outlines among tasks).
 -~> Returns {"shapes": [{"color": palette number, "outers", "holes",
 -~> "prims"}...], "merge": what each merge step did (lineart_merge),
 -~> "colors", "lab", "background" (palette number or -1), "solid": solid
--~> pixels taken, "outline_ms"}.
-function lineart_trace_fills(pixels, m, dist, w, h, opt, curve) {
-  let none = {"shapes": [], "merge": {}, "colors": [], "lab": [], "background": -1, "solid": 0, "gradients": 0, "outline_ms": 0}
+-~> pixels taken, "outline_ms", "stages": the milliseconds of solid,
+-~> detail_map, regions, merge and gradients}.
+function lineart_trace_fills(pixels, m, dist, w, h, opt, curve, jobs) {
+  let none = {"shapes": [], "merge": {}, "colors": [], "lab": [], "background": -1, "solid": 0, "gradients": 0, "outline_ms": 0, "stages": {}}
+  let ts = time.ms()
   if (!opt.fills) {
     return none
   }
@@ -333,6 +349,7 @@ function lineart_trace_fills(pixels, m, dist, w, h, opt, curve) {
     min_area = math.max(4, math.round(w * h / 40000.0))
   }
   let solid = lineart_solid(m, pixels, dist, w, depth)
+  let tp = time.ms()
   let strength = 0.0
   if (opt.adaptive) {
     strength = opt.adaptive_strength
@@ -342,8 +359,11 @@ function lineart_trace_fills(pixels, m, dist, w, h, opt, curve) {
     map = lineart_detail_map(m.luma, m.ink, w, h)
     map.focus = opt.focus
   }
+  let tq = time.ms()
   let fill = lineart_regions(pixels, m.mask, w, h, opt.colors, min_area, map, strength)
+  let tr = time.ms()
   let merged = lineart_merge_regions(fill, w, h, opt.merge)
+  let tm = time.ms()
   let order = merged.order
   let ramps = {"groups": 0, "joined": 0}
   if (opt.gradients) {
@@ -362,19 +382,22 @@ function lineart_trace_fills(pixels, m, dist, w, h, opt, curve) {
     busy = lineart_region_detail(fill, map, w, h)
     focus = lineart_region_focus(fill, opt.focus, w, h)
   }
-  let shapes = []
-  for (let k = 0; k < len(order.order); k += 1) {
-    let id = order.order[k]
-    let own = curve
+  let ids = order.order
+  let details = []
+  for (let k = 0; k < len(ids); k += 1) {
+    let own = curve.detail
     if (busy !== null) {
-      own = hash.merge(curve, {
-        "detail": curve.detail * math.min(1.5, lineart_detail_factor(busy[id], strength)) / focus[id]
-      })
+      own = curve.detail * math.min(1.5, lineart_detail_factor(busy[ids[k]], strength)) / focus[ids[k]]
     }
-    let s = lineart_region_shapes(fill, order, id, w, h, own)
+    push(details, own)
+  }
+  let made = lineart_outline_regions(fill, order, w, h, curve, details, jobs)
+  let shapes = []
+  for (let k = 0; k < len(ids); k += 1) {
+    let s = made[k]
     if (len(s.outers) > 0) {
-      s.color = fill.regions[id].color
-      s.paint = lineart_region_paint(fill, id)
+      s.color = fill.regions[ids[k]].color
+      s.paint = lineart_region_paint(fill, ids[k])
       push(shapes, s)
     }
   }
@@ -393,8 +416,81 @@ function lineart_trace_fills(pixels, m, dist, w, h, opt, curve) {
     "background": order.background,
     "solid": solid,
     "gradients": ramps.groups,
-    "outline_ms": time.ms() - t0
+    "outline_ms": time.ms() - t0,
+    "stages": {
+      "solid": tp - ts,
+      "detail_map": tq - tp,
+      "regions": tr - tq,
+      "merge": tm - tr,
+      "gradients": t0 - tm
+    }
   }
+}
+
+-~> The shapes (lineart_region_shapes) of the regions of order.order, in that
+-~> order; details[k] is the fit tolerance of the k-th. With parallel `jobs`
+-~> the regions are dealt out among tasks, the big ones first, each to the
+-~> piece with the least to do; the shapes are the same either way.
+function lineart_outline_regions(fill, order, w, h, curve, details, jobs) {
+  let ids = order.order
+  let size = []
+  let numbers = []
+  let work = 0
+  for (let k = 0; k < len(ids); k += 1) {
+    let b = order.box[ids[k]]
+    push(size, (b[2] - b[0] + 5) * (b[3] - b[1] + 5))
+    push(numbers, k)
+    work += size[k]
+  }
+  jobs = lineart_jobs_for(jobs, work, jobs.outlines)
+  let pieces = jobs.pieces
+  let at = []
+  let load = []
+  for (let p = 0; p < pieces; p += 1) {
+    push(at, [])
+    push(load, 0)
+  }
+  let biggest = list.sort(numbers, function(a, b) { size[a] > size[b] || (size[a] == size[b] && a < b) })
+  for (let n = 0; n < len(biggest); n += 1) {
+    let k = biggest[n]
+    let least = 0
+    for (let p = 1; p < pieces; p += 1) {
+      if (load[p] < load[least]) {
+        least = p
+      }
+    }
+    push(at[least], k)
+    load[least] += size[k] + 400
+  }
+  let calls = []
+  for (let p = 0; p < pieces; p += 1) {
+    if (len(at[p]) == 0) {
+      continue
+    }
+    let pick = []
+    let tol = []
+    for (let n = 0; n < len(at[p]); n += 1) {
+      push(pick, ids[at[p][n]])
+      push(tol, details[at[p][n]])
+    }
+    push(calls, ["shapes", [fill.label, order, pick, tol, w, h, curve]])
+  }
+  let done = jobs.run(calls)
+  let out = []
+  for (let k = 0; k < len(ids); k += 1) {
+    push(out, null)
+  }
+  let c = 0
+  for (let p = 0; p < pieces; p += 1) {
+    if (len(at[p]) == 0) {
+      continue
+    }
+    for (let n = 0; n < len(at[p]); n += 1) {
+      out[at[p][n]] = done[c][n]
+    }
+    c += 1
+  }
+  out
 }
 
 -~> Whether a node number is a junction (-1 is no node).

@@ -119,7 +119,8 @@ function score_one(path, mode, masks, set = {}) {
     "fills": fills,
     "strokes": strokes,
     "bytes": len(t.code),
-    "ms": math.round(t.stats.ms)
+    "ms": math.round(t.stats.ms),
+    "stages": t.stats.stages
   }
 }
 

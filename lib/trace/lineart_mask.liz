@@ -40,60 +40,113 @@ function lineart_box_sums(values, w, h, r) {
   for (let y = 0; y < h; y += 1) {
     push(sums, 0.0)
     let row = 0.0
+    let up = y * w1 + 1
+    let src = y * w
     for (let x = 0; x < w; x += 1) {
-      row = row + values[y * w + x]
-      push(sums, sums[y * w1 + x + 1] + row)
+      row = row + values[src + x]
+      push(sums, sums[up + x] + row)
     }
+  }
+  let left = []
+  let right = []
+  for (let x = 0; x < w; x += 1) {
+    push(left, math.max(0, x - r))
+    push(right, math.min(w, x + r + 1))
   }
   let out = []
   for (let y = 0; y < h; y += 1) {
-    let y0 = math.max(0, y - r)
-    let y1 = math.min(h, y + r + 1)
+    let top = math.max(0, y - r) * w1
+    let bottom = math.min(h, y + r + 1) * w1
     for (let x = 0; x < w; x += 1) {
-      let x0 = math.max(0, x - r)
-      let x1 = math.min(w, x + r + 1)
-      push(out, sums[y1 * w1 + x1] - sums[y0 * w1 + x1] - sums[y1 * w1 + x0] + sums[y0 * w1 + x0])
+      let x0 = left[x]
+      let x1 = right[x]
+      push(out, sums[bottom + x1] - sums[top + x1] - sums[bottom + x0] + sums[top + x0])
     }
   }
   out
 }
 
--~> The brightness of the paper around every pixel: the mean, over the square
--~> of side 2r + 1, of the pixels that are at least as bright as the mean
--~> around themselves (the lighter side of every edge). Comparing a pixel
--~> with this rather than with the plain mean keeps a line next to a dark
--~> area (an eye, a black ribbon) dark against its paper.
-function lineart_paper_level(luma, w, h, r) {
+-~> The sums of lists of values (each one per pixel) over the squares of side
+-~> 2r + 1, as lineart_box_sums gives them: through `jobs` (see
+-~> lineart_parallel) when there are some, so the sums run side by side, else
+-~> one after another here.
+function lineart_box_sums_of(lists, w, h, r, jobs) {
+  if (jobs === null || !jobs.parallel || w * h < jobs.pixels) {
+    let out = []
+    for (let i = 0; i < len(lists); i += 1) {
+      push(out, lineart_box_sums(lists[i], w, h, r))
+    }
+    return out
+  }
+  let calls = []
+  for (let i = 0; i < len(lists); i += 1) {
+    push(calls, ["box_sums", [lists[i], w, h, r]])
+  }
+  jobs.run(calls)
+}
+
+-~> The paper around every pixel, from the pixels and their `luma`, over the
+-~> square of side 2r + 1. A pixel is on the lighter side when it is at least
+-~> as bright as the mean around it; the paper is the mean, over the square,
+-~> of the pixels on the lighter side. Comparing a pixel with this rather than
+-~> with the plain mean keeps a line next to a dark area (an eye, a black
+-~> ribbon) dark against its paper.
+-~> Returns {"level": the brightness of the paper, "rgb": [reds, greens,
+-~> blues] of the paper color (255 where no pixel there is on the lighter
+-~> side)}.
+function lineart_paper(pixels, luma, w, h, r, jobs = null) {
   let sum = lineart_box_sums(luma, w, h, r)
+  let wide = []
+  for (let x = 0; x < w; x += 1) {
+    push(wide, math.min(w, x + r + 1) - math.max(0, x - r))
+  }
   let area = []
+  let light = []
+  let count = []
+  let reds = []
+  let greens = []
+  let blues = []
   for (let y = 0; y < h; y += 1) {
     let rows = math.min(h, y + r + 1) - math.max(0, y - r)
     for (let x = 0; x < w; x += 1) {
-      push(area, rows * (math.min(w, x + r + 1) - math.max(0, x - r)))
+      let i = y * w + x
+      let a = rows * wide[x]
+      push(area, a)
+      if (luma[i] * a >= sum[i]) {
+        let c = pixels[i]
+        push(light, luma[i])
+        push(count, 1.0)
+        push(reds, c.r + 0.0)
+        push(greens, c.g + 0.0)
+        push(blues, c.b + 0.0)
+      } else {
+        push(light, 0.0)
+        push(count, 0.0)
+        push(reds, 0.0)
+        push(greens, 0.0)
+        push(blues, 0.0)
+      }
     }
   }
-  let light = []
-  let count = []
+  let sums = lineart_box_sums_of([light, count, reds, greens, blues], w, h, r, jobs)
+  let lsum = sums[0]
+  let cs = sums[1]
+  let level = []
+  let rgb = [[], [], []]
   for (let i = 0; i < len(luma); i += 1) {
-    if (luma[i] * area[i] >= sum[i]) {
-      push(light, luma[i])
-      push(count, 1.0)
+    if (cs[i] > 0) {
+      push(level, lsum[i] / cs[i])
+      push(rgb[0], sums[2][i] / cs[i])
+      push(rgb[1], sums[3][i] / cs[i])
+      push(rgb[2], sums[4][i] / cs[i])
     } else {
-      push(light, 0.0)
-      push(count, 0.0)
+      push(level, sum[i] / area[i])
+      push(rgb[0], 255.0)
+      push(rgb[1], 255.0)
+      push(rgb[2], 255.0)
     }
   }
-  let lsum = lineart_box_sums(light, w, h, r)
-  let lcount = lineart_box_sums(count, w, h, r)
-  let out = []
-  for (let i = 0; i < len(luma); i += 1) {
-    if (lcount[i] > 0) {
-      push(out, lsum[i] / lcount[i])
-    } else {
-      push(out, sum[i] / area[i])
-    }
-  }
-  out
+  {"level": level, "rgb": rgb}
 }
 
 -~> How much lighter than a pixel the lighter ones of the square of side
@@ -128,52 +181,6 @@ function lineart_lighter_gap(luma, w, h, x, y, r) {
 
 -~> The least lighter_gap a colored pixel needs to be ink.
 let lineart_thin_gap = 0.06
-
--~> The paper color around every pixel: the mean r, g and b, over the square
--~> of side 2r + 1, of the pixels at least as bright as the mean there (as
--~> lineart_paper_level does for brightness). Returns [reds, greens, blues].
-function lineart_paper_rgb(pixels, luma, w, h, r) {
-  let sum = lineart_box_sums(luma, w, h, r)
-  let reds = []
-  let greens = []
-  let blues = []
-  let count = []
-  for (let y = 0; y < h; y += 1) {
-    let rows = math.min(h, y + r + 1) - math.max(0, y - r)
-    for (let x = 0; x < w; x += 1) {
-      let i = y * w + x
-      let area = rows * (math.min(w, x + r + 1) - math.max(0, x - r))
-      if (luma[i] * area >= sum[i]) {
-        push(reds, pixels[i].r + 0.0)
-        push(greens, pixels[i].g + 0.0)
-        push(blues, pixels[i].b + 0.0)
-        push(count, 1.0)
-      } else {
-        push(reds, 0.0)
-        push(greens, 0.0)
-        push(blues, 0.0)
-        push(count, 0.0)
-      }
-    }
-  }
-  let rs = lineart_box_sums(reds, w, h, r)
-  let gs = lineart_box_sums(greens, w, h, r)
-  let bs = lineart_box_sums(blues, w, h, r)
-  let cs = lineart_box_sums(count, w, h, r)
-  let out = [[], [], []]
-  for (let i = 0; i < len(luma); i += 1) {
-    if (cs[i] > 0) {
-      push(out[0], rs[i] / cs[i])
-      push(out[1], gs[i] / cs[i])
-      push(out[2], bs[i] / cs[i])
-    } else {
-      push(out[0], 255.0)
-      push(out[1], 255.0)
-      push(out[2], 255.0)
-    }
-  }
-  out
-}
 
 -~> The cube root of t (0 to 1.1), by Newton steps.
 function lineart_cbrt(t) {
@@ -220,15 +227,21 @@ function lineart_is_neutral(c) {
 -~> The ink mask of a picture. `threshold` (0 to 1) is how much darker than
 -~> its surroundings a pixel must be to seed a line (0.5: half as bright);
 -~> half of it lets a pixel join a line it touches. `radius` is the half side
--~> of the neighbourhood, in pixels.
+-~> of the neighbourhood, in pixels. `jobs`, when given, runs the sums behind
+-~> the paper in tasks (lineart_parallel); the mask is the same either way.
 -~> Returns {"mask": padded grid of 0 and 1, "ink": the list of padded
 -~> positions that are 1 (in raster order), "ink_color": the mean color of
 -~> the strong ink, "paper": the mean color of the rest, "luma": the
--~> brightness of every pixel, 0 to 1, row by row}.
-function lineart_mask(pixels, w, h, threshold, radius) {
+-~> brightness of every pixel, 0 to 1, row by row, "stages": the
+-~> milliseconds of luma, paper, classify and flood}.
+function lineart_mask(pixels, w, h, threshold, radius, jobs = null) {
+  let t0 = time.ms()
   let luma = lineart_luma(pixels)
-  let mean = lineart_paper_level(luma, w, h, radius)
-  let paper_rgb = lineart_paper_rgb(pixels, luma, w, h, radius)
+  let t1 = time.ms()
+  let around = lineart_paper(pixels, luma, w, h, radius, jobs)
+  let mean = around.level
+  let paper_rgb = around.rgb
+  let t2 = time.ms()
   let w2 = w + 2
   let state = []
   for (let i = 0; i < w2 * (h + 2); i += 1) {
@@ -243,8 +256,12 @@ function lineart_mask(pixels, w, h, threshold, radius) {
       let m = mean[i]
       let l = luma[i]
       let gap = m - l
-      let rel = gap / math.max(m, 0.05)
       let neutral = lineart_is_neutral(pixels[i])
+      if (neutral && gap < 0.05 && l >= dark) {
+        -~> A gray pixel as light as its paper: the most of the picture.
+        continue
+      }
+      let rel = gap / math.max(m, 0.05)
       let strong = (rel >= threshold && gap >= 0.1) || (l < dark && neutral)
       let faint = rel >= weak && gap >= 0.05
       if (!neutral && !((strong || faint) && lineart_lighter_gap(luma, w, h, x, y, 1) >= lineart_thin_gap)) {
@@ -253,10 +270,13 @@ function lineart_mask(pixels, w, h, threshold, radius) {
         -~> one (a line wider than 3 pixels needs the wider look). It must
         -~> still be clearly darker than the paper, so pale shading is not ink, and not a dark
         -~> fill (navy, maroon), whose edge would pass for a thick line.
+        if (gap < 0.25 || l < 0.3) {
+          continue
+        }
         let far = lineart_color_gap(pixels[i], paper_rgb, i)
         strong = far >= threshold * 90.0
         faint = far >= threshold * 80.0
-        if (!faint || gap < 0.25 || l < 0.3 || lineart_lighter_gap(luma, w, h, x, y, radius) < lineart_thin_gap) {
+        if (!faint || lineart_lighter_gap(luma, w, h, x, y, radius) < lineart_thin_gap) {
           continue
         }
       } elif (!strong && !faint) {
@@ -271,6 +291,7 @@ function lineart_mask(pixels, w, h, threshold, radius) {
       }
     }
   }
+  let t3 = time.ms()
   let ink_sum = lineart_color_sum(pixels, todo, w)
   let steps = [-1, 1, -w2, w2, -w2 - 1, -w2 + 1, w2 - 1, w2 + 1]
   while (len(todo) > 0) {
@@ -305,7 +326,8 @@ function lineart_mask(pixels, w, h, threshold, radius) {
     "ink": ink,
     "ink_color": lineart_mean_color(ink_sum, #000000),
     "paper": lineart_mean_color(paper, #ffffff),
-    "luma": luma
+    "luma": luma,
+    "stages": {"luma": t1 - t0, "paper": t2 - t1, "classify": t3 - t2, "flood": time.ms() - t3}
   }
 }
 

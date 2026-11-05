@@ -1,0 +1,85 @@
+-~> trace_speed: times the line-art tracer stage by stage, without tasks and
+-~> with them, and checks that both give the very same code.
+-~>
+-~>   lizardscript --vm tools/trace_speed.liz [images...]
+-~>   scripts/trace_speed.sh [images...]
+-~>
+-~> Without images it takes every PNG and JPEG of docs/Art/References/trace/.
+-~> Each picture is traced twice with the default options, once with
+-~> "parallel": false and once with true, and a row says the milliseconds of
+-~> each (and whether the code of the two is identical). Then, for the picture,
+-~> the milliseconds of each stage in both runs. The exit code is 1 when some
+-~> picture traced differently.
+
+use "../lib/app/host_img"
+use "../lib/trace/trace"
+
+let speed_refs = "docs/Art/References/trace"
+
+-~> The pictures of the reference folder.
+function speed_default_images() {
+  let out = []
+  let names = list.sort(fs.list(speed_refs))
+  for (let i = 0; i < len(names); i += 1) {
+    let n = text.lower(names[i])
+    if (text.slice(n, -4, len(n)) == ".png" || text.slice(n, -4, len(n)) == ".jpg" || text.slice(n, -5, len(n)) == ".jpeg") {
+      push(out, fs.join(speed_refs, names[i]))
+    }
+  }
+  out
+}
+
+-~> The stages of a trace as one line: "name ms name ms ...", the
+-~> sub-stages of the fills inside.
+function speed_stages(stages) {
+  let out = []
+  let names = keys(stages)
+  for (let i = 0; i < len(names); i += 1) {
+    let v = stages[names[i]]
+    if (type(v) == "HASH") {
+      let inner = keys(v)
+      for (let k = 0; k < len(inner); k += 1) {
+        push(out, inner[k] + " " + str(math.round(v[inner[k]])))
+      }
+    } else {
+      push(out, names[i] + " " + str(math.round(v)))
+    }
+  }
+  text.join(out, ", ")
+}
+
+function speed_main(args) {
+  let images = args
+  if (len(images) == 0) {
+    images = speed_default_images()
+  }
+  let differ = 0
+  let serial_ms = 0
+  let parallel_ms = 0
+  for (let k = 0; k < len(images); k += 1) {
+    let loaded = host_img().load(images[k], 1024)
+    let a = trace_pixels(loaded.size, loaded.pixels, {"mode": "lineart", "parallel": false}, images[k])
+    let b = trace_pixels(loaded.size, loaded.pixels, {"mode": "lineart", "parallel": true}, images[k])
+    let ok = a.code == b.code
+    if (!ok) {
+      differ += 1
+    }
+    serial_ms += a.stats.ms
+    parallel_ms += b.stats.ms
+    let verdict = "identical"
+    if (!ok) {
+      verdict = "DIFFERENT"
+    }
+    io.error(images[k] + ": serial " + str(math.round(a.stats.ms)) + " ms, parallel " + str(math.round(b.stats.ms)) +
+      " ms, " + str(len(a.code)) + " bytes, " + verdict + "\n")
+    io.error("  serial:   " + speed_stages(a.stats.stages) + "\n")
+    io.error("  parallel: " + speed_stages(b.stats.stages) + "\n")
+  }
+  io.error("total: serial " + str(math.round(serial_ms)) + " ms, parallel " + str(math.round(parallel_ms)) + " ms\n")
+  if (differ > 0) {
+    io.error(str(differ) + " picture(s) traced differently\n")
+    os.exit(1)
+  }
+}
+
+speed_main(os.args())

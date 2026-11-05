@@ -2,7 +2,7 @@
 -~> [--min-area 8] [--max-side 256] [--scale 1] [--corner 55] turns a picture
 -~> into drawing code (lib/trace) and says what it made. --mode lineart traces
 -~> inked drawings as strokes and fills (--line-threshold, --line-min,
--~> --continuation, --radius, --fills, --solid). --focus x,y,w,h[,f] (any
+-~> --continuation, --radius, --fills, --solid, --parallel). --focus x,y,w,h[,f] (any
 -~> number of times, line art) asks for more detail (f above 1, default 2) or
 -~> less (below 1) inside a box of the picture, in its own pixels. --quality
 -~> light|balanced|detailed|max (line art) takes a preset of options
@@ -14,7 +14,7 @@ use "libs"
 use "trace_auto"
 use "../trace/trace_quality"
 
-let trace_usage = "usage: linkz trace in.png out.lzdraw [--colors 8] [--detail 1.5] [--min-area 8] [--max-side 256] [--scale 1] [--corner 55] [--mode photo|lineart] [--line-threshold 0.5] [--line-min 6] [--continuation 35] [--radius 0] [--fills true|false] [--solid 0] [--quality light|balanced|detailed|max|auto] [--focus x,y,w,h[,f]]..."
+let trace_usage = "usage: linkz trace in.png out.lzdraw [--colors 8] [--detail 1.5] [--min-area 8] [--max-side 256] [--scale 1] [--corner 55] [--mode photo|lineart] [--line-threshold 0.5] [--line-min 6] [--continuation 35] [--radius 0] [--fills true|false] [--parallel true|false] [--solid 0] [--quality light|balanced|detailed|max|auto] [--focus x,y,w,h[,f]]..."
 
 -~> The options the command takes, by flag, and the key of trace's options.
 let trace_flags = {
@@ -72,7 +72,7 @@ function trace_args(args) {
     }
     let name = text.slice(args[i], 2, len(args[i]))
     let key = trace_flags[name]
-    let word = name == "mode" || name == "fills" || name == "focus" || name == "quality"
+    let word = name == "mode" || name == "fills" || name == "parallel" || name == "focus" || name == "quality"
     if ((key == null && !word) || i + 1 >= len(args)) {
       error("bad option " + args[i] + "\n" + trace_usage)
     }
@@ -105,6 +105,13 @@ function trace_args(args) {
       options.fills = args[i] == "true"
       continue
     }
+    if (name == "parallel") {
+      if (args[i] != "true" && args[i] != "false") {
+        error("--parallel must be true or false, got " + json.write(args[i]))
+      }
+      options.parallel = args[i] == "true"
+      continue
+    }
     let n = text.number(args[i])
     if (n == null) {
       error("--" + name + " needs a number, got " + json.write(args[i]))
@@ -130,7 +137,7 @@ function trace_file(path, options) {
   if (options.quality == "auto") {
     return trace_auto(path, options)
   }
-  let names = libs_load(libs_draw + libs_trace, {"img": host_img(), "time": time})
+  let names = libs_load(libs_draw + libs_trace, {"img": host_img(), "time": time, "task": task})
   names.trace(path, options)
 }
 

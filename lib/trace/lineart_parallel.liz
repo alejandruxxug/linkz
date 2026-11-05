@@ -1,0 +1,105 @@
+-~> lineart_parallel: runs the independent pieces of a line-art trace (the
+-~> calls of lineart_task) side by side in tasks, one process each, and gives
+-~> the results back in the order of the calls. Only data crosses to a task
+-~> (the pixels are lists and numbers), and each piece is the same code that
+-~> runs without tasks, so the trace is the same either way; only the time
+-~> differs.
+-~>
+-~> Tasks are not there inside a task, nor in a program or sandbox that
+-~> doesn't give the task module: the calls then run one after another here.
+-~> So does a call whose task fails.
+
+use "lineart_task"
+
+-~> How many pieces a long list of work is cut into: more than the usual
+-~> number of processors, so the shorter pieces fill the gaps; tasks beyond the
+-~> free processors wait their turn.
+let lineart_pieces = 12
+
+-~> The least work for which tasks pay: the pixels of the picture, for the
+-~> sums behind the mask, and the pixels of the region grids, for the outlines.
+-~> A task starts in about 15 ms and the data is copied across, so a small
+-~> picture is quicker traced here.
+let lineart_pixels_least = 300000
+let lineart_outlines_least = 350000
+
+-~> The jobs of a trace: {"parallel": whether the calls run in tasks, "pieces":
+-~> how many pieces to cut long work into, "run": function(calls) -> the
+-~> results, "pixels" and "outlines": the least work for which tasks pay}.
+-~> With `parallel` false, or when there are no tasks to be had, the calls run
+-~> one after another here.
+function lineart_jobs(parallel) {
+  if (!parallel || !lineart_has_tasks()) {
+    return lineart_here()
+  }
+  {
+    "parallel": true,
+    "pieces": lineart_pieces,
+    "run": lineart_run_tasks,
+    "pixels": lineart_pixels_least,
+    "outlines": lineart_outlines_least
+  }
+}
+
+-~> The jobs that run every call here, one after another.
+function lineart_here() {
+  {"parallel": false, "pieces": 1, "run": lineart_run_here, "pixels": 0, "outlines": 0}
+}
+
+-~> `jobs`, when there is `work` enough (at least `least`) for tasks to pay,
+-~> else the jobs that run here. `jobs` may be null (here).
+function lineart_jobs_for(jobs, work, least) {
+  if (jobs === null || !jobs.parallel || work < least) {
+    return lineart_here()
+  }
+  jobs
+}
+
+-~> Whether this program can start tasks.
+function lineart_has_tasks() {
+  try {
+    return type(task.start) == "BUILTIN"
+  } catch {
+    return false
+  }
+}
+
+-~> The results of `calls` ([name, args] each), here, in order.
+function lineart_run_here(calls) {
+  let out = []
+  for (let i = 0; i < len(calls); i += 1) {
+    push(out, lineart_task_run(calls[i][0], calls[i][1]))
+  }
+  out
+}
+
+-~> The results of `calls`, each in a task of its own, all started before the
+-~> first is waited for. A call whose task can't start or fails runs here.
+function lineart_run_tasks(calls) {
+  let started = []
+  for (let i = 0; i < len(calls); i += 1) {
+    try {
+      push(started, task.start("lineart_task", "lineart_task_run", [calls[i][0], calls[i][1]]))
+    } catch {
+      push(started, null)
+    }
+  }
+  let out = []
+  for (let i = 0; i < len(calls); i += 1) {
+    let got = null
+    let ok = false
+    if (started[i] !== null) {
+      try {
+        got = started[i].result()
+        ok = true
+      } catch {
+        ok = false
+      }
+    }
+    if (!ok) {
+      got = lineart_task_run(calls[i][0], calls[i][1])
+    }
+    push(out, got)
+  }
+  out
+}

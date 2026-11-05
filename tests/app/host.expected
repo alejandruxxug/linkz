@@ -28,7 +28,7 @@ unknown flag --fast (usage: linkz edit [--no-splash] [--slow-splash] [file.lzdra
 --quality is for --mode lineart
 --focus needs x,y,w,h or x,y,w,h,f, got "1,2,3"
 --focus needs numbers, got "1,2,x,4"
-usage: linkz trace in.png out.lzdraw [--colors 8] [--detail 1.5] [--min-area 8] [--max-side 256] [--scale 1] [--corner 55] [--mode photo|lineart] [--line-threshold 0.5] [--line-min 6] [--continuation 35] [--radius 0] [--fills true|false] [--solid 0] [--quality light|balanced|detailed|max|auto] [--focus x,y,w,h[,f]]...
+usage: linkz trace in.png out.lzdraw [--colors 8] [--detail 1.5] [--min-area 8] [--max-side 256] [--scale 1] [--corner 55] [--mode photo|lineart] [--line-threshold 0.5] [--line-min 6] [--continuation 35] [--radius 0] [--fills true|false] [--parallel true|false] [--solid 0] [--quality light|balanced|detailed|max|auto] [--focus x,y,w,h[,f]]...
 bad option --colours
 --colors needs a number, got "x"
 bad option --colors
