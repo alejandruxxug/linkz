@@ -1,0 +1,41 @@
+-~> layer_count: how many layers the drawing has, shown in the "LAYERS"
+-~> headers (the coder rows panel, the layers dock and the artist sidebar).
+-~> It counts every `layer` block in the file, nested ones included; shapes
+-~> outside any layer are not counted, as the layers panel lists them as
+-~> shapes. The count is made again only when the rows change.
+-~>   lc_count()           the number of layers
+-~>   lc_header(x, y)      the title at x, then the count; the x after it
+
+use "editor_state"
+use "i18n"
+use "view_gfx"
+
+let LC = {"key": null, "n": 0}
+
+-~> The number of `layer` rows, kept while ed_rows_key() stays the same.
+function lc_count() {
+  let key = ed_rows_key()
+  if (LC.key != key) {
+    let rows = ed_rows()
+    let n = 0
+    for (let i = 0; i < len(rows); i = i + 1) {
+      if (rows[i].kind == "layer") {
+        n = n + 1
+      }
+    }
+    LC.n = n
+    LC.key = key
+  }
+  LC.n
+}
+
+-~> Paints the title in mute, a 6 px gap, then the count in dim. Returns the
+-~> x where the count ends.
+function lc_header(x, y) {
+  let title = text.upper(t("panel.layers"))
+  g_text(title, x, y, P.mute)
+  let cx = x + g_text_w(title) + 6
+  let n = str(lc_count())
+  g_text(n, cx, y, P.dim)
+  cx + g_text_w(n)
+}

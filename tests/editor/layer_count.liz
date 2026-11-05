@@ -1,0 +1,37 @@
+-~> The layers headers show how many layers the drawing has: 0, 1 and 3
+-~> (one nested), shapes outside layers not counted, and add + undo update it.
+
+use "rig"
+
+let head = "-~> lzdraw 1\ncanvas = {\"size\": (480, 320), \"background\": #f6d9a8}\n"
+let size = (640, 480)
+let modules = rig_modules + ["ui/view_panels", "ui/view_canvas", "ui/i18n", "ui/mode_state", "ui/layers_dock", "ui/artist_layout",
+  "ui/artist_route", "ui/artist_layers", "ui/layer_thumbs", "ui/palette_view", "ui/color_state", "ui/blend_menu", "ui/layer_blend", "ui/layer_count"]
+
+function open_with(name, body) {
+  rig_open(fs.join(fs.home(), "layer-count-" + name), head + body, size, modules)
+}
+
+function count(rig) {
+  rig_frame(rig)
+  rig.names.lc_count()
+}
+
+puts("-- 0 layers (a loose shape does not count)")
+let r0 = open_with("zero", "circle((100, 100), 30, #fff3c4)\n")
+puts(count(r0))
+
+puts("-- 1 layer")
+let r1 = open_with("one", "layer sun\n  circle((100, 100), 30, #fff3c4)\n")
+puts(count(r1))
+
+puts("-- 3 layers, one nested")
+let r3 = open_with("three", "layer sun\n  circle((100, 100), 30, #fff3c4)\n  layer ray\n    line((0, 0), (9, 9), #fff3c4, 2)\nlayer sky\n  rect((0, 0), (480, 200), #f2a65a)\n")
+puts(count(r3))
+
+puts("-- add a layer, then undo")
+puts(r3.names.ed_add_layer())
+puts(count(r3))
+r3.names.ed_undo()
+puts(count(r3))
+puts(r3.ed.error)

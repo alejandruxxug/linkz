@@ -1,0 +1,11 @@
+-- 0 layers (a loose shape does not count)
+0
+-- 1 layer
+1
+-- 3 layers, one nested
+3
+-- add a layer, then undo
+true
+4
+3
+

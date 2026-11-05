@@ -25,6 +25,7 @@ use "editor_state"
 use "editor_undo"
 use "i18n"
 use "layer_blend"
+use "layer_count"
 use "layers_dock"
 use "layer_thumbs"
 use "mode_state"
@@ -555,7 +556,7 @@ function art_layers_paint() {
     g_icon(chev, x + 3, y + 3, hc)
     tx = x + 14
   }
-  g_text(text.upper(t("panel.layers")), tx, y, P.mute)
+  lc_header(tx, y)
   if (la_folded()) {
     return null
   }

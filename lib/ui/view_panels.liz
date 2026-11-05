@@ -10,6 +10,7 @@ use "error_words"
 use "home_data"
 use "i18n"
 use "layer_band"
+use "layer_count"
 use "pen_props"
 use "select_model"
 use "tool_route"
@@ -360,10 +361,10 @@ function view_paint_rows() {
   } else {
     g_rect(0, 30, V.pw, 13, P.raised)
     g_rect(0, 43, V.pw, 1, P.void)
-    g_text(text.upper(t("panel.layers")), 6, 30, P.mute)
+    let tail = lc_header(6, 30)
     let fname = view_file_name()
-    -~> the file name only when it fits next to the title
-    if (6 + g_text_w(text.upper(t("panel.layers"))) + 12 + g_text_w(fname) + 6 <= V.pw) {
+    -~> the file name only when it fits next to the title and the count
+    if (tail + 12 + g_text_w(fname) + 6 <= V.pw) {
       g_text(fname, V.pw - g_text_w(fname) - 6, 30, P.dim)
     }
   }
