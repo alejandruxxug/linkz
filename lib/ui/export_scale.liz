@@ -1,0 +1,136 @@
+-~> export_scale: the size and the shapes of an Export PNG at a scale. The
+-~> picture is not a 1x render made bigger: every path, stroke width, gradient
+-~> and stamp of the drawing is multiplied by the scale and drawn again, so 2x
+-~> equals a fresh render of the drawing scaled by 2.
+-~>
+-~> The cap is on the longest side: export_max_side pixels (16384, the
+-~> largest canvas a drawing may have). A bigger export is refused with a
+-~> reason, in the popover and for the automation alike.
+
+use "../draw/gradient"
+use "i18n"
+
+-~> The longest side an exported picture may have, in pixels.
+let export_max_side = 16384
+
+-~> The scales the popover offers as buttons.
+let export_presets = [1, 2, 3, 4]
+
+-~> What an export at `spec` makes of a canvas of `canvas` (a point): a scale
+-~> (a number) or {"width": px} for a width that keeps the aspect ratio.
+-~> Returns {"k": the scale, "size": (w, h), "error": null or the reason it is refused}.
+function export_plan(canvas, spec) {
+  let k = spec
+  let size = canvas
+  if (type(spec) == "HASH") {
+    let w = spec["width"]
+    if (type(w) != "INTEGER" || w < 1) {
+      return {"k": 1, "size": canvas, "error": t("export.bad_width")}
+    }
+    k = w / float(canvas.x)
+    size = (w, math.max(1, int(math.round(canvas.y * k))))
+  } elif (type(spec) == "INTEGER" || type(spec) == "FLOAT") {
+    if (spec <= 0) {
+      return {"k": 1, "size": canvas, "error": t("export.bad_scale")}
+    }
+    size = (math.max(1, int(math.round(canvas.x * spec))), math.max(1, int(math.round(canvas.y * spec))))
+  } else {
+    return {"k": 1, "size": canvas, "error": t("export.bad_scale")}
+  }
+  let error = null
+  if (math.max(size.x, size.y) > export_max_side) {
+    error = t("export.too_big", {"max": export_max_side})
+  }
+  {"k": k, "size": size, "error": error}
+}
+
+-~> A rough most the PNG can weigh, in words: the picture's pixels at 4 bytes
+-~> each (a PNG of a drawing is nearly always smaller), e.g. "7.3 MB".
+function export_size_hint(size) {
+  let bytes = size.x * size.y * 4
+  if (bytes < 1024 * 1024) {
+    return str(math.max(1, math.round(bytes / 1024.0))) + " KB"
+  }
+  let tenths = math.round(bytes * 10.0 / (1024 * 1024))
+  str(tenths // 10) + "." + str(tenths % 10) + " MB"
+}
+
+-~> A list of points (a path command, a stamp's outline) made k times bigger.
+function export_scale_path(path, k) {
+  let out = []
+  for (let i = 0; i < len(path); i += 1) {
+    let c = path[i]
+    let n = [c[0]]
+    for (let j = 1; j < len(c); j += 1) {
+      push(n, c[j] * k)
+    }
+    push(out, n)
+  }
+  out
+}
+
+-~> A number made k times bigger; anything else stays.
+function export_scale_number(v, k) {
+  if (type(v) == "INTEGER" || type(v) == "FLOAT") {
+    return v * k
+  }
+  v
+}
+
+-~> The stamps of a stamped stroke made k times bigger.
+function export_scale_stamps(stamps, k) {
+  let out = []
+  for (let i = 0; i < len(stamps); i += 1) {
+    let s = stamps[i]
+    let n = hash.merge(s, {})
+    n.path = export_scale_path(s.path, k)
+    n.x = export_scale_number(s.x, k)
+    n.y = export_scale_number(s.y, k)
+    n.rx = export_scale_number(s.rx, k)
+    n.ry = export_scale_number(s.ry, k)
+    push(out, n)
+  }
+  out
+}
+
+-~> A copy of a shape made k times bigger (what raster.shape and resolve_paint
+-~> read). A stamped stroke gets a new stamp_key, so the rasterizer's cache
+-~> doesn't hand back the stamps of the 1x picture.
+function export_scale_shape(s, k) {
+  let widths = s.widths
+  if (type(widths) == "LIST") {
+    widths = []
+    for (let i = 0; i < len(s.widths); i += 1) {
+      push(widths, export_scale_number(s.widths[i], k))
+    }
+  }
+  let out = {
+    "path": export_scale_path(s.path, k),
+    "fill": scale_paint(s.fill, k),
+    "stroke": scale_paint(s.stroke, k),
+    "width": export_scale_number(s.width, k),
+    "widths": widths,
+    "rule": s.rule,
+    "line": s.line,
+    "styles": s.styles,
+    "layer": s.layer,
+    "kind": s.kind
+  }
+  if (s.stamps != null) {
+    out.stamps = export_scale_stamps(s.stamps, k)
+    out.stamp_key = str(s.stamp_key) + "|x" + str(k)
+  }
+  out
+}
+
+-~> The shapes made k times bigger; at 1 the very same list.
+function export_scale_shapes(shapes, k) {
+  if (k == 1) {
+    return shapes
+  }
+  let out = []
+  for (let i = 0; i < len(shapes); i += 1) {
+    push(out, export_scale_shape(shapes[i], k))
+  }
+  out
+}

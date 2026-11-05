@@ -527,8 +527,20 @@ function view_commands() {
   cmds["ClickRow"] = function(args) {
     {"ok": view_click_row_cmd(args[0])}
   }
-  cmds["Export"] = function(_args) {
-    {"ok": view_export(), "status": ed.status, "path": view_png_path()}
+  cmds["Export"] = function(args) {
+    -~> an optional scale, e.g. Export 2 (never a popover, never a dialog)
+    let scale = 1
+    if (len(args) > 0 && args[0] != "") {
+      try {
+        scale = float(args[0])
+        if (scale == math.floor(scale)) {
+          scale = int(scale)
+        }
+      } catch (e) {
+        scale = 0
+      }
+    }
+    {"ok": view_export("", "", scale), "status": ed.status, "path": view_png_path()}
   }
   cmds["Hover"] = function(args) {
     view_prepare()

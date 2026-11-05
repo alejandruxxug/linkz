@@ -8,6 +8,7 @@
 use "blend_menu"
 use "editor_shape_ops"
 use "editor_undo"
+use "export_popover"
 use "fill_editor"
 use "shape_menu"
 use "view_input"
@@ -16,19 +17,19 @@ use "zoom_menu"
 
 -~> Whether either is open.
 function shape_popup_open() {
-  SM.open || FE.open || BM.open || ZM.open
+  SM.open || FE.open || BM.open || ZM.open || XP.open
 }
 
 -~> The boxes they cover, as [kind, rect] (see popup_list).
 function shape_popup_rects() {
   fe_sync()
-  fe_popup_rects() + sm_popup_rects() + blend_menu_rects() + zoom_menu_rects()
+  fe_popup_rects() + sm_popup_rects() + blend_menu_rects() + zoom_menu_rects() + xp_rects()
 }
 
 -~> What they show, as a text: they are drawn again when it changes.
 function shape_popup_key() {
   fe_sync()
-  fe_content_key() + "|" + sm_content_key() + "|" + blend_menu_key() + "|" + zoom_menu_key()
+  fe_content_key() + "|" + sm_content_key() + "|" + blend_menu_key() + "|" + zoom_menu_key() + "|" + xp_key()
 }
 
 -~> Draws them into the current buffer (popup_paint draws into both).
@@ -37,10 +38,14 @@ function shape_popup_draw() {
   sm_draw()
   blend_menu_draw()
   zoom_menu_draw()
+  xp_draw()
 }
 
 -~> The hover id at a UI point, or null when neither is there.
 function shape_hover_at(x, y) {
+  if (XP.open) {
+    return xp_hover_at(x, y)
+  }
   let bid = blend_menu_hover_at(x, y)
   if (bid != null) {
     return bid
@@ -58,6 +63,9 @@ function shape_hover_at(x, y) {
 
 -~> A left press: true when one of them took it.
 function shape_down(e) {
+  if (xp_down(e)) {
+    return true
+  }
   if (blend_menu_down(e)) {
     return true
   }
@@ -81,6 +89,9 @@ function shape_up(e) {
 
 -~> A key: true when one of them used it.
 function shape_keydown(e) {
+  if (xp_key_down(e)) {
+    return true
+  }
   if (blend_menu_key_down(e)) {
     return true
   }
@@ -95,6 +106,9 @@ function shape_keydown(e) {
 
 -~> Typed text: true when one of them took it.
 function shape_text(s) {
+  if (xp_text(s)) {
+    return true
+  }
   if (sm_text(s)) {
     return true
   }

@@ -30,7 +30,7 @@ let photo = fs.join(dir, "photo.png")
 img.save(pic, photo)
 
 let modules = rig_modules + ["ui/view_panels", "ui/view_canvas", "ui/view_popups", "ui/i18n", "ui/home_view", "ui/app_screens",
-  "ui/trace_model", "ui/trace_view", "ui/trace_editor", "ui/export_png"]
+  "ui/trace_model", "ui/trace_view", "ui/trace_editor", "ui/export_png", "ui/export_popover", "ui/export_scale"]
 let settings = {"tutorial_done": true, "drawings_dir": fs.join(dir, "drawings")}
 let rig = rig_open(fs.join(dir, "editor"), code, (512, 360), modules, settings)
 let n = rig.names
@@ -44,8 +44,12 @@ function saves() {
   len(rig_save_calls)
 }
 
+-~> Cmd+E opens the size popover; Enter in it (1x as remembered) goes on to the dialog.
 function export_key() {
   frame([{"type": "key", "key": "E", "mods": {"shift": false, "alt": false, "cmd": true, "ctrl": false}}])
+  if (n.XP.open) {
+    frame([{"type": "key", "key": "Enter", "mods": {"shift": false, "alt": false, "cmd": false, "ctrl": false}}])
+  }
 }
 
 function answer(paths, dialog = "save", answer_id = id) {

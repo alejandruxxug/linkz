@@ -1,0 +1,76 @@
+-- 1x is the drawing's own size
+(48, 32)
+-- 2x is exactly twice the size and equals the drawing written at twice the numbers
+(96, 64) true
+true true
+-- and is not the 1x picture stretched
+true
+-- a stamped stroke is scaled too: about 4 times the inked pixels, not the 1x stamps
+true true
+true
+-- 3x and a fractional scale
+(144, 96) (24, 16)
+-- a custom width keeps the aspect ratio
+(120, 80) (100, 67)
+(100, 67) true
+-- the cap: 16384 px on the longest side
+16384 true true
+true true
+true true
+false false true
+false false false false
+Too big: 16384 px is the most on a side
+-- the size hint
+24 KB 7.3 MB 1 KB
+-- a transparent background leaves the corners clear, the drawing's own fills them
+true true 255
+true
+-- the popover: Cmd+E opens it and asks nothing yet
+true true 1 true true
+(48, 32) true
+-- Esc closes it and nothing is asked
+false true
+-- Right and Left change the scale, Enter asks where to write
+2 (96, 64)
+4
+3
+false true 3
+(144, 96)
+-- the scale is remembered: in settings and in the next popover
+3 true
+3
+2 (96, 64)
+-- a press on Export… (not Enter) goes on too
+false 2 2
+(96, 64)
+-- digits fill the width, Backspace takes one off, the size follows
+120 (120, 80) true
+12 (12, 8)
+120
+{"width": 120}
+(120, 80)
+-- a width is not remembered, the scale stays
+2
+-- a scale button clears the width
+true 1
+-- too big: the reason shows and Enter / Export… wait
+true 20000
+true true
+-- transparent from the popover reaches the picture
+true
+true
+0
+false
+-- a press outside closes it, Cancel too
+false
+false true
+-- Cmd+E again while it is open opens nothing more, and the code is not edited
+true true
+-- Spanish
+Escala Exportar… Demasiado grande: 16384 px es el máximo por lado
+-- the automation: an optional scale, no popover, no dialog
+true (48, 32) false
+true (96, 64)
+true (72, 48)
+false (72, 48) true
+false true

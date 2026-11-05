@@ -1,0 +1,356 @@
+-~> export_popover: the small window Export PNG opens before the save dialog,
+-~> to pick the picture's size. A row of scale buttons (1x to 4x, the last one
+-~> used is lit), a width in pixels that keeps the aspect ratio (digits typed
+-~> into the field), the size that comes out with a rough file size, and the
+-~> background: the drawing's own or transparent. Export… closes it and calls
+-~> the function it was opened with (export_png.liz asks for the file there).
+-~> Enter does the same, Esc and a press outside close it, Left and Right
+-~> change the scale. Too big a picture (export_scale.liz) is told why and
+-~> Export… waits. The scale last exported with (a button, not a width) is
+-~> remembered in settings.liz as `let export_scale = 2`.
+
+use "editor_state"
+use "export_scale"
+use "i18n"
+use "mode_state"
+use "view_gfx"
+use "view_layout"
+
+-~> open: it is on the screen; scale: the lit button; custom: the width typed
+-~> ("" for none); focus: the field has the caret; hover: the part under the
+-~> pointer; then(spec, transparent): what Export… calls.
+let XP = {
+  "open": false,
+  "x": 0,
+  "y": 0,
+  "w": 0,
+  "h": 0,
+  "scale": 1,
+  "custom": "",
+  "focus": false,
+  "transparent": false,
+  "hover": "",
+  "then": null
+}
+
+let xp_min_w = 236
+let xp_h = 138
+
+-~> The scale remembered in settings.liz, 1 when it has none.
+function xp_saved_scale() {
+  let s = settings.export_scale
+  if (type(s) == "INTEGER" && list.index(export_presets, s) >= 0) {
+    return s
+  }
+  1
+}
+
+-~> What the popover asks for now: the width typed, else the lit scale.
+function xp_spec() {
+  if (XP.custom != "") {
+    return {"width": int(XP.custom)}
+  }
+  XP.scale
+}
+
+-~> What the popover makes now (see export_plan).
+function xp_plan() {
+  export_plan(ed_canvas_size(), xp_spec())
+}
+
+-~> How wide the box must be for the words in the current language: the
+-~> labels, the scale buttons and the two background buttons side by side.
+function xp_width() {
+  let lw = 0
+  let labels = [t("export.scale"), t("export.width"), t("export.background")]
+  for (let i = 0; i < len(labels); i += 1) {
+    lw = math.max(lw, g_text_w(labels[i]))
+  }
+  let left = 10 + lw + 8
+  let bg = g_text_w(t("export.bg_drawing")) + g_text_w(t("export.bg_clear")) + 30
+  math.max(xp_min_w, left + math.max(bg, 4 * 34) + 10)
+}
+
+-~> == Opening and closing ==
+
+-~> Opens it in the middle of the window. `then(spec, transparent)` runs when
+-~> Export… is pressed.
+function xp_open(then) {
+  XP.then = then
+  XP.scale = xp_saved_scale()
+  XP.custom = ""
+  XP.focus = false
+  XP.transparent = false
+  XP.hover = ""
+  XP.w = xp_width()
+  XP.h = xp_h
+  XP.x = (V.w - XP.w) // 2
+  XP.y = math.max(2, (V.h - xp_h) // 3)
+  XP.open = true
+  view_touch()
+}
+
+function xp_close() {
+  if (XP.open) {
+    XP.open = false
+    XP.then = null
+    view_touch()
+  }
+}
+
+-~> Writes `let export_scale = n` into settings.liz (a file that can't be
+-~> written only loses the memory) and into `settings`.
+function xp_remember(n) {
+  settings.export_scale = n
+  try {
+    let path = settings_path()
+    let body = null
+    if (fs.exists(path)) {
+      body = fs.read(path)
+    }
+    fs.write(path, mode_settings_with(body, "export_scale", str(n)))
+  } catch (e) {
+    null
+  }
+}
+
+-~> Export…: closes the popover and goes on, unless the size is refused (the
+-~> reason stays on the screen). True when it went on.
+function xp_go() {
+  let plan = xp_plan()
+  if (plan.error != null) {
+    return false
+  }
+  let then = XP.then
+  let spec = xp_spec()
+  let transparent = XP.transparent
+  if (XP.custom == "") {
+    xp_remember(XP.scale)
+  }
+  xp_close()
+  if (then != null) {
+    then(spec, transparent)
+  }
+  true
+}
+
+-~> == Layout ==
+
+-~> The parts as [x, y, w, h]: "scale0".."scale3", "field", "bg0", "bg1", "cancel", "go".
+function xp_layout() {
+  let labels = [t("export.scale"), t("export.width"), t("export.background")]
+  let lw = 0
+  for (let i = 0; i < len(labels); i += 1) {
+    lw = math.max(lw, g_text_w(labels[i]))
+  }
+  let cx = XP.x + 10 + lw + 8
+  let out = {"label_x": XP.x + 10, "col_x": cx}
+  for (let i = 0; i < len(export_presets); i += 1) {
+    out["scale" + str(i)] = [cx + i * 34, XP.y + 24, 32, 16]
+  }
+  out.field = [cx, XP.y + 46, 64, 16]
+  let w0 = g_text_w(t("export.bg_drawing")) + 14
+  let w1 = g_text_w(t("export.bg_clear")) + 14
+  out.bg0 = [cx, XP.y + 86, w0, 16]
+  out.bg1 = [cx + w0 + 2, XP.y + 86, w1, 16]
+  let gw = g_text_w(t("export.go")) + 22
+  let cw = g_text_w(t("export.cancel")) + 22
+  out.go = [XP.x + XP.w - 8 - gw, XP.y + XP.h - 26, gw, 18]
+  out.cancel = [out.go[0] - 4 - cw, XP.y + XP.h - 26, cw, 18]
+  out
+}
+
+-~> The part at a UI point, or "" off all of them.
+function xp_part_at(x, y) {
+  let lay = xp_layout()
+  let names = ["scale0", "scale1", "scale2", "scale3", "field", "bg0", "bg1", "cancel", "go"]
+  for (let i = 0; i < len(names); i += 1) {
+    let r = lay[names[i]]
+    if (view_in(x, y, r[0], r[1], r[2], r[3])) {
+      return names[i]
+    }
+  }
+  ""
+}
+
+-~> == The popup interface (shape_popups.liz) ==
+
+-~> The box it covers, with its shadow, as [kind, rect].
+function xp_rects() {
+  if (!XP.open) {
+    return []
+  }
+  [["export_popover", [XP.x, XP.y, XP.w + 3, XP.h + 3]]]
+}
+
+-~> What it shows, as a text: it is drawn again when this changes.
+function xp_key() {
+  if (!XP.open) {
+    return ""
+  }
+  "x" + str(XP.scale) + "|" + XP.custom + "|" + str(XP.focus) + "|" + str(XP.transparent) + "|" + XP.hover + "|" + lang_get()
+}
+
+-~> The hover id at a UI point: xpop:<part> on a part, xpop:box on the rest of
+-~> the box, null off it.
+function xp_hover_at(x, y) {
+  if (!XP.open || !view_in(x, y, XP.x, XP.y, XP.w, XP.h)) {
+    if (XP.open && XP.hover != "") {
+      XP.hover = ""
+      view_touch()
+    }
+    return null
+  }
+  let part = xp_part_at(x, y)
+  if (part != XP.hover) {
+    XP.hover = part
+    view_touch()
+  }
+  "xpop:" + part
+}
+
+-~> Does what pressing a part does.
+function xp_press(part) {
+  if (text.starts(part, "scale")) {
+    XP.scale = export_presets[int(text.slice(part, 5, 6))]
+    XP.custom = ""
+    XP.focus = false
+  } elif (part == "field") {
+    XP.focus = true
+  } elif (part == "bg0") {
+    XP.transparent = false
+  } elif (part == "bg1") {
+    XP.transparent = true
+  } elif (part == "cancel") {
+    xp_close()
+    return null
+  } elif (part == "go") {
+    xp_go()
+    return null
+  }
+  view_touch()
+}
+
+-~> A press while it is open: true when it was the popover's (a press outside
+-~> closes it).
+function xp_down(e) {
+  if (!XP.open) {
+    return false
+  }
+  if (!view_in(e.pos.x, e.pos.y, XP.x, XP.y, XP.w, XP.h)) {
+    xp_close()
+    return true
+  }
+  xp_press(xp_part_at(e.pos.x, e.pos.y))
+  true
+}
+
+-~> A key while it is open. True when it used it (every key does).
+function xp_key_down(e) {
+  if (!XP.open) {
+    return false
+  }
+  let k = text.lower(e.key)
+  if (k == "escape") {
+    xp_close()
+  } elif (k == "enter" || k == "return") {
+    xp_go()
+  } elif (k == "backspace") {
+    if (XP.custom != "") {
+      XP.custom = text.slice(XP.custom, 0, len(XP.custom) - 1)
+      XP.focus = true
+      view_touch()
+    }
+  } elif (k == "arrowleft" || k == "arrowright") {
+    let at = list.index(export_presets, XP.scale)
+    if (k == "arrowleft") {
+      at = math.max(0, at - 1)
+    } else {
+      at = math.min(len(export_presets) - 1, at + 1)
+    }
+    XP.scale = export_presets[at]
+    XP.custom = ""
+    XP.focus = false
+    view_touch()
+  }
+  true
+}
+
+-~> Typed text: the digits go into the width field. True when it was open.
+function xp_text(s) {
+  if (!XP.open) {
+    return false
+  }
+  for (let i = 0; i < len(s); i += 1) {
+    let c = text.slice(s, i, i + 1)
+    if (c >= "0" && c <= "9" && len(XP.custom) < 6 && !(XP.custom == "" && c == "0")) {
+      XP.custom = XP.custom + c
+      XP.focus = true
+    }
+  }
+  view_touch()
+  true
+}
+
+-~> == Drawing ==
+
+function xp_button_state(part, lit) {
+  if (lit) {
+    return "active"
+  }
+  if (XP.hover == part) {
+    return "hover"
+  }
+  "normal"
+}
+
+function xp_draw() {
+  if (!XP.open) {
+    return null
+  }
+  let lay = xp_layout()
+  let plan = xp_plan()
+  g_rect(XP.x + 3, XP.y + 3, XP.w, XP.h, P.void)
+  g_frame(XP.x, XP.y, XP.w, XP.h, P.void)
+  g_rect(XP.x + 1, XP.y + 1, XP.w - 2, XP.h - 2, P.row)
+  g_rect(XP.x + 1, XP.y + 1, XP.w - 2, 1, P.bevel)
+  g_text(t("export.title"), XP.x + 10, XP.y + 6, P.bright)
+  g_text(t("export.scale"), lay.label_x, XP.y + 26, P.mute)
+  for (let i = 0; i < len(export_presets); i += 1) {
+    let part = "scale" + str(i)
+    let r = lay[part]
+    let lit = XP.custom == "" && XP.scale == export_presets[i]
+    g_button(r[0], r[1], r[2], r[3], "", str(export_presets[i]) + "x", xp_button_state(part, lit))
+  }
+  g_text(t("export.width"), lay.label_x, XP.y + 48, P.mute)
+  let f = lay.field
+  g_field(f[0], f[1], f[2], f[3], XP.focus)
+  if (XP.custom != "") {
+    g_text(XP.custom, f[0] + 4, f[1] + 2, P.bright)
+    if (XP.focus) {
+      g_rect(f[0] + 4 + g_text_w(XP.custom), f[1] + 3, 1, 10, P.amber)
+    }
+  } else {
+    g_text(str(plan.size.x), f[0] + 4, f[1] + 2, P.dim)
+  }
+  g_text("px", f[0] + f[2] + 4, f[1] + 2, P.mute)
+  let line = str(plan.size.x) + " × " + str(plan.size.y) + " px"
+  if (plan.error != null) {
+    g_text(plan.error, lay.col_x, XP.y + 68, P.ember)
+  } else {
+    g_text(line, lay.col_x, XP.y + 68, P.text)
+    let hint = "~" + export_size_hint(plan.size)
+    g_text(hint, XP.x + XP.w - 10 - g_text_w(hint), XP.y + 68, P.dim)
+  }
+  g_text(t("export.background"), lay.label_x, XP.y + 88, P.mute)
+  g_button(lay.bg0[0], lay.bg0[1], lay.bg0[2], lay.bg0[3], "", t("export.bg_drawing"), xp_button_state("bg0", !XP.transparent))
+  g_button(lay.bg1[0], lay.bg1[1], lay.bg1[2], lay.bg1[3], "", t("export.bg_clear"), xp_button_state("bg1", XP.transparent))
+  let c = lay.cancel
+  g_button(c[0], c[1], c[2], c[3], "", t("export.cancel"), xp_button_state("cancel", false))
+  let go = lay.go
+  let state = xp_button_state("go", false)
+  if (plan.error != null) {
+    state = "disabled"
+  }
+  g_button(go[0], go[1], go[2], go[3], "export", t("export.go"), state)
+}

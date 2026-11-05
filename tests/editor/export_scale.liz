@@ -1,0 +1,291 @@
+-~> Export PNG at a chosen size. Cmd+E opens a popover (Scale 1x to 4x, a width in
+-~> px that keeps the aspect ratio, the size that comes out, the background);
+-~> Esc closes it, Enter exports (the save dialog then opens), Left and Right
+-~> change the scale, digits fill the width, a press outside closes. 2x is a
+-~> fresh render at twice the size, not the 1x picture stretched: it equals the
+-~> same drawing written with every number doubled (paths, stroke widths,
+-~> gradients, stamps); a custom width gives exactly that width; a side over
+-~> 16384 px is refused with a reason and writes nothing; the scale last used is
+-~> remembered in settings.liz; a transparent background leaves the corners
+-~> clear; the automation's Export takes an optional scale and never asks.
+
+use "rig"
+
+-~> The drawing at scale k: every coordinate, width and radius times k.
+function drawing(k) {
+  let c = function(x, y) { "(" + str(x * k) + ", " + str(y * k) + ")" }
+  "-~> lzdraw 1
+canvas = {\"size\": (" + str(48 * k) + ", " + str(32 * k) + "), \"background\": #f6d9a8}
+layer sun
+  circle(" + c(24, 16) + ", " + str(10 * k) + ", #fff3c4)
+  line(" + c(4, 4) + ", " + c(44, 28) + ", #5a3d8c, " + str(3 * k) + ")
+  rect(" + c(30, 2) + ", " + c(16, 10) + ", linear(" + c(30, 2) + ", " + c(46, 12) + ", [#e86a4a, #4a8fe8]))
+  circle(" + c(10, 10) + ", " + str(5 * k) + ", radial(" + c(10, 10) + ", " + str(5 * k) + ", [#ffffff, #d03060]))
+"
+}
+
+-~> A stamped stroke alone. Its stamps are made at the drawing's own size, so
+-~> a 2x export scales them (a drawing written with doubled numbers would get
+-~> a differently grained stroke, and is no reference for them).
+let stamped_code = "-~> lzdraw 1
+canvas = {\"size\": (48, 32), \"background\": #ffffff}
+layer ink
+  brush([(6, 16), (24, 20), (42, 14)], [1, 1, 1], #2f6b3a, pens.chalk)
+"
+
+let dir = fs.join(fs.home(), "export-scale-test")
+if (fs.exists(dir)) {
+  fs.remove(dir)
+}
+fs.mkdir(dir)
+let modules = rig_modules + ["ui/view_panels", "ui/view_canvas", "ui/view_popups", "ui/i18n", "ui/home_view", "ui/app_screens",
+  "ui/trace_model", "ui/trace_view", "ui/trace_editor", "ui/export_png", "ui/export_popover", "ui/export_scale", "ui/shape_popups"]
+let settings = {"tutorial_done": true, "drawings_dir": fs.join(dir, "drawings")}
+let rig = rig_open(fs.join(dir, "editor"), drawing(1), (512, 360), modules, settings)
+let big = rig_open(fs.join(dir, "big"), drawing(2), (512, 360), modules, {"tutorial_done": true, "drawings_dir": fs.join(dir, "drawings")})
+let n = rig.names
+let id = n.export_dialog_id
+let plain = {"shift": false, "alt": false, "cmd": false, "ctrl": false}
+
+function frame(events = []) {
+  rig_frame(rig, events)
+}
+
+function key(k, mods = plain) {
+  frame([{"type": "key", "key": k, "mods": mods}])
+}
+
+function open_popover() {
+  key("E", {"shift": false, "alt": false, "cmd": true, "ctrl": false})
+}
+
+function type_text(s) {
+  frame([{"type": "type", "text": s}])
+}
+
+function press(part) {
+  let r = n.xp_layout()[part]
+  frame([{"type": "down", "pos": point(r[0] + 2, r[1] + 2)}, {"type": "up", "pos": point(r[0] + 2, r[1] + 2)}])
+}
+
+function chosen(path) {
+  frame([{"type": "chosen", "dialog": "save", "id": id, "paths": [path]}])
+}
+
+-~> The picture a size makes: the PNG exported to name, loaded.
+function exported(name, scale, transparent = false) {
+  let path = fs.join(dir, name)
+  n.view_export(path, "", scale, transparent)
+  img.load(path)
+}
+
+-~> How many pixels of a grid over picture a differ from picture b (same size).
+function differing(a, b) {
+  let size = img.size(a)
+  let diff = 0
+  for (let y = 0; y < size.y; y += 3) {
+    for (let x = 0; x < size.x; x += 3) {
+      if (img.get(a, x, y) != img.get(b, x, y)) {
+        diff += 1
+      }
+    }
+  }
+  diff
+}
+
+puts("-- 1x is the drawing's own size")
+let one = exported("one.png", 1)
+puts(img.size(one))
+
+puts("-- 2x is exactly twice the size and equals the drawing written at twice the numbers")
+let two = exported("two.png", 2)
+big.names.view_export(fs.join(dir, "ref.png"))
+let ref = img.load(fs.join(dir, "ref.png"))
+puts(img.size(two), img.size(two) == img.size(ref))
+let probes = [(1, 1), (48, 32), (24, 16), (60, 30), (10, 10), (30, 50), (80, 10), (60, 44), (90, 60), (12, 56)]
+let same = 0
+for (let i = 0; i < len(probes); i += 1) {
+  if (img.get(two, probes[i].x, probes[i].y) == img.get(ref, probes[i].x, probes[i].y)) {
+    same += 1
+  }
+}
+puts(same == len(probes), differing(two, ref) * 100 < (img.size(two).x // 3) * (img.size(two).y // 3))
+puts("-- and is not the 1x picture stretched")
+let stretched = 0
+for (let i = 0; i < len(probes); i += 1) {
+  if (img.get(two, probes[i].x, probes[i].y) == img.get(one, probes[i].x // 2, probes[i].y // 2)) {
+    stretched += 1
+  }
+}
+puts(stretched < len(probes) || differing(two, ref) == 0)
+
+puts("-- a stamped stroke is scaled too: about 4 times the inked pixels, not the 1x stamps")
+let ink = rig_open(fs.join(dir, "ink"), stamped_code, (512, 360), modules, settings)
+function inked(pic) {
+  let size = img.size(pic)
+  let count = 0
+  for (let y = 0; y < size.y; y += 1) {
+    for (let x = 0; x < size.x; x += 1) {
+      if (img.get(pic, x, y) != #ffffff) {
+        count += 1
+      }
+    }
+  }
+  count
+}
+let ink_path = fs.join(dir, "ink1.png")
+ink.names.view_export(ink_path)
+let ink1 = inked(img.load(ink_path))
+ink.names.view_export(ink_path, "", 2)
+let ink2 = inked(img.load(ink_path))
+let ratio = ink2 / float(ink1)
+puts(ink1 > 20, ratio > 3.0 && ratio < 5.0)
+ink.names.view_export(ink_path, "", 1)
+puts(inked(img.load(ink_path)) == ink1)
+
+puts("-- 3x and a fractional scale")
+puts(img.size(exported("three.png", 3)), img.size(exported("half.png", 0.5)))
+
+puts("-- a custom width keeps the aspect ratio")
+puts(img.size(exported("w120.png", {"width": 120})), img.size(exported("w100.png", {"width": 100})))
+let plan = n.export_plan((48, 32), {"width": 100})
+puts(plan.size, plan.error == null)
+
+puts("-- the cap: 16384 px on the longest side")
+puts(n.export_max_side, n.export_plan((48, 32), {"width": 16384}).error == null, n.export_plan((48, 32), {"width": 16385}).error != null)
+puts(n.export_plan((48, 32), 341).error == null, n.export_plan((48, 32), 342).error != null)
+puts(n.export_plan((32, 48), 341).error == null, n.export_plan((32, 48), 342).error != null)
+let refused = fs.join(dir, "refused.png")
+puts(n.view_export(refused, "", 1000), fs.exists(refused), n.ed.status == n.t("export.too_big", {"max": 16384}))
+puts(n.view_export(refused, "", {"width": 0}), n.view_export(refused, "", 0), n.view_export(refused, "", "x"), fs.exists(refused))
+puts(n.export_plan((48, 32), {"width": 20000}).error)
+
+puts("-- the size hint")
+puts(n.export_size_hint((96, 64)), n.export_size_hint((1600, 1200)), n.export_size_hint((10, 10)))
+
+puts("-- a transparent background leaves the corners clear, the drawing's own fills them")
+let clear = exported("clear.png", 1, true)
+let filled = exported("filled.png", 1)
+puts(img.get(clear, 0, 0) != img.get(filled, 0, 0), img.get(clear, 0, 0).a == 0, img.get(filled, 0, 0).a)
+puts(img.get(clear, 24, 16) == img.get(filled, 24, 16))
+
+puts("-- the popover: Cmd+E opens it and asks nothing yet")
+let asked = len(rig_save_calls)
+open_popover()
+puts(n.XP.open, len(rig_save_calls) == asked, n.XP.scale, n.XP.custom == "", n.shape_popup_open())
+puts(n.xp_plan().size, n.xp_plan().error == null)
+
+puts("-- Esc closes it and nothing is asked")
+key("Escape")
+puts(n.XP.open, len(rig_save_calls) == asked)
+
+puts("-- Right and Left change the scale, Enter asks where to write")
+open_popover()
+key("ArrowRight")
+puts(n.XP.scale, n.xp_plan().size)
+key("ArrowRight")
+key("ArrowRight")
+key("ArrowRight")
+puts(n.XP.scale)
+key("ArrowLeft")
+puts(n.XP.scale)
+key("Enter")
+puts(n.XP.open, len(rig_save_calls) == asked + 1, n.EXPORT.spec)
+chosen(fs.join(dir, "three-x.png"))
+puts(img.size(img.load(fs.join(dir, "three-x.png"))))
+
+puts("-- the scale is remembered: in settings and in the next popover")
+puts(settings.export_scale, text.find(fs.read(n.settings_path()), "let export_scale = 3") >= 0)
+open_popover()
+puts(n.XP.scale)
+press("scale1")
+puts(n.XP.scale, n.xp_plan().size)
+puts("-- a press on Export… (not Enter) goes on too")
+press("go")
+puts(n.XP.open, settings.export_scale, n.EXPORT.spec)
+chosen(fs.join(dir, "two-x.png"))
+puts(img.size(img.load(fs.join(dir, "two-x.png"))))
+
+puts("-- digits fill the width, Backspace takes one off, the size follows")
+open_popover()
+type_text("1")
+type_text("20")
+puts(n.XP.custom, n.xp_plan().size, n.XP.focus)
+key("Backspace")
+puts(n.XP.custom, n.xp_plan().size)
+type_text("0")
+type_text("x")
+puts(n.XP.custom)
+key("Enter")
+puts(n.EXPORT.spec)
+chosen(fs.join(dir, "wide.png"))
+puts(img.size(img.load(fs.join(dir, "wide.png"))))
+puts("-- a width is not remembered, the scale stays")
+puts(settings.export_scale)
+
+puts("-- a scale button clears the width")
+open_popover()
+type_text("300")
+press("scale0")
+puts(n.XP.custom == "", n.XP.scale)
+key("Escape")
+
+puts("-- too big: the reason shows and Enter / Export… wait")
+open_popover()
+type_text("20000")
+puts(n.xp_plan().error != null, n.XP.custom)
+let before = len(rig_save_calls)
+key("Enter")
+press("go")
+puts(n.XP.open, len(rig_save_calls) == before)
+key("Escape")
+
+puts("-- transparent from the popover reaches the picture")
+open_popover()
+press("bg1")
+puts(n.XP.transparent)
+key("Enter")
+puts(n.EXPORT.transparent)
+chosen(fs.join(dir, "popover-clear.png"))
+puts(img.get(img.load(fs.join(dir, "popover-clear.png")), 0, 0).a)
+open_popover()
+puts(n.XP.transparent)
+key("Escape")
+
+puts("-- a press outside closes it, Cancel too")
+before = len(rig_save_calls)
+open_popover()
+frame([{"type": "down", "pos": point(1, 1)}, {"type": "up", "pos": point(1, 1)}])
+puts(n.XP.open)
+open_popover()
+press("cancel")
+puts(n.XP.open, len(rig_save_calls) == before)
+
+puts("-- Cmd+E again while it is open opens nothing more, and the code is not edited")
+let code_before = n.ed.code
+open_popover()
+open_popover()
+type_text("5")
+key("Backspace")
+puts(n.XP.open, n.ed.code == code_before)
+key("Escape")
+
+puts("-- Spanish")
+n.lang_use("es")
+open_popover()
+puts(n.t("export.scale"), n.t("export.go"), n.t("export.too_big", {"max": 16384}))
+key("Escape")
+n.lang_use("en")
+
+puts("-- the automation: an optional scale, no popover, no dialog")
+let cmds = n.screens.editor.debug_commands
+let asked_now = len(rig_save_calls)
+let r1 = cmds.Export([])
+puts(r1.ok, img.size(img.load(n.view_png_path())), n.XP.open)
+let r2 = cmds.Export(["2"])
+puts(r2.ok, img.size(img.load(n.view_png_path())))
+let r3 = cmds.Export(["1.5"])
+puts(r3.ok, img.size(img.load(n.view_png_path())))
+let r4 = cmds.Export(["400"])
+puts(r4.ok, img.size(img.load(n.view_png_path())), n.ed.status == n.t("export.too_big", {"max": 16384}))
+puts(cmds.Export(["abc"]).ok, len(rig_save_calls) == asked_now)

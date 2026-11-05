@@ -1,4 +1,5 @@
--~> export_png: Export PNG asks where to write the picture. It opens the system's
+-~> export_png: Export PNG first opens the export popover (export_popover.liz) for
+-~> the picture's size, then asks where to write it. It opens the system's
 -~> save dialog (dialog.choose_save) with a name, `<drawing>.png` or `Untitled N.png`,
 -~> and a folder: the last one exported to (remembered in settings.liz as
 -~> `export_folder`), else the drawing's own, else Pictures, else Documents. It
@@ -6,9 +7,10 @@
 -~> and our id, and view_event hands it to export_chosen. A cancel does nothing.
 -~> Where the system has no save dialog the old way is used: the PNG goes next to
 -~> the drawing, and the status bar says so. The automation's Export never asks
--~> (it calls view_export itself).
+-~> and is 1x unless it is given a scale (it calls view_export itself).
 
 use "editor_undo"
+use "export_popover"
 use "home_data"
 use "i18n"
 use "mode_state"
@@ -18,8 +20,9 @@ use "view_input"
 -~> The id our dialog carries, so another save dialog's answer isn't taken for ours.
 let export_dialog_id = "export-png"
 
--~> pending: the dialog is on the screen.
-let EXPORT = {"pending": false}
+-~> pending: the dialog is on the screen; spec and transparent: the size and
+-~> background the popover chose, for when the dialog answers.
+let EXPORT = {"pending": false, "spec": 1, "transparent": false}
 
 -~> The name without its extension: "sun.lzdraw" is "sun".
 function export_stem(path) {
@@ -63,20 +66,27 @@ function export_folder() {
   home
 }
 
--~> Export PNG from the menu or its shortcut: asks where to write. Nothing is
--~> asked while a dialog is already open.
+-~> Export PNG from the menu or its shortcut: opens the popover for the size.
+-~> Nothing is asked while a dialog is already open.
 function export_ask() {
-  if (EXPORT.pending) {
+  if (EXPORT.pending || XP.open) {
     return null
   }
   view_commit_focus()
+  xp_open(export_save)
+}
+
+-~> The popover's Export…: asks where to write a picture of that size.
+function export_save(spec, transparent) {
+  EXPORT.spec = spec
+  EXPORT.transparent = transparent
   let folder = export_folder()
   let options = {"title": t("export.title"), "name": export_name(folder), "types": ["png"], "folder": folder, "id": export_dialog_id}
   try {
     dialog.choose_save(options)
     EXPORT.pending = true
   } catch (e) {
-    view_export("", t("export.no_dialog"))
+    view_export("", t("export.no_dialog"), spec, transparent)
   }
 }
 
@@ -115,7 +125,7 @@ function export_chosen(e) {
     return true
   }
   let path = export_with_extension(e.paths[0])
-  if (view_export(path)) {
+  if (view_export(path, "", EXPORT.spec, EXPORT.transparent)) {
     export_remember(trace_folder(path))
   }
   true

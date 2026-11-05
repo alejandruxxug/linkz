@@ -10,6 +10,7 @@ use "artist_route"
 use "blend_props"
 use "budget_view"
 use "canvas_zoom"
+use "export_scale"
 use "zoom_menu"
 use "pen_library"
 use "pen_props"
@@ -413,20 +414,31 @@ function view_png_path() {
   ed.file + ".png"
 }
 
--~> Renders the drawing at its own size into an offscreen buffer and saves it as a PNG
--~> at path ("" is view_png_path(), next to the file). note is added to the status.
-function view_export(path = "", note = "") {
+-~> Renders the drawing into an offscreen buffer and saves it as a PNG at path
+-~> ("" is view_png_path(), next to the file). note is added to the status. scale
+-~> is 1 (the drawing's own size), a number, or {"width": px} (export_scale.liz);
+-~> a size over the cap is refused with its reason. transparent leaves the
+-~> background out.
+function view_export(path = "", note = "", scale = 1, transparent = false) {
   view_commit_focus()
   view_prepare()
   if (path == "") {
     path = view_png_path()
   }
-  let size = ed_canvas_size()
+  let plan = export_plan(ed_canvas_size(), scale)
+  if (plan.error != null) {
+    ed_refuse(plan.error)
+    view_after()
+    return false
+  }
+  let size = plan.size
   let ok = true
   try {
     fb.offscreen(size)
-    fb.fill((0, 0), size, ed.canvas.background)
-    let shapes = ed_paint_shapes()
+    if (!transparent) {
+      fb.fill((0, 0), size, scale_paint(ed.canvas.background, plan.k))
+    }
+    let shapes = export_scale_shapes(ed_paint_shapes(), plan.k)
     for (let i = 0; i < len(shapes); i = i + 1) {
       let r = raster.shape(shapes[i])
       if (r.fill !== null) {
