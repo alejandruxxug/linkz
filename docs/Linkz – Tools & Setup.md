@@ -58,10 +58,10 @@ Nothing is published until a person pushes a tag and publishes the draft. The pi
 
 | File | Does |
 |---|---|
-| `scripts/crossbuild.sh` | `lizardscript build --vm --os OS --arch ARCH . -o linkz` for darwin/arm64, darwin/amd64, linux/amd64 and windows/amd64 (the other systems' runtimes are built from lizard-script's source with Go), then `tar.gz` archives (`zip` on Windows) named `linkz_<version>_<os>_<arch>` with the README, the license and the examples, and `checksums.txt` (sha256). The version is `linkz_version` in `lib/app/version.liz`. |
+| `scripts/crossbuild.sh` | `lizardscript build --vm --os OS --arch ARCH --icon assets/icon/linkz-1024.png --icon-small assets/icon/linkz-16.png . -o linkz` for darwin/arm64, darwin/amd64, linux/amd64 and windows/amd64 (the other systems' runtimes are built from lizard-script's source with Go), then `tar.gz` archives (`zip` on Windows) named `linkz_<version>_<os>_<arch>` with the README, the license and the examples, and `checksums.txt` (sha256). The icon is in each build: the darwin archives hold `Linkz.app` (not a bare `linkz`: `Contents/MacOS/Linkz`, the program's files in `Contents/Resources/program.lzb`, `icon.icns`, an `Info.plist`; signed ad hoc when `codesign` is there), the Windows `.exe` carries it as a resource, and the Linux archive has `icon.png`, `icon-256.png` and `linkz.desktop` next to `linkz`. The version is `linkz_version` in `lib/app/version.liz`. |
 | `.github/workflows/ci.yml` | By hand only for now: checks out linkz and lizard-script side by side, builds `lizardscript`, runs `scripts/test.sh`, `scripts/parity.sh`, fmt and check, and the cross build. |
 | `.github/workflows/release.yml` | On tags `v*` (and by hand): builds `lizardscript`, the tests, writes the tag's version into `lib/app/version.liz`, the cross build, then `gh release create --draft` with the archives and `checksums.txt`. |
-| `scripts/install.sh`, `scripts/install.ps1` | Download the latest release's archive for this system, verify its checksum, install. `--from-file` / `-FromFile` installs a local archive without the network. |
+| `scripts/install.sh`, `scripts/install.ps1` | Download the latest release's archive for this system, verify its checksum, install. On macOS `install.sh` puts `Linkz.app` in `~/Applications` (`/Applications` with `--system`, or `--apps DIR`) and makes a link `linkz` in the bin folder to the program inside it. `--from-file` / `-FromFile` installs a local archive without the network. |
 
 **Flow:** `git tag v0.1.0 && git push origin v0.1.0` → release workflow → draft release with the four archives and `checksums.txt` → read it, then publish it on GitHub.
 
@@ -69,7 +69,9 @@ Nothing is published until a person pushes a tag and publishes the draft. The pi
 
 **Private repo:** while `alejandruxxug/linkz` is private, `install.sh` / `install.ps1` only work with `GITHUB_TOKEN` set to a token that can read it; once a release is public they work without one.
 
-**Not done yet:** macOS notarization (a built program is `lizardscript` with the files appended, which `codesign --verify` rejects in strict mode, so it can't be signed or notarized as it is: lizard-script DESIGN.md, Known limitations), Windows signing (the installers print the Gatekeeper and SmartScreen workarounds), the Homebrew tap, linux/arm64.
+**App icon:** the approved icon is R006 E2 (`docs/Art/Reviews/R006/E2-*`, generator `docs/Art/Figma-gen/r006c.py`); `assets/icon/linkz-1024.png` and `linkz-16.png` are copies of its 1024 master and 16 px sprite (copy again after changing the generator). The editor and the splash set the master as the window's `icon` (`app_icon()` in `lib/app/editor.liz`); `bundle.txt` carries `assets/icon/*.png`. Opening `Linkz.app` with no arguments starts the editor (`main.liz`).
+
+**Not done yet:** macOS notarization (`Linkz.app` is signed ad hoc, so `codesign --verify --strict` passes, but `spctl -a` rejects it: Gatekeeper wants a Developer ID signature and a notarization ticket; the installer prints the `xattr` workaround), Windows signing (the installers print the Gatekeeper and SmartScreen workarounds), the Homebrew tap, linux/arm64.
 
 ## 🔌 Every session
 

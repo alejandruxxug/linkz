@@ -14,7 +14,7 @@
 
 use "engine"
 use "libs"
-use "pen_files"
+use "brush_files"
 
 -~> The step limit of a drawing.
 let drawing_steps = 2000000
@@ -61,9 +61,9 @@ function drawing_source() {
 -~> alive around it, the names of `around` (the host's primitives) and the
 -~> tracker's hooks. It gives what lizard.run gives, with the drawing's
 -~> shapes and canvas as r.drawing and r.canvas (null when it didn't load).
--~> The pens saved in ~/.linkz/pens are there too (pen_files.liz).
+-~> The brushes of the library, ~/.linkz/brushes, are there too (brush_files.liz).
 function drawing_exec(code, around, tr, specs = libs_draw) {
-  let hooks = {"here": tr.here, "results": null, "pens": pen_files_load()}
+  let hooks = {"here": tr.here, "results": null, "pens": brush_library_load()}
   let names = hash.merge(around, {"drawing_run_hooks": hooks, "src": {"here": tr.here}})
   let name = drawing_source()
   let r = lizard.run(code, {

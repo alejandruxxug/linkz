@@ -7,6 +7,7 @@
 
 use "../draw/geometry"
 use "../draw/pens"
+use "brush_copy"
 use "editor_doc"
 use "editor_rows"
 use "i18n"
@@ -326,14 +327,14 @@ function twoway_after_header(m) {
 
 -~> Where loose new rows go: after the opening comments and after the
 -~> top-level `let` declarations that follow them (`let colors = {...}`, pens,
--~> values), so a new row can use them. Blank and comment lines between
+-~> values) and the `pens.name = {...}` copies of library brushes (brush_copy.liz), so a new row can use them. Blank and comment lines between
 -~> declarations are skipped; nothing after the last declaration counts.
 function twoway_after_decls(m) {
   let end = twoway_after_header(m)
   let at = end
   while (at < len(m.lines)) {
     let li = m.lines[at]
-    if (text.starts(li, "let ")) {
+    if (text.starts(li, "let ") || (text.starts(li, "pens.") && text.find(li, " = ") > 0)) {
       end = doc_row(m, at + 1, null, null).end_line
       at = end
     } elif (is_blank(li) || text.starts(text.trim(li), "-~>")) {
@@ -464,5 +465,23 @@ function brush_insert(m, samples, pen_name, source, layer, color) {
     push(texts, fmt_decimal(simple[1][i]))
   }
   let code = "brush(" + fmt_points(simple[0]) + ", [" + text.join(texts, ", ") + "], " + color + ", pens." + pen_name + ")"
-  twoway_new_row(m, code, layer)
+  let at = twoway_after_decls(m)
+  let r = twoway_new_row(m, code, layer)
+  if (brush_copy_is_library(pens[pen_name]) && !brush_copy_present(m.lines, pen_name)) {
+    return brush_copy_add(r, at, pens[pen_name])
+  }
+  r
+}
+
+-~> The model with the drawing's copy of a library brush put at line `at`
+-~> (0 up, from twoway_after_decls of the model before the stroke), the caret
+-~> kept on its row.
+function brush_copy_add(m, at, pen) {
+  let add = brush_copy_lines(pen)
+  let lines = list.slice(m.lines, 0, at) + add + list.slice(m.lines, at, len(m.lines))
+  let line = m.line
+  if (line > at) {
+    line += len(add)
+  }
+  doc_with(m, lines, line, m.col)
 }

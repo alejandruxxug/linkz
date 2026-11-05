@@ -8,6 +8,8 @@
 -~> option names the engine takes, and trace_visible() hides the others.
 -~> The labels are language keys; the view turns them into words.
 
+use "trace_full"
+
 -~> The sliders: the key (also the option's name), the language key of the
 -~> label, the range, the step, the decimals shown, the unit after the value,
 -~> and the modes it belongs to.
@@ -59,7 +61,9 @@ function trace_new(known, defaults) {
     "result": null,
     "preview": null,
     "raw": null,
-    "retrace": false
+    "retrace": false,
+    "full": trace_full_new(),
+    "want": null
   }
 }
 

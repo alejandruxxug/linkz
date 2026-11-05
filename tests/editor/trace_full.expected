@@ -1,0 +1,23 @@
+-- the preview is small; the full-size trace starts after it and replaces it
+1 false 0 true
+true false
+1 2 true
+-- the badge texts, English and Spanish
+tracing full size… full size
+calcando a tamaño completo… tamaño completo
+-- Insert reuses the finished trace: no trace is made for it
+true 0 1
+true
+-- a slider change stops the task, and nothing of the old one is shown
+0 false cancelled
+0 true
+-- Insert pressed while the task runs waits for it, and does not trace again
+true insert
+true 0 1
+-- Insert at once, before the debounce: the task starts for it
+insert true
+true 1
+-- the toggles redraw from the full-size trace without a new one
+false 0 true true
+true true
+false

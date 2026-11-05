@@ -20,8 +20,11 @@
 -~>                  (the stroke's width is still how far scatter reaches)
 -~>   spacing        [0.25] the distance between stamps, as a share of the stamp's size
 -~>   jitter         [0]    each stamp moves by up to this share of its size
--~>   shape          ["round"] "round", "square", "flat" (a wide, thin nib) or
--~>                  "star". Any other name draws round; a bitmap goes here later
+-~>   shape          ["round"] "round", "square", "flat" (a wide, thin nib), "star",
+-~>                  "spray" (a cloud of tiny dots), "leaf", or a bitmap
+-~>                  {"bitmap": runs, "w", "h"}: the stamp is the bitmap's alpha,
+-~>                  scaled to the stamp (see stamp_bitmap.liz). Any other name
+-~>                  draws round. stamp_shapes() lists them with en/es names.
 -~>   roundness      [1]    0.05 to 1: how much of its width the height keeps
 -~>   rotation       ["fixed"] "fixed" (the angle below), "follow" (the direction
 -~>                  of the stroke, plus the angle) or "random" (a different
@@ -30,10 +33,14 @@
 -~>   scatter        [0]    stamps spread across the stroke by up to this share of the width
 -~>   count          [1]    stamps at every step (with scatter, a spray)
 -~>   grain          a hash {"kind": "noise", "scale": 6, "depth": 0.5, "moving": false}:
--~>                  a noise that fades each stamp (depth 0 to 1, how much; scale
--~>                  in pixels). Fixed grain is the same for any stroke on the
--~>                  canvas, like paper; moving grain travels with the stroke.
--~>                  A plain number keeps its meaning: a rough edge, in pixels.
+-~>                  a texture that fades each stamp (depth 0 to 1, how much; scale
+-~>                  in pixels). kind: "noise", "paper", "canvas", "chalk", "hatch",
+-~>                  or "bitmap" with "data", "w", "h" (a picture repeated, `scale`
+-~>                  pixels per picture pixel); stamp_grains() lists them. Each stamp
+-~>                  is faded as a whole by the texture at its center. Fixed grain is
+-~>                  the same for any stroke on the canvas, like paper; moving grain
+-~>                  travels with the stroke. A plain number keeps its meaning: a
+-~>                  rough edge, in pixels.
 -~>   size_jitter    [0]    each stamp's size changes by up to this share, either way
 -~>   opacity_jitter [0]    each stamp loses up to this share of its opacity
 -~>   color_jitter   [[0, 0, 0]] [hue in degrees, saturation, brightness]: how far

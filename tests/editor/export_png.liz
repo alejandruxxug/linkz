@@ -1,0 +1,131 @@
+-~> Export PNG (the menu or Cmd+E) asks where to write through the system's save
+-~> dialog (here the rig's own, which opens nothing): it offers `<drawing>.png`
+-~> (`Untitled N.png` with no file) in the last export folder, else the drawing's
+-~> folder. The "chosen" answer (dialog "save", our id) writes the PNG there and the
+-~> status says where; a cancel does nothing; the folder is remembered in
+-~> settings.liz; with no save dialog the PNG goes next to the drawing; the trace
+-~> dialog's open picker and this save never mix up; the automation's Export
+-~> never asks.
+
+use "rig"
+
+let code = "-~> lzdraw 1
+canvas = {\"size\": (48, 32), \"background\": #f6d9a8}
+layer sun
+  circle((24, 16), 10, #fff3c4)
+"
+
+let dir = fs.join(fs.home(), "export-png-test")
+if (fs.exists(dir)) {
+  fs.remove(dir)
+}
+fs.mkdir(dir)
+let out = fs.join(dir, "out")
+fs.mkdir(out)
+let out2 = fs.join(dir, "out2")
+fs.mkdir(out2)
+let pic = img.new(16, 16)
+img.fill(pic, [0, 0, 16, 16], #5a3d8c)
+let photo = fs.join(dir, "photo.png")
+img.save(pic, photo)
+
+let modules = rig_modules + ["ui/view_panels", "ui/view_canvas", "ui/view_popups", "ui/i18n", "ui/home_view", "ui/app_screens",
+  "ui/trace_model", "ui/trace_view", "ui/trace_editor", "ui/export_png"]
+let settings = {"tutorial_done": true, "drawings_dir": fs.join(dir, "drawings")}
+let rig = rig_open(fs.join(dir, "editor"), code, (512, 360), modules, settings)
+let n = rig.names
+let id = n.export_dialog_id
+
+function frame(events = []) {
+  rig_frame(rig, events)
+}
+
+function saves() {
+  len(rig_save_calls)
+}
+
+function export_key() {
+  frame([{"type": "key", "key": "E", "mods": {"shift": false, "alt": false, "cmd": true, "ctrl": false}}])
+}
+
+function answer(paths, dialog = "save", answer_id = id) {
+  frame([{"type": "chosen", "dialog": dialog, "id": answer_id, "paths": paths}])
+}
+
+function base(path) {
+  n.trace_base(path)
+}
+
+puts("-- Cmd+E asks: the drawing's name and folder, png only, a title, our id")
+export_key()
+let first = rig_save_calls[0]
+puts(saves(), first.name, first.folder == fs.join(dir, "editor"), first.types, first.id, first.title == n.t("export.title"))
+puts("-- asking again while the dialog is open asks nothing more")
+export_key()
+puts(saves())
+
+puts("-- cancel writes nothing and frees the dialog")
+answer([])
+puts(fs.exists(fs.join(dir, "editor", "drawing.png")), n.EXPORT.pending)
+
+puts("-- the answer writes the PNG there and the status says where")
+export_key()
+let target = fs.join(out, "mine.png")
+answer([target])
+puts(saves(), fs.exists(target), n.ed.status == n.t("status.exported", {"file": target}), n.EXPORT.pending)
+let written = img.load(target)
+puts(img.size(written))
+
+puts("-- the folder is remembered: the next dialog starts there, and settings.liz says so")
+export_key()
+puts(saves(), rig_save_calls[2].folder == out, settings.export_folder == out, text.find(fs.read(n.settings_path()), "let export_folder") >= 0)
+answer([])
+
+puts("-- a name with no extension gets .png")
+export_key()
+answer([fs.join(out2, "plain")])
+puts(fs.exists(fs.join(out2, "plain.png")))
+
+puts("-- Spanish title")
+n.lang_use("es")
+export_key()
+puts(rig_save_calls[len(rig_save_calls) - 1].title)
+answer([])
+n.lang_use("en")
+
+puts("-- a drawing with no file: Untitled N.png, the first free one")
+let kept = n.ed.file
+n.ed.file = ""
+settings.export_folder = out2
+fs.write(fs.join(out2, "Untitled 1.png"), "x")
+export_key()
+puts(rig_save_calls[len(rig_save_calls) - 1].name)
+answer([])
+n.ed.file = kept
+
+puts("-- routing: the trace dialog's open picker and the export save don't mix")
+frame([{"type": "key", "key": "T", "mods": {"shift": true, "alt": false, "cmd": true, "ctrl": false}}])
+n.T.d.choosing = true
+let before = n.T.d.path
+let routed = fs.join(out2, "routed.png")
+n.EXPORT.pending = true
+answer([routed])
+puts(fs.exists(routed), n.T.d.path == before, n.T.d.choosing, n.tr_is_open())
+answer([photo], "open", null)
+puts(n.T.d.path == photo, n.EXPORT.pending, n.T.d.choosing)
+frame([{"type": "key", "key": "Escape", "mods": {"shift": false, "alt": false, "cmd": false, "ctrl": false}}])
+
+puts("-- a save answer with another id is not ours")
+n.EXPORT.pending = true
+answer([fs.join(out2, "other.png")], "save", "something-else")
+puts(fs.exists(fs.join(out2, "other.png")), n.EXPORT.pending)
+n.EXPORT.pending = false
+
+puts("-- the automation's export never asks")
+let asked = saves()
+puts(n.view_export(), saves() == asked, fs.exists(n.view_png_path()))
+
+puts("-- no save dialog on this system: the old way, and the status says so")
+rig_dialog.choose_save = function(options) { error("needs zenity") }
+export_key()
+puts(fs.exists(n.view_png_path()), n.EXPORT.pending, text.find(n.ed.status, n.t("export.no_dialog")) >= 0)

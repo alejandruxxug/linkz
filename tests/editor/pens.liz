@@ -1,9 +1,10 @@
--~> The pen settings window and the stabilizer, driven like real input: the
--~> window opens from a picker gear, its sliders and its curve change a draft
--~> (never the built-in pen), test pad strokes never reach the drawing, Save
--~> as new pen writes ~/.linkz/pens/<key>.liz (the test HOME) and the pen
--~> joins the picker and the drawing's pens, and the string stabilizer steadies
--~> a stroke on the canvas live.
+-~> The brush creator's Pressure tab (the old pen settings' coverage) and the
+-~> stabilizer, driven like real input: the creator opens from a picker gear
+-~> on its Pressure tab, its sliders and its curve change a draft (never the
+-~> built-in pen), test pad strokes never reach the drawing, Save brush
+-~> writes ~/.linkz/brushes/<key>.lzbrush (the test HOME) and the brush joins
+-~> the picker and the drawing's pens, and the string stabilizer steadies a
+-~> stroke on the canvas live. The other tabs: brush_creator.liz.
 
 use "../../lib/app/drawing"
 use "../../lib/app/editor"
@@ -11,10 +12,10 @@ use "../../lib/app/libs"
 use "rig"
 
 let dir = fs.join(fs.home(), "pens-test")
-let pens_dir = fs.join(fs.home(), ".linkz", "pens")
+let pens_dir = fs.join(fs.home(), ".linkz", "brushes")
 let code = fs.read(fs.join(libs_root(), "examples", "hello.lzdraw"))
 let modules = rig_modules + ["ui/view_popups", "ui/pen_edit", "ui/pen_window", "ui/pen_pad", "ui/tool_stabilizer", "ui/pen_route",
-  "draw/pens"]
+  "ui/brush_tab_pressure", "draw/pens"]
 let rig = rig_open(dir, code, editor_size, modules)
 let n = rig.names
 let cmds = rig.ed.app.debug_commands
@@ -47,7 +48,7 @@ rig_frame(rig, [{"type": "move", "pos": mid(gear)}])
 puts(n.V.hover, len(n.pens.list), n.pick_rect()[3])
 click(mid(gear))
 let w = win()
-puts(w.open, w.key, w.name, n.V.picker, rig.ed.error)
+puts(w.open, w.key, w.name, w.tab, n.V.picker, rig.ed.error)
 
 puts("-- a slider changes the draft, never the built-in pen")
 let tr = w.rects.tracks.smoothing
@@ -75,19 +76,19 @@ puts(win().pad_strokes)
 puts("-- a built-in's name is refused; a name of its own saves the pen")
 n.pw.name = "pencil"
 click(mid(win().rects.save))
-puts(win().note, fs.exists(fs.join(pens_dir, "pencil.liz")))
+puts(win().note, fs.exists(fs.join(pens_dir, "pencil.lzbrush")))
 n.pw.name = "Soft Ink"
 click(mid(win().rects.save))
-let file = fs.join(pens_dir, "soft_ink.liz")
+let file = fs.join(pens_dir, "soft_ink.lzbrush")
 puts(fs.exists(file), win().key, n.ed.pen, len(n.pens.list), n.pens.list[5].name)
-let saved = lizard.run(fs.read(file), {"name": file}).globals.pen
+let saved = lizard.run(fs.read(file), {"name": file}).globals.brush
 puts(saved.name, saved.pressure.smoothing, saved.key == null, n.pens.pencil.name)
 
 puts("-- the picker lists the saved pen after the built-in ones, \"yours\"")
 n.pw_close()
 cmds.Picker([])
 rig_frame(rig)
-puts(n.picker_desc(n.pens.list[5]), n.pick_rect()[3])
+puts(n.picker_desc(n.pens.list[len(n.pens.list) - 1]), n.pick_rect()[3])
 cmds.Picker([])
 rig_frame(rig)
 

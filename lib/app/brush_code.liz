@@ -1,0 +1,198 @@
+-~> brush_code: a brush (a pen hash, see lib/draw/pens.liz) as lizard code,
+-~> the text of a `.lzbrush` file. Pure text work, no files: brush_files.liz
+-~> reads and writes the files, the editor copies a brush into a drawing with
+-~> brush_code_hash. The writing is lossless (a number written and read again
+-~> is the same number), so a brush written, read and written again gives
+-~> the same text:
+-~>   -~> lzbrush 1
+-~>   let brush = {
+-~>     "name": "chalk",
+-~>     "min": 6,
+-~>     "pressure": {
+-~>       "curve": [[0, 0], [1, 1]],
+-~>       ...
+-~>     }
+-~>   }
+-~> One key per line; a value too long for a line (the runs of a bitmap)
+-~> goes over several lines, packed. Data only: no calls, no names.
+
+-~> The keys of a hash in the order they are written, by the name it has in
+-~> its parent ("" is the brush itself); others follow, by name.
+let brush_code_orders = {
+  "": ["name", "render", "min", "max", "taper", "opacity", "nib", "size", "spacing", "jitter", "shape", "roundness",
+    "rotation", "angle", "scatter", "count", "grain", "size_jitter", "opacity_jitter", "color_jitter", "speed",
+    "pressure", "tilt", "stabilizer"],
+  "pressure": ["curve", "width", "opacity", "smoothing", "speed", "floor", "nib_weight", "inputs"],
+  "inputs": ["trackpad", "tablet", "mouse"],
+  "grain": ["kind", "scale", "depth", "moving"],
+  "speed": ["size", "opacity"],
+  "stabilizer": ["mode", "length", "catch_up"]
+}
+
+-~> The longest a line may get before a value is broken over lines.
+let brush_code_width = 90
+
+-~> A number as short text, and exactly the number: 0.3 stays 0.3, but
+-~> 90deg (1.5707963267948966) keeps all its digits.
+function brush_code_number(v) {
+  if (type(v) == "INTEGER") {
+    return str(v)
+  }
+  let short = math.round(v * 1000000) / 1000000.0
+  if (short == v) {
+    return str(short)
+  }
+  str(v)
+}
+
+-~> A text as a lizard string literal.
+function brush_code_string(s) {
+  let out = text.replace(s, "\\", "\\\\")
+  out = text.replace(out, "\"", "\\\"")
+  out = text.replace(out, "\n", "\\n")
+  "\"" + text.replace(out, "\t", "\\t") + "\""
+}
+
+-~> The keys of h to write: those of the name's order it has, then the rest
+-~> by name. "key" (the editor's note of a saved brush) is never written.
+function brush_code_keys(h, name) {
+  let order = brush_code_orders[name]
+  if (order == null) {
+    order = []
+  }
+  let out = []
+  for (let i = 0; i < len(order); i += 1) {
+    if (hash.has(h, order[i])) {
+      push(out, order[i])
+    }
+  }
+  let rest = list.sort(keys(h))
+  for (let i = 0; i < len(rest); i += 1) {
+    if (list.index(out, rest[i]) < 0 && !(name == "" && rest[i] == "key")) {
+      push(out, rest[i])
+    }
+  }
+  out
+}
+
+-~> Any value on one line.
+function brush_code_inline(v, name) {
+  let ty = type(v)
+  if (ty == "NULL") {
+    return "null"
+  }
+  if (ty == "BOOLEAN") {
+    if (v) {
+      return "true"
+    }
+    return "false"
+  }
+  if (ty == "INTEGER" || ty == "FLOAT") {
+    return brush_code_number(v)
+  }
+  if (ty == "STRING") {
+    return brush_code_string(v)
+  }
+  if (ty == "POINT") {
+    return "(" + brush_code_number(v.x) + ", " + brush_code_number(v.y) + ")"
+  }
+  if (ty == "ARRAY") {
+    let parts = []
+    for (let i = 0; i < len(v); i += 1) {
+      push(parts, brush_code_inline(v[i], ""))
+    }
+    return "[" + text.join(parts, ", ") + "]"
+  }
+  if (ty == "HASH") {
+    let ks = brush_code_keys(v, name)
+    let parts = []
+    for (let i = 0; i < len(ks); i += 1) {
+      push(parts, brush_code_string(ks[i]) + ": " + brush_code_inline(v[ks[i]], ks[i]))
+    }
+    return "{" + text.join(parts, ", ") + "}"
+  }
+  str(v)
+}
+
+-~> The lines of the items of an array, packed as many to a line as fit.
+function brush_code_packed(items, indent) {
+  let lines = []
+  let line = ""
+  for (let i = 0; i < len(items); i += 1) {
+    let piece = items[i]
+    if (i < len(items) - 1) {
+      piece += ","
+    }
+    if (line != "" && len(indent) + len(line) + 1 + len(piece) > brush_code_width) {
+      push(lines, indent + line)
+      line = piece
+    } elif (line == "") {
+      line = piece
+    } else {
+      line += " " + piece
+    }
+  }
+  if (line != "") {
+    push(lines, indent + line)
+  }
+  lines
+}
+
+-~> A value as text that goes on from a key already written on a line at
+-~> `indent` (so it starts with no indent): one line when it fits, else a hash
+-~> one key per line, an array packed. `force` opens a hash even when short.
+function brush_code_value(v, name, indent, force) {
+  let one = brush_code_inline(v, name)
+  let ty = type(v)
+  if (!force && len(indent) + len(one) + 8 <= brush_code_width) {
+    return one
+  }
+  if (ty == "HASH" && len(keys(v)) > 0) {
+    let ks = brush_code_keys(v, name)
+    let rows = []
+    for (let i = 0; i < len(ks); i += 1) {
+      let tail = ""
+      if (i < len(ks) - 1) {
+        tail = ","
+      }
+      push(rows, indent + "  " + brush_code_string(ks[i]) + ": " + brush_code_value(v[ks[i]], ks[i], indent + "  ", false) + tail)
+    }
+    return "{\n" + text.join(rows, "\n") + "\n" + indent + "}"
+  }
+  if (ty == "ARRAY" && len(v) > 0) {
+    let items = []
+    for (let i = 0; i < len(v); i += 1) {
+      push(items, brush_code_inline(v[i], ""))
+    }
+    return "[\n" + text.join(brush_code_packed(items, indent + "  "), "\n") + "\n" + indent + "]"
+  }
+  one
+}
+
+-~> The `{...}` of a brush: one key per line, the pressure block and long
+-~> values opened. This is what a drawing keeps as `pens.chalk = {...}`.
+function brush_code_hash(pen, indent = "") {
+  brush_code_value(pen, "", indent, true)
+}
+
+-~> The text of a `.lzbrush` file: the header, a note, then the brush.
+function brush_code_file(pen) {
+  "-~> lzbrush 1\n-~> " + str(pen.name) + ": a brush saved from Linkz.\nlet brush = " + brush_code_hash(pen) + "\n"
+}
+
+-~> The text of a `.lzbrushes` file: the header, then the list.
+function brush_code_set_file(list_of) {
+  let rows = []
+  for (let i = 0; i < len(list_of); i += 1) {
+    let tail = ""
+    if (i < len(list_of) - 1) {
+      tail = ","
+    }
+    push(rows, "  " + brush_code_hash(list_of[i], "  ") + tail)
+  }
+  let body = "[]"
+  if (len(rows) > 0) {
+    body = "[\n" + text.join(rows, "\n") + "\n]"
+  }
+  "-~> lzbrushes 1\n-~> A set of brushes saved from Linkz.\nlet brushes = " + body + "\n"
+}

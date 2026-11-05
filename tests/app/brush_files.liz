@@ -1,0 +1,194 @@
+-~> Brush files (brush_files.liz): every built-in pen and the stamped example
+-~> pens survive writing and reading unchanged, bitmap data (long runs) too,
+-~> a set of brushes round-trips, unknown keys are dropped and out-of-range
+-~> values clamped with a warning, hostile files (a loop, file access, a use,
+-~> a call, a huge list, a syntax error, a wrong header) are refused with their
+-~> reason and write nothing, the library saves, loads, exports and imports (a
+-~> taken or built-in key gets _2), and the pens the old pop-up saved are
+-~> copied to the library once. Run with HOME in a folder of its own.
+
+use "../../lib/app/brush_files"
+use "../../lib/draw/pens"
+
+-~> Whether two values are the same all the way down, numbers of the same kind.
+function same(a, b) {
+  if (type(a) != type(b)) {
+    return false
+  }
+  if (type(a) == "ARRAY") {
+    if (len(a) != len(b)) {
+      return false
+    }
+    for (let i = 0; i < len(a); i += 1) {
+      if (!same(a[i], b[i])) {
+        return false
+      }
+    }
+    return true
+  }
+  if (type(a) == "HASH") {
+    let ks = keys(a)
+    if (len(ks) != len(keys(b))) {
+      return false
+    }
+    for (let i = 0; i < len(ks); i += 1) {
+      if (!hash.has(b, ks[i]) || !same(a[ks[i]], b[ks[i]])) {
+        return false
+      }
+    }
+    return true
+  }
+  a == b
+}
+
+let home = fs.join(fs.home(), ".linkz")
+let lib = brush_library_dir()
+
+puts("-- the built-in and the stamped pens round-trip")
+let names = ["ink", "pencil", "marker", "brush", "calligraphy", "chalk", "spray", "ink_dots", "star_trail"]
+for (let i = 0; i < len(names); i += 1) {
+  let text1 = brush_write(pens[names[i]])
+  let r = brush_read(text1)
+  puts(names[i], r.error, r.warnings, same(r.brush, pens[names[i]]), brush_write(r.brush) == text1)
+}
+puts(brush_write(pens.star_trail))
+
+puts("-- a bitmap shape and grain as runs")
+let runs = []
+for (let i = 0; i < 120; i += 1) {
+  push(runs, [i, i % 7, 12 + i % 5])
+}
+let bitmap = {
+  "name": "leaf",
+  "render": "stamped",
+  "min": 4,
+  "max": 12,
+  "shape": {"kind": "bitmap", "w": 16, "h": 120, "runs": runs},
+  "grain": {"kind": "bitmap", "scale": 1.5, "depth": 0.5, "moving": true, "w": 16, "h": 120, "runs": runs},
+  "angle": 45deg,
+  "taper": 0.1 + 0.2
+}
+let bt = brush_write(bitmap)
+let br = brush_read(bt)
+puts(br.error, br.warnings, same(br.brush, bitmap), brush_write(br.brush) == bt, len(text.split(bt, "\n")) > 20)
+
+puts("-- a set")
+let set_text = brushes_write([pens.chalk, bitmap])
+let sr = brushes_read(set_text)
+puts(sr.error, sr.warnings, len(sr.brushes), same(sr.brushes[0], pens.chalk), same(sr.brushes[1], bitmap))
+puts(brushes_read(brushes_write([])).brushes)
+
+puts("-- unknown keys dropped, values clamped, wrong types dropped")
+let messy = "-~> lzbrush 1\nlet brush = {\"name\": \"messy\", \"min\": -5, \"max\": 900, \"glitter\": 1,\n" +
+  "  \"opacity\": [0.5, 3], \"count\": 2.6, \"shape\": 7, \"rotation\": \"spin\", \"key\": \"ignored\",\n" +
+  "  \"pressure\": {\"floor\": 2, \"curve\": [[0, 0]], \"inputs\": {\"mouse\": {\"speed\": 5, \"zip\": 1}}}}\n"
+let mr = brush_read(messy)
+puts(mr.error, mr.brush)
+for (let i = 0; i < len(mr.warnings); i += 1) {
+  puts(mr.warnings[i])
+}
+let bare = brush_read("-~> lzbrush 1\nlet brush = {\"render\": \"stamped\"}\n")
+puts(bare.brush, bare.warnings)
+
+puts("-- hostile files are refused with their reason")
+let zeros = []
+for (let i = 0; i < 300000; i += 1) {
+  push(zeros, "0")
+}
+let big = "[" + text.join(zeros, ",") + "]"
+let hostile = [
+  "-~> lzbrush 1\nlet brush = {\"name\": \"a\"}\nwhile (true) {}\n",
+  "-~> lzbrush 1\nlet brush = fs.read(\"/etc/hosts\")\n",
+  "-~> lzbrush 1\nlet brush = {\"name\": os.env(\"HOME\")}\n",
+  "-~> lzbrush 1\nuse \"../../lib/draw/pens\"\nlet brush = {\"name\": \"a\"}\n",
+  "-~> lzbrush 1\nlet brush = {\"name\": \"a\", \"min\": math.max(1, 2)}\n",
+  "-~> lzbrush 1\nlet brush = function() { 1 }\n",
+  "-~> lzbrush 1\nlet brush = {\"name\": \"a\", \"runs\": " + big + "}\n",
+  "-~> lzbrush 1\nlet brush = {\"name\": \n",
+  "let brush = {\"name\": \"a\"}\n",
+  "-~> lzbrush 2\nlet brush = {\"name\": \"a\"}\n",
+  "-~> lzbrushes 1\nlet brushes = []\n",
+  "-~> lzbrush 1\nlet brush = [1, 2]\n",
+  "-~> lzbrush 1\nlet other = {\"name\": \"a\"}\n",
+  ""
+]
+for (let i = 0; i < len(hostile); i += 1) {
+  let r = brush_read(hostile[i])
+  puts(i, r.brush, r.error)
+}
+puts(brushes_read("-~> lzbrushes 1\nlet brushes = [1]\n").error)
+puts(brushes_read("-~> lzbrushes 1\nlet brushes = [{\"name\": \"a\"}, nope]\n").error)
+
+puts("-- the library")
+let before = len(brush_library_load())
+let mine = {"name": "Lib One!", "min": 2, "max": 9, "taper": 0.1, "opacity": [0.5, 1], "render": "stamped", "spacing": 0.3}
+let path = brush_library_save(mine)
+puts(text.replace(path, fs.home(), "$HOME"), fs.exists(path))
+let all = brush_library_load()
+let found = null
+for (let i = 0; i < len(all); i += 1) {
+  if (all[i].key == "lib_one") {
+    found = all[i]
+  }
+}
+puts(len(all) == before + 1, found.key, same(found.pen, mine))
+puts(brush_library_load() == all)
+for (let i = 0; i < 2; i += 1) {
+  let name = ["ink", "!!!"][i]
+  try {
+    brush_library_save({"name": name, "min": 1, "max": 2})
+  } catch (e) {
+    puts(e.message)
+  }
+}
+
+puts("-- export all, import")
+let out_dir = fs.join(fs.home(), "brush-files-test")
+fs.mkdir(out_dir)
+let set_path = fs.join(out_dir, "all.lzbrushes")
+let exported = brush_library_export_all(set_path)
+puts(exported == len(brush_library_load()))
+let back = brushes_read(fs.read(set_path))
+puts(back.error, len(back.brushes) == exported)
+let one = fs.join(out_dir, "one.lzbrush")
+fs.write(one, brush_write({"name": "ink", "min": 3, "max": 4, "glitter": 1}))
+let added = brush_import_file(one)
+puts(added.error, len(added.added), added.added[0].key, added.added[0].name, added.warnings)
+puts(brush_import_file(one).added[0].key, brush_import_file(one).added[0].key)
+let two = brush_import_file(set_path)
+puts(two.error, len(two.added) == exported)
+let files_before = fs.list(lib)
+let bad = fs.join(out_dir, "bad.lzbrush")
+fs.write(bad, "-~> lzbrush 1\nlet brush = {\"name\": \"x\"}\nwhile (true) {}\n")
+let refused = brush_import_file(bad)
+puts(refused.added, refused.error, fs.list(lib) == files_before)
+fs.write(fs.join(out_dir, "bad.lzbrushes"), "-~> lzbrushes 1\nlet brushes = [{\"name\": \"x\"}, fs.read(\"a\")]\n")
+refused = brush_import_file(fs.join(out_dir, "bad.lzbrushes"))
+puts(refused.added, refused.error, fs.list(lib) == files_before)
+
+puts("-- the old pens are copied once, nothing is deleted")
+let old_dir = fs.join(home, "pens")
+fs.mkdir(old_dir)
+let old_file = fs.join(old_dir, "mig_old.liz")
+fs.write(old_file, "let pen = {\"name\": \"mig old\", \"min\": 1, \"max\": 5, \"taper\": 0.2}\n")
+fs.remove(fs.join(lib, ".migrated"))
+let loaded = brush_library_load()
+let got = null
+for (let i = 0; i < len(loaded); i += 1) {
+  if (loaded[i].key == "mig_old") {
+    got = loaded[i]
+  }
+}
+puts(got.pen, fs.exists(fs.join(lib, "mig_old.lzbrush")), fs.exists(old_file), fs.exists(fs.join(lib, ".migrated")))
+fs.write(fs.join(lib, "mig_old.lzbrush"), brush_write({"name": "changed", "min": 1, "max": 2}))
+fs.remove(fs.join(lib, ".migrated"))
+brush_library_load()
+puts(brush_read(fs.read(fs.join(lib, "mig_old.lzbrush"))).brush.name)
+
+-~> The library belongs to this test only: the other tests share the HOME.
+let left = fs.list(lib)
+for (let i = 0; i < len(left); i += 1) {
+  fs.remove(fs.join(lib, left[i]))
+}
+fs.remove(fs.join(old_dir, "mig_old.liz"))
+puts(fs.list(lib), fs.list(old_dir))

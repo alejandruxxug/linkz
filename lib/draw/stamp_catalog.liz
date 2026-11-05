@@ -1,0 +1,29 @@
+-~> stamp_catalog: what a stamped pen can be made of, for the brush creator's
+-~> pickers. Each entry is {"name" (the key a pen uses), "en", "es"}; an entry
+-~> with "needs": "bitmap" also wants a picture (see stamp_bitmap.liz).
+
+-~> The stamp shapes: pen.shape is "name", or a bitmap hash for the last one.
+function stamp_shapes() {
+  [
+    {"name": "round", "en": "Round", "es": "Redonda"},
+    {"name": "square", "en": "Square", "es": "Cuadrada"},
+    {"name": "flat", "en": "Flat nib", "es": "Punta plana"},
+    {"name": "star", "en": "Star", "es": "Estrella"},
+    {"name": "spray", "en": "Spray", "es": "Rociado"},
+    {"name": "leaf", "en": "Leaf", "es": "Hoja"},
+    {"name": "bitmap", "en": "Picture", "es": "Imagen", "needs": "bitmap"}
+  ]
+}
+
+-~> The grains: pen.grain is {"kind": "name", ...}; "none" is a plain 0.
+function stamp_grains() {
+  [
+    {"name": "none", "en": "None", "es": "Ninguno"},
+    {"name": "noise", "en": "Noise", "es": "Ruido"},
+    {"name": "paper", "en": "Paper", "es": "Papel"},
+    {"name": "canvas", "en": "Canvas", "es": "Lienzo"},
+    {"name": "chalk", "en": "Chalk", "es": "Tiza"},
+    {"name": "hatch", "en": "Hatch", "es": "Rayado"},
+    {"name": "bitmap", "en": "Picture", "es": "Imagen", "needs": "bitmap"}
+  ]
+}

@@ -12,11 +12,14 @@
 -~> too, so the line of a setting is easy to find. Each line says which
 -~> setting it holds ("min", "pressure.curve", "pressure.inputs.trackpad").
 
--~> The keys of a pen in the order they are written; any others follow, by name.
-let pen_code_order = ["name", "min", "max", "taper", "opacity", "nib", "grain", "pressure", "tilt", "stabilizer"]
+-~> The keys of a pen in the order they are written (a stamped pen's after
+-~> the grain, as the pens.liz header lists them); any others follow, by name.
+let pen_code_order = ["name", "render", "min", "max", "taper", "opacity", "nib", "grain", "size", "spacing", "jitter",
+  "shape", "roundness", "rotation", "angle", "scatter", "count", "size_jitter", "opacity_jitter", "color_jitter", "speed",
+  "pressure", "tilt", "stabilizer"]
 let pen_code_pressure_order = ["curve", "width", "opacity", "smoothing", "speed", "floor", "nib_weight", "inputs"]
 let pen_code_inputs_order = ["trackpad", "tablet", "mouse"]
-let pen_code_inline_order = ["mode", "length", "catch_up"]
+let pen_code_inline_order = ["mode", "length", "catch_up", "kind", "scale", "depth", "moving"]
 
 -~> A number as short text: whole numbers without a point, others with four
 -~> decimals at most (0.30000000000000004 is 0.3, 45deg is 0.7854).

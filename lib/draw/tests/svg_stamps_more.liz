@@ -1,0 +1,14 @@
+-~> The new stamp shapes in SVG: a spray, a leaf and a bitmap are <path> elements
+-~> (a bitmap becomes the rectangles of its opaque pixels in one path, so the SVG
+-~> is the same shapes as the canvas, scales without blur and takes the stamp's color).
+use "../shapes"
+use "../svg"
+
+canvas = {"size": (60, 40), "background": #ffffff}
+function pen_of(shape) {
+  {"name": "p", "render": "stamped", "min": 8, "max": 8, "taper": 0, "opacity": [1, 1], "nib": null, "grain": 0, "spacing": 6, "shape": shape}
+}
+brush([(8, 8), (40, 8)], [1, 1], #3fa34d, pen_of("spray"))
+brush([(8, 20), (40, 20)], [1, 1], #3fa34d, pen_of("leaf"))
+brush([(8, 32), (40, 32)], [1, 1], #3fa34d, pen_of({"bitmap": [2, 255, 2, 0, 2, 255], "w": 3, "h": 2}))
+puts(svg_document(canvas, drawing))

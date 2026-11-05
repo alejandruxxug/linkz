@@ -8,6 +8,11 @@
 -~> over the home screen, tr_draw inside the editor's popups); what the
 -~> screen does with the result is theirs: tr_open takes the functions to call.
 -~>
+-~> A moment after that preview, the trace Insert and Open use is started in a
+-~> background task (trace_full.liz): the preview then shows it ("full size"),
+-~> and the two buttons reuse its code. Pressing one before it ended waits for
+-~> it. Any change stops the task.
+-~>
 -~> The preview is traced at a small size (trace_preview_side) a moment after
 -~> the last change (a debounce of tr_wait ms), and never while a frame is
 -~> being drawn: the frame that follows a change says "tracing…", the next
@@ -19,6 +24,7 @@
 use "../gfx/raster"
 use "home_thumbs"
 use "i18n"
+use "trace_full"
 use "trace_model"
 use "view_gfx"
 
@@ -78,6 +84,9 @@ function tr_open(size, host, dim = true) {
 }
 
 function tr_close() {
+  if (T.d != null) {
+    trace_full_cancel(T.d.full)
+  }
   tr_drop_surface()
   T.d = null
   T.drag = null
@@ -92,7 +101,13 @@ function tr_touch() {
 
 -~> Whether a trace is waiting (the screen keeps painting until it ran).
 function tr_wants_paint() {
-  T.d != null && T.d.phase != "idle"
+  T.d != null && (T.d.phase != "idle" || tr_full_pending())
+}
+
+-~> Whether a full-size trace is due, running, or waited for by a button.
+function tr_full_pending() {
+  let d = T.d
+  d.image != null && (d.full.due != 0 || d.want != null || trace_full_running(d.full))
 }
 
 -~> A text that changes when the dialog looks different (for the editor's popups).
@@ -248,11 +263,19 @@ function tr_paint_preview(l) {
   let cw = g_text_w(t("trace.traced")) + 6
   tr_paint_chip(t("trace.traced"), r.x + r.w - cw - 1, r.y + 1)
   if (d.phase != "idle") {
-    let msg = t("trace.tracing")
-    let w = g_text_w(msg) + 8
-    g_rect(r.x + (r.w - w) // 2, r.y + r.h - 16, w, 13, P.void)
-    g_text(msg, r.x + (r.w - w) // 2 + 4, r.y + r.h - 17, P.amber)
+    tr_paint_badge(r, t("trace.tracing"), P.amber)
+  } elif (d.full.shown) {
+    tr_paint_badge(r, t("trace.full_size"), P.lizard)
+  } elif (tr_full_pending()) {
+    tr_paint_badge(r, t("trace.tracing_full"), P.amber)
   }
+}
+
+-~> A small label at the bottom of the preview.
+function tr_paint_badge(r, msg, color) {
+  let w = g_text_w(msg) + 8
+  g_rect(r.x + (r.w - w) // 2, r.y + r.h - 16, w, 13, P.void)
+  g_text(msg, r.x + (r.w - w) // 2 + 4, r.y + r.h - 17, color)
 }
 
 function tr_paint_slider(row, d) {
@@ -467,6 +490,7 @@ function tr_schedule(d, retrace = true) {
   d.due = time.ms() + tr_wait
   if (retrace || d.result == null) {
     d.retrace = true
+    trace_full_cancel(d.full)
   }
   tr_touch()
 }
@@ -484,6 +508,88 @@ function tr_tick() {
     d.phase = "show"
     tr_touch()
   }
+  if (d.phase == "idle") {
+    tr_full_tick(d)
+  }
+}
+
+-~> The full-size trace, one frame at a time: starts it when it is due (or a
+-~> button waits for one), shows it when it ended, and runs the button that
+-~> was waiting for it.
+function tr_full_tick(d) {
+  let f = d.full
+  if (d.image == null || d.error != "" || f.broken) {
+    if (d.want != null) {
+      tr_do(d.want)
+    }
+    return null
+  }
+  if (f.due != 0 && time.ms() >= f.due) {
+    f.due = 0
+    tr_full_start(d, tr_full_scale())
+    tr_full_start(d, 1)
+  }
+  if (d.want != null) {
+    tr_full_start(d, tr_want_scale(d.want))
+  }
+  if (trace_full_poll(f)) {
+    tr_touch()
+  }
+  let main = trace_full_job(f, tr_full_scale())
+  if (main != null && main.state == "done" && !f.shown) {
+    tr_show_full(d, main)
+  }
+  if (d.want != null) {
+    let job = trace_full_job(f, tr_want_scale(d.want))
+    if (f.broken || (job != null && job.state != "running")) {
+      tr_do(d.want)
+    }
+  }
+}
+
+-~> The scale of the job the preview shows: the one Insert uses when a
+-~> drawing is open, else the one Open uses (1).
+function tr_full_scale() {
+  if (T.host.canvas() == null) {
+    return 1
+  }
+  tr_insert_scale()
+}
+
+-~> The scale of the job a button needs.
+function tr_want_scale(what) {
+  if (what == "insert") {
+    return tr_insert_scale()
+  }
+  1
+}
+
+-~> The options of a job: the dialog's, at full size (no max_side), at `scale`.
+function tr_scale_extra(scale) {
+  if (scale == 1) {
+    return {}
+  }
+  {"scale": scale}
+}
+
+-~> Starts the job at `scale` unless there is one.
+function tr_full_start(d, scale) {
+  if (trace_full_job(d.full, scale) == null) {
+    trace_full_start(d.full, d.path, trace_options(d, tr_scale_extra(scale)), scale)
+  }
+}
+
+-~> The preview shows a finished full-size trace from now on.
+function tr_show_full(d, job) {
+  d.full.shown = true
+  try {
+    d.raw = job.raw
+    d.result = job.stats
+    tr_render(trace_filter(d.raw, d.lines, d.fills))
+  } catch (e) {
+    d.error = t("trace.failed", {"message": e.message})
+  }
+  tr_touch()
 }
 
 -~> Call at the end of a frame: a "tracing…" frame is on screen now, so the
@@ -524,6 +630,8 @@ function tr_apply_path() {
   d.result = null
   d.phase = "idle"
   d.error = ""
+  d.want = null
+  trace_full_cancel(d.full)
   if (p == "") {
     return tr_touch()
   }
@@ -606,6 +714,8 @@ function tr_run() {
       d.raw = r.raw
       d.result = r.stats
       d.retrace = false
+      trace_full_cancel(d.full)
+      trace_full_arm(d.full)
     }
     tr_render(trace_filter(d.raw, d.lines, d.fills))
     d.error = ""
@@ -629,38 +739,52 @@ function tr_insert_scale() {
   trace_fit_scale(trace_shrunk(d.image.size, table.max_side), canvas)
 }
 
+-~> Insert as layer: with the full-size trace if it ended, else after it.
 function tr_insert() {
-  let d = T.d
-  if (d.focus == "path") {
-    tr_apply_path()
-  }
-  if (d.image == null || T.host.canvas() == null) {
-    return null
-  }
-  try {
-    let r = tr_code({"scale": tr_insert_scale()})
-    let err = T.host.insert(r.code)
-    if (err == "") {
-      return tr_close()
-    }
-    d.error = err
-  } catch (e) {
-    d.error = t("trace.failed", {"message": e.message})
-  }
-  tr_touch()
+  tr_press("insert")
 }
 
 function tr_open_drawing() {
+  tr_press("open")
+}
+
+-~> A button: waits for the full-size trace (tr_full_tick runs it then).
+function tr_press(what) {
   let d = T.d
   if (d.focus == "path") {
     tr_apply_path()
   }
-  if (d.image == null) {
+  if (d.image == null || (what == "insert" && T.host.canvas() == null)) {
     return null
   }
+  d.want = what
+  tr_touch()
+}
+
+-~> The traced code for a button: the finished full-size job's, else a trace
+-~> made here (tasks can't run, or the job failed).
+function tr_button_code(what) {
+  let d = T.d
+  let scale = tr_want_scale(what)
+  let job = trace_full_job(d.full, scale)
+  if (job != null && job.state == "done") {
+    return trace_filter(job.raw, d.lines, d.fills)
+  }
+  tr_code(tr_scale_extra(scale)).code
+}
+
+-~> Does what the button asked for, with the code it has now.
+function tr_do(what) {
+  let d = T.d
+  d.want = null
   try {
-    let r = tr_code({})
-    let err = T.host.open(trace_stem(d.path), r.code)
+    let code = tr_button_code(what)
+    let err = ""
+    if (what == "insert") {
+      err = T.host.insert(code)
+    } else {
+      err = T.host.open(trace_stem(d.path), code)
+    }
     if (err == "") {
       return tr_close()
     }
@@ -845,8 +969,12 @@ function tr_choose() {
 }
 
 -~> The answer of the open-file dialog: the first path becomes the picture, as a
--~> drop does; no path (cancel) changes nothing.
+-~> drop does; no path (cancel) changes nothing. A save dialog's answer (the
+-~> PNG export) isn't ours.
 function tr_chosen(e) {
+  if (e.dialog == "save") {
+    return null
+  }
   let d = T.d
   d.choosing = false
   if (e.paths == null || len(e.paths) == 0) {
@@ -899,6 +1027,15 @@ function tr_event(e) {
 
 -~> == The backdoor ==
 
+-~> The full-size jobs as [scale, state] pairs.
+function tr_debug_jobs(f) {
+  let out = []
+  for (let i = 0; i < len(f.jobs); i += 1) {
+    push(out, [f.jobs[i].scale, f.jobs[i].state, f.jobs[i].error])
+  }
+  out
+}
+
 function tr_debug_state() {
   let d = T.d
   if (d == null) {
@@ -918,6 +1055,7 @@ function tr_debug_state() {
     "error": d.error,
     "phase": d.phase,
     "traced": d.preview != null,
+    "full": {"shown": d.full.shown, "broken": d.full.broken, "error": d.full.error, "want": d.want, "jobs": tr_debug_jobs(d.full)},
     "split": d.split,
     "lines": d.lines,
     "fills": d.fills,

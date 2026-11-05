@@ -1,0 +1,243 @@
+-~> The brush creator, tab by tab, driven like real input: every control
+-~> writes a flat key of the draft (never the pen), a vector pen's stamped
+-~> settings say why they can't change, the tiles come from lib/draw's
+-~> catalog, the changed tabs get their dot, the test pad's sample stroke
+-~> and buttons work and never touch the drawing, the code block shows the
+-~> hash as `pens.<key> = {...}`, Esc closes without saving, Save brush
+-~> writes ~/.linkz/brushes/<key>.lzbrush (one undo step when the drawing
+-~> keeps a copy of the brush), Export… writes a .lzbrush beside the
+-~> drawing, and every tab fits in English and in Spanish, in both modes.
+
+use "../../lib/app/editor"
+use "rig"
+
+let dir = fs.join(fs.home(), "brush-creator-test")
+let lib_dir = fs.join(fs.home(), ".linkz", "brushes")
+let code = "canvas = {\"size\": (480, 320), \"background\": #f4f1e8}\ncircle((240, 160), 40, #e06)"
+let modules = rig_modules + ["ui/view_popups", "ui/pen_edit", "ui/pen_window", "ui/pen_pad", "ui/pen_route", "ui/brush_edit",
+  "ui/brush_tabs", "ui/brush_tiles", "ui/brush_controls", "ui/i18n", "ui/view_gfx", "ui/mode_state", "draw/pens", "draw/stamp_catalog"]
+let rig = rig_open(dir, code, editor_size, modules)
+let n = rig.names
+let cmds = rig.ed.app.debug_commands
+
+function click(p) {
+  rig_frame(rig, [{"type": "down", "pos": p}, {"type": "up", "pos": p}])
+}
+
+function drag(points) {
+  rig_frame(rig, [{"type": "down", "pos": points[0]}])
+  for (let i = 1; i < len(points); i += 1) {
+    rig_frame(rig, [{"type": "move", "pos": points[i]}])
+  }
+  rig_frame(rig, [{"type": "up", "pos": points[len(points) - 1]}])
+}
+
+function mid(r) {
+  (r[0] + r[2] // 2, r[1] + r[3] // 2)
+}
+
+function win() {
+  editor_dump(rig.ed).app.view.pen_window
+}
+
+-~> The far right (or left) end of a slider's track.
+function track_end(id, right) {
+  let tr = win().rects.tracks[id]
+  if (right) {
+    return (tr[0] + tr[2] + 2, tr[1] + 1)
+  }
+  (tr[0] - 2, tr[1] + 1)
+}
+
+function tab(id) {
+  click(mid(win().rects.tabs[id]))
+}
+
+puts("-- the creator opens on a tab, eight tabs in the rail")
+cmds.Tool(["brush"])
+cmds.PenSettings(["ink", "stroke"])
+rig_frame(rig)
+let w = win()
+puts(w.open, w.tab, w.name, len(keys(w.rects.tabs)), w.changed_tabs, w.rects.win)
+puts(text.starts(n.V.hover, "pw:") || n.V.hover == "", rig.ed.error)
+
+puts("-- Stroke: the stabilizer moved here; a vector pen's spacing says why it can't change")
+click(mid(win().rects.segs["stab:string"]))
+puts(win().draft.stabilizer.mode, win().changed_tabs)
+click(track_end("spacing", true))
+puts(win().note, win().draft.spacing, n.pens.ink.spacing)
+
+puts("-- Rendering: stamped turns the stamped settings on")
+tab("rendering")
+click(mid(win().rects.segs["render:stamped"]))
+click(track_end("size", true))
+puts(win().draft.render, win().draft.size, n.pens.ink.render, win().changed_tabs)
+tab("stroke")
+click(track_end("spacing", true))
+click(track_end("jitter", false))
+puts(win().draft.spacing, win().draft.jitter, win().note)
+
+puts("-- Shape: the tiles are lib/draw's shapes; rotation, angle, count")
+tab("shape")
+let names_ = []
+let cat = n.stamp_shapes()
+for (let i = 0; i < len(cat); i += 1) {
+  push(names_, cat[i].name)
+}
+puts(list.sort(keys(win().rects.tiles)) == list.sort(names_))
+click(mid(win().rects.tiles.star))
+click(mid(win().rects.segs["rotation:follow"]))
+click(track_end("angle", true))
+click(track_end("count", true))
+let d = win().draft
+puts(d.shape, d.rotation, d.angle, d.count, n.pens.ink.shape)
+let view = n.pw_code_view()
+puts(view.mark >= 0, text.find(view.lines[view.mark].s, "\"count\": 8") >= 0, win().changed)
+puts(n.be_note("shape"))
+click(mid(win().rects.tiles.bitmap))
+puts(win().note, win().draft.shape)
+
+puts("-- Grain: a texture from the catalog, moving or fixed, depth; none is a plain 0")
+tab("grain")
+click(mid(win().rects.tiles.chalk))
+click(mid(win().rects.segs["texture:moving"]))
+click(track_end("grain_depth", false))
+puts(win().draft.grain, n.be_note("grain"))
+click(mid(win().rects.checks.grain_size))
+puts(win().note)
+click(mid(win().rects.tiles.none))
+puts(win().draft.grain, keys(win().rects.tracks))
+click(mid(win().rects.tiles.paper))
+
+puts("-- Dynamics, Color, Taper")
+tab("dynamics")
+click(track_end("size_jitter", true))
+click(track_end("speed_opacity", false))
+puts(win().draft.size_jitter, win().draft.speed)
+tab("color")
+click(track_end("hue_jitter", true))
+click(track_end("bright_jitter", true))
+puts(win().draft.color_jitter)
+tab("taper")
+click(track_end("nib_angle", true))
+puts(win().note, win().draft.nib)
+click(mid(win().rects.checks.nib))
+click(track_end("nib_angle", true))
+click(track_end("taper", false))
+puts(win().draft.nib, win().draft.taper, n.pens.ink.nib, n.pens.ink.taper)
+puts(win().changed_tabs)
+
+puts("-- the test pad: the sample stroke, dark paper, strokes stay in the pad")
+let before = text.join(n.ed_model().lines, "\n")
+puts(len(n.pad_shapes()), n.pw.pad_sample)
+click(mid(win().rects.sample))
+puts(len(n.pad_shapes()), n.pw.pad_sample)
+click(mid(win().rects.paper))
+puts(n.pw.pad_dark, n.pad_paper() == n.P.panel)
+let pad = win().rects.pad
+drag([(pad[0] + 220, pad[1] + 30), (pad[0] + 260, pad[1] + 20), (pad[0] + 300, pad[1] + 40)])
+puts(win().pad_strokes, len(n.pad_shapes()), text.join(n.ed_model().lines, "\n") == before)
+click(mid(win().rects.sample))
+click(mid(win().rects.paper))
+click(mid(win().rects.trash))
+puts(win().pad_strokes, len(n.pad_shapes()))
+
+puts("-- the code block writes the hash under the name it will be saved as")
+puts(n.pw_code_view().lines[0].s)
+puts(n.pw_code_label(len(n.pw_code_view().lines)))
+
+puts("-- Esc closes without saving")
+rig_frame(rig, [{"type": "key", "key": "Escape"}])
+puts(win().open, fs.exists(fs.join(lib_dir, "my_ink.lzbrush")), n.pens.ink.render)
+
+puts("-- Reset goes back to the pen it opened on")
+cmds.PenSettings(["ink", "shape"])
+rig_frame(rig)
+click(mid(win().rects.tiles.star))
+puts(win().changed_tabs)
+click(mid(win().rects.reset))
+puts(win().changed_tabs, win().draft.shape)
+
+puts("-- Save brush: a built-in's name is refused, a name of its own goes to the library")
+n.pw.name = "ink"
+click(mid(win().rects.save))
+puts(win().note)
+click(mid(win().rects.tiles.leaf))
+n.pw.name = "Dry Leaf"
+let undo0 = len(n.ed.undo)
+click(mid(win().rects.save))
+let file = fs.join(lib_dir, "dry_leaf.lzbrush")
+puts(fs.exists(file), win().key, n.ed.pen, win().note, len(n.ed.undo) == undo0, win().changed_tabs)
+let saved = lizard.run(fs.read(file), {"name": file}).globals.brush
+puts(saved.name, saved.shape, saved.render, saved.key == null)
+
+puts("-- one undo step when the drawing keeps a copy of the brush")
+cmds.SetCode([code + "\npens.dry_leaf = {\"name\": \"Dry Leaf\", \"min\": 1,\n  \"max\": 10}\nbrush([(10, 10), (60, 40)], [0.5, 0.8], #000, pens.dry_leaf)"])
+rig_frame(rig)
+cmds.PenSettings(["dry_leaf", "taper"])
+rig_frame(rig)
+click(track_end("taper", true))
+let undo1 = len(n.ed.undo)
+click(mid(win().rects.save))
+let text_ = text.join(n.ed_model().lines, "\n")
+puts(len(n.ed.undo) - undo1, text.find(text_, "\"taper\": 0.5") > 0, text.find(text_, "\"max\": 10}") < 0, n.ed_undo_text())
+puts(text.find(text_, "brush([(10, 10)") > 0, rig.ed.error)
+n.ed_undo()
+puts(text.find(text.join(n.ed_model().lines, "\n"), "\"max\": 10}") > 0)
+
+puts("-- Export… writes a .lzbrush beside the drawing")
+click(mid(win().rects.export))
+let out = fs.join(dir, "dry_leaf.lzbrush")
+puts(fs.exists(out), text.starts(fs.read(out), "-~> lzbrush 1"), win().note)
+
+puts("-- every tab fits, in English and in Spanish, in coder and artist mode")
+function fits() {
+  let bad = []
+  let lay = n.pw_layout()
+  let wr = lay.win
+  for (let i = 0; i < len(n.bt_tabs); i += 1) {
+    let id = n.bt_tabs[i]
+    if (n.g_text_w(n.t("brush.tab." + id)) + 18 + 8 > lay.tabs[i].rect[2]) {
+      push(bad, "tab " + id)
+    }
+    n.pw.tab = id
+    let tl = n.pw_layout().tab
+    let rows = tl.rows
+    for (let k = 0; k < len(rows); k += 1) {
+      let r = rows[k]
+      if (r.track != null && r.label_x + n.g_text_w(r.label) + 4 > r.track[0]) {
+        push(bad, id + " " + r.id)
+      }
+      if (r.segs != null) {
+        let last = r.segs[len(r.segs) - 1].rect
+        if (last[0] + last[2] > wr[0] + wr[2] - 2) {
+          push(bad, id + " " + r.id)
+        }
+      }
+    }
+  }
+  let ft = n.pw_layout()
+  if (ft.name[0] + ft.name[2] > ft.export[0]) {
+    push(bad, "footer")
+  }
+  n.pw.tab = "shape"
+  let tiles = n.pw_layout().tab.tiles
+  if (tiles.import[0] + tiles.import[2] > tiles.preview_x - 2) {
+    push(bad, "import button")
+  }
+  bad
+}
+puts(fits())
+n.lang_use("es")
+puts(fits(), n.t("brush.title"), n.t("brush.tab.rendering"))
+puts(n.pw_rect(), n.pw_layout().code != null)
+n.MODE.artist = true
+puts(fits(), n.pw_rect(), n.pw_layout().code)
+n.lang_use("en")
+puts(fits())
+n.MODE.artist = false
+cmds.PenSettings(["close"])
+rig_frame(rig)
+
+-~> the other tests of this HOME start with no saved brushes
+fs.remove(file)

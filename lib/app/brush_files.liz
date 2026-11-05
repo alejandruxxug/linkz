@@ -1,0 +1,678 @@
+-~> brush_files: brushes as files and the brush library.
+-~>
+-~> A `.lzbrush` file is lizard code that holds data only:
+-~>   -~> lzbrush 1
+-~>   let brush = {"name": "chalk", "min": 6, "max": 18, ...}
+-~> the flat keys of lib/draw/pens.liz, stamped ones included; a bitmap is
+-~> run-length data in the hash. A `.lzbrushes` file is `-~> lzbrushes 1` and
+-~> `let brushes = [{...}, ...]`. Because a brush file is code anyone can send,
+-~> reading one never runs anything of it: the text is parsed, every node must
+-~> be data (a literal, a list, a hash, a minus or a sum of numbers), and only
+-~> then it is evaluated, in a sandbox with no names but the builtins and a
+-~> step limit. A refused file says why and nothing is written.
+-~>
+-~> The library is ~/.linkz/brushes, one `<key>.lzbrush` per brush. The pens
+-~> the old pen pop-up saved in ~/.linkz/pens are copied there once (the old
+-~> files stay). Every read returns {"brush"|"brushes", "warnings"} and, when
+-~> the file is refused, an "error" with the reason and no brush.
+-~>
+-~> The API:
+-~>   brush_write(pen) -> text                  brushes_write(list) -> text
+-~>   brush_read(text) -> {"brush", "warnings"} brushes_read(text) -> {"brushes", "warnings"}
+-~>   brush_library_dir() -> path               brush_library_save(pen) -> path
+-~>   brush_library_load() -> [{"key", "pen", "path"}]
+-~>   brush_library_export_all(path) -> how many were written
+-~>   brush_import_file(path) -> {"added": [{"key", "name", "path"}], "warnings"}
+
+use "../draw/pens"
+use "brush_code"
+use "engine"
+use "pen_files"
+
+-~> Limits of a brush file: its size in characters, its data nodes, how many
+-~> brushes a set holds, how many steps the evaluation may take.
+let brush_limits = {"chars": 2000000, "nodes": 200000, "brushes": 500, "steps": 200000}
+
+-~> == What a brush may hold ==
+-~> Each key: its type and its range. "num" is an integer or a float; one
+-~> out of range is clamped to the closest end, with a warning. A wrong type
+-~> is dropped with a warning (the brush then uses the default).
+
+let brush_pair = {"t": "pair", "lo": 0, "hi": 1}
+
+let brush_pressure_keys = {
+  "curve": {"t": "curve"},
+  "width": brush_pair,
+  "opacity": brush_pair,
+  "smoothing": {"t": "num", "lo": 0, "hi": 0.95},
+  "speed": {"t": "num", "lo": 0, "hi": 1},
+  "floor": {"t": "num", "lo": 0, "hi": 0.9},
+  "nib_weight": {"t": "num", "lo": 0, "hi": 1}
+}
+
+let brush_device_keys = {
+  "trackpad": {"t": "hash", "keys": brush_pressure_keys},
+  "tablet": {"t": "hash", "keys": brush_pressure_keys},
+  "mouse": {"t": "hash", "keys": brush_pressure_keys}
+}
+
+let brush_specs = {
+  "name": {"t": "str", "max": 60},
+  "render": {"t": "str", "in": ["vector", "stamped"]},
+  "min": {"t": "num", "lo": 0, "hi": 500},
+  "max": {"t": "num", "lo": 0, "hi": 500},
+  "taper": {"t": "num", "lo": 0, "hi": 0.5},
+  "opacity": brush_pair,
+  "nib": {"t": "num", "lo": -7, "hi": 7, "null": true},
+  "size": {"t": "num", "lo": 0.01, "hi": 10},
+  "spacing": {"t": "num", "lo": 0.01, "hi": 10},
+  "jitter": {"t": "num", "lo": 0, "hi": 2},
+  "shape": {"t": "shape"},
+  "roundness": {"t": "num", "lo": 0.05, "hi": 1},
+  "rotation": {"t": "str", "in": ["fixed", "follow", "random"]},
+  "angle": {"t": "num", "lo": -7, "hi": 7},
+  "scatter": {"t": "num", "lo": 0, "hi": 5},
+  "count": {"t": "int", "lo": 1, "hi": 50},
+  "grain": {"t": "grain"},
+  "size_jitter": {"t": "num", "lo": 0, "hi": 1},
+  "opacity_jitter": {"t": "num", "lo": 0, "hi": 1},
+  "color_jitter": {"t": "nums", "los": [0, 0, 0], "his": [360, 1, 1]},
+  "speed": {"t": "hash", "keys": {"size": {"t": "num", "lo": -1, "hi": 1}, "opacity": {"t": "num", "lo": -1, "hi": 1}}},
+  "pressure": {"t": "hash", "keys": hash.merge(brush_pressure_keys, {"inputs": {"t": "hash", "keys": brush_device_keys}})},
+  "tilt": {"t": "hash", "keys": {"nib": {"t": "num", "lo": -10, "hi": 10}}},
+  "stabilizer": {
+    "t": "hash",
+    "keys": {
+      "mode": {"t": "str", "max": 20},
+      "length": {"t": "num", "lo": 0, "hi": 1000},
+      "catch_up": {"t": "num", "lo": 0, "hi": 1}
+    }
+  }
+}
+
+-~> What a brush gets when its file leaves out what a pen cannot be without,
+-~> with a warning (a brush without them is not a brush), and what brush()
+-~> reads in every pen and a short file may leave out (no warning).
+let brush_defaults = {"name": "imported", "min": 1, "max": 8}
+let brush_quiet_defaults = {"taper": 0, "opacity": [1, 1]}
+
+-~> == Reading ==
+
+-~> Whether v is a number.
+function brush_is_num(v) {
+  type(v) == "INTEGER" || type(v) == "FLOAT"
+}
+
+-~> A number inside lo..hi: [value, true when it had to move].
+function brush_clamp(v, lo, hi) {
+  if (v < lo) {
+    return [lo, true]
+  }
+  if (v > hi) {
+    return [hi, true]
+  }
+  [v, false]
+}
+
+-~> The words of a warning about a value: `pressure.floor: ...`.
+function brush_warn(w, path, what) {
+  push(w, path + ": " + what)
+}
+
+-~> The value of a key checked against its spec: [true, value], or
+-~> [false, null] when it is dropped (a warning says why). Warnings go to w.
+function brush_check(v, spec, path, w) {
+  let t = spec.t
+  if (v == null && spec["null"] == true) {
+    return [true, null]
+  }
+  if (t == "num") {
+    if (!brush_is_num(v)) {
+      brush_warn(w, path, "want a number, got " + type(v) + "; dropped")
+      return [false, null]
+    }
+    return brush_check_range(v, spec, path, w)
+  }
+  if (t == "int") {
+    if (!brush_is_num(v)) {
+      brush_warn(w, path, "want a whole number, got " + type(v) + "; dropped")
+      return [false, null]
+    }
+    return brush_check_range(int(math.round(v)), spec, path, w)
+  }
+  if (t == "bool") {
+    if (type(v) != "BOOLEAN") {
+      brush_warn(w, path, "want true or false, got " + type(v) + "; dropped")
+      return [false, null]
+    }
+    return [true, v]
+  }
+  if (t == "str") {
+    return brush_check_str(v, spec, path, w)
+  }
+  if (t == "pair") {
+    return brush_check_nums(v, [spec.lo, spec.lo], [spec.hi, spec.hi], path, w)
+  }
+  if (t == "nums") {
+    return brush_check_nums(v, spec.los, spec.his, path, w)
+  }
+  if (t == "curve") {
+    return brush_check_curve(v, path, w)
+  }
+  if (t == "shape") {
+    return brush_check_shape(v, path, w)
+  }
+  if (t == "grain") {
+    return brush_check_grain(v, path, w)
+  }
+  if (t == "hash") {
+    if (type(v) != "HASH") {
+      brush_warn(w, path, "want a hash, got " + type(v) + "; dropped")
+      return [false, null]
+    }
+    return [true, brush_check_hash(v, spec.keys, path, w)]
+  }
+  [false, null]
+}
+
+-~> A number against lo and hi of its spec.
+function brush_check_range(v, spec, path, w) {
+  let r = brush_clamp(v, spec.lo, spec.hi)
+  if (r[1]) {
+    brush_warn(w, path, str(v) + " is outside " + str(spec.lo) + " to " + str(spec.hi) + "; used " + str(r[0]))
+  }
+  [true, r[0]]
+}
+
+-~> A text, cut at its "max" characters, or one of "in".
+function brush_check_str(v, spec, path, w) {
+  if (type(v) != "STRING") {
+    brush_warn(w, path, "want a text, got " + type(v) + "; dropped")
+    return [false, null]
+  }
+  if (spec["in"] != null && list.index(spec["in"], v) < 0) {
+    brush_warn(w, path, "\"" + v + "\" is not one of " + text.join(spec["in"], ", ") + "; dropped")
+    return [false, null]
+  }
+  if (spec.max != null && len(v) > spec.max) {
+    brush_warn(w, path, "the text is longer than " + str(spec.max) + " characters; cut")
+    return [true, text.slice(v, 0, spec.max)]
+  }
+  [true, v]
+}
+
+-~> A list of numbers of the length of los, each inside its range.
+function brush_check_nums(v, los, his, path, w) {
+  if (type(v) != "ARRAY" || len(v) != len(los)) {
+    brush_warn(w, path, "want " + str(len(los)) + " numbers; dropped")
+    return [false, null]
+  }
+  let out = []
+  for (let i = 0; i < len(v); i += 1) {
+    if (!brush_is_num(v[i])) {
+      brush_warn(w, path, "want numbers, got " + type(v[i]) + "; dropped")
+      return [false, null]
+    }
+    let r = brush_clamp(v[i], los[i], his[i])
+    if (r[1]) {
+      brush_warn(w, path + "[" + str(i) + "]", str(v[i]) + " is outside " + str(los[i]) + " to " + str(his[i]) + "; used " + str(r[0]))
+    }
+    push(out, r[0])
+  }
+  [true, out]
+}
+
+-~> A pressure curve: 2 to 32 points [raw, effective], each 0 to 1.
+function brush_check_curve(v, path, w) {
+  if (type(v) != "ARRAY" || len(v) < 2 || len(v) > 32) {
+    brush_warn(w, path, "want 2 to 32 points like [[0, 0], [1, 1]]; dropped")
+    return [false, null]
+  }
+  let out = []
+  for (let i = 0; i < len(v); i += 1) {
+    let p = brush_check_nums(v[i], [0, 0], [1, 1], path + "[" + str(i) + "]", w)
+    if (!p[0]) {
+      return [false, null]
+    }
+    push(out, p[1])
+  }
+  [true, out]
+}
+
+-~> A stamp shape: a name, or a hash for a bitmap (data, kept as it is).
+function brush_check_shape(v, path, w) {
+  if (type(v) == "STRING" && len(v) <= 40) {
+    return [true, v]
+  }
+  if (type(v) == "HASH") {
+    return [true, v]
+  }
+  brush_warn(w, path, "want a shape name or a bitmap hash; dropped")
+  [false, null]
+}
+
+-~> A grain: a number (a rough edge in pixels) or a hash {"kind", "scale",
+-~> "depth", "moving"}; a bitmap grain keeps its data keys as they are.
+function brush_check_grain(v, path, w) {
+  if (brush_is_num(v)) {
+    return brush_check_range(v, {"lo": 0, "hi": 50}, path, w)
+  }
+  if (type(v) != "HASH") {
+    brush_warn(w, path, "want a number or a hash; dropped")
+    return [false, null]
+  }
+  let keys_ok = {
+    "kind": {"t": "str", "max": 40},
+    "scale": {"t": "num", "lo": 0.1, "hi": 500},
+    "depth": {"t": "num", "lo": 0, "hi": 1},
+    "moving": {"t": "bool"}
+  }
+  [true, brush_check_hash(v, keys_ok, path, w, ["w", "h", "runs", "data"])]
+}
+
+-~> The hash h kept to the keys of `specs` (and `free`, whose values are kept
+-~> as they are): unknown keys are dropped with a warning.
+function brush_check_hash(h, specs, path, w, free = []) {
+  let out = {}
+  let ks = list.sort(keys(h))
+  for (let i = 0; i < len(ks); i += 1) {
+    let k = ks[i]
+    let at = k
+    if (path != "") {
+      at = path + "." + k
+    }
+    if (specs[k] != null) {
+      let r = brush_check(h[k], specs[k], at, w)
+      if (r[0]) {
+        out[k] = r[1]
+      }
+    } elif (list.index(free, k) >= 0) {
+      out[k] = h[k]
+    } elif (!(path == "" && k == "key")) {
+      brush_warn(w, at, "unknown key, dropped")
+    }
+  }
+  out
+}
+
+-~> A default for one brush: a list is copied, so brushes never share it.
+function brush_copy_value(v) {
+  if (type(v) == "ARRAY") {
+    return list.slice(v, 0, len(v))
+  }
+  v
+}
+
+-~> A brush hash made safe: {"brush", "warnings"} (warnings after `w`).
+function brush_clean(h, w) {
+  let out = brush_check_hash(h, brush_specs, "", w)
+  let need = keys(brush_defaults)
+  for (let i = 0; i < len(need); i += 1) {
+    if (out[need[i]] == null) {
+      out[need[i]] = brush_defaults[need[i]]
+      brush_warn(w, need[i], "missing; used " + str(brush_defaults[need[i]]))
+    }
+  }
+  let quiet = keys(brush_quiet_defaults)
+  for (let i = 0; i < len(quiet); i += 1) {
+    if (out[quiet[i]] == null) {
+      out[quiet[i]] = brush_copy_value(brush_quiet_defaults[quiet[i]])
+    }
+  }
+  out
+}
+
+-~> == The sandbox ==
+
+-~> The reason the code is not data, or "" when every node is. Counts the
+-~> nodes in c.n (the limit is brush_limits.nodes).
+function brush_data_check(node, c) {
+  c.n += 1
+  if (c.n > brush_limits.nodes) {
+    return "the file holds too much data (more than " + str(brush_limits.nodes) + " values)"
+  }
+  let k = node.kind
+  let kids = []
+  if (k == "integer" || k == "float" || k == "string" || k == "color" || k == "boolean") {
+    return ""
+  }
+  if (k == "name") {
+    if (node.value == "null") {
+      return ""
+    }
+    return brush_not_data(node, "the name \"" + str(node.value) + "\"")
+  }
+  if (k == "point") {
+    kids = node.coords
+  } elif (k == "array") {
+    kids = node.elements
+  } elif (k == "prefix" && node.operator == "-") {
+    kids = [node.right]
+  } elif (k == "infix" && list.index(["+", "-", "*", "/"], node.operator) >= 0) {
+    kids = [node.left, node.right]
+  } elif (k == "hash") {
+    for (let i = 0; i < len(node.pairs); i += 1) {
+      push(kids, node.pairs[i].key)
+      push(kids, node.pairs[i].value)
+    }
+  } else {
+    return brush_not_data(node, "a " + str(k))
+  }
+  for (let i = 0; i < len(kids); i += 1) {
+    let why = brush_data_check(kids[i], c)
+    if (why != "") {
+      return why
+    }
+  }
+  ""
+}
+
+function brush_not_data(node, what) {
+  "[line " + str(node.line) + ", column " + str(node.column) + "] " + what + " is not data: a brush file holds only values"
+}
+
+-~> The version line of a file: "lzbrush 1" gives ["lzbrush", 1]. null when the
+-~> first line is not a header at all.
+function brush_header(code) {
+  let lines = text.split(code, "\n")
+  for (let i = 0; i < len(lines); i += 1) {
+    let s = text.trim(lines[i])
+    if (s == "") {
+      continue
+    }
+    if (!text.starts(s, "-~>")) {
+      return null
+    }
+    let words = text.split(text.trim(text.slice(s, 3, len(s))), " ")
+    if (len(words) != 2) {
+      return null
+    }
+    return words
+  }
+  null
+}
+
+-~> The data of a brush file as {"value"} (what `let <name>` holds) or
+-~> {"error": reason}. `kind` is "lzbrush" or "lzbrushes".
+function brush_load(code, kind, name) {
+  if (type(code) != "STRING") {
+    return {"error": "no text to read"}
+  }
+  if (len(code) > brush_limits.chars) {
+    return {"error": "the file is too big (more than " + str(brush_limits.chars) + " characters)"}
+  }
+  let head = brush_header(code)
+  if (head == null || head[0] != kind) {
+    return {"error": "not a ." + kind + " file: it should start with the line -~> " + kind + " 1"}
+  }
+  if (head[1] != "1") {
+    return {"error": "this ." + kind + " file is version " + head[1] + "; this Linkz reads version 1"}
+  }
+  let tree = lizard.parse(code, name)
+  if (len(tree.errors) > 0) {
+    let e = tree.errors[0]
+    return {"error": "[line " + str(e.line) + ", column " + str(e.column) + "] " + e.kind + " error: " + e.message}
+  }
+  let st = tree.program.statements
+  for (let i = 0; i < len(st); i += 1) {
+    if (st[i].kind != "let") {
+      return {"error": brush_not_data(st[i], "this " + str(st[i].kind) + " statement")}
+    }
+  }
+  if (len(st) != 1 || st[0].kind != "let" || st[0].name.value != name || st[0].declaration == true) {
+    return {"error": "a ." + kind + " file is the header line and one line, let " + name + " = ..."}
+  }
+  let why = brush_data_check(st[0].value, {"n": 0})
+  if (why != "") {
+    return {"error": why}
+  }
+  let r = lizard.run(code, {"name": name, "steps": brush_limits.steps, "engine": engine_name()})
+  if (r.error != null) {
+    return {"error": "[line " + str(r.error.line) + ", column " + str(r.error.column) + "] " + r.error.kind + " error: " + r.error.message}
+  }
+  {"value": r.globals[name]}
+}
+
+-~> Reads the text of a `.lzbrush` file: {"brush", "warnings"}, or
+-~> {"brush": null, "warnings": [], "error": reason}.
+function brush_read(code) {
+  let r = brush_load(code, "lzbrush", "brush")
+  if (r.error != null || type(r.value) != "HASH") {
+    let why = r.error
+    if (why == null) {
+      why = "let brush must be a hash {...}"
+    }
+    return {"brush": null, "warnings": [], "error": why}
+  }
+  let w = []
+  {"brush": brush_clean(r.value, w), "warnings": w}
+}
+
+-~> Reads the text of a `.lzbrushes` file: {"brushes", "warnings"}, or an error.
+function brushes_read(code) {
+  let r = brush_load(code, "lzbrushes", "brushes")
+  let refused = {"brushes": [], "warnings": []}
+  if (r.error != null) {
+    refused.error = r.error
+    return refused
+  }
+  if (type(r.value) != "ARRAY") {
+    refused.error = "let brushes must be a list [...]"
+    return refused
+  }
+  if (len(r.value) > brush_limits.brushes) {
+    refused.error = "the set holds more than " + str(brush_limits.brushes) + " brushes"
+    return refused
+  }
+  let out = {"brushes": [], "warnings": []}
+  for (let i = 0; i < len(r.value); i += 1) {
+    if (type(r.value[i]) != "HASH") {
+      refused.error = "brush " + str(i + 1) + " is not a hash {...}"
+      return refused
+    }
+    let w = []
+    push(out.brushes, brush_clean(r.value[i], w))
+    for (let k = 0; k < len(w); k += 1) {
+      push(out.warnings, "brush " + str(i + 1) + " " + w[k])
+    }
+  }
+  out
+}
+
+-~> == Writing ==
+
+-~> The text of a `.lzbrush` file for a brush.
+function brush_write(pen) {
+  brush_code_file(pen)
+}
+
+-~> The text of a `.lzbrushes` file for a list of brushes.
+function brushes_write(brushes) {
+  brush_code_set_file(brushes)
+}
+
+-~> == The library ==
+
+-~> The folder of the library, ~/.linkz/brushes.
+function brush_library_dir() {
+  fs.join(fs.home(), ".linkz", "brushes")
+}
+
+-~> The key a brush name is saved under: lower case, every run of other
+-~> characters as one _ ("Soft Ink!" is soft_ink), "pen_" before a digit.
+function brush_key(name) {
+  let out = ""
+  let gap = false
+  let s = text.lower(text.trim(str(name)))
+  for (let i = 0; i < len(s); i += 1) {
+    if (text.find("abcdefghijklmnopqrstuvwxyz0123456789", s[i]) >= 0) {
+      if (gap && out != "") {
+        out += "_"
+      }
+      out += s[i]
+      gap = false
+    } else {
+      gap = true
+    }
+  }
+  if (out != "" && text.find("0123456789", out[0]) >= 0) {
+    out = "pen_" + out
+  }
+  out
+}
+
+-~> The keys of the built-in pens (and "list"), as they were when this file
+-~> loaded: the editor adds the library's brushes to `pens` later.
+let brush_builtin_keys = keys(pens)
+
+-~> Whether a key is one of the built-in pens.
+function brush_is_builtin(key) {
+  list.index(brush_builtin_keys, key) >= 0
+}
+
+-~> The marker that says the old pens were copied.
+function brush_migrated_marker() {
+  fs.join(brush_library_dir(), ".migrated")
+}
+
+-~> Copies the pens the old pen pop-up saved (~/.linkz/pens) into the library,
+-~> once: the first time the library is read. A pen whose brush file is
+-~> already there is left alone, and the old files are never deleted.
+function brush_library_migrate() {
+  if (fs.exists(brush_migrated_marker())) {
+    return 0
+  }
+  let n = 0
+  let old = pen_files_load()
+  fs.mkdir(brush_library_dir())
+  for (let i = 0; i < len(old); i += 1) {
+    let path = fs.join(brush_library_dir(), old[i].key + ".lzbrush")
+    if (!fs.exists(path)) {
+      fs.write(path, brush_write(old[i].pen))
+      n += 1
+    }
+  }
+  fs.write(brush_migrated_marker(), "the pens of ~/.linkz/pens were copied here\n")
+  n
+}
+
+-~> Saves a brush in the library under its key (its "key", else the key of
+-~> its name) and gives the path. A built-in's key, or a name with no letter
+-~> or digit, is an error.
+function brush_library_save(pen) {
+  let key = pen.key
+  if (type(key) != "STRING" || key == "") {
+    key = brush_key(pen.name)
+  }
+  if (key == "") {
+    error("a brush needs a name with a letter or a digit")
+  }
+  if (brush_is_builtin(key)) {
+    error("\"" + key + "\" is a built-in pen; give the brush a name of its own")
+  }
+  fs.mkdir(brush_library_dir())
+  let path = fs.join(brush_library_dir(), key + ".lzbrush")
+  fs.write(path, brush_write(pen))
+  path
+}
+
+-~> What was read last: the folder's files (names and digests) and their brushes.
+let brush_cache = {"key": null, "list": []}
+
+-~> The brushes of the library, [{"key", "pen", "path"}], by key. A file that
+-~> is refused (or whose name cannot follow `pens.`) is left out. The files are
+-~> read again only when one of them changed.
+function brush_library_load() {
+  brush_library_migrate()
+  let dir = brush_library_dir()
+  let files = []
+  let sig = dir
+  let names = list.sort(fs.list(dir))
+  for (let i = 0; i < len(names); i += 1) {
+    let name = names[i]
+    if (text.ends(name, ".lzbrush") && !text.starts(name, ".")) {
+      let path = fs.join(dir, name)
+      push(files, [text.slice(name, 0, len(name) - 8), path])
+      sig += "|" + name + ":" + fs.digest(path, "fnv")
+    }
+  }
+  if (sig == brush_cache.key) {
+    return brush_cache.list
+  }
+  let out = []
+  for (let i = 0; i < len(files); i += 1) {
+    if (pen_files_key_ok(files[i][0])) {
+      let r = brush_read(fs.read(files[i][1]))
+      if (r.brush != null) {
+        push(out, {"key": files[i][0], "pen": r.brush, "path": files[i][1]})
+      }
+    }
+  }
+  brush_cache.key = sig
+  brush_cache.list = out
+  out
+}
+
+-~> Writes every brush of the library into one `.lzbrushes` file; gives how
+-~> many.
+function brush_library_export_all(path) {
+  let all = brush_library_load()
+  let pens_out = []
+  for (let i = 0; i < len(all); i += 1) {
+    push(pens_out, all[i].pen)
+  }
+  fs.write(path, brushes_write(pens_out))
+  len(pens_out)
+}
+
+-~> A key not used yet by a built-in pen or a library brush: key, key_2, ...
+function brush_free_key(key, used) {
+  let k = key
+  let n = 2
+  while (list.index(used, k) >= 0 || brush_is_builtin(k)) {
+    k = key + "_" + str(n)
+    n += 1
+  }
+  k
+}
+
+-~> Adds the brushes of a `.lzbrush` or `.lzbrushes` file to the library, each
+-~> under a key of its name that no other brush has (a taken one gets _2, _3).
+-~> {"added": [{"key", "name", "path"}], "warnings"}; a refused file gives
+-~> "added": [] and an "error", and nothing is written.
+function brush_import_file(path) {
+  let got = null
+  let list_of = []
+  if (text.ends(text.lower(path), ".lzbrushes")) {
+    got = brushes_read(fs.read(path))
+    list_of = got.brushes
+  } else {
+    got = brush_read(fs.read(path))
+    if (got.brush != null) {
+      list_of = [got.brush]
+    }
+  }
+  let out = {"added": [], "warnings": got.warnings}
+  if (got.error != null) {
+    out.error = got.error
+    return out
+  }
+  let used = []
+  let have = brush_library_load()
+  for (let i = 0; i < len(have); i += 1) {
+    push(used, have[i].key)
+  }
+  for (let i = 0; i < len(list_of); i += 1) {
+    let key = brush_key(list_of[i].name)
+    if (key == "") {
+      key = "imported"
+    }
+    key = brush_free_key(key, used)
+    push(used, key)
+    let pen = list_of[i]
+    pen.key = key
+    let where = brush_library_save(pen)
+    push(out.added, {"key": key, "name": pen.name, "path": where})
+  }
+  out
+}

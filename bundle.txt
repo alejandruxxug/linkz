@@ -2,6 +2,7 @@
 -~> main.liz and the modules it uses: the libraries, which the commands and
 -~> the editor load by path at run time (lib/app/libs.liz), and the doc
 -~> translations. Not their tests.
+assets/icon/*.png
 lib/app/*.liz
 lib/draw/*.liz
 lib/draw/docs/*.liz

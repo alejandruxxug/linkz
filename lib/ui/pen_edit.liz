@@ -1,9 +1,11 @@
--~> pen_edit: what the pen settings window edits, `pw`: a draft copy of one
--~> pen, never the pen itself, until Save as new pen writes it under a name
--~> (pen_library.liz). The test pad and the tools use the draft live. Each
+-~> pen_edit: what the brush creator edits, `pw`: a draft copy of one pen,
+-~> never the pen itself, until Save brush writes it under a name
+-~> (brush_store.liz). The test pad and the tools use the draft live. Each
 -~> change notes which setting it was ("pressure.smoothing"), so the code
--~> view can show that line. The functions here are the window's logic; the
--~> window itself is pen_window.liz.
+-~> view can show that line. The functions here are the R002 settings (the
+-~> pressure curve, the inputs, the stabilizer); the stamped keys are in
+-~> brush_edit.liz and the window itself is pen_window.liz. pw.tab is the
+-~> creator's tab (brush_tabs.liz); pw.stab0 the stabilizer it opened with.
 
 use "../draw/pens"
 use "i18n"
@@ -14,8 +16,9 @@ use "tool_stabilizer"
 
 let pw = {
   "open": false,
-  "x": 16,
-  "y": 34,
+  "x": 6,
+  "y": 18,
+  "tab": "pressure",
   "key": "",
   "draft": null,
   "orig": null,
@@ -31,6 +34,9 @@ let pw = {
   "curve_hover": -1,
   "pad": [],
   "pad_live": null,
+  "pad_sample": true,
+  "pad_dark": false,
+  "stab0": null,
   "note": "",
   "follow": false
 }
@@ -52,12 +58,16 @@ let pw_sliders = [
   ["speed", "pressure.speed", 0, 1, 0.01]
 ]
 
--~> Opens the window on a pen (its key): the draft is a copy of it, and a
--~> built-in's copy gets a name of its own to be saved under.
-function pw_open(key) {
+-~> Opens the window on a pen (its key), on a tab (null keeps the last
+-~> one): the draft is a copy of it, and a built-in's copy gets a name of
+-~> its own to be saved under.
+function pw_open(key, tab = null) {
   let pen = pens[key]
   if (pen == null) {
     return false
+  }
+  if (tab != null) {
+    pw.tab = tab
   }
   pw.key = key
   pw.draft = pen_deep_copy(pen)
@@ -73,6 +83,7 @@ function pw_open(key) {
   pw.note = ""
   pw.curve_hover = -1
   pw.draft.stabilizer = pw_stab_hash(tool_stab_get(key))
+  pw.stab0 = pw.draft.stabilizer
   pw.open = true
   pw.ver += 1
   true
@@ -90,6 +101,7 @@ function pw_reset() {
   pw.changed = ""
   pw.note = ""
   pw.draft.stabilizer = pw_stab_hash(stabilize_settings(pw.orig))
+  pw.stab0 = pw.draft.stabilizer
   tool_stab_forget(pw.key)
   pw.ver += 1
 }
@@ -390,25 +402,4 @@ function pw_toggle_catch_up() {
   let s = stabilize_settings(pw.draft)
   s.catch_up = !s.catch_up
   pw_set_stab(s)
-}
-
--~> == Saving ==
-
--~> Saves the draft as a new pen under the name field: the pen is then the
--~> current one and the window edits it. Gives the key, or null (pw.note says why).
-function pw_save() {
-  let r = pen_lib_save(pw.draft, pw.name)
-  if (r.refused != null) {
-    pw.note = r.refused
-    pw.ver += 1
-    return null
-  }
-  let s = stabilize_settings(pw.draft)
-  pw.key = r.key
-  pw.orig = pen_deep_copy(pens[r.key])
-  pw.draft = pen_deep_copy(pens[r.key])
-  tool_stab_set(r.key, s)
-  pw.note = t("pen.saved", {"key": "pens." + r.key})
-  pw.ver += 1
-  r.key
 }

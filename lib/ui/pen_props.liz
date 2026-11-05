@@ -5,10 +5,10 @@
 -~>      the tool's hint, cut at a word; the pencil has its hint only
 -~>   2  the stabilizer: Off / String / Average and its length (drag it
 -~>      sideways like a number); a narrow panel shortens the label
--~> The context bar (artist mode) leaves the hint out. The gear opens the pen
--~> settings. The changes are the tool's settings for the session
--~> (tool_stabilizer.liz) and, while the pen settings are open on the same
--~> pen, its draft too.
+-~> The context bar (artist mode) leaves the hint out. The gear opens the
+-~> brush creator on its Pressure tab. The changes are the tool's settings
+-~> for the session (tool_stabilizer.liz) and, while the creator is open on
+-~> the same pen, its draft too.
 
 use "../draw/pens"
 use "editor_undo"
@@ -174,7 +174,7 @@ function pen_props_set(key, s) {
 function pen_props_press(b, e) {
   let key = pen_props_key()
   if (b.kind == "pengear") {
-    pen_route_show(ed.pen)
+    pen_route_show(ed.pen, "pressure")
     return true
   }
   if (key == null) {

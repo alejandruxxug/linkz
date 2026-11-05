@@ -1,0 +1,182 @@
+-~> stamp_bitmap: pictures inside a stamped brush. A bitmap is a flat list of
+-~> alphas (0 to 255), row by row, packed in runs: [count, alpha, count,
+-~> alpha, ...]. It serves two ways:
+-~>   as a stamp shape  {"bitmap": data, "w": 8, "h": 8}  the stamp is the
+-~>                     bitmap's alpha, scaled to the stamp size;
+-~>   as a grain        {"kind": "bitmap", "data": data, "w": 8, "h": 8}
+-~>                     see stamp_grain.liz.
+-~> stamp_bitmap_from_image() makes the first from a picture file.
+
+use "check"
+
+-~> A flat list of alphas as runs: [count, alpha, count, alpha, ...].
+function stamp_bitmap_encode(alphas) {
+  let out = []
+  let i = 0
+  while (i < len(alphas)) {
+    let j = i
+    while (j < len(alphas) && alphas[j] == alphas[i]) {
+      j += 1
+    }
+    push(out, j - i)
+    push(out, alphas[i])
+    i = j
+  }
+  out
+}
+
+-~> The n alphas a run list holds. A short list is filled with 0.
+function stamp_bitmap_decode(data, n) {
+  let out = []
+  let i = 0
+  while (i + 1 < len(data) && len(out) < n) {
+    let a = int(data[i + 1])
+    for (let k = 0; k < int(data[i]) && len(out) < n; k += 1) {
+      push(out, a)
+    }
+    i += 2
+  }
+  while (len(out) < n) {
+    push(out, 0)
+  }
+  out
+}
+
+-~> Whether b is a usable bitmap shape: {"bitmap": runs, "w", "h"}.
+function stamp_bitmap_ok(b) {
+  type(b) == "HASH" && type(b.bitmap) == "ARRAY" && is_number(b.w) && is_number(b.h) && b.w > 0 && b.h > 0 && b.w * b.h <= 65536
+}
+
+-~> A picture file as a bitmap shape that fits `size` pixels on its longest
+-~> side. The alpha is the picture's own when it has any transparency;
+-~> otherwise it comes from the luminance, dark pixels being the ink (a drawing
+-~> on white paper), or bright ones with `bright` true. Alphas keep 16 levels
+-~> so the runs stay short.
+function stamp_bitmap_from_image(path, size, bright = false) {
+  let im = img.load(path, size)
+  let dim = img.size(im)
+  let px = img.pixels(im)
+  let has_alpha = false
+  for (let i = 0; i < len(px); i += 1) {
+    if (px[i].a < 255) {
+      has_alpha = true
+    }
+  }
+  let alphas = []
+  for (let i = 0; i < len(px); i += 1) {
+    let a = px[i].a
+    if (!has_alpha) {
+      let lum = (0.299 * px[i].r + 0.587 * px[i].g + 0.114 * px[i].b) / 255.0
+      if (!bright) {
+        lum = 1.0 - lum
+      }
+      a = math.round(lum * 255)
+    }
+    push(alphas, math.round(a / 17.0) * 17)
+  }
+  {"bitmap": stamp_bitmap_encode(alphas), "w": dim.x, "h": dim.y}
+}
+
+-~> A bitmap shape used as a grain.
+function stamp_bitmap_as_grain(bm) {
+  {"kind": "bitmap", "data": bm.bitmap, "w": bm.w, "h": bm.h}
+}
+
+-~> The contours already made, by the bitmap's text.
+let stamp_bitmap_cache = {}
+
+-~> The most rectangles a bitmap stamp may have. A stamp is a few pixels
+-~> wide, and every corner costs time for each stamp, so a finer picture is
+-~> shrunk (by halves, averaging the alpha) until it fits.
+let stamp_bitmap_rect_limit = 12
+
+-~> The rectangles of the opaque pixels (alpha 128 or more) of w by h alphas:
+-~> [x0, x1, y0, y1] for each. Runs of pixels on a row become one
+-~> rectangle, and equal runs on rows below join it, so a plain shape stays
+-~> small.
+function stamp_bitmap_rects(alphas, w, h) {
+  let rects = []
+  let open = {}
+  for (let y = 0; y < h; y += 1) {
+    let next = {}
+    let x = 0
+    while (x < w) {
+      if (alphas[y * w + x] < 128) {
+        x += 1
+        continue
+      }
+      let x1 = x
+      while (x1 < w && alphas[y * w + x1] >= 128) {
+        x1 += 1
+      }
+      let k = str(x) + "," + str(x1)
+      let r = open[k]
+      if (r === null) {
+        r = [x, x1, y, y + 1]
+        push(rects, r)
+      } else {
+        r[3] = y + 1
+      }
+      next[k] = r
+      x = x1
+    }
+    open = next
+  }
+  rects
+}
+
+-~> The alphas of w by h pixels at half the size (rounded up), each the
+-~> average of the pixels it covers.
+function stamp_bitmap_halve(alphas, w, h) {
+  let nw = int(math.ceil(w / 2.0))
+  let nh = int(math.ceil(h / 2.0))
+  let out = []
+  for (let y = 0; y < nh; y += 1) {
+    for (let x = 0; x < nw; x += 1) {
+      let sum = 0
+      let n = 0
+      for (let dy = 0; dy < 2; dy += 1) {
+        for (let dx = 0; dx < 2; dx += 1) {
+          if (x * 2 + dx < w && y * 2 + dy < h) {
+            sum += alphas[(y * 2 + dy) * w + x * 2 + dx]
+            n += 1
+          }
+        }
+      }
+      push(out, math.ceil(sum / float(n)))
+    }
+  }
+  out
+}
+
+-~> The outline of a bitmap as rectangles (a list of contours, each a list of
+-~> points), fitted into -1 to 1 on its longest side, the picture shrunk when
+-~> it needs more than stamp_bitmap_rect_limit rectangles.
+function stamp_bitmap_contours(bm) {
+  let key = str(bm)
+  if (stamp_bitmap_cache[key] !== null) {
+    return stamp_bitmap_cache[key]
+  }
+  let w = int(bm.w)
+  let h = int(bm.h)
+  let alphas = stamp_bitmap_decode(bm.bitmap, w * h)
+  let rects = stamp_bitmap_rects(alphas, w, h)
+  while (len(rects) > stamp_bitmap_rect_limit && math.max(w, h) > 2) {
+    alphas = stamp_bitmap_halve(alphas, w, h)
+    w = int(math.ceil(w / 2.0))
+    h = int(math.ceil(h / 2.0))
+    rects = stamp_bitmap_rects(alphas, w, h)
+  }
+  let m = math.max(w, h) / 2.0
+  let out = []
+  for (let i = 0; i < len(rects); i += 1) {
+    let r = rects[i]
+    let l = (r[0] - w / 2.0) / m
+    let rt = (r[1] - w / 2.0) / m
+    let t = (r[2] - h / 2.0) / m
+    let bt = (r[3] - h / 2.0) / m
+    push(out, [(l, t), (rt, t), (rt, bt), (l, bt)])
+  }
+  stamp_bitmap_cache[key] = out
+  out
+}

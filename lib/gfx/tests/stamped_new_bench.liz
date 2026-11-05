@@ -1,0 +1,63 @@
+-~> B067: how long a 300-point stroke takes with each new stamp shape and grain
+-~> (making the stroke, its spans, first paint, cached paint), next to the
+-~> round stamp. A painted program may take 2 million steps, which this whole
+-~> list does not fit in: keep one bench_pen line at the end and run it with
+-~> linkz paint lib/gfx/tests/stamped_new_bench.liz out.png 640x400
+let pts = []
+let pressures = []
+for (let i = 0; i < 300; i += 1) {
+  push(pts, (20 + i * 2, 200 + math.sin(i / 12.0) * 120))
+  push(pressures, 0.4 + 0.5 * math.sin(i / 20.0) * math.sin(i / 20.0))
+}
+
+function bench_pen(name, extra) {
+  let pen = hash.merge(pens.ink_dots, hash.merge({"min": 4, "max": 8, "spacing": 0.15}, extra))
+  let t0 = time.ms()
+  let shape = brush(pts, pressures, #223344, pen)
+  let t1 = time.ms()
+  raster.shape(shape)
+  let t2 = time.ms()
+  raster.paint([shape], (0, 0))
+  let t3 = time.ms()
+  raster.paint([shape], (0, 0))
+  let t4 = time.ms()
+  puts(name, len(shape.stamps), "stamps: make", math.round(t1 - t0), "ms, spans", math.round(t2 - t1), "ms, first paint", math.round(t3 - t2), "ms, cached paint", math.round(t4 - t3), "ms")
+}
+
+-~> An 8 by 8 heart as runs ("#" opaque), the way stamped_new.liz makes one.
+let rows = [".##..##.", "########", "########", "########", ".######.", "..####..", "...##...", "........"]
+let heart_runs = []
+let last = null
+for (let y = 0; y < 8; y += 1) {
+  for (let x = 0; x < 8; x += 1) {
+    let a = 0
+    if (rows[y][x] == "#") {
+      a = 255
+    }
+    if (last == a) {
+      heart_runs[len(heart_runs) - 2] += 1
+    } else {
+      push(heart_runs, 1)
+      push(heart_runs, a)
+      last = a
+    }
+  }
+}
+let heart = {"bitmap": heart_runs, "w": 8, "h": 8}
+let big = []
+for (let i = 0; i < 256; i += 1) {
+  push(big, 1)
+  push(big, ((i % 16) + math.floor(i / 16)) % 2 * 255)
+}
+let picture = {"bitmap": big, "w": 16, "h": 16}
+bench_pen("round", {})
+bench_pen("spray", {"shape": "spray"})
+bench_pen("leaf", {"shape": "leaf", "rotation": "follow"})
+bench_pen("bitmap 8x8 heart", {"shape": heart})
+bench_pen("bitmap 16x16 checker (shrunk)", {"shape": picture})
+bench_pen("grain noise", {"grain": {"kind": "noise"}})
+bench_pen("grain paper", {"grain": {"kind": "paper"}})
+bench_pen("grain canvas", {"grain": {"kind": "canvas"}})
+bench_pen("grain chalk", {"grain": {"kind": "chalk"}})
+bench_pen("grain hatch", {"grain": {"kind": "hatch"}})
+bench_pen("grain bitmap", {"grain": {"kind": "bitmap", "data": big, "w": 16, "h": 16, "scale": 2}})

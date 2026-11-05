@@ -171,7 +171,8 @@ function launch_run(sp, title, slow, load) {
     "scale": splash_scale,
     "frameless": true,
     "transparent": true,
-    "on_demand": true
+    "on_demand": true,
+    "icon": app_icon()
   })
   let l = launch_new(sp, slow)
   splash_frame(sp, win, 0, 0, -1, false)

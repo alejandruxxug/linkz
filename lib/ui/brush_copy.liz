@@ -1,0 +1,34 @@
+-~> brush_copy: a drawing keeps its own copy of a library brush, so it renders
+-~> the same on any machine. The first stroke made with a brush of the library
+-~> (~/.linkz/brushes, a pen the editor noted a key in) writes
+-~>   pens.chalk = {
+-~>     "name": "chalk",
+-~>     ...
+-~>   }
+-~> after the `let colors` block, in the same undo step as the stroke
+-~> (brush_insert, editor_twoway.liz). The drawing's copy runs after the
+-~> library loads, so it wins. Built-in pens are never copied.
+
+use "../app/brush_code"
+
+-~> Whether a pen is a library brush: the editor notes its key in it
+-~> (pen_library.liz); a built-in pen has none.
+function brush_copy_is_library(pen) {
+  pen != null && type(pen.key) == "STRING" && pen.key != ""
+}
+
+-~> The lines `pens.KEY = {...}` for a brush.
+function brush_copy_lines(pen) {
+  text.split("pens." + pen.key + " = " + brush_code_hash(pen), "\n")
+}
+
+-~> Whether the drawing's lines already have the copy of a key.
+function brush_copy_present(lines, key) {
+  let start = "pens." + key + " ="
+  for (let i = 0; i < len(lines); i += 1) {
+    if (text.starts(lines[i], start)) {
+      return true
+    }
+  }
+  false
+}

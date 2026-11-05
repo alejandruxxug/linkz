@@ -1,0 +1,184 @@
+-~> brush_tab_pressure: the brush creator's Pressure tab, the R002 pen
+-~> settings' curve editor shared as it was (style guide R005 frame 4):
+-~>   left   the pressure curve 84x84 (drag a point; press elsewhere on it to
+-~>          add one; drag a middle point off it to take it out), the preset
+-~>          dropdown under it
+-~>   right  size and opacity (ranges), smoothing, a rule, the live pressure
+-~>          readout, the input switch and that input's overrides box
+-~> Places are in UI pixels from the tab's top left (x0, y0).
+
+use "../draw/pens"
+use "brush_controls"
+use "brush_tabs"
+use "i18n"
+use "pen_code"
+use "pen_edit"
+use "view_gfx"
+use "view_layout"
+
+-~> Where everything is: {"graph", "preset", "rows", "rule_y", "readout_y",
+-~> "inputs", "box", "override", "sx", "sw"}.
+function bpr_layout(x0, y0) {
+  let sx = x0 + 100
+  let sw = 294
+  let rows = bc_rows(bt_controls("pressure"), sx, y0, sw).rows
+  let inputs = []
+  let at = sx
+  let ids = ["trackpad", "tablet", "mouse"]
+  for (let i = 0; i < len(ids); i = i + 1) {
+    let label = t(prefixed("input.", ids[i]))
+    let w = g_text_w(label) + 8
+    push(inputs, {"id": "input", "option": ids[i], "label": label, "rect": [at, y0 + 78, w, 14]})
+    at = at + w - 1
+  }
+  let by = y0 + 95
+  let label = t(prefixed("pen.", pw_override_name()))
+  let fx = sx + 5 + g_text_w(label) + 6
+  let fw = sw - (fx - sx) - g_text_w("10%") - 6
+  {
+    "graph": [x0 + 1, y0 + 16, 84, 84],
+    "preset": [x0, y0 + 103, 86, 16],
+    "rows": rows,
+    "rule_y": y0 + 56,
+    "readout_y": y0 + 60,
+    "inputs": inputs,
+    "box": [sx, by, sw, 31],
+    "override": {
+      "kind": "slider",
+      "id": "override",
+      "label": label,
+      "label_x": sx + 5,
+      "y": by + 1,
+      "track": [fx + 1, by + 6, fw - 2, 4],
+      "value_r": sx + sw - 2
+    },
+    "sx": sx,
+    "sw": sw
+  }
+}
+
+-~> The hit id of a point in the tab ("graph", "preset", "slider:id",
+-~> "seg:input:option"), or null.
+function bpr_hit(pl, x, y) {
+  let boxes = [["graph", pl.graph], ["preset", pl.preset]]
+  for (let i = 0; i < len(boxes); i = i + 1) {
+    let r = boxes[i][1]
+    if (view_in(x, y, r[0], r[1], r[2], r[3])) {
+      return boxes[i][0]
+    }
+  }
+  for (let i = 0; i < len(pl.inputs); i = i + 1) {
+    let r = pl.inputs[i].rect
+    if (view_in(x, y, r[0], r[1], r[2], r[3])) {
+      return "seg:input:" + pl.inputs[i].option
+    }
+  }
+  if (bc_on_track(pl.override, x, y)) {
+    return "slider:override"
+  }
+  bc_hit(pl.rows, x, y)
+}
+
+-~> The graph's pixel for a curve point [raw, effective].
+function pw_graph_xy(gr, p) {
+  return [gr[0] + math.round(p[0] * (gr[2] - 1)), gr[1] + gr[3] - 1 - math.round(p[1] * (gr[3] - 1))]
+}
+
+-~> == Painting ==
+
+function bpr_draw(pl, x0, y0, hover) {
+  g_text(text.upper(t("pen.pressure")), x0, y0, P.mute)
+  bpr_draw_curve(pl)
+  bc_draw(pl.rows, hover)
+  let sx = pl.sx
+  g_rect(sx, pl.rule_y, pl.sw, 1, P.bevel)
+  let label = t("pen.pressure") + " "
+  let ry = pl.readout_y
+  g_text(label, sx, ry, P.mute)
+  let at = sx + g_text_w(label)
+  let val = "—"
+  let vc = P.dim
+  if (pw.live_p != null) {
+    val = pen_code_number(math.round(pw.live_p * 100) / 100.0)
+    vc = P.sky
+  }
+  g_text(val, at, ry, vc)
+  let src = pw.live_src
+  if (src == null) {
+    src = pw.source
+  }
+  g_text(" · " + text.lower(t(prefixed("input.", src))), at + g_text_w(val), ry, P.mute)
+  bc_draw_segments(pl.inputs, pw.source, hover, true)
+  let b = pl.box
+  g_rect(b[0], b[1], b[2], b[3], P.coal)
+  g_rect(b[0], b[1], 1, b[3], P.lizard)
+  let o = pl.override
+  bc_draw_label(o, true)
+  let lim = pw_limits("override")
+  bc_draw_slider(o, [pw_override_value()], lim[0], lim[1], pw_value_text("override"), true)
+  g_text(t(prefixed("override.", pw.source)), b[0] + 5, b[1] + 15, P.mute)
+}
+
+-~> A dotted line across or down the graph, a dot every 3 pixels.
+function bpr_dots(x, y, n, across, c) {
+  for (let i = 0; i < n; i = i + 3) {
+    if (across) {
+      g_rect(x + i, y, 1, 1, c)
+    } else {
+      g_rect(x, y + i, 1, 1, c)
+    }
+  }
+}
+
+function bpr_draw_curve(pl) {
+  let gr = pl.graph
+  g_frame(gr[0] - 1, gr[1] - 1, gr[2] + 2, gr[3] + 2, P.void)
+  g_rect(gr[0], gr[1], gr[2], gr[3], P.coal)
+  for (let q = 1; q < 4; q = q + 1) {
+    bpr_dots(gr[0], gr[1] + gr[3] * q // 4, gr[2], true, P.bevel)
+    bpr_dots(gr[0] + gr[2] * q // 4, gr[1], gr[3], false, P.bevel)
+  }
+  for (let i = 0; i < gr[2]; i = i + 1) {
+    g_rect(gr[0] + i, gr[1] + gr[3] - 1 - i, 1, 1, P.dim)
+  }
+  -~> the curve: a column of pixels for each x, joined to the one before
+  let c = pw_curve()
+  let prev = -1
+  for (let i = 0; i < gr[2]; i = i + 1) {
+    let e = pen_curve({"curve": c, "floor": 0}, i / float(gr[2] - 1))
+    let py = gr[1] + gr[3] - 1 - math.round(e * (gr[3] - 1))
+    let top = py
+    let h = 1
+    if (prev >= 0) {
+      top = math.min(py, prev)
+      h = math.abs(py - prev) + 1
+    }
+    g_rect(gr[0] + i, top, 1, h, P.lizard)
+    prev = py
+  }
+  if (pw.live_p != null) {
+    let lx = gr[0] + math.round(math.max(0.0, math.min(1.0, pw.live_p)) * (gr[2] - 1))
+    for (let k = 0; k < gr[3]; k = k + 4) {
+      g_rect(lx, gr[1] + k, 1, 2, P.sky)
+    }
+    let ly = gr[1] + gr[3] - 1 - math.round(pw_effective(pw.live_p) * (gr[3] - 1))
+    g_rect(lx - 2, ly - 2, 5, 5, P.void)
+    g_rect(lx - 1, ly - 1, 3, 3, P.sky)
+  }
+  for (let i = 0; i < len(c); i = i + 1) {
+    let at = pw_graph_xy(gr, c[i])
+    if (pw.curve_hover == i) {
+      g_rect(at[0] - 3, at[1] - 3, 7, 7, P.amber)
+    } else {
+      g_rect(at[0] - 3, at[1] - 3, 7, 7, P.void)
+      g_rect(at[0] - 2, at[1] - 2, 5, 5, P.lizard)
+    }
+  }
+  let raw = t("pen.raw")
+  g_text(raw, gr[0] + gr[2] - g_text_w(raw) - 2, gr[1] + gr[3] - 14, P.mute)
+  g_text(t("pen.out"), gr[0] + 2, gr[1] + 1, P.mute)
+  let pr = pl.preset
+  g_field(pr[0], pr[1], pr[2], pr[3], V.hover == "pw:preset")
+  g_text(t(prefixed("preset.", pw_preset_name())), pr[0] + 4, pr[1] + 2, P.text)
+  g_icon("chevron-down", pr[0] + pr[2] - 12, pr[1] + 4, P.mute)
+}

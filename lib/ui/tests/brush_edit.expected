@@ -1,0 +1,29 @@
+-- the sliders: [id, set to, shows, the draft keeps]
+spacing 50% true true 0.5
+spacing 100% true true 1.0
+angle 30° true true 0.5236
+angle 0° true true 0.0
+count 3 true true 3
+roundness 5% true true 0.05
+hue_jitter 45° true true [45.0, 0, 0]
+sat_jitter 25% true true [45.0, 0.25, 0]
+speed_opacity -50% true true {"opacity": -0.5}
+grain_scale 7.5 px true true {"kind": "noise", "scale": 7.5}
+width 1-12 true true 12.0
+null null
+-- a vector pen: stamped settings say why; render brings them back
+{"ok": false, "why": "stamped brushes only: turn it on in Rendering"} {"ok": true, "why": ""} false false
+stamped true stamped
+false vector
+-- segments and checkboxes
+follow follow string 0.7854 true
+null true false
+-- shapes and grains from the catalog
+round none true true
+true false star stamped
+{"kind": "paper", "scale": 6, "depth": 0.5, "moving": true} paper moving moving: travels with the stroke
+0 none no texture: a rough edge only
+false true true
+-- the tabs that changed
+["stroke", "shape", "rendering"]
+false false false

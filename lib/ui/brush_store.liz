@@ -1,0 +1,167 @@
+-~> brush_store: where the brush creator's draft goes. Save brush writes it
+-~> to the brush library (~/.linkz/brushes/<key>.lzbrush, through the host's
+-~> src.brush_save) and makes it the brush tool's pen; a drawing that already
+-~> keeps a copy of that brush (`pens.<key> = {...}`, written when it first
+-~> used it) gets the new hash in the same step, one undo step. Export…
+-~> writes the brush as a `.lzbrush` file next to the drawing (src.brush_text
+-~> is the file's text). A built-in pen is never replaced: its copy needs a
+-~> name of its own.
+
+use "../draw/pens"
+use "editor_doc"
+use "editor_undo"
+use "i18n"
+use "pen_code"
+use "pen_edit"
+use "pen_library"
+use "stabilize"
+use "tool_stabilizer"
+
+-~> The key the name field saves under, or {"refused": why}.
+function bs_key() {
+  let key = pen_lib_key(pw.name)
+  if (key == "") {
+    return {"refused": t("pen.refuse_name")}
+  }
+  if (pen_is_builtin(key)) {
+    return {"refused": t("pen.refuse_builtin", {"name": key})}
+  }
+  {"key": key}
+}
+
+-~> The draft as it is written: its name from the field, its key noted.
+function bs_pen(key) {
+  let pen = pen_deep_copy(pw.draft)
+  pen.name = text.trim(pw.name)
+  pen.key = key
+  pen
+}
+
+-~> A refusal: the window says why.
+function bs_refuse(why) {
+  pw.note = why
+  pw.ver += 1
+  null
+}
+
+-~> Save brush. Gives the key, or null (pw.note says why).
+function brush_save() {
+  let k = bs_key()
+  if (k.refused != null) {
+    return bs_refuse(k.refused)
+  }
+  let key = k.key
+  let pen = bs_pen(key)
+  try {
+    src.brush_save(pen)
+  } catch (e) {
+    return bs_refuse(str(e))
+  }
+  let s = stabilize_settings(pw.draft)
+  pen_lib_put(key, pen)
+  bs_update_copy(key, pens[key])
+  pw.key = key
+  pw.orig = pen_deep_copy(pens[key])
+  pw.draft = pen_deep_copy(pens[key])
+  pw.stab0 = pw_stab_hash(s)
+  tool_stab_set(key, s)
+  pw.note = t("pen.saved", {"key": "pens." + key})
+  pw.ver += 1
+  key
+}
+
+-~> The lines [from, to] (1 up) of the drawing's `pens.<key> = ...`
+-~> statement, or null: from its first line to where its brackets close.
+function bs_copy_lines(lines, key) {
+  let head = "pens." + key + " ="
+  for (let i = 0; i < len(lines); i = i + 1) {
+    if (text.starts(lines[i], head)) {
+      let depth = 0
+      for (let j = i; j < len(lines); j = j + 1) {
+        depth = depth + bs_depth(lines[j])
+        if (depth <= 0) {
+          return [i + 1, j + 1]
+        }
+      }
+      return null
+    }
+  }
+  null
+}
+
+-~> How many more brackets a line opens than it closes (text in quotes aside).
+function bs_depth(s) {
+  let d = 0
+  let quoted = false
+  for (let i = 0; i < len(s); i = i + 1) {
+    let c = s[i]
+    if (c == "\"" && (i == 0 || s[i - 1] != "\\")) {
+      quoted = !quoted
+    } elif (!quoted && (c == "{" || c == "[" || c == "(")) {
+      d = d + 1
+    } elif (!quoted && (c == "}" || c == "]" || c == ")")) {
+      d = d - 1
+    }
+  }
+  d
+}
+
+-~> The lines of `pens.<key> = {...}` for a pen.
+function bs_copy_text(key, pen) {
+  let own = pen_deep_copy(pen)
+  delete(own, "key")
+  let lines = pen_code_lines(own)
+  let out = []
+  for (let i = 0; i < len(lines); i = i + 1) {
+    push(out, lines[i].s)
+  }
+  out[0] = "pens." + key + " = {"
+  out
+}
+
+-~> Puts the new hash in the drawing's copy of the brush, when it has one.
+-~> True when the drawing changed (one undo step).
+function bs_update_copy(key, pen) {
+  let m = ed_model()
+  let at = bs_copy_lines(m.lines, key)
+  if (at == null) {
+    return false
+  }
+  let lines = list.slice(m.lines, 0, at[0] - 1) + bs_copy_text(key, pen) + list.slice(m.lines, at[1], len(m.lines))
+  ed_label("brush_save", {"key": "pens." + key})
+  let changed = ed_apply(doc_with(m, lines, at[0], 0), null)
+  ed.label = null
+  changed
+}
+
+-~> Where Export… writes: <key>.lzbrush beside the drawing, or in the home
+-~> folder for a drawing never saved.
+function bs_export_path(key) {
+  let dir = fs.home()
+  let parts = text.split(text.replace(ed.file, "\\", "/"), "/")
+  if (ed.file != "" && len(parts) > 1) {
+    dir = text.join(list.slice(parts, 0, len(parts) - 1), "/")
+  }
+  fs.join(dir, key + ".lzbrush")
+}
+
+function key_file(key) {
+  key + ".lzbrush"
+}
+
+-~> Export…: writes the draft as a .lzbrush file. Gives the path, or null.
+function brush_export() {
+  let k = bs_key()
+  if (k.refused != null) {
+    return bs_refuse(k.refused)
+  }
+  let path = bs_export_path(k.key)
+  try {
+    fs.write(path, src.brush_text(bs_pen(k.key)))
+  } catch (e) {
+    return bs_refuse(t("brush.export_failed", {"file": path}))
+  }
+  pw.note = t("brush.exported", {"file": key_file(k.key)})
+  pw.ver += 1
+  path
+}

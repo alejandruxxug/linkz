@@ -1,19 +1,19 @@
--~> pen_route: where the pen settings window and the picker's gears meet
--~> the editor's view. view_input, view_popups and view_main call these
--~> hooks (one line each) so the window's own code stays in its files:
+-~> pen_route: where the brush creator and the picker's gears meet the
+-~> editor's view. view_input, view_popups and view_main call these hooks
+-~> (one line each) so the window's own code stays in its files:
 -~> pen_window.liz (places, painting), pen_window_input.liz (the pointer and
--~> keys), pen_pad.liz (the test pad).
+-~> keys), pen_pad.liz (the test pad). A gear (on a picker row, in the brush
+-~> inspector) opens the creator on its Pressure tab.
 
 use "../draw/pens"
+use "brush_tabs"
 use "editor_undo"
 use "pen_edit"
 use "pen_library"
-use "pen_pad"
 use "pen_props"
 use "pen_window"
 use "pen_window_input"
 use "view_popups"
-use "view_gfx"
 use "view_layout"
 
 let pen_route_double_ms = 450
@@ -45,7 +45,7 @@ function pen_route_down(e) {
   if (V.picker) {
     let i = picker_gear_at(e.pos.x, e.pos.y)
     if (i >= 0) {
-      pen_route_show(pen_key_of(pens.list[i]))
+      pen_route_show(pen_key_of(pens.list[i]), "pressure")
       return true
     }
   }
@@ -104,10 +104,10 @@ function pen_route_text(s) {
 
 -~> == Opening ==
 
--~> Opens the window on a pen key.
-function pen_route_show(key) {
+-~> Opens the window on a pen key, on a tab (null: the last one).
+function pen_route_show(key, tab = null) {
   pen_lib_load()
-  pw_show(key)
+  pw_show(key, tab)
 }
 
 -~> A press of the brush button: a second one soon after the first is a
@@ -156,18 +156,6 @@ function pen_route_popup_draw() {
   pw_draw()
 }
 
--~> The test pad's strokes at full resolution, into the canvas buffer.
-function pen_route_paint_full(cl) {
-  if (!pw.open) {
-    return null
-  }
-  let cr = cl.crect
-  g_canvas((cr[0], cr[1]))
-  fb.unclip()
-  pad_paint(pw_layout().pad, (cr[0], cr[1]))
-  g_ui()
-}
-
 -~> == The backdoor ==
 
 -~> The window as the backdoor's Dump shows it: open, the pen, where its parts are.
@@ -176,45 +164,91 @@ function pen_route_debug() {
     return {"open": false}
   }
   let lay = pw_layout()
-  let rows = {}
-  for (let i = 0; i < len(lay.sliders); i = i + 1) {
-    rows[lay.sliders[i].id] = lay.sliders[i].track
+  let tl = lay.tab
+  let tracks = {}
+  let segs = {}
+  let checks = {}
+  let rows = tl.rows
+  if (tl.pressure != null) {
+    rows = rows + [tl.pressure.override, {"kind": "seg", "segs": tl.pressure.inputs}]
   }
-  rows.length = lay.length.track
-  rows.override = lay.override.track
+  for (let i = 0; i < len(rows); i = i + 1) {
+    let r = rows[i]
+    if (r.kind == "seg") {
+      for (let k = 0; k < len(r.segs); k = k + 1) {
+        segs[r.segs[k].id + ":" + r.segs[k].option] = r.segs[k].rect
+      }
+    } elif (r.kind == "check") {
+      checks[r.id] = r.box
+    } else {
+      tracks[r.id] = r.track
+    }
+  }
+  let tabs = {}
+  for (let i = 0; i < len(lay.tabs); i = i + 1) {
+    tabs[lay.tabs[i].id] = lay.tabs[i].rect
+  }
+  let tiles = {}
+  if (tl.tiles != null) {
+    for (let i = 0; i < len(tl.tiles.tiles); i = i + 1) {
+      tiles[tl.tiles.tiles[i].name] = tl.tiles.tiles[i].rect
+    }
+  }
+  let changed = []
+  for (let i = 0; i < len(bt_tabs); i = i + 1) {
+    if (bt_changed(bt_tabs[i])) {
+      push(changed, bt_tabs[i])
+    }
+  }
+  let r = {
+    "win": lay.win,
+    "title": lay.title,
+    "close": lay.close,
+    "reset": lay.reset,
+    "pad": lay.pad,
+    "sample": lay.sample,
+    "paper": lay.paper,
+    "trash": lay.trash,
+    "name": lay.name,
+    "export": lay.export,
+    "save": lay.save,
+    "code": lay.code,
+    "tabs": tabs,
+    "tiles": tiles,
+    "tracks": tracks,
+    "segs": segs,
+    "checks": checks
+  }
+  if (tl.pressure != null) {
+    r.graph = tl.pressure.graph
+    r.preset = tl.pressure.preset
+  }
   {
     "open": true,
     "key": pw.key,
     "name": pw.name,
+    "tab": pw.tab,
     "draft": pw.draft,
     "source": pw.source,
     "pad_strokes": len(pw.pad),
     "changed": pw.changed,
+    "changed_tabs": changed,
     "note": pw.note,
-    "rects": {
-      "win": lay.win,
-      "title": lay.title,
-      "close": lay.close,
-      "reset": lay.reset,
-      "graph": lay.graph,
-      "preset": lay.preset,
-      "pad": lay.pad,
-      "trash": lay.trash,
-      "name": lay.name,
-      "save": lay.save,
-      "code": lay.code,
-      "catch": lay.catch,
-      "tracks": rows
-    }
+    "rects": r
   }
 }
 
--~> The backdoor's command PenSettings [key]: opens the window (on the brush's
--~> pen when no key is given); PenSettings close closes it.
+-~> The backdoor's command PenSettings [key [tab]]: opens the window (on the
+-~> brush's pen when no key is given, on the last tab when no tab is);
+-~> PenSettings close closes it.
 function pen_route_command(args) {
   let key = ed.pen
+  let tab = null
   if (len(args) > 0) {
     key = str(args[0])
+  }
+  if (len(args) > 1) {
+    tab = str(args[1])
   }
   if (key == "close") {
     pw_close()
@@ -222,5 +256,5 @@ function pen_route_command(args) {
     view_touch()
     return {"ok": true, "open": false}
   }
-  {"ok": pen_route_show(key), "open": pw.open, "key": pw.key}
+  {"ok": pen_route_show(key, tab), "open": pw.open, "key": pw.key, "tab": pw.tab}
 }

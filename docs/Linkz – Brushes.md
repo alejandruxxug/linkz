@@ -2,7 +2,7 @@
 
 > "Keep a note on how we could import brushes and export brushes. Brush creator would allow to parametrize brushes Procreate style." — the developer, 2026-11-03
 
-Status: **idea, not scheduled** (after v1.1). Builds on the pens in `lib/draw/pens.liz` and the tunable pressure from B009.
+Status: **being built** (2026-11-04). Done: stamped renderer and parameters (B060, B067), `.lzbrush` files and the library in `~/.linkz/brushes` with a sandboxed reader (B065: `lib/app/brush_files.liz`; refusals return `{"error": reason}`), the brush creator (B066). Next: picker menu and import, Procreate importer. Builds on the pens in `lib/draw/pens.liz` and the tunable pressure from B009.
 
 ## 🧩 What a brush is in Linkz
 

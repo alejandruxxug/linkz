@@ -1,0 +1,114 @@
+-~> brush_tabs: the brush creator's eight tabs (style guide R005, layout A):
+-~> each one's icon, the flat pen keys it groups and the controls of its
+-~> settings column. The tabs group the keys in the window only; the pen
+-~> hash stays flat (lib/draw/pens.liz). A tab whose keys differ from the pen
+-~> the creator opened on gets an amber dot in the rail.
+-~> A control is {"kind", "id"}: "seg" (a segmented control, its options in
+-~> brush_edit.liz), "slider", "range" (two ends) or "check".
+
+use "brush_edit"
+use "i18n"
+use "pen_edit"
+use "pen_library"
+use "view_gfx"
+
+let bt_tabs = ["stroke", "taper", "shape", "grain", "dynamics", "pressure", "color", "rendering"]
+
+let bt_icons = {
+  "stroke": "stroke",
+  "taper": "taper",
+  "shape": "shape",
+  "grain": "grain",
+  "dynamics": "dynamics",
+  "pressure": "graph",
+  "color": "fill",
+  "rendering": "render"
+}
+
+-~> The keys of the draft each tab changes. "pressure" is the pressure block
+-~> without its "speed", which the Dynamics tab holds.
+let bt_keys = {
+  "stroke": ["spacing", "jitter", "stabilizer"],
+  "taper": ["taper", "nib"],
+  "shape": ["shape", "rotation", "angle", "scatter", "count", "roundness"],
+  "grain": ["grain"],
+  "dynamics": ["size_jitter", "opacity_jitter", "speed", "pressure.speed"],
+  "pressure": ["min", "max", "opacity", "pressure"],
+  "color": ["color_jitter"],
+  "rendering": ["render", "size"]
+}
+
+function bt_slider(id) {
+  {"kind": "slider", "id": id}
+}
+
+-~> The controls of a tab's settings column, top to bottom. The Grain tab's
+-~> depend on the grain: a texture's, or the rough edge's one number.
+function bt_controls(tab) {
+  if (tab == "stroke") {
+    return [{"kind": "seg", "id": "stab"}, bt_slider("length"), {"kind": "check", "id": "catch_up"}, bt_slider("spacing"), bt_slider("jitter")]
+  }
+  if (tab == "taper") {
+    return [bt_slider("taper"), {"kind": "check", "id": "nib"}, bt_slider("nib_angle")]
+  }
+  if (tab == "shape") {
+    return [{"kind": "seg", "id": "rotation"}, bt_slider("angle"), bt_slider("scatter"), bt_slider("count"), bt_slider("roundness")]
+  }
+  if (tab == "grain") {
+    if (!be_textured()) {
+      return [bt_slider("edge")]
+    }
+    return [{"kind": "seg", "id": "texture"}, bt_slider("grain_scale"), bt_slider("grain_depth"), {"kind": "check", "id": "grain_size"}]
+  }
+  if (tab == "dynamics") {
+    return [bt_slider("speed"), bt_slider("size_jitter"), bt_slider("opacity_jitter"), bt_slider("speed_size"), bt_slider("speed_opacity")]
+  }
+  if (tab == "pressure") {
+    return [{"kind": "range", "id": "width"}, {"kind": "range", "id": "opacity"}, bt_slider("smoothing")]
+  }
+  if (tab == "color") {
+    return [bt_slider("hue_jitter"), bt_slider("sat_jitter"), bt_slider("bright_jitter")]
+  }
+  [{"kind": "seg", "id": "render"}, bt_slider("size")]
+}
+
+-~> A control's label.
+function bt_label(id) {
+  t(prefixed("brush.set.", id))
+}
+
+-~> A pen's value for a tab key, for comparing: an empty block counts as none.
+function bt_part(pen, key) {
+  let parts = text.split(key, ".")
+  let v = pen[parts[0]]
+  if (len(parts) > 1 && type(v) == "HASH") {
+    v = v[parts[1]]
+  } elif (len(parts) > 1) {
+    v = null
+  }
+  if (key == "pressure" && type(v) == "HASH") {
+    v = pen_deep_copy(v)
+    delete(v, "speed")
+  }
+  if (type(v) == "HASH" && len(keys(v)) == 0) {
+    return null
+  }
+  v
+}
+
+-~> Whether a tab's keys differ from the pen the creator opened on (the
+-~> stabilizer from the one it had then, in pw.stab0).
+function bt_changed(tab) {
+  let ks = bt_keys[tab]
+  for (let i = 0; i < len(ks); i = i + 1) {
+    let k = ks[i]
+    let was = bt_part(pw.orig, k)
+    if (k == "stabilizer") {
+      was = pw.stab0
+    }
+    if (str(bt_part(pw.draft, k)) != str(was)) {
+      return true
+    }
+  }
+  false
+}

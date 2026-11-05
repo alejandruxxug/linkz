@@ -1,0 +1,111 @@
+-~> A drawing keeps its own copy of a library brush (B065): the first stroke
+-~> with a brush of ~/.linkz/brushes writes `pens.<key> = {...}` after the
+-~> `let colors` block, in the same undo step as the stroke; the second stroke
+-~> adds no second copy; a built-in pen is never copied; the copy renders the
+-~> same as the library brush and wins over it.
+
+use "../../lib/app/brush_files"
+use "../../lib/app/drawing"
+use "../../lib/app/editor"
+use "rig"
+
+let modules = rig_modules + ["ui/view_popups", "ui/pen_edit", "ui/pen_window", "ui/pen_pad", "ui/tool_stabilizer", "ui/pen_route",
+  "draw/pens"]
+let chalky = {
+  "name": "chalky",
+  "render": "stamped",
+  "min": 4,
+  "max": 12,
+  "taper": 0.1,
+  "opacity": [0.5, 1],
+  "shape": "square",
+  "spacing": 0.3,
+  "grain": {"kind": "noise", "scale": 3, "depth": 0.5, "moving": false}
+}
+brush_library_save(chalky)
+let code = "-~> lzdraw 1\n\nlet colors = {\"sky\": #aaccee}\n\ncanvas = {\"size\": (480, 320), \"background\": colors.sky}\n"
+let rig = rig_open(fs.join(fs.home(), "brush-copy-test"), code, editor_size, modules)
+let n = rig.names
+let cmds = rig.ed.app.debug_commands
+
+function drag(points) {
+  rig_frame(rig, [{"type": "down", "pos": points[0]}])
+  for (let i = 1; i < len(points); i += 1) {
+    rig_frame(rig, [{"type": "move", "pos": points[i]}])
+  }
+  rig_frame(rig, [{"type": "up", "pos": points[len(points) - 1]}])
+}
+
+function stroke(y) {
+  let cl = n.view_canvas_layout()
+  let p0 = n.view_to_window(cl, (100, y)) * 0.5
+  let pts = [p0]
+  for (let i = 1; i <= 12; i += 1) {
+    push(pts, p0 + (i * 8, 0))
+  }
+  drag(pts)
+}
+
+function lines() {
+  n.ed_model().lines
+}
+
+function copies(key) {
+  let c = 0
+  for (let i = 0; i < len(lines()); i += 1) {
+    if (text.starts(lines()[i], "pens." + key + " = ")) {
+      c += 1
+    }
+  }
+  c
+}
+
+puts("-- the library brush is a pen of the editor")
+cmds.Tool(["brush"])
+cmds.Pen(["chalky"])
+rig_frame(rig)
+puts(n.ed.pen, n.pens.chalky.key, n.pens.chalky.name)
+
+puts("-- the first stroke writes the copy after the colors block")
+stroke(100)
+puts(rig.ed.error)
+let l = lines()
+let at = list.index(l, "let colors = {\"sky\": #aaccee}")
+puts(at, copies("chalky"), text.starts(l[at + 1], "pens.chalky = {"))
+let last = 0
+for (let i = 0; i < len(l); i += 1) {
+  if (l[i] == "}") {
+    last = i
+  }
+}
+puts(text.starts(l[last + 1], "brush("), text.find(l[last + 1], "pens.chalky") > 0, text.starts(l[n.ed_model().line - 1], "brush("))
+puts(drawing_run(text.join(l, "\n")).errors)
+
+puts("-- a second stroke adds no copy")
+stroke(160)
+puts(copies("chalky"), rig.ed.error)
+
+puts("-- undo takes the stroke and the copy away in one step; redo brings both")
+cmds.Undo([])
+puts(copies("chalky"), len(lines()) - len(l))
+cmds.Undo([])
+puts(copies("chalky"), len(lines()), text.join(lines(), "\n") == code)
+cmds.Redo([])
+puts(copies("chalky"))
+
+puts("-- the drawing's copy wins over a changed library brush")
+let seen = drawing_run(text.join(lines(), "\n") + "\n")
+puts(seen.errors, len(seen.shapes))
+brush_library_save({"name": "chalky", "min": 40, "max": 80})
+let again = drawing_run(text.join(lines(), "\n") + "\n")
+puts(again.errors, len(again.shapes), again.shapes[0].args[3].min)
+let fresh = drawing_run(code + "brush([(10, 10), (80, 30), (150, 10)], [0.5, 0.8, 0.5], #000, pens.chalky)\n")
+puts(fresh.errors, len(fresh.shapes), fresh.shapes[0].args[3].min)
+
+puts("-- a built-in pen is never copied")
+cmds.Pen(["ink"])
+stroke(220)
+puts(copies("ink"), text.find(text.join(lines(), "\n"), "pens.ink = "))
+
+-~> The library belongs to this test only: the other tests share the HOME.
+fs.remove(brush_library_dir() + "/chalky.lzbrush")

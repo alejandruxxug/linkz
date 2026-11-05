@@ -3,12 +3,15 @@
 -~>   parse(code)            lines, statements and errors (see scan.liz)
 -~>   run(code)              runs a drawing (see drawing.liz)
 -~>   library_docs(lang)     the drawing functions' docs (see docs.liz)
--~>   saved_pens()           the pens saved in ~/.linkz/pens, [{"key", "pen", "path"}]
--~>                          (see pen_files.liz); copy a pen before changing it
+-~>   saved_pens()           the brushes of the library, ~/.linkz/brushes,
+-~>                          [{"key", "pen", "path"}] (see brush_files.liz);
+-~>                          copy a pen before changing it
+-~>   brush_save(pen)        writes a brush to the library, gives its path
+-~>   brush_text(pen)        the text of a .lzbrush file for a brush
 
 use "docs"
 use "drawing"
-use "pen_files"
+use "brush_files"
 use "scan"
 
 function host_src() {
@@ -16,6 +19,8 @@ function host_src() {
     "parse": scan_parse,
     "run": function(code) { drawing_run(code) },
     "library_docs": docs_library,
-    "saved_pens": function() { pen_files_load() }
+    "saved_pens": function() { brush_library_load() },
+    "brush_save": function(pen) { brush_library_save(pen) },
+    "brush_text": function(pen) { brush_write(pen) }
   }
 }

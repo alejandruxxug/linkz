@@ -1,17 +1,27 @@
--~> pen_window_input: what the pointer and the keyboard do in the pen
--~> settings window. view_input asks it first while the window is open:
--~> pw_hit says what is under a point ("pw:..." ids, "" for the window's
--~> face, null outside it), pw_down takes a press inside it, and a drag
--~> that starts there (V.drag kind "pw") goes on to pw_move and pw_up.
--~>   title     drag the window          close, Esc   close it
+-~> pen_window_input: what the pointer and the keyboard do in the brush
+-~> creator. view_input asks it first while the window is open: pw_hit says
+-~> what is under a point ("pw:..." ids, "" for the window's face, null
+-~> outside it), pw_down takes a press inside it, and a drag that starts
+-~> there (V.drag kind "pw") goes on to pw_move and pw_up.
+-~>   title     drag the window          close, Esc   close it (nothing is saved)
+-~>   tab       show that tab            Reset        back to the pen it opened on
+-~>   tiles     pick a stamp shape or a grain
+-~>   sliders   press or drag along the track (a range moves its nearer end)
+-~>   segments, checkboxes   pick, tick
 -~>   graph     drag a curve point; press elsewhere on it to add one; drag a
 -~>             middle point off the graph to take it out
 -~>   preset    the next preset (soft, linear, firm)
--~>   sliders   press or drag along the track (a range moves its nearer end)
--~>   pad       draw on it                trash        clear it
--~>   name      type the name             save         Save as new pen
+-~>   pad       draw on it; its buttons: the sample stroke, dark paper, clear
+-~>   name      type the name             Save brush, Export…
+-~> A control that can't be used now says why in the footer.
 
+use "brush_controls"
+use "brush_edit"
+use "brush_store"
+use "brush_tab_pressure"
+use "brush_tiles"
 use "editor_undo"
+use "i18n"
 use "pen_edit"
 use "pen_pad"
 use "pen_window"
@@ -28,53 +38,51 @@ function pw_hit(x, y) {
   if (!view_in(x, y, w[0], w[1], w[2], w[3])) {
     return null
   }
-  let boxes = [["close", lay.close], ["reset", lay.reset], ["title", lay.title], ["graph", lay.graph],
-    ["preset", lay.preset], ["catch", [lay.catch[0], lay.catch[1], 120, 10]], ["box", null], ["trash", lay.trash],
-    ["pad", lay.pad], ["name", lay.name], ["save", lay.save], ["code", lay.code]]
+  let boxes = [["close", lay.close], ["reset", lay.reset], ["title", lay.title], ["sample", lay.sample],
+    ["paper", lay.paper], ["trash", lay.trash], ["pad", lay.pad], ["name", lay.name], ["export", lay.export],
+    ["save", lay.save], ["code", lay.code]]
   for (let i = 0; i < len(boxes); i = i + 1) {
     let r = boxes[i][1]
     if (r != null && view_in(x, y, r[0], r[1], r[2], r[3])) {
       return "pw:" + boxes[i][0]
     }
   }
-  let segs = lay.modes + lay.inputs
-  for (let i = 0; i < len(segs); i = i + 1) {
-    let r = segs[i].rect
+  for (let i = 0; i < len(lay.tabs); i = i + 1) {
+    let r = lay.tabs[i].rect
     if (view_in(x, y, r[0], r[1], r[2], r[3])) {
-      return "pw:seg:" + segs[i].id
+      return "pw:tab:" + lay.tabs[i].id
     }
   }
-  for (let i = 0; i < len(lay.sliders); i = i + 1) {
-    if (pw_on_track(lay.sliders[i], x, y)) {
-      return "pw:slider:" + lay.sliders[i].id
-    }
-  }
-  if (pw_on_track(lay.length, x, y)) {
-    return "pw:slider:length"
-  }
-  if (pw_on_track(lay.override, x, y)) {
-    return "pw:slider:override"
+  let id = pw_tab_hit(lay.tab, x, y)
+  if (id != null) {
+    return "pw:" + id
   }
   ""
 }
 
--~> Whether a point is on a slider's track (a little around it too).
-function pw_on_track(row, x, y) {
-  let tr = row.track
-  view_in(x, y, tr[0] - 4, row.y, tr[2] + 8, 15)
+-~> What is under a point in the open tab, or null.
+function pw_tab_hit(tl, x, y) {
+  if (tl.pressure != null) {
+    return bpr_hit(tl.pressure, x, y)
+  }
+  if (tl.tiles != null) {
+    let id = bti_hit(tl.tiles, x, y)
+    if (id != null) {
+      return id
+    }
+  }
+  bc_hit(tl.rows, x, y)
 }
 
 -~> The slider row of an id in a layout.
 function pw_row(lay, id) {
-  if (id == "length") {
-    return lay.length
+  let tl = lay.tab
+  if (tl.pressure != null && id == "override") {
+    return tl.pressure.override
   }
-  if (id == "override") {
-    return lay.override
-  }
-  for (let i = 0; i < len(lay.sliders); i = i + 1) {
-    if (lay.sliders[i].id == id) {
-      return lay.sliders[i]
+  for (let i = 0; i < len(tl.rows); i = i + 1) {
+    if (tl.rows[i].id == id) {
+      return tl.rows[i]
     }
   }
   null
@@ -95,10 +103,10 @@ function pw_force_all() {
 }
 
 -~> The curve point within 4 pixels of a UI point, or -1.
-function pw_point_at(lay, x, y) {
+function pw_point_at(gr, x, y) {
   let c = pw_curve()
   for (let i = 0; i < len(c); i = i + 1) {
-    let at = pw_graph_xy(lay.graph, c[i])
+    let at = pw_graph_xy(gr, c[i])
     if (math.abs(at[0] - x) <= 4 && math.abs(at[1] - y) <= 4) {
       return i
     }
@@ -107,29 +115,38 @@ function pw_point_at(lay, x, y) {
 }
 
 -~> A UI point on the graph as [raw, effective] from 0 to 1.
-function pw_graph_value(lay, x, y) {
-  let gr = lay.graph
+function pw_graph_value(gr, x, y) {
   return [(x - gr[0]) / float(gr[2] - 1), (gr[1] + gr[3] - 1 - y) / float(gr[3] - 1)]
+}
+
+-~> The graph of the open tab, or null.
+function pw_graph(lay) {
+  if (lay.tab.pressure == null) {
+    return null
+  }
+  lay.tab.pressure.graph
 }
 
 -~> Sets a slider from a UI x; `sub` is the end of a range that moves.
 function pw_slide(id, sub, x) {
-  let lay = pw_layout()
-  let lim = pw_limits(id)
-  pw_set(id, sub, pw_track_value(pw_row(lay, id).track, x, lim[0], lim[1]))
+  let row = pw_row(pw_layout(), id)
+  if (row == null) {
+    return null
+  }
+  let lim = be_limits(id)
+  be_set(id, sub, bc_track_value(row.track, x, lim[0], lim[1]))
 }
 
 -~> Which end of a range a press at x takes: the nearer one.
 function pw_nearer_end(id, x) {
-  let v = pw_value(id)
+  let v = be_value(id)
   if (len(v) < 2) {
     return 0
   }
-  let lay = pw_layout()
-  let lim = pw_limits(id)
-  let tr = pw_row(lay, id).track
-  let a = pw_track_x(tr, v[0], lim[0], lim[1])
-  let b = pw_track_x(tr, v[1], lim[0], lim[1])
+  let lim = be_limits(id)
+  let tr = pw_row(pw_layout(), id).track
+  let a = bc_track_x(tr, v[0], lim[0], lim[1])
+  let b = bc_track_x(tr, v[1], lim[0], lim[1])
   if (math.abs(x - a) < math.abs(x - b) || (a == b && x < a)) {
     return 0
   }
@@ -144,6 +161,17 @@ function pw_pad_point(s) {
     return s.canvas_pos + (V.host_origin.x * 2, V.host_origin.y * 2) - o
   }
   s.pos * 2 - o
+}
+
+-~> A control that can't be used: the footer says why. True when it was refused.
+function pw_refused(id) {
+  let e = be_enabled(id)
+  if (e.ok) {
+    return false
+  }
+  pw.note = e.why
+  pw.ver += 1
+  true
 }
 
 -~> A press in the window. True when it was in it (the press is then used).
@@ -167,34 +195,43 @@ function pw_down(e) {
   let lay = pw_layout()
   if (what == "close") {
     pw_close()
+    pw_force_all()
   } elif (what == "reset") {
     pw_reset()
   } elif (what == "title") {
     V.drag = {"kind": "pw", "what": "title", "grab": (e.pos.x - lay.win[0], e.pos.y - lay.win[1])}
+  } elif (what == "tab") {
+    pw.tab = parts[2]
+    pw.note = ""
+    pw.ver += 1
+  } elif (what == "tile") {
+    let why = bti_pick(pw.tab, parts[2], lay.tab.tiles)
+    if (why != "") {
+      pw.note = why
+      pw.ver += 1
+    }
+  } elif (what == "import") {
+    pw.note = t("brush.import_later")
+    pw.ver += 1
   } elif (what == "graph") {
-    let i = pw_point_at(lay, e.pos.x, e.pos.y)
-    if (i < 0) {
-      let v = pw_graph_value(lay, e.pos.x, e.pos.y)
-      i = pw_curve_add(v[0], v[1])
-    }
-    if (i >= 0) {
-      pw.curve_hover = i
-      V.drag = {"kind": "pw", "what": "point", "i": i, "off": false}
-    }
+    pw_down_graph(pw_graph(lay), e)
   } elif (what == "preset") {
     pw_preset_next()
   } elif (what == "slider") {
-    let sub = pw_nearer_end(parts[2], e.pos.x)
-    pw_slide(parts[2], sub, e.pos.x)
-    V.drag = {"kind": "pw", "what": "slider", "id": parts[2], "sub": sub}
-  } elif (what == "catch") {
-    pw_toggle_catch_up()
+    if (!pw_refused(parts[2])) {
+      let sub = pw_nearer_end(parts[2], e.pos.x)
+      pw_slide(parts[2], sub, e.pos.x)
+      V.drag = {"kind": "pw", "what": "slider", "id": parts[2], "sub": sub}
+    }
+  } elif (what == "check") {
+    if (!pw_refused(parts[2])) {
+      be_toggle(parts[2])
+    }
   } elif (what == "seg") {
-    let s = parts[2]
-    if (s == "off" || s == "string" || s == "average") {
-      pw_stab_mode(s)
-    } else {
-      pw_set_source(s)
+    if (parts[2] == "input") {
+      pw_set_source(parts[3])
+    } elif (!pw_refused(parts[2])) {
+      be_choose(parts[2], parts[3])
     }
   } elif (what == "pad") {
     let src = "mouse"
@@ -205,6 +242,10 @@ function pw_down(e) {
     }
     pad_begin(pw_pad_point(e), p, src, time.ms() / 1000.0)
     V.drag = {"kind": "pw", "what": "pad"}
+  } elif (what == "sample") {
+    pad_toggle_sample()
+  } elif (what == "paper") {
+    pad_toggle_paper()
   } elif (what == "trash") {
     pad_clear()
   } elif (what == "name") {
@@ -213,15 +254,30 @@ function pw_down(e) {
     pw.name_caret = math.max(0, math.min(len(pw.name), (e.pos.x - nr[0] - 4 + 3) // 7))
   } elif (what == "save") {
     pw_save_now()
+  } elif (what == "export") {
+    brush_export()
   }
   pw_changed()
   true
 }
 
--~> Save as new pen: the saved pen becomes the brush's pen, and the drawing
+-~> A press on the graph: on a point it grabs it, elsewhere it adds one.
+function pw_down_graph(gr, e) {
+  let i = pw_point_at(gr, e.pos.x, e.pos.y)
+  if (i < 0) {
+    let v = pw_graph_value(gr, e.pos.x, e.pos.y)
+    i = pw_curve_add(v[0], v[1])
+  }
+  if (i >= 0) {
+    pw.curve_hover = i
+    V.drag = {"kind": "pw", "what": "point", "i": i, "off": false}
+  }
+}
+
+-~> Save brush: the saved brush becomes the brush's pen, and the drawing
 -~> runs again whole (its pens now have the new one).
 function pw_save_now() {
-  let key = pw_save()
+  let key = brush_save()
   if (key != null) {
     ed.pen = key
     ed.ran = null
@@ -238,21 +294,26 @@ function pw_move(e) {
     pw_move_to(e.pos.x - d.grab.x, e.pos.y - d.grab.y)
     pw_force_all()
   } elif (d.what == "point") {
-    let lay = pw_layout()
-    let gr = lay.graph
-    let c = pw_curve()
-    let middle = d.i > 0 && d.i < len(c) - 1
-    d.off = middle && !view_in(e.pos.x, e.pos.y, gr[0] - 8, gr[1] - 8, gr[2] + 16, gr[3] + 16)
-    let v = pw_graph_value(lay, e.pos.x, e.pos.y)
-    if (!d.off) {
-      pw_curve_move(d.i, v[0], v[1])
+    let gr = pw_graph(pw_layout())
+    if (gr != null) {
+      let c = pw_curve()
+      let middle = d.i > 0 && d.i < len(c) - 1
+      d.off = middle && !view_in(e.pos.x, e.pos.y, gr[0] - 8, gr[1] - 8, gr[2] + 16, gr[3] + 16)
+      let v = pw_graph_value(gr, e.pos.x, e.pos.y)
+      if (!d.off) {
+        pw_curve_move(d.i, v[0], v[1])
+      }
     }
   } elif (d.what == "slider") {
     pw_slide(d.id, d.sub, e.pos.x)
   } elif (d.what == "pad") {
     let list_ = e.samples
     if (list_ == null || len(list_) == 0) {
-      list_ = [{"pos": e.pos, "canvas_pos": null, "pressure": e.pen.pressure, "t": time.ms() / 1000.0}]
+      let p = null
+      if (e.pen != null) {
+        p = e.pen.pressure
+      }
+      list_ = [{"pos": e.pos, "canvas_pos": null, "pressure": p, "t": time.ms() / 1000.0}]
     }
     if (e.pen != null && pw.pad_live != null) {
       pw.pad_live.source = e.pen.source
@@ -281,7 +342,7 @@ function pw_up(_e) {
 function pw_hover(x, y) {
   let i = -1
   if (pw.open && pw_hit(x, y) == "pw:graph") {
-    i = pw_point_at(pw_layout(), x, y)
+    i = pw_point_at(pw_graph(pw_layout()), x, y)
   }
   if (i != pw.curve_hover) {
     pw.curve_hover = i
@@ -357,9 +418,10 @@ function pw_wheel(e) {
   true
 }
 
--~> Opens the window on a pen: the picker closes, the window shows.
-function pw_show(key) {
-  if (!pw_open(key)) {
+-~> Opens the window on a pen, on a tab (null: the last one): the picker
+-~> closes, the window shows.
+function pw_show(key, tab = null) {
+  if (!pw_open(key, tab)) {
     return false
   }
   V.picker = false

@@ -1,6 +1,6 @@
 -- the picker has a gear on every row and a footer
 pengear:1 5 133
-true pencil my pencil false 
+true pencil my pencil pressure false 
 -- a slider changes the draft, never the built-in pen
 0.95 0.05 pressure.smoothing
 firm [[0, 0], [0.6, 0.3], [1, 1]]
@@ -8,7 +8,7 @@ firm [[0, 0], [0.6, 0.3], [1, 1]]
 4
 3
 -- the test pad: strokes stay in the pad
-1 true false 1
+1 true false 2
 0
 -- a built-in's name is refused; a name of its own saves the pen
 pencil is a built-in pen: save the copy under another name false

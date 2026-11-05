@@ -1,8 +1,8 @@
 -~> overlay_rules: which overlays show together, so that one never stays
 -~> over another that has taken over (style guide R002 / R003, the v1.1
 -~> design check's "overlays that stay or stack"):
--~>   the signature hint and the suggestions wait while the color popover is
--~>   open, and after a canvas tool or a swatch moved the caret, until the
+-~>   the signature hint and the suggestions wait while the color popover or
+-~>   the brush creator is open, and after a canvas tool or a swatch moved the caret, until the
 -~>   caret moves again (typing, a click in the code)
 -~>   the Select tool's size handles and turn ring, and a shape's anchors,
 -~>   give way to the gradient handles while the fill editor is open (the
@@ -16,6 +16,7 @@ use "doc_cache"
 use "editor_state"
 use "editor_undo"
 use "fill_editor"
+use "pen_edit"
 use "select_edit"
 use "view_canvas"
 use "view_layout"
@@ -39,7 +40,7 @@ function ov_quiet_here() {
 
 -~> Whether the completion's popups wait now.
 function ov_cmp_quiet() {
-  if (CP.open) {
+  if (CP.open || pw.open) {
     return true
   }
   OV.quiet != null && OV.quiet == ov_caret_key()

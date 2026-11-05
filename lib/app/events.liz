@@ -2,7 +2,8 @@
 -~> written for the events of the old Go host, so this keeps them as they were:
 -~>   type        down, up, move, wheel (the window's scroll), key, text (type),
 -~>               resize, focus, leave, enter, drop (pos, paths),
--~>               chosen (paths: what window.choose_file picked; none on cancel)
+-~>               chosen (paths: what window.choose_file or choose_save picked, none on cancel;
+-~>               dialog "open" or "save"; id: the dialog's id option, if any)
 -~>               pinch (pos, scale: the trackpad's pinch, a factor for the zoom),
 -~>               keyup (key: a key was released)
 -~>   pos         the pointer in ui pixels
@@ -88,6 +89,8 @@ function events_app(e) {
     h.paths = e.paths
   } elif (type == "chosen") {
     h.paths = e.paths
+    h.dialog = e.dialog
+    h.id = e.id
   }
   h.mods = events_no_mods
   if (e.mods != null) {

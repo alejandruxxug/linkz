@@ -1,0 +1,122 @@
+-~> export_png: Export PNG asks where to write the picture. It opens the system's
+-~> save dialog (dialog.choose_save) with a name, `<drawing>.png` or `Untitled N.png`,
+-~> and a folder: the last one exported to (remembered in settings.liz as
+-~> `export_folder`), else the drawing's own, else Pictures, else Documents. It
+-~> returns at once; the answer comes back as a "chosen" event with dialog "save"
+-~> and our id, and view_event hands it to export_chosen. A cancel does nothing.
+-~> Where the system has no save dialog the old way is used: the PNG goes next to
+-~> the drawing, and the status bar says so. The automation's Export never asks
+-~> (it calls view_export itself).
+
+use "editor_undo"
+use "home_data"
+use "i18n"
+use "mode_state"
+use "trace_model"
+use "view_input"
+
+-~> The id our dialog carries, so another save dialog's answer isn't taken for ours.
+let export_dialog_id = "export-png"
+
+-~> pending: the dialog is on the screen.
+let EXPORT = {"pending": false}
+
+-~> The name without its extension: "sun.lzdraw" is "sun".
+function export_stem(path) {
+  let name = trace_base(path)
+  if (text.ends(name, ".lzdraw")) {
+    return text.slice(name, 0, len(name) - 7)
+  }
+  name
+}
+
+-~> The file name the dialog offers in folder: the drawing's name with .png, or
+-~> "Untitled N.png" for a drawing with no file, the first N that is free.
+function export_name(folder) {
+  if (ed.file != "") {
+    return export_stem(ed.file) + ".png"
+  }
+  let n = 1
+  while (folder != "" && fs.exists(fs.join(folder, "Untitled " + str(n) + ".png"))) {
+    n += 1
+  }
+  "Untitled " + str(n) + ".png"
+}
+
+-~> The folder the dialog starts in.
+function export_folder() {
+  let last = settings.export_folder
+  if (type(last) == "STRING" && last != "" && fs.exists(last)) {
+    return last
+  }
+  let own = trace_folder(ed.file)
+  if (own != "" && fs.exists(own)) {
+    return own
+  }
+  let home = fs.home()
+  let places = [fs.join(home, "Pictures"), fs.join(home, "Documents")]
+  for (let i = 0; i < len(places); i += 1) {
+    if (fs.exists(places[i])) {
+      return places[i]
+    }
+  }
+  home
+}
+
+-~> Export PNG from the menu or its shortcut: asks where to write. Nothing is
+-~> asked while a dialog is already open.
+function export_ask() {
+  if (EXPORT.pending) {
+    return null
+  }
+  view_commit_focus()
+  let folder = export_folder()
+  let options = {"title": t("export.title"), "name": export_name(folder), "types": ["png"], "folder": folder, "id": export_dialog_id}
+  try {
+    dialog.choose_save(options)
+    EXPORT.pending = true
+  } catch (e) {
+    view_export("", t("export.no_dialog"))
+  }
+}
+
+-~> The path with ".png" added when its file name has no extension.
+function export_with_extension(path) {
+  if (text.find(trace_base(path), ".") >= 0) {
+    return path
+  }
+  path + ".png"
+}
+
+-~> Writes the settings line `let export_folder = "..."` (a file that can't be
+-~> written only loses the memory) and keeps it in `settings`.
+function export_remember(folder) {
+  settings.export_folder = folder
+  try {
+    let path = settings_path()
+    let body = null
+    if (fs.exists(path)) {
+      body = fs.read(path)
+    }
+    fs.write(path, mode_settings_with(body, "export_folder", home_quote(folder)))
+  } catch (e) {
+    null
+  }
+}
+
+-~> The answer of a save dialog. True when it was ours (the caller then needs
+-~> to do nothing more), false for another dialog's.
+function export_chosen(e) {
+  if (e.dialog != "save" || (e.id != null && e.id != export_dialog_id)) {
+    return false
+  }
+  EXPORT.pending = false
+  if (e.paths == null || len(e.paths) == 0) {
+    return true
+  }
+  let path = export_with_extension(e.paths[0])
+  if (view_export(path)) {
+    export_remember(trace_folder(path))
+  }
+  true
+}

@@ -1,0 +1,229 @@
+-~> brush_controls: the settings column of a brush creator tab (style guide
+-~> R005): rows at a pitch of 18, the labels `mute` in a column as wide as
+-~> the longest one + 6, then the control, the value right-aligned in `amber`
+-~> (32 wide). A slider is the R002 construction: a track 6 high, filled in
+-~> `lizard`, thumbs 5x12; a range fills between its two thumbs. Segmented
+-~> controls are 14 high, each button its label + 6. A rule and one `mute`
+-~> note line go under the rows.
+-~> A control that can't be used now (brush_edit's be_enabled) is drawn dim.
+
+use "brush_edit"
+use "brush_tabs"
+use "i18n"
+use "view_gfx"
+use "view_layout"
+
+let bc_value_w = 32
+
+-~> The rows of a list of controls (brush_tabs.liz) placed from (sx, sy), sw
+-~> wide: [{"kind", "id", "label", "label_x", "y", ...}] with "track" (the
+-~> slider's inner track [x, y, w, h]) and "value_r" for a slider, "segs"
+-~> for a segmented control, "box" for a checkbox. Gives {"rows", "end"}:
+-~> end is the y under the last row.
+function bc_rows(controls, sx, sy, sw) {
+  let lw = 0
+  for (let i = 0; i < len(controls); i = i + 1) {
+    if (controls[i].kind != "check") {
+      lw = math.max(lw, g_text_w(bt_label(controls[i].id)))
+    }
+  }
+  lw = lw + 6
+  let rows = []
+  let y = sy
+  for (let i = 0; i < len(controls); i = i + 1) {
+    let c = controls[i]
+    let row = {"kind": c.kind, "id": c.id, "label": bt_label(c.id), "label_x": sx, "y": y}
+    if (c.kind == "seg") {
+      row.segs = bc_segments(sx + lw, y - 1, c.id)
+    } elif (c.kind == "check") {
+      row.box = [sx, y, 13 + g_text_w(row.label), 13]
+    } else {
+      let w = sw - lw - bc_value_w - 2
+      row.track = [sx + lw + 1, y + 5, w - 2, 4]
+      row.value_r = sx + sw
+    }
+    push(rows, row)
+    y = y + 18
+  }
+  {"rows": rows, "end": y}
+}
+
+-~> The buttons of a segmented control from x: [{"id", "option", "label", "rect"}].
+-~> Neighbours share their outline (each starts one pixel before the last ends).
+function bc_segments(x, y, id) {
+  let out = []
+  let at = x
+  let opts = be_segments[id]
+  for (let i = 0; i < len(opts); i = i + 1) {
+    let label = bc_option_label(id, opts[i])
+    let w = g_text_w(label) + 6
+    push(out, {"id": id, "option": opts[i], "label": label, "rect": [at, y, w, 14]})
+    at = at + w - 1
+  }
+  out
+}
+
+function bc_option_label(id, option) {
+  if (id == "stab") {
+    return t(prefixed("stab.", option))
+  }
+  t("brush.opt." + id + "." + option)
+}
+
+-~> The hit id of a point on the rows ("slider:id", "seg:id:option",
+-~> "check:id"), or null.
+function bc_hit(rows, x, y) {
+  for (let i = 0; i < len(rows); i = i + 1) {
+    let r = rows[i]
+    if (r.kind == "seg") {
+      for (let k = 0; k < len(r.segs); k = k + 1) {
+        let s = r.segs[k].rect
+        if (view_in(x, y, s[0], s[1], s[2], s[3])) {
+          return "seg:" + r.id + ":" + r.segs[k].option
+        }
+      }
+    } elif (r.kind == "check") {
+      let b = r.box
+      if (view_in(x, y, b[0], b[1], b[2], b[3])) {
+        return "check:" + r.id
+      }
+    } elif (bc_on_track(r, x, y)) {
+      return "slider:" + r.id
+    }
+  }
+  null
+}
+
+-~> Whether a point is on a slider's track (a little around it too).
+function bc_on_track(row, x, y) {
+  let tr = row.track
+  view_in(x, y, tr[0] - 4, row.y, tr[2] + 8, 15)
+}
+
+-~> The x of a value along a track.
+function bc_track_x(track, v, lo, hi) {
+  let f = 0.0
+  if (hi > lo) {
+    f = (v - lo) / float(hi - lo)
+  }
+  track[0] + math.round(math.max(0.0, math.min(1.0, f)) * (track[2] - 1))
+}
+
+-~> The value at x along a track.
+function bc_track_value(track, x, lo, hi) {
+  let f = (x - track[0]) / float(math.max(1, track[2] - 1))
+  lo + (hi - lo) * math.max(0.0, math.min(1.0, f))
+}
+
+-~> == Painting ==
+
+-~> Paints the rows; `hover` is the window's hover id without "pw:".
+function bc_draw(rows, hover) {
+  for (let i = 0; i < len(rows); i = i + 1) {
+    let r = rows[i]
+    let ok = be_enabled(r.id).ok
+    if (r.kind == "seg") {
+      bc_draw_label(r, ok)
+      bc_draw_segments(r.segs, be_choice(r.id), hover, ok)
+    } elif (r.kind == "check") {
+      bc_draw_check(r.box, be_checked(r.id), r.label, ok)
+    } else {
+      bc_draw_label(r, ok)
+      let lim = be_limits(r.id)
+      bc_draw_slider(r, be_value(r.id), lim[0], lim[1], be_text(r.id), ok)
+    }
+  }
+}
+
+function bc_draw_label(r, ok) {
+  let c = P.mute
+  if (!ok) {
+    c = P.dim
+  }
+  g_text(r.label, r.label_x, r.y, c)
+}
+
+-~> A slider's track, fill, thumbs and value. v is [value] or [low, high].
+function bc_draw_slider(row, v, lo, hi, value_text, ok) {
+  let tr = row.track
+  g_frame(tr[0] - 1, tr[1] - 1, tr[2] + 2, tr[3] + 2, P.void)
+  g_rect(tr[0], tr[1], tr[2], tr[3], P.coal)
+  let a = tr[0]
+  let b = bc_track_x(tr, v[0], lo, hi)
+  if (len(v) > 1) {
+    a = b
+    b = bc_track_x(tr, v[1], lo, hi)
+  }
+  let fill = P.lizard
+  let thumb = P.bright
+  let vc = P.amber
+  if (!ok) {
+    fill = P.bevel
+    thumb = P.dim
+    vc = P.dim
+  }
+  g_rect(a, tr[1], math.max(1, b - a), tr[3], fill)
+  if (len(v) > 1) {
+    bc_draw_thumb(a, tr[1], thumb)
+  }
+  bc_draw_thumb(b, tr[1], thumb)
+  if (value_text != "") {
+    g_text(value_text, row.value_r - g_text_w(value_text), row.y, vc)
+  }
+}
+
+-~> A thumb at x of a track whose inner top is ty: a 5x12 outline, 3x10 inside.
+function bc_draw_thumb(x, ty, c) {
+  g_frame(x - 2, ty - 4, 5, 12, P.void)
+  g_rect(x - 1, ty - 3, 3, 10, c)
+}
+
+-~> A segmented control: the current option pressed in.
+function bc_draw_segments(segs, current, hover, ok) {
+  for (let i = 0; i < len(segs); i = i + 1) {
+    let s = segs[i]
+    let r = s.rect
+    let state = "normal"
+    if (!ok) {
+      state = "disabled"
+    } elif (s.option == current) {
+      state = "active"
+    } elif (hover == "seg:" + s.id + ":" + s.option) {
+      state = "hover"
+    }
+    g_button(r[0], r[1], r[2], r[3], "", s.label, state)
+  }
+}
+
+-~> A checkbox: a 9x9 box (`moss` with a `lizard` tick when on) and its label.
+function bc_draw_check(box, on, label, ok) {
+  let x = box[0]
+  let y = box[1]
+  g_frame(x, y + 2, 9, 9, P.void)
+  let face = P.coal
+  if (on) {
+    face = P.moss
+  }
+  g_rect(x + 1, y + 3, 7, 7, face)
+  if (on) {
+    let tick = [[2, 6], [3, 7], [3, 8], [4, 7], [5, 6], [6, 5], [7, 4]]
+    for (let i = 0; i < len(tick); i = i + 1) {
+      g_rect(x + tick[i][0], y + tick[i][1], 1, 1, P.lizard)
+    }
+  }
+  let c = P.text
+  if (!ok) {
+    c = P.dim
+  }
+  g_text(label, x + 13, y, c)
+}
+
+-~> The rule and the note line under the rows (none when the note is "").
+-~> The note may run 4 past the rule, up to the window's edge.
+function bc_draw_note(sx, y, sw, note, c) {
+  if (note == "") {
+    return null
+  }
+  g_rect(sx, y + 2, sw, 1, P.bevel)
+  g_text(g_fit_words(note, sw + 4), sx, y + 6, c)
+}

@@ -9,6 +9,7 @@ use "artist_route"
 use "budget_view"
 use "editor_commands"
 use "editor_state"
+use "export_png"
 use "editor_undo"
 use "home_view"
 use "i18n"
@@ -237,6 +238,10 @@ function view_event(e) {
     if (text.lower(e.key) == "space") {
       canvas_space_up()
     }
+    return null
+  }
+  if (ty == "chosen" && export_chosen(e)) {
+    -~> the answer of the Export PNG save dialog (the trace picker's is "open")
     return null
   }
   if (tr_is_open() && ty != "resize") {

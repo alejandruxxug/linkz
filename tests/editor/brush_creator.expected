@@ -1,0 +1,55 @@
+-- the creator opens on a tab, eight tabs in the rail
+true stroke my ink 8 [] [6, 18, 500, 326]
+true 
+-- Stroke: the stabilizer moved here; a vector pen's spacing says why it can't change
+string ["stroke"]
+stamped brushes only: turn it on in Rendering null null
+-- Rendering: stamped turns the stamped settings on
+stamped 2.0 null ["stroke", "rendering"]
+1.0 0.0 
+-- Shape: the tiles are lib/draw's shapes; rotation, angle, count
+true
+star follow 3.1416 8 null
+true true count
+star · follows the stroke
+importing a picture comes later star
+-- Grain: a texture from the catalog, moving or fixed, depth; none is a plain 0
+{"kind": "chalk", "scale": 6, "depth": 0.0, "moving": true} moving: travels with the stroke
+brushes can't do this yet
+0 ["edge"]
+-- Dynamics, Color, Taper
+1.0 {"opacity": -1.0}
+[180.0, 0, 1.0]
+turn the nib on first null
+3.1416 0.0 null 0.3
+["stroke", "taper", "shape", "grain", "dynamics", "color", "rendering"]
+-- the test pad: the sample stroke, dark paper, strokes stay in the pad
+1 true
+0 false
+true true
+1 1 true
+0 1
+-- the code block writes the hash under the name it will be saved as
+pens.my_ink = {"name": "my ink",
+pens.my_ink · 2-5 / 13
+-- Esc closes without saving
+false false null
+-- Reset goes back to the pen it opened on
+["shape", "rendering"]
+[] null
+-- Save brush: a built-in's name is refused, a name of its own goes to the library
+ink is a built-in pen: save the copy under another name
+true dry_leaf dry_leaf saved as pens.dry_leaf true []
+Dry Leaf leaf stamped true
+-- one undo step when the drawing keeps a copy of the brush
+1 true true save brush pens.dry_leaf
+true 
+true
+-- Export… writes a .lzbrush beside the drawing
+true true exported dry_leaf.lzbrush
+-- every tab fits, in English and in Spanish, in coder and artist mode
+[]
+[] Creador de pinceles Render
+[6, 18, 500, 326] true
+[] [6, 52, 500, 264] null
+[]

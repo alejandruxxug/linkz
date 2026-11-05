@@ -1,0 +1,89 @@
+-- the built-in and the stamped pens round-trip
+ink null [] true true
+pencil null [] true true
+marker null [] true true
+brush null [] true true
+calligraphy null [] true true
+chalk null [] true true
+spray null [] true true
+ink_dots null [] true true
+star_trail null [] true true
+-~> lzbrush 1
+-~> star_trail: a brush saved from Linkz.
+let brush = {
+  "name": "star_trail",
+  "render": "stamped",
+  "min": 8,
+  "max": 22,
+  "taper": 0.25,
+  "opacity": [0.8, 1],
+  "nib": null,
+  "spacing": 1.1,
+  "shape": "star",
+  "rotation": "follow",
+  "angle": 1.5707963267948966,
+  "grain": 0,
+  "size_jitter": 0.25,
+  "color_jitter": [25, 0.1, 0.1],
+  "speed": {"size": -0.4, "opacity": 0},
+  "pressure": {
+    "curve": [[0, 0], [1, 1]],
+    "smoothing": 0.3,
+    "speed": 0,
+    "inputs": {"trackpad": {"floor": 0.1}, "tablet": {}, "mouse": {"speed": 0.8}}
+  }
+}
+
+-- a bitmap shape and grain as runs
+null [] false false true
+-- a set
+null [] 2 true false
+[]
+-- unknown keys dropped, values clamped, wrong types dropped
+null {"count": 3, "max": 500, "min": 0, "name": "messy", "opacity": [0.5, 1], "pressure": {"floor": 0.9, "inputs": {"mouse": {"speed": 1}}}, "taper": 0}
+glitter: unknown key, dropped
+max: 900 is outside 0 to 500; used 500
+min: -5 is outside 0 to 500; used 0
+opacity[1]: 3 is outside 0 to 1; used 1
+pressure.curve: want 2 to 32 points like [[0, 0], [1, 1]]; dropped
+pressure.floor: 2 is outside 0 to 0.9; used 0.9
+pressure.inputs.mouse.speed: 5 is outside 0 to 1; used 1
+pressure.inputs.mouse.zip: unknown key, dropped
+rotation: "spin" is not one of fixed, follow, random; dropped
+shape: want a shape name or a bitmap hash; dropped
+{"render": "stamped", "name": "imported", "min": 1, "max": 8, "taper": 0, "opacity": [1, 1]} ["name: missing; used imported", "min: missing; used 1", "max: missing; used 8"]
+-- hostile files are refused with their reason
+0 null [line 3, column 1] this expression statement is not data: a brush file holds only values
+1 null [line 2, column 13] a call is not data: a brush file holds only values
+2 null [line 2, column 22] a call is not data: a brush file holds only values
+3 null [line 2, column 1] this use statement is not data: a brush file holds only values
+4 null [line 2, column 34] a call is not data: a brush file holds only values
+5 null [line 2, column 13] a function is not data: a brush file holds only values
+6 null the file holds too much data (more than 200000 values)
+7 null [line 3, column 1] syntax error: expected an expression, got end of input
+8 null not a .lzbrush file: it should start with the line -~> lzbrush 1
+9 null this .lzbrush file is version 2; this Linkz reads version 1
+10 null not a .lzbrush file: it should start with the line -~> lzbrush 1
+11 null let brush must be a hash {...}
+12 null a .lzbrush file is the header line and one line, let brush = ...
+13 null not a .lzbrush file: it should start with the line -~> lzbrush 1
+brush 1 is not a hash {...}
+[line 2, column 31] the name "nope" is not data: a brush file holds only values
+-- the library
+$HOME/.linkz/brushes/lib_one.lzbrush true
+true lib_one true
+true
+"ink" is a built-in pen; give the brush a name of its own
+a brush needs a name with a letter or a digit
+-- export all, import
+true
+null true
+null 1 ink_2 ink ["glitter: unknown key, dropped"]
+ink_3 ink_4
+null true
+[] [line 3, column 1] this expression statement is not data: a brush file holds only values true
+[] [line 2, column 31] a call is not data: a brush file holds only values true
+-- the old pens are copied once, nothing is deleted
+{"max": 5, "min": 1, "name": "mig old", "taper": 0.2, "opacity": [1, 1]} true true true
+changed
+[] []

@@ -1,0 +1,287 @@
+-~> brush_tiles: the preset tiles and the big preview of the brush creator's
+-~> Shape and Grain tabs (style guide R005). The tiles are what lib/draw
+-~> offers, read from stamp_shapes() / stamp_grains() (stamp_catalog.liz), so
+-~> a new shape or grain shows up here on its own: 24x24 at a step of 27,
+-~> 4 to a row, a `coal` well in a `void` outline; the picked one has a
+-~> `lizard` outline and a 5x5 `lizard` corner. The last tile and the button
+-~> under the tiles import a picture: not in the creator yet, so they are
+-~> drawn disabled, and so is a picture entry the draft has no picture for.
+-~> The preview is 64x64: the stamp large with a `lizard` line at its angle,
+-~> or a short stroke of the brush on paper to see the grain in it.
+-~> What is inside the tiles and the preview is drawn smooth, by brush().
+
+use "../draw/pens"
+use "../draw/shapes"
+use "../draw/stamp_catalog"
+use "../gfx/raster"
+use "brush_edit"
+use "brush_pictures"
+use "editor_undo"
+use "i18n"
+use "pen_edit"
+use "pen_library"
+use "view_gfx"
+use "view_layout"
+
+let bti_size = 24
+let bti_step = 27
+
+-~> The catalog of a tab, and the entry the draft has now.
+function bti_entries(tab) {
+  if (tab == "shape") {
+    return stamp_shapes()
+  }
+  stamp_grains()
+}
+
+function bti_current(tab) {
+  if (tab == "shape") {
+    return be_shape()
+  }
+  be_grain()
+}
+
+-~> Where the tiles column and the preview are, from (x0, y0):
+-~> {"tiles": [{"name", "rect", "ok"}], "import_tile", "import", "hint_y",
+-~> "preview_x", "preview"}.
+function bti_layout(tab, x0, y0) {
+  let list_ = bti_entries(tab)
+  let cur = bti_current(tab)
+  let tiles = []
+  for (let k = 0; k < len(list_); k = k + 1) {
+    let r = [x0 + (k % 4) * bti_step, y0 + 15 + (k // 4) * bti_step, bti_size, bti_size]
+    push(tiles, {"name": list_[k].name, "entry": list_[k], "rect": r, "ok": be_entry_ok(list_[k], cur)})
+  }
+  let n = len(list_)
+  let it = [x0 + (n % 4) * bti_step, y0 + 15 + (n // 4) * bti_step, bti_size, bti_size]
+  let by = y0 + 15 + ((n + 4) // 4) * bti_step + 3
+  let label = t("brush.import_image")
+  {
+    "tiles": tiles,
+    "import_tile": it,
+    "import": [x0, by, g_text_w(label) + 22, 16],
+    "hint_y": by + 18,
+    "preview_x": x0 + 117,
+    "preview": [x0 + 118, y0 + 16, 64, 64]
+  }
+}
+
+-~> The hit id of a point ("tile:name", "import"), or null.
+function bti_hit(tl, x, y) {
+  for (let i = 0; i < len(tl.tiles); i = i + 1) {
+    let r = tl.tiles[i].rect
+    if (view_in(x, y, r[0], r[1], r[2], r[3])) {
+      return "tile:" + tl.tiles[i].name
+    }
+  }
+  let boxes = [tl.import_tile, tl.import]
+  for (let i = 0; i < len(boxes); i = i + 1) {
+    let r = boxes[i]
+    if (view_in(x, y, r[0], r[1], r[2], r[3])) {
+      return "import"
+    }
+  }
+  null
+}
+
+-~> A press on a tile: picks it. Returns why when it can't be picked, else "".
+function bti_pick(tab, name, tl) {
+  for (let i = 0; i < len(tl.tiles); i = i + 1) {
+    if (tl.tiles[i].name == name && !tl.tiles[i].ok) {
+      return t("brush.import_later")
+    }
+  }
+  if (tab == "shape") {
+    be_pick_shape(name)
+  } else {
+    be_pick_grain(name)
+  }
+  ""
+}
+
+-~> == Painting ==
+
+function bti_draw(tab, tl, x0, y0, hover) {
+  g_text(text.upper(t(prefixed("brush.head.", tab))), x0, y0, P.mute)
+  let cur = bti_current(tab)
+  for (let i = 0; i < len(tl.tiles); i = i + 1) {
+    bti_draw_tile(tab, tl.tiles[i], tl.tiles[i].name == cur, hover == "tile:" + tl.tiles[i].name)
+  }
+  bti_draw_import_tile(tl.import_tile)
+  let ib = tl.import
+  g_button(ib[0], ib[1], ib[2], ib[3], "image", t("brush.import_image"), "disabled")
+  g_text(t("brush.png_hint"), x0, tl.hint_y, P.mute)
+  let head = "brush.head.stamp"
+  if (tab == "grain") {
+    head = "brush.head.preview"
+  }
+  g_text(text.upper(t(head)), tl.preview_x, y0, P.mute)
+  let pv = tl.preview
+  g_frame(pv[0] - 1, pv[1] - 1, pv[2] + 2, pv[3] + 2, P.void)
+  if (tab == "grain") {
+    g_rect(pv[0], pv[1], pv[2], pv[3], #fbf8ef)
+    bti_grain_preview(pv)
+  } else {
+    g_rect(pv[0], pv[1], pv[2], pv[3], P.coal)
+    bti_stamp_preview(pv)
+  }
+}
+
+function bti_draw_tile(tab, tile, selected, hovered) {
+  let r = tile.rect
+  let edge = P.void
+  if (selected) {
+    edge = P.lizard
+  } elif (hovered && tile.ok) {
+    edge = P.mute
+  }
+  g_frame(r[0], r[1], r[2], r[3], edge)
+  g_rect(r[0] + 1, r[1] + 1, r[2] - 2, r[3] - 2, P.coal)
+  if (!tile.ok) {
+    g_icon("image", r[0] + 8, r[1] + 8, P.dim)
+  } elif (tab == "grain" && tile.name == "none") {
+    for (let i = 0; i < r[2] - 8; i = i + 1) {
+      g_rect(r[0] + 4 + i, r[1] + r[3] - 5 - i, 1, 1, P.dim)
+    }
+  } elif (tab == "grain") {
+    bti_grain_tile(tile.name, r)
+  } else {
+    bti_shape_tile(tile.name, r)
+  }
+  if (selected) {
+    g_rect(r[0] + r[2] - 6, r[1] + r[3] - 6, 5, 5, P.lizard)
+  }
+}
+
+-~> The import tile: `panel` face, a dotted `bevel` edge, a `plus` (dim: not yet).
+function bti_draw_import_tile(r) {
+  g_frame(r[0], r[1], r[2], r[3], P.void)
+  g_rect(r[0] + 1, r[1] + 1, r[2] - 2, r[3] - 2, P.panel)
+  for (let k = 0; k < r[2] - 2; k = k + 3) {
+    g_rect(r[0] + 1 + k, r[1] + 1, 1, 1, P.bevel)
+    g_rect(r[0] + 1 + k, r[1] + r[3] - 2, 1, 1, P.bevel)
+    g_rect(r[0] + 1, r[1] + 1 + k, 1, 1, P.bevel)
+    g_rect(r[0] + r[2] - 2, r[1] + 1 + k, 1, 1, P.bevel)
+  }
+  g_icon("plus", r[0] + (r[2] - 8) // 2, r[1] + (r[3] - 8) // 2, P.dim)
+}
+
+-~> == The smooth content ==
+
+-~> One stamp of a pen at c (screen pixels), d wide, in a color.
+function bti_stamp(pen, c, d, color) {
+  let own = pen_deep_copy(pen)
+  own.render = "stamped"
+  own.min = d
+  own.max = d
+  own.taper = 0
+  own.opacity = [1, 1]
+  own.spacing = 50
+  own.scatter = 0
+  own.jitter = 0
+  own.size = 1
+  own.size_jitter = 0
+  own.opacity_jitter = 0
+  own.color_jitter = [0, 0, 0]
+  own.grain = 0
+  delete(own, "pressure")
+  let s = brush([c - (0.25, 0), c + (0.25, 0)], [1, 1], color, own)
+  pop(drawing)
+  s
+}
+
+-~> How a tile shows a shape: the flat nib turned and thin, the others whole.
+function bti_tile_pen(name) {
+  if (name == "bitmap") {
+    return {"shape": pw.draft.shape, "rotation": "fixed", "angle": 0}
+  }
+  if (name == "flat") {
+    return {"shape": "flat", "rotation": "fixed", "angle": -0.5236}
+  }
+  {"shape": name, "rotation": "fixed", "angle": 0}
+}
+
+function bti_shape_tile(name, r) {
+  let size = (r[2] - 2, r[3] - 2)
+  let key = name
+  if (name == "bitmap") {
+    key = str(pw.draft.shape)
+  }
+  bp_keep("pw:tile:shape:" + name, key, size, function() {
+    bp_paint_shapes([bti_stamp(bti_tile_pen(name), (size.x, size.y), 30, P.bright)], (0, 0))
+  })
+  bp_blit("pw:tile:shape:" + name, r[0] + 1, r[1] + 1, size)
+}
+
+-~> A grain tile: rows of small square stamps faded by the grain, light on `dim`.
+function bti_grain_tile(name, r) {
+  let size = (r[2] - 4, r[3] - 4)
+  let grain = {"kind": name, "scale": 4, "depth": 1, "moving": false}
+  if (name == "bitmap") {
+    grain = pw.draft.grain
+  }
+  bp_keep("pw:tile:grain:" + name, str(grain), size, function() {
+    fb.fill((0, 0), (size.x * 2, size.y * 2), P.dim)
+    let pen = {
+      "name": "tile",
+      "render": "stamped",
+      "shape": "square",
+      "min": 3,
+      "max": 3,
+      "taper": 0,
+      "opacity": [1, 1],
+      "spacing": 0.67,
+      "grain": grain
+    }
+    let rows = []
+    for (let y = 1.5; y < size.y * 2; y = y + 2) {
+      push(rows, brush([(0, y), (size.x * 2, y)], [1, 1], P.bright, pen))
+      pop(drawing)
+    }
+    bp_paint_shapes(rows, (0, 0))
+  })
+  bp_blit("pw:tile:grain:" + name, r[0] + 2, r[1] + 2, size)
+}
+
+-~> The stamp preview: the draft's stamp large and a `lizard` line along its angle.
+function bti_stamp_preview(pv) {
+  let size = (pv[2], pv[3])
+  bp_keep("pw:preview:shape", str(pw.ver), size, function() {
+    let c = (size.x, size.y)
+    let pen = {"shape": pw.draft.shape, "roundness": pw.draft.roundness, "rotation": "fixed", "angle": be_number("angle", 0)}
+    if (pen.shape == null) {
+      pen.shape = "round"
+    }
+    if (pen.roundness == null) {
+      pen.roundness = 1
+    }
+    bp_paint_shapes([bti_stamp(pen, c, 82, P.bright)], (0, 0))
+    let a = pen.angle
+    let tip = c + (math.cos(a) * 54, math.sin(a) * 54)
+    fb.spans(raster.stroke([["M", c], ["L", tip]], 1.2), (0, 0), P.lizard)
+  })
+  bp_blit("pw:preview:shape", pv[0], pv[1], size)
+}
+
+-~> The grain preview: a short wave of the draft brush, in the brush's color.
+function bti_grain_preview(pv) {
+  let size = (pv[2], pv[3])
+  bp_keep("pw:preview:grain", str(pw.ver) + "|" + ed.color, size, function() {
+    let color = g_hex_color(ed.color)
+    if (color == null) {
+      color = P.void
+    }
+    let pts = []
+    let ps = []
+    for (let i = 0; i < 12; i = i + 1) {
+      let f = i / 11.0
+      push(pts, (14 + 100 * f, 64 + 22 * math.sin(f * 1.6 * math.pi + 3.4)))
+      push(ps, 0.5 + 0.5 * f)
+    }
+    pen_set_input("tablet")
+    let s = brush(pts, ps, color, pw.draft)
+    pop(drawing)
+    bp_paint_shapes([s], (0, 0))
+  })
+  bp_blit("pw:preview:grain", pv[0], pv[1], size)
+}

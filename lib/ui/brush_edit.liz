@@ -1,0 +1,376 @@
+-~> brush_edit: the brush creator's settings beyond the R002 pen settings,
+-~> as flat keys of the draft pen (the keys the pens.liz header documents:
+-~> "spacing", "shape", "grain" {"kind", ...}, "color_jitter" [h, s, b]...).
+-~> The creator's controls only call the be_* functions here; a setting the
+-~> old window had (width, opacity, taper, smoothing, length...) is passed on
+-~> to pen_edit.liz, so both windows' settings read and write one way.
+-~> A setting with no value in the draft shows the default stamps.liz uses.
+
+use "../draw/stamp_catalog"
+use "i18n"
+use "pen_code"
+use "pen_edit"
+use "pen_library"
+use "stabilize"
+use "view_gfx"
+
+-~> The sliders of the stamped keys: id -> [path, low, high, step, unit,
+-~> default]. Low, high and step are in what the slider shows: degrees for
+-~> "deg" (the pen keeps radians) and "hue" (the pen keeps degrees too),
+-~> shares for "%".
+let be_sliders = {
+  "spacing": ["spacing", 0.02, 1, 0.01, "%", 0.25],
+  "jitter": ["jitter", 0, 1, 0.01, "%", 0],
+  "size": ["size", 0.1, 2, 0.05, "%", 1],
+  "angle": ["angle", 0, 180, 1, "deg", 0],
+  "scatter": ["scatter", 0, 2, 0.01, "%", 0],
+  "count": ["count", 1, 8, 1, "", 1],
+  "roundness": ["roundness", 0.05, 1, 0.01, "%", 1],
+  "grain_scale": ["grain.scale", 0.5, 24, 0.5, "px", 6],
+  "grain_depth": ["grain.depth", 0, 1, 0.01, "%", 0.5],
+  "edge": ["grain", 0, 3, 0.1, "px", 0],
+  "size_jitter": ["size_jitter", 0, 1, 0.01, "%", 0],
+  "opacity_jitter": ["opacity_jitter", 0, 1, 0.01, "%", 0],
+  "speed_size": ["speed.size", -1, 1, 0.01, "%", 0],
+  "speed_opacity": ["speed.opacity", -1, 1, 0.01, "%", 0],
+  "hue_jitter": ["color_jitter.0", 0, 180, 1, "hue", 0],
+  "sat_jitter": ["color_jitter.1", 0, 1, 0.01, "%", 0],
+  "bright_jitter": ["color_jitter.2", 0, 1, 0.01, "%", 0],
+  "nib_angle": ["nib", 0, 180, 1, "deg", 0]
+}
+
+-~> The segmented controls: id -> their options.
+let be_segments = {
+  "stab": ["off", "string", "average"],
+  "rotation": ["fixed", "follow", "random"],
+  "texture": ["moving", "fixed"],
+  "render": ["vector", "stamped"]
+}
+
+-~> The settings only a stamped brush reads.
+let be_stamped_only = ["spacing", "jitter", "size", "angle", "scatter", "count", "roundness", "rotation", "texture",
+  "grain_scale", "grain_depth", "size_jitter", "opacity_jitter", "speed_size", "speed_opacity", "hue_jitter",
+  "sat_jitter", "bright_jitter"]
+
+-~> The nib angle a pen gets when its nib is turned on (45 degrees).
+let be_nib_default = 0.7854
+
+-~> == Paths into the draft ==
+
+-~> The value at a path of the draft ("grain.scale", "color_jitter.1"), or null.
+function be_get(path) {
+  let parts = text.split(path, ".")
+  let v = pw.draft
+  for (let i = 0; i < len(parts); i = i + 1) {
+    if (type(v) == "HASH") {
+      v = v[parts[i]]
+    } elif (type(v) == "ARRAY") {
+      let k = int(parts[i])
+      if (k >= len(v)) {
+        return null
+      }
+      v = v[k]
+    } else {
+      return null
+    }
+  }
+  v
+}
+
+-~> Puts a value at a path of the draft, making the hash or the [h, s, b]
+-~> list on the way when it is missing, and notes the change by its top key.
+function be_put(path, v) {
+  let parts = text.split(path, ".")
+  let top = parts[0]
+  if (len(parts) == 1) {
+    pw.draft[top] = v
+  } elif (top == "color_jitter") {
+    let c = [0, 0, 0]
+    let old = pw.draft.color_jitter
+    if (type(old) == "ARRAY" && len(old) == 3) {
+      c = [old[0], old[1], old[2]]
+    }
+    c[int(parts[1])] = v
+    pw.draft.color_jitter = c
+  } else {
+    let h = pw.draft[top]
+    if (type(h) != "HASH") {
+      h = {}
+    } else {
+      h = pen_deep_copy(h)
+    }
+    h[parts[1]] = v
+    pw.draft[top] = h
+  }
+  pw_mark(top)
+}
+
+-~> Whether the draft draws stamps.
+function be_stamped() {
+  pw.draft.render == "stamped"
+}
+
+-~> Whether the draft's grain is a texture (a hash), not a rough edge.
+function be_textured() {
+  type(pw.draft.grain) == "HASH"
+}
+
+-~> == What the controls show ==
+
+-~> Whether a setting can be changed now, and when not, why (a text), as
+-~> {"ok", "why"}.
+function be_enabled(id) {
+  if (list.index(be_stamped_only, id) >= 0 && !be_stamped()) {
+    return {"ok": false, "why": t("brush.needs_stamped")}
+  }
+  if ((id == "texture" || id == "grain_scale" || id == "grain_depth") && !be_textured()) {
+    return {"ok": false, "why": t("brush.needs_texture")}
+  }
+  if (id == "nib_angle" && pw.draft.nib == null) {
+    return {"ok": false, "why": t("brush.needs_nib")}
+  }
+  if (id == "grain_size") {
+    return {"ok": false, "why": t("brush.needs_key")}
+  }
+  {"ok": true, "why": ""}
+}
+
+-~> A number the draft holds at a path, or the default.
+function be_number(path, fallback) {
+  let v = be_get(path)
+  if (type(v) == "INTEGER" || type(v) == "FLOAT") {
+    return v
+  }
+  fallback
+}
+
+-~> What a slider holds: [low, high] for a range, else [value], in what it shows.
+function be_value(id) {
+  let s = be_sliders[id]
+  if (s == null) {
+    return pw_value(id)
+  }
+  let v = be_number(s[0], s[5])
+  if (s[4] == "deg") {
+    v = v * 180 / math.pi
+  }
+  [v]
+}
+
+-~> The slider's limits [low, high, step].
+function be_limits(id) {
+  let s = be_sliders[id]
+  if (s == null) {
+    return pw_limits(id)
+  }
+  [s[1], s[2], s[3]]
+}
+
+-~> Sets one end (sub 0 or 1) of a slider from what it shows.
+function be_set(id, sub, v) {
+  let s = be_sliders[id]
+  if (s == null) {
+    return pw_set(id, sub, v)
+  }
+  let x = pw_snap(v, s[1], s[2], s[3])
+  if (s[4] == "deg") {
+    x = math.round(x * math.pi / 180 * 10000) / 10000.0
+  }
+  if (id == "count") {
+    x = int(x)
+  }
+  be_put(s[0], x)
+}
+
+-~> The text a slider shows: "35%", "30°", "6 px", "1".
+function be_text(id) {
+  let s = be_sliders[id]
+  if (s == null) {
+    return pw_value_text(id)
+  }
+  let v = be_value(id)[0]
+  if (s[4] == "%") {
+    return str(math.round(v * 100)) + "%"
+  }
+  if (s[4] == "deg" || s[4] == "hue") {
+    return str(math.round(v)) + "°"
+  }
+  if (s[4] == "px") {
+    return pen_code_number(math.round(v * 10) / 10.0) + " px"
+  }
+  pen_code_number(v)
+}
+
+-~> The option a segmented control has now.
+function be_choice(id) {
+  if (id == "stab") {
+    return stabilize_settings(pw.draft).mode
+  }
+  if (id == "rotation") {
+    let r = pw.draft.rotation
+    if (list.index(be_segments.rotation, r) >= 0) {
+      return r
+    }
+    return "fixed"
+  }
+  if (id == "texture") {
+    if (be_get("grain.moving") == true) {
+      return "moving"
+    }
+    return "fixed"
+  }
+  if (be_stamped()) {
+    return "stamped"
+  }
+  "vector"
+}
+
+-~> Picks an option of a segmented control.
+function be_choose(id, option) {
+  if (id == "stab") {
+    pw_stab_mode(option)
+  } elif (id == "rotation") {
+    be_put("rotation", option)
+  } elif (id == "texture") {
+    be_put("grain.moving", option == "moving")
+  } elif (id == "render") {
+    be_render(option)
+  }
+}
+
+-~> Vector or stamped. A pen that had no "render" key loses it again for
+-~> vector, so its hash stays as it was written.
+function be_render(option) {
+  if (option == "stamped") {
+    pw.draft.render = "stamped"
+  } elif (pw.orig.render == null) {
+    delete(pw.draft, "render")
+  } else {
+    pw.draft.render = "vector"
+  }
+  pw_mark("render")
+}
+
+-~> Whether a checkbox is ticked.
+function be_checked(id) {
+  if (id == "catch_up") {
+    return stabilize_settings(pw.draft).catch_up
+  }
+  if (id == "nib") {
+    return pw.draft.nib != null
+  }
+  false
+}
+
+function be_toggle(id) {
+  if (id == "catch_up") {
+    pw_toggle_catch_up()
+  } elif (id == "nib") {
+    if (pw.draft.nib != null) {
+      pw.draft.nib = null
+    } elif (pw.orig.nib != null) {
+      pw.draft.nib = pw.orig.nib
+    } else {
+      pw.draft.nib = be_nib_default
+    }
+    pw_mark("nib")
+  }
+}
+
+-~> == Shapes and grains ==
+
+-~> The entry's name in the interface's language.
+function be_entry_name(e) {
+  let s = e[lang_get()]
+  if (s == null) {
+    s = e.en
+  }
+  s
+}
+
+-~> The shape the draft stamps: a name of stamp_shapes(), "bitmap" for a picture.
+function be_shape() {
+  let s = pw.draft.shape
+  if (type(s) == "HASH") {
+    return "bitmap"
+  }
+  if (type(s) != "STRING") {
+    return "round"
+  }
+  s
+}
+
+-~> The grain the draft has: a name of stamp_grains(), "none" for a plain number.
+function be_grain() {
+  let g = pw.draft.grain
+  if (type(g) != "HASH") {
+    return "none"
+  }
+  if (type(g.kind) == "STRING") {
+    return g.kind
+  }
+  "noise"
+}
+
+-~> Whether a catalog entry can be picked: one that needs a picture only when
+-~> the draft already has one (importing a picture is not in the creator yet).
+function be_entry_ok(e, current) {
+  e.needs == null || e.name == current
+}
+
+-~> Picks a stamp shape. A vector brush becomes a stamped one: a shape is
+-~> only drawn by stamps.
+function be_pick_shape(name) {
+  if (name == be_shape()) {
+    return false
+  }
+  pw.draft.shape = name
+  pw.draft.render = "stamped"
+  pw_mark("shape")
+  true
+}
+
+-~> Picks a grain. "none" is a plain 0; a texture keeps the scale, depth and
+-~> fixed/moving the draft had, and makes the brush stamped (only stamps
+-~> have a texture).
+function be_pick_grain(name) {
+  if (name == be_grain()) {
+    return false
+  }
+  if (name == "none") {
+    pw.draft.grain = 0
+  } else {
+    let g = {"kind": name, "scale": be_number("grain.scale", 6), "depth": be_number("grain.depth", 0.5), "moving": be_get("grain.moving") == true}
+    pw.draft.grain = g
+    pw.draft.render = "stamped"
+  }
+  pw_mark("grain")
+  true
+}
+
+-~> The note under a tab's settings, or "".
+function be_note(tab) {
+  if (tab == "shape") {
+    let name = be_shape()
+    let list_ = stamp_shapes()
+    for (let i = 0; i < len(list_); i = i + 1) {
+      if (list_[i].name == name) {
+        name = text.lower(be_entry_name(list_[i]))
+      }
+    }
+    return name + " · " + t(prefixed("brush.note.", be_choice("rotation")))
+  }
+  if (tab == "grain") {
+    if (!be_textured()) {
+      return t("brush.note.edge")
+    }
+    return t(prefixed("brush.note.grain_", be_choice("texture")))
+  }
+  if (tab == "rendering") {
+    return t(prefixed("brush.note.", be_choice("render")))
+  }
+  if (tab == "stroke" && be_stamped()) {
+    return t("brush.note.spacing")
+  }
+  ""
+}

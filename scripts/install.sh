@@ -5,11 +5,16 @@
 #   scripts/install.sh --system         # -> /usr/local/bin (uses sudo)
 #   scripts/install.sh --version v0.1.0 # a specific release
 #   scripts/install.sh --dir ~/bin      # another folder
+#   scripts/install.sh --apps ~/Apps    # macOS: where Linkz.app goes
 #   scripts/install.sh --from-file linkz_0.1.0_darwin_arm64.tar.gz [--checksums checksums.txt]
 #
 # Downloads come only from github.com/alejandruxxug/linkz releases. While that
 # repo is private this works once a release is public, or with a token that can
 # read the repo:  GITHUB_TOKEN=... scripts/install.sh
+#
+# On macOS the archive holds Linkz.app (with the icon): it goes to
+# ~/Applications (/Applications with --system) and a link `linkz` in the bin
+# folder runs the program inside it.
 #
 # --from-file installs an archive you already have (no network), for testing
 # and offline machines. The archive is checked when --checksums is given.
@@ -20,18 +25,20 @@ BIN="linkz"
 version=""
 dir="$HOME/.local/bin"
 system=0
+apps=""
 from_file=""
 checksums_file=""
 
 die() { echo "install: $*" >&2; exit 1; }
 
-usage() { sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; }
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --version)   [ $# -ge 2 ] || die "--version needs a value"; version="$2"; shift 2 ;;
     --dir)       [ $# -ge 2 ] || die "--dir needs a value"; dir="$2"; shift 2 ;;
     --system)    system=1; dir="/usr/local/bin"; shift ;;
+    --apps)      [ $# -ge 2 ] || die "--apps needs a value"; apps="$2"; shift 2 ;;
     --from-file) [ $# -ge 2 ] || die "--from-file needs a value"; from_file="$2"; shift 2 ;;
     --checksums) [ $# -ge 2 ] || die "--checksums needs a value"; checksums_file="$2"; shift 2 ;;
     -h|--help)   usage; exit 0 ;;
@@ -121,17 +128,28 @@ fi
 
 mkdir -p "$tmp/x"
 tar -xzf "$archive" -C "$tmp/x"
-[ -f "$tmp/x/$BIN" ] || die "the archive has no $BIN"
-chmod +x "$tmp/x/$BIN"
 
-if [ "$system" = 1 ]; then
-  sudo mkdir -p "$dir"
-  sudo install -m 755 "$tmp/x/$BIN" "$dir/$BIN"
+# run SUDO_OR_NOT COMMAND...: with --system the folders are root's.
+run() { if [ "$system" = 1 ]; then sudo "$@"; else "$@"; fi; }
+
+if [ "$os" = darwin ]; then
+  app="$tmp/x/Linkz.app"
+  [ -d "$app" ] || die "the archive has no Linkz.app"
+  if [ -z "$apps" ]; then
+    if [ "$system" = 1 ]; then apps="/Applications"; else apps="$HOME/Applications"; fi
+  fi
+  run mkdir -p "$apps" "$dir"
+  run rm -rf "$apps/Linkz.app"
+  run cp -R "$app" "$apps/Linkz.app"
+  run ln -sf "$apps/Linkz.app/Contents/MacOS/Linkz" "$dir/$BIN"
+  echo "installed $apps/Linkz.app, and $dir/$BIN that runs it"
 else
-  mkdir -p "$dir"
-  install -m 755 "$tmp/x/$BIN" "$dir/$BIN"
+  [ -f "$tmp/x/$BIN" ] || die "the archive has no $BIN"
+  chmod +x "$tmp/x/$BIN"
+  run mkdir -p "$dir"
+  run install -m 755 "$tmp/x/$BIN" "$dir/$BIN"
+  echo "installed $dir/$BIN"
 fi
-echo "installed $dir/$BIN"
 
 echo
 echo "Next steps"
@@ -143,5 +161,5 @@ echo "  - try it:  $BIN render examples/hello.lzdraw   (examples are in the arch
 echo "  - open the editor:  $BIN edit"
 if [ "$os" = darwin ]; then
   echo "  - if macOS says the app can't be opened (it is not notarized yet):"
-  echo "      xattr -d com.apple.quarantine $dir/$BIN"
+  echo "      xattr -dr com.apple.quarantine \"$apps/Linkz.app\""
 fi

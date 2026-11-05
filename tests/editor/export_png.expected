@@ -1,0 +1,26 @@
+-- Cmd+E asks: the drawing's name and folder, png only, a title, our id
+1 drawing.png true ["png"] export-png true
+-- asking again while the dialog is open asks nothing more
+1
+-- cancel writes nothing and frees the dialog
+false false
+-- the answer writes the PNG there and the status says where
+2 true true false
+(48, 32)
+-- the folder is remembered: the next dialog starts there, and settings.liz says so
+3 true true true
+-- a name with no extension gets .png
+true
+-- Spanish title
+Exportar PNG
+-- a drawing with no file: Untitled N.png, the first free one
+Untitled 2.png
+-- routing: the trace dialog's open picker and the export save don't mix
+true true true true
+true false false
+-- a save answer with another id is not ours
+false true
+-- the automation's export never asks
+true true true
+-- no save dialog on this system: the old way, and the status says so
+true false true

@@ -1,13 +1,16 @@
--~> pen_pad: the pen settings' test pad, a strip of paper to try the draft
--~> pen on. A stroke there goes through the same steps as one on the canvas
--~> (the stabilizer, the pressures from the device or a mouse's speed,
--~> stroke_simplify, brush()) but stays in pw.pad: it never reaches the
--~> drawing, and it is drawn again with the draft every time the draft
--~> changes. Points are in the pad's own full-resolution pixels.
+-~> pen_pad: the brush creator's test pad (the scribble pad of style guide
+-~> R005), a strip of paper to try the draft pen on. A stroke there goes
+-~> through the same steps as one on the canvas (the stabilizer, the
+-~> pressures from the device or a mouse's speed, stroke_simplify, brush())
+-~> but stays in pw.pad: it never reaches the drawing, and it is drawn again
+-~> with the draft every time the draft changes. A sample stroke (a wave
+-~> with a pressure ramp, on the left) is drawn first while pw.pad_sample is
+-~> on; pw.pad_dark puts the strokes on dark paper, for light brushes.
+-~> Points are in the pad's own full-resolution pixels.
 
 use "../draw/pens"
 use "../draw/shapes"
-use "../gfx/raster"
+use "brush_pictures"
 use "editor_twoway"
 use "editor_undo"
 use "pen_edit"
@@ -66,6 +69,38 @@ function pad_clear() {
   pw.ver += 1
 }
 
+-~> The sample stroke on a pad of `size` (full-resolution pixels): a wave
+-~> over the left 170 UI pixels whose pressure rises from 0.1 to 1.
+function pad_sample(size) {
+  let samples = []
+  let n = 40
+  for (let i = 0; i < n; i = i + 1) {
+    let f = i / float(n - 1)
+    let x = 24 + 340 * f
+    let y = size.y / 2 + 0.24 * size.y * math.sin(f * 2.2 * math.pi + 2.6)
+    push(samples, {"pos": (x, y), "canvas_pos": (x, y), "pressure": 0.1 + 0.9 * f, "t": i * 0.01})
+  }
+  {"source": "tablet", "samples": samples}
+}
+
+function pad_toggle_sample() {
+  pw.pad_sample = !pw.pad_sample
+  pw.ver += 1
+}
+
+function pad_toggle_paper() {
+  pw.pad_dark = !pw.pad_dark
+  pw.ver += 1
+}
+
+-~> The pad's paper: light, or dark for light brushes.
+function pad_paper() {
+  if (pw.pad_dark) {
+    return P.panel
+  }
+  #fbf8ef
+}
+
 -~> The brush shape of a pad stroke with the draft pen, or null (too short):
 -~> the steps brush_insert takes, without the row.
 function pad_shape(stroke, color) {
@@ -99,11 +134,12 @@ function pad_shape(stroke, color) {
   s
 }
 
--~> The shapes of every pad stroke, made again when the draft or the strokes change.
+-~> The shapes of every pad stroke, made again when the draft or the strokes
+-~> change. `size` is the pad's inside in full-resolution pixels.
 let pad_cache = {"key": "", "shapes": []}
 
-function pad_shapes() {
-  let key = str(pw.ver) + "|" + ed.color
+function pad_shapes(size = (972, 136)) {
+  let key = str(pw.ver) + "|" + ed.color + "|" + str(size)
   if (pad_cache.key == key) {
     return pad_cache.shapes
   }
@@ -111,7 +147,11 @@ function pad_shapes() {
   if (color == null) {
     color = P.void
   }
-  let list_ = list.copy(pw.pad)
+  let list_ = []
+  if (pw.pad_sample) {
+    push(list_, pad_sample(size))
+  }
+  list_ = list_ + pw.pad
   if (pw.pad_live != null) {
     push(list_, pw.pad_live)
   }
@@ -127,26 +167,18 @@ function pad_shapes() {
   out
 }
 
--~> Paints the pad's strokes into the canvas buffer, inside the paper. `pad` is
--~> the pad's rect in UI pixels, `origin` the buffer's top left.
-function pad_paint(pad, origin) {
-  let off = ((pad[0] + 1 - origin.x) * 2, (pad[1] + 1 - origin.y) * 2)
-  fb.clip(off, ((pad[2] - 2) * 2, (pad[3] - 2) * 2))
-  let shapes = pad_shapes()
-  for (let i = 0; i < len(shapes); i = i + 1) {
-    let sp = raster.shape(shapes[i])
-    if (sp.fill !== null) {
-      raster.draw(sp.fill, off, shapes[i].fill)
-    }
-    if (sp.stamps !== null) {
-      for (let j = 0; j < len(sp.stamps); j = j + 1) {
-        raster.draw(sp.stamps[j][0], off, sp.stamps[j][1])
-      }
-    }
-  }
+-~> Paints the pad's strokes (and the string of a live stroke) into the
+-~> buffer drawn now, inside the paper. `pad` is the pad's rect in UI pixels.
+function pad_paint(pad) {
+  let size = (pad[2] - 2, pad[3] - 2)
+  let full = (size.x * 2, size.y * 2)
   let g = pw.pad_live
-  if (g != null && g.settings.mode == "string" && g.state.tip != null) {
-    stab_paint(off + g.state.tip, off + g.state.cursor, g.settings.length)
-  }
-  fb.unclip()
+  let key = str(pw.ver) + "|" + ed.color + "|" + str(size)
+  bp_keep("pw:pad", key, size, function() {
+    bp_paint_shapes(pad_shapes(full), (0, 0))
+    if (g != null && g.settings.mode == "string" && g.state.tip != null) {
+      stab_paint(g.state.tip, g.state.cursor, g.settings.length)
+    }
+  })
+  bp_blit("pw:pad", pad[0] + 1, pad[1] + 1, size)
 }

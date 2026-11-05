@@ -1,0 +1,100 @@
+-~> trace_full: the Trace image dialog's full-size traces. The preview is
+-~> traced small and at once; a moment after the last change the trace that
+-~> Insert and Open use is started in a background task (task.start), so the
+-~> window keeps answering, and when it ends the preview shows it and the
+-~> buttons reuse its code instead of tracing again.
+-~>
+-~> A full-size trace is a "job": {"scale", "options", "task", "state", "raw",
+-~> "stats", "error"} with the state "running", "done" or "failed". The state
+-~> of all of them is `f` (trace_full_new), kept in the dialog's state; this
+-~> file knows nothing of the dialog's look.
+
+use "trace_task"
+
+-~> What task.start names below (by module and function name, so a built
+-~> program needs the `use` above to carry the file).
+let trace_full_entry = trace_task_run
+
+-~> The pause after the preview ran before a full-size trace starts, in ms
+-~> (the preview itself waits 250 ms after the last change).
+let trace_full_wait = 150
+
+-~> A dialog's full-size state: jobs, when the next start is due (0: none),
+-~> whether the preview shows a finished job, and broken (tasks can't be
+-~> started here, so the buttons trace by themselves) with the error why.
+function trace_full_new() {
+  {"jobs": [], "due": 0, "shown": false, "broken": false, "error": ""}
+}
+
+-~> Stops every job and forgets them: the picture or an option changed.
+function trace_full_cancel(f) {
+  for (let i = 0; i < len(f.jobs); i += 1) {
+    if (f.jobs[i].state == "running") {
+      f.jobs[i].task.cancel()
+    }
+  }
+  f.jobs = []
+  f.due = 0
+  f.shown = false
+}
+
+-~> Asks for a start `wait` ms from now.
+function trace_full_arm(f, wait = trace_full_wait) {
+  f.due = time.ms() + wait
+}
+
+-~> The job at `scale`, or null.
+function trace_full_job(f, scale) {
+  for (let i = 0; i < len(f.jobs); i += 1) {
+    if (f.jobs[i].scale == scale) {
+      return f.jobs[i]
+    }
+  }
+  null
+}
+
+-~> Starts the job for the picture at `path` with `options` (trace()'s, as
+-~> the dialog sets them) at `scale`. Without tasks the state is broken.
+function trace_full_start(f, path, options, scale) {
+  let job = {"scale": scale, "options": options, "task": null, "state": "running", "raw": null, "stats": null, "error": ""}
+  try {
+    job.task = task.start("trace_task", "trace_task_run", [path, options])
+  } catch (e) {
+    f.broken = true
+    f.error = e.message
+    return null
+  }
+  push(f.jobs, job)
+  job
+}
+
+-~> Collects the jobs that ended. True when one did.
+function trace_full_poll(f) {
+  let changed = false
+  for (let i = 0; i < len(f.jobs); i += 1) {
+    let job = f.jobs[i]
+    if (job.state == "running" && job.task.done()) {
+      changed = true
+      try {
+        let r = job.task.result()
+        job.raw = r.code
+        job.stats = r.stats
+        job.state = "done"
+      } catch (e) {
+        job.state = "failed"
+        job.error = e.message
+      }
+    }
+  }
+  changed
+}
+
+-~> Whether a job is running now (the screen keeps painting to see it end).
+function trace_full_running(f) {
+  for (let i = 0; i < len(f.jobs); i += 1) {
+    if (f.jobs[i].state == "running") {
+      return true
+    }
+  }
+  false
+}

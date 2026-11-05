@@ -4,6 +4,8 @@
 -~> loaded in a sandbox of their own, with the host's primitives (host.liz),
 -~> the settings and the machine's measurement around them; the loop hands
 -~> them every event and asks them to paint when they say they need it.
+-~> The editor's libraries also get the Terrarium's `task`, for the Trace image
+-~> dialog's full-size trace (trace_full.liz).
 -~> The editor's `linkz` has three more functions: trace_engine() loads the
 -~> tracer for the Trace image dialog; machine() gives the
 -~> machine's measurement ({} when unknown) and measure() measures again,
@@ -27,16 +29,25 @@ let editor_min_size = (320, 210)
 -~> functions (lang_init). A test or a benchmark adds the ones it reaches into.
 let editor_modules = ["ui/i18n", "ui/app"]
 
+-~> The path of Linkz's icon, the window's icon in the title bar, the taskbar
+-~> and the Dock (assets/icon, made by docs/Art/Figma-gen/r006c.py).
+function app_icon() {
+  fs.join(libs_root(), "assets", "icon", "linkz-1024.png")
+}
+
 -~> The window options of the editor.
 function editor_options() {
-  {"scale": 2, "resizable": true, "min_size": editor_min_size, "on_demand": true, "hover": false}
+  {"scale": 2, "resizable": true, "min_size": editor_min_size, "on_demand": true, "hover": false, "icon": app_icon()}
 }
 
 -~> The system's dialogs for the UI libraries, as `dialog` (a test puts its own in
--~> stand_ins). choose_file(options) returns at once; the answer comes back as a
--~> "chosen" event (see window.choose_file).
+-~> stand_ins). choose_file(options) and choose_save(options) return at once; the answer
+-~> comes back as a "chosen" event (see window.choose_file).
 function editor_dialog(win) {
-  {"choose_file": function(options) { window.choose_file(win, options) }}
+  {
+    "choose_file": function(options) { window.choose_file(win, options) },
+    "choose_save": function(options) { window.choose_save(win, options) }
+  }
 }
 
 -~> The editor on the window win, started on path ("" for the home screen):
@@ -53,7 +64,7 @@ function editor_load(win, path, settings, machine, modules = editor_modules, sta
     "events": 0,
     "events_coalesced": 0
   }
-  let around = hash.merge(hash.merge(host_globals(win, true), {"settings": settings, "machine": machine, "dialog": editor_dialog(win)}), stand_ins)
+  let around = hash.merge(hash.merge(host_globals(win, true), {"settings": settings, "machine": machine, "dialog": editor_dialog(win), "task": task}), stand_ins)
   let kept = {"machine": machine}
   around.linkz = hash.merge(around.linkz, {
     "machine": function() { kept.machine },

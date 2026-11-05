@@ -1,0 +1,32 @@
+7 7
+round Round Redonda null
+square Square Cuadrada null
+flat Flat nib Punta plana null
+star Star Estrella null
+spray Spray Rociado null
+leaf Leaf Hoja null
+bitmap Picture Imagen bitmap
+none None Ninguno null
+noise Noise Ruido null
+paper Paper Papel null
+canvas Canvas Lienzo null
+chalk Chalk Tiza null
+hatch Hatch Rayado null
+bitmap Picture Imagen bitmap
+spray false 9 true true
+leaf false 10.0 true 15
+[5, 255, 2, 0, 9, 255] [255, 255, 255, 255, 255, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255]
+bitmap false 10.0 10.0 20
+10.0 3.33
+round
+[]
+true false
+true
+noise true true true
+paper true true true
+canvas true true true
+chalk true true true
+hatch true true true
+["255"] true true
+true
+167 62

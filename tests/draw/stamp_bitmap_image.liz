@@ -1,0 +1,30 @@
+-~> stamp_bitmap_from_image: a picture file as a bitmap stamp (lib/draw/stamp_bitmap.liz).
+-~> It needs files and img, so it runs here, with a host, not in lib/draw/tests.
+use "../../lib/draw/stamp_bitmap"
+
+-~> With no alpha, the dark pixels are the ink; with alpha, the alpha.
+let dir = fs.join(fs.home(), "stamp-bitmap-test")
+fs.mkdir(dir)
+let dk = img.new(4, 2, #ffffff)
+img.set(dk, 0, 0, #000000)
+img.set(dk, 3, 1, #000000)
+img.save(dk, fs.join(dir, "dark.png"))
+let a = stamp_bitmap_from_image(fs.join(dir, "dark.png"), 16)
+puts(a.w, a.h, stamp_bitmap_decode(a.bitmap, 8))
+let b2 = stamp_bitmap_from_image(fs.join(dir, "dark.png"), 16, true)
+puts(stamp_bitmap_decode(b2.bitmap, 8))
+let tr = img.new(2, 1, #00000000)
+img.set(tr, 1, 0, #ff0000)
+img.save(tr, fs.join(dir, "alpha.png"))
+puts(stamp_bitmap_decode(stamp_bitmap_from_image(fs.join(dir, "alpha.png"), 16).bitmap, 2))
+-~> Shrunk to fit the size.
+let big = img.new(40, 20, #ffffff)
+img.save(big, fs.join(dir, "big.png"))
+let sm = stamp_bitmap_from_image(fs.join(dir, "big.png"), 8)
+puts(sm.w, sm.h)
+puts(stamp_bitmap_as_grain(a).kind)
+let names = ["dark.png", "alpha.png", "big.png"]
+for (let i = 0; i < len(names); i += 1) {
+  fs.remove(fs.join(dir, names[i]))
+}
+fs.remove(dir)

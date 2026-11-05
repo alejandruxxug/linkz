@@ -7,9 +7,10 @@
 # LIZARDSCRIPT names the lizardscript to use (default: the one on PATH). The
 # other systems' runtimes are built from lizard-script's source with Go: put
 # it next to linkz (../lizard-script) or say where with LIZARD_SRC.
-# Caveat (lizard-script DESIGN.md, Known limitations): on macOS the appended
-# files make `codesign --verify` fail strict validation, so a built Linkz
-# can't be signed or notarized as it is.
+# The icon (assets/icon, from docs/Art/Figma-gen/r006c.py) goes in with
+# --icon: macOS archives hold Linkz.app (signed ad hoc when codesign is there,
+# not notarized), Windows gets it in the .exe, Linux gets icon.png and a
+# .desktop template beside the binary.
 set -eu
 cd "$(dirname "$0")/.."
 LZ="${LIZARDSCRIPT:-lizardscript}"
@@ -28,14 +29,16 @@ for target in darwin/arm64 darwin/amd64 linux/amd64 windows/amd64; do
   mkdir -p "$dir"
   bin="linkz"
   [ "$os" = windows ] && bin="linkz.exe"
+  [ "$os" = darwin ] && bin="Linkz.app"
   echo "== $os/$arch"
-  "$LZ" build --vm --os "$os" --arch "$arch" . -o "$dir/$bin" > /dev/null
+  "$LZ" build --vm --os "$os" --arch "$arch" --icon assets/icon/linkz-1024.png \
+    --icon-small assets/icon/linkz-16.png . -o "$dir/$bin" > /dev/null
   cp README.md LICENSE "$dir/"
   mkdir -p "$dir/examples" && cp examples/*.lzdraw "$dir/examples/"
   if [ "$os" = windows ]; then
     (cd "$dir" && zip -qr "../$name.zip" .)
   else
-    tar -czf "$OUT/$name.tar.gz" -C "$dir" .
+    COPYFILE_DISABLE=1 tar -czf "$OUT/$name.tar.gz" -C "$dir" .
   fi
   rm -rf "$dir"
 done

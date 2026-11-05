@@ -1,0 +1,17 @@
+-~> trace_task: the Trace image dialog's tracing, written to run in a
+-~> background task (task.start("trace_task", "trace_task_run", [path, options])
+-~> from trace_view). Only data crosses to and from a task, and a picture is
+-~> not data, so the task gets the path and the options of trace(), loads the
+-~> picture itself and gives back plain data: {"code", "stats"}.
+-~>
+-~> A built program carries only the modules that are used, so trace_view uses
+-~> this file too, although it only names it in task.start.
+
+use "../app/host_img"
+use "../app/libs"
+
+-~> The trace of the picture at `path` with `options`, as trace() gives it.
+function trace_task_run(path, options) {
+  let names = libs_load(libs_draw + libs_trace, {"img": host_img(), "time": time})
+  names.trace(path, options)
+}

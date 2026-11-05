@@ -1,0 +1,19 @@
+-- the library brush is a pen of the editor
+chalky chalky chalky
+-- the first stroke writes the copy after the colors block
+
+2 1 true
+true true true
+[]
+-- a second stroke adds no copy
+1 
+-- undo takes the stroke and the copy away in one step; redo brings both
+1 0
+0 6 true
+1
+-- the drawing's copy wins over a changed library brush
+[] 1
+[] 1 4
+[] 1 40
+-- a built-in pen is never copied
+0 -1

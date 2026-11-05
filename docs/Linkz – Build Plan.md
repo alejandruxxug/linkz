@@ -48,9 +48,14 @@ Order: finish B007b (editor view) + B015 (home) → **B007c autocomplete (mandat
 | B061 | Pen pressure on Windows and Linux (lizard-script `pen`) | ✅ lizard-script ed0f9a0; needs real tablets (PEN_CHECKS.md) |
 | B062 | Trace: belt outlines, then colored line art | ✅ ed557f4, adc7f3c |
 | B063 | Canvas zoom and pan, pinch, cursors; sideways code scroll; trace file picker | ✅ cbfbbd2, 3f97593 |
-| R006 | App icon | E2 picked-ish, waiting for the developer's OK |
-| R005 | Figma: brush creator, brush picker import/export, tooltip mini videos | waiting for the developer's approval (8 questions) |
-| next | `.lzbrush` export/import (sandboxed) → Procreate importer (ABR/SUT after) → brush creator UI and tooltip videos (after R005) → trace strokes along curves | queued |
+| R006 / B064 | App icon E2 in every build (`Linkz.app`, exe icon, Linux png), window/Dock icon | ✅ |
+| R005 | Figma: brush creator, brush picker import/export, tooltip mini videos | ✅ approved 2026-11-04 |
+| B065 | `.lzbrush` files, the brush library, copy on first use | ✅ |
+| B066 | Brush creator window (replaces the pen pop-up) | ✅ |
+| B067 | Spray, leaf, bitmap stamps; paper/canvas/chalk/hatch/bitmap grains | ✅ |
+| B068 | `task` (background work, lizard-script) and the full-size trace preview | ✅ |
+| — | PNG export through the system Save dialog (`window.choose_save`) | ✅ |
+| next | brush picker ⋯ menu, drop and import result (R005 5–9) → creator Export… via the Save dialog, picture import → Procreate importer (ABR/SUT after) → tooltip videos drawn live → trace strokes along curves | queued |
 
 ## 🗃️ Later (parked ideas)
 | Idea | Why parked |

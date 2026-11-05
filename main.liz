@@ -42,7 +42,12 @@ let commands = {
   "debug": debug_command
 }
 
+-~> Double-clicking Linkz.app (macOS) starts the program with no arguments:
+-~> a built Linkz on a Mac then opens the editor instead of printing the usage.
 function main(args) {
+  if (len(args) == 0 && os.platform() == "macos" && os.program_dir() == "bundle:") {
+    args = ["edit"]
+  }
   if (len(args) < 1 || !hash.has(commands, args[0])) {
     io.error(usage + "\n")
     os.exit(2)

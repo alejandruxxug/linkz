@@ -20,6 +20,7 @@ use "editor_doc"
 use "editor_props"
 use "editor_state"
 use "editor_undo"
+use "export_png"
 use "home_view"
 use "i18n"
 use "layer_card"
@@ -412,11 +413,14 @@ function view_png_path() {
   ed.file + ".png"
 }
 
--~> Renders the drawing at its own size into an offscreen buffer and saves it as a PNG.
-function view_export() {
+-~> Renders the drawing at its own size into an offscreen buffer and saves it as a PNG
+-~> at path ("" is view_png_path(), next to the file). note is added to the status.
+function view_export(path = "", note = "") {
   view_commit_focus()
   view_prepare()
-  let path = view_png_path()
+  if (path == "") {
+    path = view_png_path()
+  }
   let size = ed_canvas_size()
   let ok = true
   try {
@@ -440,6 +444,9 @@ function view_export() {
     fb.save_png(path)
     fb.screen()
     ed.status = t("status.exported", {"file": path})
+    if (note != "") {
+      ed.status = ed.status + " (" + note + ")"
+    }
   } catch (e) {
     fb.screen()
     ed_refuse(t("status.export_failed", {"file": path}))
@@ -525,7 +532,7 @@ function view_press(id) {
     if (what == "save") {
       view_save()
     } elif (what == "export") {
-      view_export()
+      export_ask()
     } elif (what == "more") {
       V.overflow = !V.overflow
       view_force_all()
@@ -1235,7 +1242,7 @@ function view_key(e) {
     return null
   }
   if (cmd && k == "e") {
-    view_export()
+    export_ask()
     return null
   }
   if (cmd && mods.shift && (k == "t" || k == "keyt")) {

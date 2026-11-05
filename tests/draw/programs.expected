@@ -7,9 +7,11 @@ ok draw/tests/paint.liz
 ok draw/tests/path.liz
 ok draw/tests/pens.liz
 ok draw/tests/shapes.liz
+ok draw/tests/stamp_more.liz
 ok draw/tests/stamps.liz
 ok draw/tests/svg.liz
 ok draw/tests/svg_stamps.liz
+ok draw/tests/svg_stamps_more.liz
 ok draw/tests/errors/blend_mode.liz
 ok draw/tests/errors/blend_outside.liz
 ok draw/tests/errors/brush_pen.liz

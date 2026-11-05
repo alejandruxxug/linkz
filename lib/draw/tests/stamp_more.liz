@@ -1,0 +1,104 @@
+-~> The shapes and grains of B067: spray, leaf, bitmap shapes, the procedural
+-~> and bitmap grains, the catalog and the bitmap helpers. (The picture import,
+-~> which needs files, is in tests/draw/stamp_bitmap_image.liz.)
+use "../geometry"
+use "../shapes"
+use "../stamp_bitmap"
+use "../stamp_catalog"
+function r2(x) { math.round(x * 100) / 100.0 }
+
+function plain(extra = {}) {
+  let pen = {"name": "t", "render": "stamped", "min": 10, "max": 10, "taper": 0, "opacity": [1, 1], "nib": null, "grain": 0, "pressure": {"smoothing": 0, "speed": 0}}
+  let ks = keys(extra)
+  for (let i = 0; i < len(ks); i += 1) {
+    pen[ks[i]] = extra[ks[i]]
+  }
+  pen
+}
+
+function stamps_of(pen) {
+  brush([(0, 0), (100, 0)], [1, 1], #000000, pen).stamps
+}
+
+-~> The catalog: names with English and Spanish texts, every shape and grain drawn.
+let sh = stamp_shapes()
+let gr = stamp_grains()
+puts(len(sh), len(gr))
+for (let i = 0; i < len(sh); i += 1) {
+  puts(sh[i].name, sh[i].en, sh[i].es, sh[i].needs)
+}
+for (let i = 0; i < len(gr); i += 1) {
+  puts(gr[i].name, gr[i].en, gr[i].es, gr[i].needs)
+}
+
+-~> Spray: many tiny dots in one stamp, different clouds, inside the stamp's size.
+let sp = stamps_of(plain({"shape": "spray", "spacing": 1}))
+let dots = 0
+for (let i = 0; i < len(sp[0].path); i += 1) {
+  if (sp[0].path[i][0] == "M") {
+    dots += 1
+  }
+}
+let b = path_bounds(sp[0].path)
+puts(sp[0].kind, sp[0].ellipse, dots, b.max.x - b.min.x <= 10.01, str(sp[0].path) != str(sp[1].path))
+
+-~> Leaf: pointed ends on the stamp's width, narrower than long.
+let lf = stamps_of(plain({"shape": "leaf", "spacing": 3}))[0]
+let lb = path_bounds(lf.path)
+puts(lf.kind, lf.ellipse, r2(lb.max.x - lb.min.x), r2(lb.max.y - lb.min.y) < 6, len(lf.path) - 2)
+
+-~> A bitmap shape: rows of "#", the stamp is the opaque part, scaled to the stamp size.
+function bitmap_of(rows) {
+  let alphas = []
+  for (let y = 0; y < len(rows); y += 1) {
+    for (let x = 0; x < len(rows[y]); x += 1) {
+      if (rows[y][x] == "#") {
+        push(alphas, 255)
+      } else {
+        push(alphas, 0)
+      }
+    }
+  }
+  {"bitmap": stamp_bitmap_encode(alphas), "w": len(rows[0]), "h": len(rows)}
+}
+let ell = bitmap_of(["####", "#..#", "####", "####"])
+puts(ell.bitmap, stamp_bitmap_decode(ell.bitmap, 16))
+let bm = stamps_of(plain({"shape": ell, "spacing": 3}))[0]
+let bb = path_bounds(bm.path)
+puts(bm.kind, bm.ellipse, r2(bb.max.x - bb.min.x), r2(bb.max.y - bb.min.y), len(bm.path))
+let wide = stamps_of(plain({"shape": bitmap_of(["######", "######"]), "spacing": 3}))[0]
+let wb = path_bounds(wide.path)
+puts(r2(wb.max.x - wb.min.x), r2(wb.max.y - wb.min.y))
+-~> An empty or broken bitmap is a round stamp; a transparent one draws nothing.
+puts(stamps_of(plain({"shape": {"bitmap": 3}, "spacing": 3}))[0].kind)
+puts(stamps_of(plain({"shape": bitmap_of(["..", ".."]), "spacing": 3}))[0].path)
+puts(stamp_bitmap_ok(ell), stamp_bitmap_ok({"bitmap": [], "w": 0, "h": 1}))
+-~> The same stroke gives the same bitmap stamps.
+puts(str(stamps_of(plain({"shape": ell}))) == str(stamps_of(plain({"shape": ell}))))
+
+-~> Grains: each fades the stamps by its own rule, deterministic, some stamps fainter than others.
+let kinds = ["noise", "paper", "canvas", "chalk", "hatch"]
+for (let i = 0; i < len(kinds); i += 1) {
+  let g = stamps_of(plain({"grain": {"kind": kinds[i], "scale": 3, "depth": 0.9}, "spacing": 0.5}))
+  let g2 = stamps_of(plain({"grain": {"kind": kinds[i], "scale": 3, "depth": 0.9}, "spacing": 0.5}))
+  let lo = 255
+  let hi = 0
+  for (let k = 0; k < len(g); k += 1) {
+    lo = math.min(lo, g[k].color.a)
+    hi = math.max(hi, g[k].color.a)
+  }
+  puts(kinds[i], lo < hi, hi <= 255, str(g) == str(g2))
+}
+-~> A bitmap grain repeats: a checker fades every other pixel's stamp.
+let chk = bitmap_of(["#.", ".#"])
+let cg = stamps_of(plain({"grain": {"kind": "bitmap", "data": chk.bitmap, "w": 2, "h": 2, "scale": 2, "depth": 1.0}, "spacing": 0.2, "size": 0.1}))
+let seen = {}
+for (let k = 0; k < len(cg); k += 1) {
+  seen[str(cg[k].color.a)] = true
+}
+puts(keys(seen), len(cg) > 50, len(cg) < 150)
+-~> A bitmap grain without its data is the plain noise.
+puts(len(stamps_of(plain({"grain": {"kind": "bitmap"}, "spacing": 1}))) > 5)
+-~> The old noise grain is unchanged.
+let old = stamps_of(plain({"grain": {"kind": "noise", "scale": 4, "depth": 0.8}, "spacing": 1}))
+puts(old[3].color.a, old[8].color.a)

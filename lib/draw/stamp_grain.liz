@@ -1,0 +1,93 @@
+-~> stamp_grain: the procedural grains of a stamped brush. A grain is a hash
+-~> {"kind", "scale" (pixels), "depth" (0 to 1), "moving"} on the pen's
+-~> `grain`; stamp_grain_value() says how much it fades a stamp at a place
+-~> (0 = not at all, 1 = fully, before depth). All are deterministic. The
+-~> kinds are in stamp_catalog.liz. Grain is per stamp: each stamp is faded
+-~> as a whole by the value at its center.
+
+use "geometry"
+use "pens"
+
+-~> A number kept between lo and hi.
+function stamp_clamp(v, lo, hi) {
+  math.max(lo, math.min(hi, v))
+}
+
+-~> Smooth noise (0 up to 1) at a place: the corners of the grid cell are
+-~> random numbers, blended with a smooth step.
+function stamp_value_noise(x, y) {
+  let ix = math.floor(x)
+  let iy = math.floor(y)
+  let fx = x - ix
+  let fy = y - iy
+  fx = fx * fx * (3.0 - 2.0 * fx)
+  fy = fy * fy * (3.0 - 2.0 * fy)
+  let a = pen_noise(ix * 7.31 + iy * 19.77)
+  let b = pen_noise((ix + 1) * 7.31 + iy * 19.77)
+  let c = pen_noise(ix * 7.31 + (iy + 1) * 19.77)
+  let d = pen_noise((ix + 1) * 7.31 + (iy + 1) * 19.77)
+  lerp(lerp(a, b, fx), lerp(c, d, fx), fy)
+}
+
+-~> Paper: soft clouds crossed by short fibers lying both ways.
+function stamp_grain_paper(x, y, s) {
+  0.5 * stamp_value_noise(x / s, y / s) + 0.3 * stamp_value_noise(x / (s * 0.4) + 5.0, y / (s * 2.5) + 9.0) + 0.2 * stamp_value_noise(x / (s * 2.5) + 3.0, y / (s * 0.4) + 7.0)
+}
+
+-~> Canvas: a weave, threads going over and under in a checker.
+function stamp_grain_canvas(x, y, s) {
+  let cx = math.floor(x / s)
+  let cy = math.floor(y / s)
+  let odd = (cx + cy) - 2 * math.floor((cx + cy) / 2)
+  let t = x / s - cx
+  if (odd == 1) {
+    t = y / s - cy
+  }
+  0.8 * (1.0 - math.sin(math.pi * t)) + 0.2 * stamp_value_noise(x / s * 0.5, y / s * 0.5)
+}
+
+-~> Chalk: sharp speckles over a soft noise, so some spots are bare.
+function stamp_grain_chalk(x, y, s) {
+  let cell = pen_noise(math.floor(x * 2.0 / s) * 7.31 + math.floor(y * 2.0 / s) * 19.77)
+  stamp_clamp((0.6 * cell + 0.4 * stamp_value_noise(x / s, y / s) - 0.3) * 2.0, 0.0, 1.0)
+}
+
+-~> Hatch: parallel diagonal lines, `s` pixels apart.
+function stamp_grain_hatch(x, y, s) {
+  let d = (x + y) / s
+  d = d - math.floor(d)
+  stamp_clamp(0.5 + 1.5 * math.sin(2.0 * math.pi * d), 0.0, 1.0)
+}
+
+-~> A bitmap grain, repeated: `scale` pixels for each pixel of the picture.
+function stamp_grain_bitmap(tex, x, y) {
+  let w = int(tex.w)
+  let h = int(tex.h)
+  let px = int(math.floor(x / tex.scale))
+  let py = int(math.floor(y / tex.scale))
+  px = px - w * int(math.floor(px / float(w)))
+  py = py - h * int(math.floor(py / float(h)))
+  tex.pixels[py * w + px] / 255.0
+}
+
+-~> How much the grain `tex` (see stamp_block) fades a stamp at (x, y), 0 to 1.
+-~> A kind this file does not know is the plain noise.
+function stamp_grain_value(tex, x, y) {
+  let s = tex.scale
+  if (tex.kind == "paper") {
+    return stamp_grain_paper(x, y, s)
+  }
+  if (tex.kind == "canvas") {
+    return stamp_grain_canvas(x, y, s)
+  }
+  if (tex.kind == "chalk") {
+    return stamp_grain_chalk(x, y, s)
+  }
+  if (tex.kind == "hatch") {
+    return stamp_grain_hatch(x, y, s)
+  }
+  if (tex.kind == "bitmap" && tex.pixels != null) {
+    return stamp_grain_bitmap(tex, x, y)
+  }
+  stamp_value_noise(x / s, y / s)
+}

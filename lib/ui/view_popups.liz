@@ -541,7 +541,4 @@ function popup_paint() {
   if (V.picker && V.cl != null) {
     pick_draw_strokes()
   }
-  if (V.cl != null) {
-    pen_route_paint_full(V.cl)
-  }
 }

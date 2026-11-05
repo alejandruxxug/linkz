@@ -1,0 +1,157 @@
+-~> The Trace image dialog's full-size trace in the background (trace_full.liz):
+-~> a moment after the preview a task traces the picture as Insert and Open
+-~> will, the preview then shows it, Insert reuses its code (no second trace),
+-~> a change stops it, and Insert pressed while it runs waits for it. The
+-~> tasks are real (they run in other processes); the pauses are skipped.
+
+use "rig"
+
+let code = "-~> lzdraw 1
+canvas = {\"size\": (480, 320), \"background\": #f6d9a8}
+layer sun
+  circle((360, 90), 34, #fff3c4)
+"
+
+let dir = fs.join(fs.home(), "trace-full-test")
+fs.mkdir(dir)
+let pic_path = fs.join(dir, "head.png")
+let pic = img.new(64, 48)
+img.fill(pic, [0, 0, 64, 48], #dbe4f0)
+img.fill(pic, [12, 20, 40, 28], #5a3d8c)
+img.fill(pic, [20, 8, 24, 30], #f6d9c8)
+img.fill(pic, [26, 18, 4, 4], #2a5cb0)
+img.fill(pic, [34, 18, 4, 4], #2a5cb0)
+img.save(pic, pic_path)
+
+let size = (512, 360)
+let modules = rig_modules + ["ui/view_panels", "ui/view_canvas", "ui/view_popups", "ui/i18n", "ui/home_view", "ui/app_screens",
+  "ui/trace_model", "ui/trace_view", "ui/trace_editor"]
+let rig = rig_open(fs.join(dir, "editor"), code, size, modules, {"tutorial_done": true, "drawings_dir": fs.join(dir, "drawings")})
+let n = rig.names
+let none = {"shift": false, "alt": false, "cmd": false, "ctrl": false}
+
+function frame(events = []) {
+  rig_frame(rig, events)
+}
+
+function click(p) {
+  frame([{"type": "down", "pos": p}, {"type": "up", "pos": p}])
+}
+
+function mid(r) {
+  (r[0] + r[2] // 2, r[1] + r[3] // 2)
+}
+
+function mid_toggle() {
+  let r = n.tr_layout().lines
+  (r.x + 6, r.y + 6)
+}
+
+function state() {
+  n.tr_debug_state()
+}
+
+-~> How many traces were made in the dialog's own process (the preview's, or
+-~> a button's when no task could do it); the tasks' are not counted.
+let made = {"count": 0}
+let engine = n.tr_names()
+let real_trace = engine.trace
+engine.trace = function(path, options) {
+  made.count += 1
+  real_trace(path, options)
+}
+
+-~> Frames until `done()` is true, with real time passing for the tasks.
+function until(done) {
+  for (let i = 0; i < 600; i += 1) {
+    if (done()) {
+      return true
+    }
+    frame()
+    time.sleep(10)
+  }
+  false
+}
+
+-~> Frames until the preview ran (the debounce skipped).
+function preview() {
+  for (let i = 0; i < 8; i += 1) {
+    if (n.T.d.phase == "wait") {
+      n.T.d.due = 0
+    }
+    frame()
+    if (n.T.d.phase == "idle") {
+      break
+    }
+  }
+}
+
+function open_dialog() {
+  frame([{"type": "key", "key": "T", "mods": {"shift": true, "alt": false, "cmd": true, "ctrl": false}}])
+  frame([{"type": "type", "text": pic_path}])
+  frame([{"type": "key", "key": "Enter", "mods": none}])
+  preview()
+}
+
+puts("-- the preview is small; the full-size trace starts after it and replaces it")
+open_dialog()
+puts(made.count, n.T.d.full.shown, len(n.T.d.full.jobs), n.T.d.full.due != 0)
+let small = n.T.d.result
+n.T.d.full.due = 1
+puts(until(function() { n.T.d.full.shown }), n.T.d.full.broken)
+puts(made.count, len(n.T.d.full.jobs), n.T.d.result != small)
+
+puts("-- the badge texts, English and Spanish")
+puts(n.t("trace.tracing_full"), n.t("trace.full_size"))
+n.lang_use("es")
+puts(n.t("trace.tracing_full"), n.t("trace.full_size"))
+n.lang_use("en")
+
+puts("-- Insert reuses the finished trace: no trace is made for it")
+let before = made.count
+let s0 = len(n.ed.undo)
+click(mid(state().insert))
+puts(until(function() { !n.tr_is_open() }), made.count - before, len(n.ed.undo) - s0)
+puts(list.index(n.ed_model().lines, "layer traced") >= 0)
+n.ed_undo()
+
+puts("-- a slider change stops the task, and nothing of the old one is shown")
+open_dialog()
+n.T.d.full.due = 1
+until(function() { len(n.T.d.full.jobs) > 0 })
+let old = n.T.d.full.jobs[0].task
+let thr = n.tr_debug_state().sliders[0]
+click((thr.track[0] + 15, thr.track[1] + 3))
+puts(len(n.T.d.full.jobs), n.T.d.full.shown, old.state())
+preview()
+puts(len(n.T.d.full.jobs), n.T.d.full.due != 0)
+
+puts("-- Insert pressed while the task runs waits for it, and does not trace again")
+n.T.d.full.due = 1
+until(function() { len(n.T.d.full.jobs) > 0 })
+before = made.count
+s0 = len(n.ed.undo)
+click(mid(state().insert))
+puts(n.tr_is_open(), n.T.d.want)
+puts(until(function() { !n.tr_is_open() }), made.count - before, len(n.ed.undo) - s0)
+n.ed_undo()
+
+puts("-- Insert at once, before the debounce: the task starts for it")
+open_dialog()
+click(mid(state().insert))
+puts(n.T.d.want, n.tr_is_open())
+puts(until(function() { !n.tr_is_open() }), len(n.ed.undo) - s0)
+n.ed_undo()
+
+puts("-- the toggles redraw from the full-size trace without a new one")
+open_dialog()
+n.T.d.full.due = 1
+until(function() { n.T.d.full.shown })
+before = made.count
+click(mid_toggle())
+puts(n.T.d.lines, made.count - before, n.T.d.full.shown, len(n.T.d.full.jobs) > 0)
+frame()
+puts(state().traced, state().error == "")
+
+frame([{"type": "key", "key": "Escape", "mods": none}])
+puts(n.tr_is_open())

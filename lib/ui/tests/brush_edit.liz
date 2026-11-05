@@ -1,0 +1,76 @@
+-~> The brush creator's settings logic: each slider writes its flat key in
+-~> the pen's own units (degrees shown, radians kept; a hue in degrees;
+-~> shares), within its limits; a vector pen's stamped settings are refused
+-~> with a reason; segments and checkboxes write their keys; shapes and
+-~> grains come from lib/draw's catalog, and picking one makes the brush
+-~> stamped; the tabs notice what changed.
+use "../../draw/pens"
+use "../../draw/stamp_catalog"
+use "../brush_edit"
+use "../brush_tabs"
+use "../lang_en"
+use "../pen_edit"
+use "../stabilize"
+
+pw_open("ink", "stroke")
+
+puts("-- the sliders: [id, set to, shows, the draft keeps]")
+let rows = [
+  ["spacing", 0.5, "50%", "spacing"],
+  ["spacing", 9, "100%", "spacing"],
+  ["angle", 30, "30°", "angle"],
+  ["angle", -5, "0°", "angle"],
+  ["count", 3.4, "3", "count"],
+  ["roundness", 0, "5%", "roundness"],
+  ["hue_jitter", 45, "45°", "color_jitter"],
+  ["sat_jitter", 0.25, "25%", "color_jitter"],
+  ["speed_opacity", -0.5, "-50%", "speed"],
+  ["grain_scale", 7.3, "7.5 px", "grain"],
+  ["width", 12, "1-12", "max"]
+]
+pw.draft.render = "stamped"
+pw.draft.grain = {"kind": "noise"}
+for (let i = 0; i < len(rows); i += 1) {
+  let r = rows[i]
+  be_set(r[0], 1, r[1])
+  puts(r[0], be_text(r[0]), be_text(r[0]) == r[2], pw.changed == r[3], pw.draft[r[3]])
+}
+puts(pens.ink.spacing, pens.ink.color_jitter)
+
+puts("-- a vector pen: stamped settings say why; render brings them back")
+pw_open("ink", "stroke")
+puts(be_enabled("spacing"), be_enabled("taper"), be_enabled("grain_scale").ok, be_enabled("nib_angle").ok)
+be_choose("render", "stamped")
+puts(pw.draft.render, be_enabled("spacing").ok, be_choice("render"))
+be_choose("render", "vector")
+puts(hash.has(pw.draft, "render"), be_choice("render"))
+
+puts("-- segments and checkboxes")
+be_choose("rotation", "follow")
+be_choose("stab", "string")
+be_toggle("nib")
+puts(pw.draft.rotation, be_choice("rotation"), stabilize_settings(pw.draft).mode, pw.draft.nib, be_checked("nib"))
+be_toggle("nib")
+puts(pw.draft.nib, be_checked("catch_up"), be_checked("grain_size"))
+
+puts("-- shapes and grains from the catalog")
+puts(be_shape(), be_grain(), len(stamp_shapes()) > 3, len(stamp_grains()) > 3)
+puts(be_pick_shape("star"), be_pick_shape("star"), pw.draft.shape, pw.draft.render)
+be_pick_grain("paper")
+be_choose("texture", "moving")
+puts(pw.draft.grain, be_grain(), be_choice("texture"), be_note("grain"))
+be_pick_grain("none")
+puts(pw.draft.grain, be_grain(), be_note("grain"))
+let bm = {"name": "bitmap", "needs": "bitmap"}
+puts(be_entry_ok(bm, "round"), be_entry_ok(bm, "bitmap"), be_entry_ok({"name": "leaf"}, "round"))
+
+puts("-- the tabs that changed")
+let changed = []
+for (let i = 0; i < len(bt_tabs); i += 1) {
+  if (bt_changed(bt_tabs[i])) {
+    push(changed, bt_tabs[i])
+  }
+}
+puts(changed)
+pw_reset()
+puts(bt_changed("shape"), bt_changed("stroke"), bt_changed("rendering"))

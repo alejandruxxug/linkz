@@ -108,6 +108,18 @@ function keys_of(rows) {
   text.join(out, " ")
 }
 
+-~> Frames until the button that was pressed has run: it waits for the
+-~> full-size trace, which a task makes (real time passes).
+function finish() {
+  for (let i = 0; i < 400; i += 1) {
+    if (n.T.d == null || n.T.d.want == null) {
+      break
+    }
+    frame()
+    time.sleep(10)
+  }
+}
+
 puts("-- closed at first; Cmd+Shift+T opens it, nothing else gets the keys")
 puts(n.tr_is_open())
 key("T", {"shift": true, "alt": false, "cmd": true, "ctrl": false})
@@ -167,6 +179,7 @@ settle()
 puts("-- Insert as layer: one undo step, the frontmost layer, fitted to the canvas")
 s0 = steps()
 click(mid(state().insert))
+finish()
 puts(n.tr_is_open(), steps() - s0)
 let rows = lines()
 puts(rows[3], rows[len(rows) - 2], rows[len(rows) - 1])
@@ -213,6 +226,7 @@ frame([{"type": "type", "text": pic_path}])
 key("Enter")
 settle()
 click(mid(state().open_button))
+finish()
 puts(n.tr_is_open(), fs.exists(fs.join(drawings, "head.lzdraw")), fs.join(drawings, "head.lzdraw") == n.ed.file)
 puts(text.starts(fs.read(fs.join(drawings, "head.lzdraw")), "-~> lzdraw 1"), len(n.ed.errors))
 

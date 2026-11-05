@@ -1,0 +1,29 @@
+-~> The shapes and grains of B067 painted to pixels (lib/gfx/tests/stamped_new.liz) against the
+-~> golden picture lib/draw/tests/golden/stamped_new.png. Stamps are placed from a
+-~> seed made of the stroke's points, so every run, on both engines, gives the
+-~> same pixels. To make the golden again after a change that is meant to
+-~> alter the pictures: linkz paint lib/gfx/tests/stamped_new.liz
+-~> lib/draw/tests/golden/stamped_new.png 240x170.
+
+use "../../lib/app/libs"
+use "../../lib/app/paint"
+
+let size = (240, 170)
+let got = paint_run(fs.read(fs.join(libs_dir(), "gfx", "tests", "stamped_new.liz")), size)
+let want = img.load(fs.join(libs_dir(), "draw", "tests", "golden", "stamped_new.png"))
+let a = img.pixels(got)
+let b = img.pixels(want)
+let wrong = 0
+for (let i = 0; i < len(a); i += 1) {
+  if (a[i] != b[i]) {
+    wrong += 1
+  }
+}
+puts("size", img.size(got) == img.size(want), "pixels that differ:", wrong)
+let inked = 0
+for (let i = 0; i < len(a); i += 1) {
+  if (a[i] != #ffffff) {
+    inked += 1
+  }
+}
+puts("inked:", inked > 1000)

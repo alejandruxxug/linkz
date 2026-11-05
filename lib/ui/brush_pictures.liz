@@ -1,0 +1,54 @@
+-~> brush_pictures: the smooth parts of the brush creator (the test pad's
+-~> strokes, the stamp and grain tiles, the previews), painted once at
+-~> screen resolution into a kept picture and copied into each buffer the
+-~> window is drawn in: one to one into the canvas buffer, halved into the
+-~> interface buffer. So they show over the code panel too, where there is
+-~> no canvas buffer under the window. A picture is painted again only when
+-~> its key changes.
+
+use "../gfx/raster"
+use "view_gfx"
+
+-~> name -> the key its kept picture was painted for.
+let bp_keys = {}
+
+-~> Makes sure the picture `name` is the one for `key`: when it isn't, paints
+-~> it with paint() into a transparent image of `size` UI pixels (twice as
+-~> many pixels), with (0, 0) at its top left, and keeps it.
+function bp_keep(name, key, size, paint) {
+  if (bp_keys[name] == key) {
+    return null
+  }
+  fb.offscreen((size.x * 2, size.y * 2))
+  paint()
+  fb.keep(name)
+  bp_keys[name] = key
+}
+
+-~> Copies a kept picture into the buffer drawn now, at (x, y), `size` UI pixels.
+function bp_blit(name, x, y, size) {
+  fb.blit(name, ((x - g.ox) * g.s, (y - g.oy) * g.s), (size.x * g.s, size.y * g.s))
+}
+
+-~> Paints shapes (brush strokes, stamps) at an offset, in screen pixels.
+function bp_paint_shapes(shapes, offset) {
+  for (let i = 0; i < len(shapes); i = i + 1) {
+    let sp = raster.shape(shapes[i])
+    if (sp.fill !== null) {
+      raster.draw(sp.fill, offset, shapes[i].fill)
+    }
+    if (sp.stamps !== null) {
+      for (let j = 0; j < len(sp.stamps); j = j + 1) {
+        raster.draw(sp.stamps[j][0], offset, sp.stamps[j][1])
+      }
+    }
+  }
+}
+
+-~> Forgets every picture (the tests start from none).
+function bp_forget() {
+  let ks = keys(bp_keys)
+  for (let i = 0; i < len(ks); i = i + 1) {
+    delete(bp_keys, ks[i])
+  }
+}

@@ -1,46 +1,55 @@
--~> pen_window: the floating pen settings window (style guide, R002 18b):
--~> where each of its parts is, and how it is painted. 480 wide, over the
--~> editor at the left, a title bar to drag it by, then three columns:
--~>   A  the pressure curve 84x84 and the preset dropdown
--~>   B  five sliders, a rule and the live pressure readout
--~>   C  STABILIZATION (Off / String / Average, length, catch up), the input
--~>      switch and that input's overrides box
--~> and a second row: the test pad (pen_pad.liz), the name field and Save as
--~> new pen. Below them, the pen hash the window writes, 4 lines at a time,
--~> scrolled to the line of the last change. What it edits is pw (pen_edit.liz).
--~> Every place is in UI pixels of the window, so painting and clicking agree.
+-~> pen_window: the brush creator, the floating window that replaced the
+-~> R002 pen settings pop-up (style guide R005, layout A): where each of its
+-~> parts is, and how it is painted. 500 wide, over the editor at the left:
+-~>   title    BRUSH CREATOR · the name, "from ink" (the built-in it started
+-~>            from), Reset, close; drag it to move the window
+-~>   rail     the eight tabs in a column (brush_tabs.liz), an amber dot on
+-~>            the ones changed from the pen it opened on
+-~>   content  the tab: Shape and Grain (brush_tiles.liz: tiles, preview,
+-~>            settings), Pressure (brush_tab_pressure.liz), the others a
+-~>            settings column (brush_controls.liz)
+-~>   pad      the test pad (pen_pad.liz), 488x70, its three buttons
+-~>   footer   the name field, Export… and Save brush (brush_store.liz)
+-~>   code     coder mode only: the pen hash it writes, 4 lines at a time,
+-~>            scrolled to the line of the last change
+-~> What it edits is pw (pen_edit.liz, brush_edit.liz). Every place is in UI
+-~> pixels of the window, so painting and clicking agree.
 
-use "../draw/pens"
+use "brush_controls"
+use "brush_edit"
+use "brush_tab_pressure"
+use "brush_tabs"
+use "brush_tiles"
 use "i18n"
+use "icons_brush"
+use "icons_shape"
 use "mode_state"
 use "pen_code"
 use "pen_edit"
 use "pen_library"
-use "stabilize"
+use "pen_pad"
 use "view_code"
 use "view_gfx"
 use "view_layout"
 
-let pw_w = 480
-let pw_h = 285
+let pw_w = 500
 let pw_code_lines = 4
+let pw_rail_w = 92
 
--~> Artist mode's window has no code block (style guide R002 19b): 220
--~> high, and stays under the context bar.
-let pw_h_artist = 220
-
+-~> Coder mode's window has the code block: 326 high under the toolbar.
+-~> Artist mode's has none (264 high) and stays under the context bar.
 function pw_height() {
   if (mode_artist()) {
-    return pw_h_artist
+    return 264
   }
-  pw_h
+  326
 }
 
 function pw_top() {
   if (mode_artist()) {
-    return 51
+    return 52
   }
-  16
+  18
 }
 
 -~> The window's box [x, y, w, h], kept inside the editor's window.
@@ -61,82 +70,79 @@ function pw_move_to(x, y) {
   pw.ver += 1
 }
 
--~> The sliders of column B, their places and their tracks.
-function pw_slider_rows(ox, oy) {
-  let out = []
-  for (let i = 0; i < len(pw_sliders); i = i + 1) {
-    let y = oy + 16 + i * 18
-    push(out, {"id": pw_sliders[i][0], "label_x": ox + 103, "y": y, "track": [ox + 172, y + 5, 70, 5], "value_r": ox + 294})
-  }
-  out
+-~> The x of a value along a track (the sliders' own, brush_controls.liz).
+function pw_track_x(track, v, lo, hi) {
+  bc_track_x(track, v, lo, hi)
 }
 
--~> The three buttons of a segmented control starting at x: [{"id", "label", "rect"}].
-function pw_segments(x, y, ids, labels) {
-  let out = []
-  let at = x
-  for (let i = 0; i < len(ids); i = i + 1) {
-    let w = g_text_w(labels[i]) + 6
-    push(out, {"id": ids[i], "label": labels[i], "rect": [at, y, w, 13]})
-    at = at + w
-  }
-  out
+function pw_track_value(track, x, lo, hi) {
+  bc_track_value(track, x, lo, hi)
 }
 
--~> Where everything is: a hash of rects [x, y, w, h] and lists.
+-~> Where everything is: a hash of rects [x, y, w, h] and lists. `tab` is
+-~> the open tab's own layout: {"id", "x", "y", "w", "rows", "tiles"
+-~> (Shape, Grain), "pressure" (Pressure), "note_y", "sx", "sw"}.
 function pw_layout() {
   let r = pw_rect()
   let ox = r[0]
   let oy = r[1]
+  let top = oy + 16
   let reset = t("pen.reset")
-  let rw = g_text_w(reset) + 6
-  let modes = pw_segments(ox + 303, oy + 31, ["off", "string", "average"],
-    [t("stab.off"), t("stab.string"), t("stab.average")])
-  let inputs = pw_segments(ox + 303, oy + 84, ["trackpad", "tablet", "mouse"],
-    [t("input.trackpad"), t("input.tablet"), t("input.mouse")])
-  -~> the override's track starts after its label; the name field after its own
-  let ot = ox + 310 + math.max(35, g_text_w(t(prefixed("pen.", pw_override_name())))) + 6
-  let nx = ox + 310 + g_text_w(t("props.name")) + 5
-  let sw = g_text_w(t("pen.save_new")) + 20
-  let code = [ox + 5, oy + 222, 470, pw_code_lines * 13 + 4]
+  let rx = ox + pw_w - 12 - 8 - g_text_w(reset)
+  let tabs = []
+  for (let i = 0; i < len(bt_tabs); i = i + 1) {
+    push(tabs, {"id": bt_tabs[i], "rect": [ox + 1, top + 1 + i * 18, pw_rail_w, 18]})
+  }
+  let py = top + 151
+  let fy = py + 74
+  let name_x = ox + 11 + g_text_w(text.lower(t("props.name")))
+  let save_w = g_text_w(t("brush.save")) + 22
+  let save_x = ox + pw_w - 6 - save_w
+  let exp_w = g_text_w(t("brush.export")) + 22
+  let pad = [ox + 6, py, pw_w - 12, 70]
+  let bx = pad[0] + pad[2] - 15
+  let code = [ox + 6, fy + 22, pw_w - 12, pw_code_lines * 13 + 6]
   if (mode_artist()) {
     code = null
   }
   {
     "win": r,
-    "title": [ox, oy, pw_w, 14],
-    "close": [ox + pw_w - 14, oy + 1, 12, 12],
-    "reset": [ox + pw_w - 18 - rw, oy + 1, rw, 12],
-    "graph": [ox + 6, oy + 30, 84, 84],
-    "preset": [ox + 5, oy + 119, 86, 16],
-    "sliders": pw_slider_rows(ox, oy),
-    "modes": modes,
-    "length": {"label_x": ox + 303, "y": oy + 48, "track": [ox + 352, oy + 53, 81, 5], "value_r": ox + 474},
-    "catch": [ox + 304, oy + 69, 8, 8],
-    "inputs": inputs,
-    "box": [ox + 303, oy + 100, 171, 33],
-    "override": {"label_x": ox + 310, "y": oy + 101, "track": [ot, oy + 106, ox + 433 - ot, 5], "value_r": ox + 470},
-    "pad": [ox + 5, oy + 149, 300, 66],
-    "trash": [ox + 290, oy + 151, 13, 13],
-    "name": [nx, oy + 150, ox + 474 - nx, 16],
-    "save": [ox + 474 - sw, oy + 171, sw, 16],
+    "title": [ox, oy, pw_w, 15],
+    "close": [ox + pw_w - 14, oy + 2, 12, 12],
+    "reset": [rx - 2, oy + 1, g_text_w(reset) + 4, 13],
+    "rail": [ox + 1, top, pw_rail_w, 147],
+    "tabs": tabs,
+    "tab": pw_tab_layout(pw.tab, ox + pw_rail_w + 8, top + 3, pw_w - pw_rail_w - 14),
+    "pad": pad,
+    "sample": [bx - 28, pad[1] + 2, 13, 13],
+    "paper": [bx - 14, pad[1] + 2, 13, 13],
+    "trash": [bx, pad[1] + 2, 13, 13],
+    "name": [name_x, fy, 120, 18],
+    "export": [save_x - 4 - exp_w, fy, exp_w, 18],
+    "save": [save_x, fy, save_w, 18],
     "code": code
   }
 }
 
--~> The x of a value along a track.
-function pw_track_x(track, v, lo, hi) {
-  let f = 0.0
-  if (hi > lo) {
-    f = (v - lo) / float(hi - lo)
+-~> The open tab's layout from (x0, y0), w wide.
+function pw_tab_layout(tab, x0, y0, w) {
+  let out = {"id": tab, "x": x0, "y": y0, "w": w, "rows": [], "tiles": null, "pressure": null}
+  if (tab == "pressure") {
+    out.pressure = bpr_layout(x0, y0)
+    out.rows = out.pressure.rows
+    return out
   }
-  track[0] + math.round(math.max(0.0, math.min(1.0, f)) * (track[2] - 1))
-}
-
--~> The value at x along a track.
-function pw_track_value(track, x, lo, hi) {
-  let f = (x - track[0]) / float(math.max(1, track[2] - 1))
-  lo + (hi - lo) * math.max(0.0, math.min(1.0, f))
+  let sx = x0 + 100
+  if (tab == "shape" || tab == "grain") {
+    out.tiles = bti_layout(tab, x0, y0)
+    sx = x0 + 192
+  }
+  out.sx = sx
+  out.sw = x0 + w - sx
+  let placed = bc_rows(bt_controls(tab), sx, y0, out.sw)
+  out.rows = placed.rows
+  out.note_y = placed.end
+  out
 }
 
 -~> == Painting ==
@@ -146,239 +152,160 @@ function pw_draw() {
   let r = lay.win
   let x = r[0]
   let y = r[1]
-  -~> the 3 pixel hard shadow, the outline and the face
+  -~> the 3 pixel hard shadow, the outline, the face and its left highlight
   g_rect(x + 3, y + 3, r[2], r[3], P.void)
   g_frame(x, y, r[2], r[3], P.void)
   g_rect(x + 1, y + 1, r[2] - 2, r[3] - 2, P.panel)
+  g_rect(x + 1, y + 1, 1, r[3] - 2, P.bevel)
   pw_draw_title(lay)
-  g_rect(x + 97, y + 16, 1, 125, P.void)
-  g_rect(x + 299, y + 16, 1, 125, P.void)
-  pw_draw_curve(lay)
-  pw_draw_sliders(lay)
-  pw_draw_stabilizer(lay)
-  pw_draw_inputs(lay)
-  pw_draw_pad_frame(lay)
-  pw_draw_save(lay)
+  pw_draw_rail(lay)
+  pw_draw_tab(lay.tab)
+  pw_draw_pad(lay)
+  pw_draw_footer(lay)
   pw_draw_code(lay)
+}
+
+-~> The hover id without its "pw:", or "".
+function pw_hover_id() {
+  if (text.starts(V.hover, "pw:")) {
+    return text.slice(V.hover, 3, len(V.hover))
+  }
+  ""
 }
 
 function pw_draw_title(lay) {
   let tr = lay.title
-  g_rect(tr[0] + 1, tr[1] + 1, tr[2] - 2, 13, P.raised)
-  g_rect(tr[0] + 1, tr[1] + 1, tr[2] - 2, 1, P.lizard)
-  for (let i = 0; i < 3; i = i + 1) {
-    g_rect(tr[0] + 4, tr[1] + 4 + i * 3, 1, 1, P.dim)
-    g_rect(tr[0] + 6, tr[1] + 4 + i * 3, 1, 1, P.dim)
+  let x = tr[0]
+  let y = tr[1]
+  g_rect(x + 1, y + 1, tr[2] - 2, 13, P.raised)
+  g_rect(x + 1, y + 14, tr[2] - 2, 1, P.void)
+  g_rect(x + 1, y + 1, tr[2] - 2, 1, P.lizard)
+  g_icon("grip", x + 4, y + 4, P.dim)
+  let head = text.upper(t("brush.title"))
+  let tx = x + 14
+  g_text(head, tx, y + 1, P.mute)
+  g_text("·", tx + g_text_w(head) + 5, y + 1, P.mute)
+  let name = pw_title_name()
+  let nx = tx + g_text_w(head) + 17
+  g_text(name, nx, y + 1, P.bright)
+  if (pen_is_builtin(pw.key)) {
+    g_text(t("brush.from", {"name": pen_display_name(pw.orig)}), nx + g_text_w(name) + 7, y + 1, P.dim)
   }
-  let head = text.upper(t("pen.settings"))
-  g_text(head, tr[0] + 11, tr[1] + 1, P.mute)
-  let name = pen_display_name(pw.draft)
-  g_text(" · " + name, tr[0] + 11 + g_text_w(head), tr[1] + 1, P.bright)
   let rs = lay.reset
-  g_rect(rs[0] - 3, tr[1] + 3, 1, 10, P.bevel)
+  g_rect(rs[0] - 3, y + 4, 1, 8, P.bevel)
   let rc = P.mute
   if (V.hover == "pw:reset") {
     rc = P.bright
   }
-  g_text(t("pen.reset"), rs[0] + 3, tr[1] + 1, rc)
+  g_text(t("pen.reset"), rs[0] + 2, y + 1, rc)
   let cl = lay.close
   if (V.hover == "pw:close") {
     g_rect(cl[0], cl[1], cl[2], cl[3], P.bevel)
   }
-  g_icon("close", cl[0] + 2, cl[1] + 2, P.text)
+  g_icon("close", x + tr[2] - 12, y + 4, P.mute)
 }
 
--~> A dotted line across or down the graph.
-function pw_dots(x, y, n, across, c) {
-  for (let i = 0; i < n; i = i + 2) {
-    if (across) {
-      g_rect(x + i, y, 1, 1, c)
-    } else {
-      g_rect(x, y + i, 1, 1, c)
-    }
+-~> The name the title shows: the name field's, or the pen's while it is empty.
+function pw_title_name() {
+  if (text.trim(pw.name) != "") {
+    return text.trim(pw.name)
   }
+  pen_display_name(pw.draft)
 }
 
--~> The graph's pixel for a curve point [raw, effective].
-function pw_graph_xy(gr, p) {
-  return [gr[0] + math.round(p[0] * (gr[2] - 1)), gr[1] + gr[3] - 1 - math.round(p[1] * (gr[3] - 1))]
-}
-
-function pw_draw_curve(lay) {
-  let ox = lay.win[0]
-  let oy = lay.win[1]
-  g_text(text.upper(t("pen.pressure")), ox + 5, oy + 15, P.mute)
-  let gr = lay.graph
-  g_frame(gr[0] - 1, gr[1] - 1, gr[2] + 2, gr[3] + 2, P.void)
-  g_rect(gr[0], gr[1], gr[2], gr[3], P.coal)
-  for (let q = 1; q < 4; q = q + 1) {
-    pw_dots(gr[0], gr[1] + q * 21, gr[2], true, P.bevel)
-    pw_dots(gr[0] + q * 21, gr[1], gr[3], false, P.bevel)
-  }
-  for (let i = 0; i < gr[2]; i = i + 1) {
-    g_rect(gr[0] + i, gr[1] + gr[3] - 1 - i, 1, 1, P.dim)
-  }
-  g_text(t("pen.out"), gr[0] + 3, gr[1] + 1, P.mute)
-  let raw = t("pen.raw")
-  g_text(raw, gr[0] + gr[2] - g_text_w(raw) - 3, gr[1] + gr[3] - 14, P.mute)
-  -~> the curve: a column of pixels for each x, joined to the one before
-  let c = pw_curve()
-  let prev = -1
-  for (let i = 0; i < gr[2]; i = i + 1) {
-    let e = pen_curve({"curve": c, "floor": 0}, i / float(gr[2] - 1))
-    let py = gr[1] + gr[3] - 1 - math.round(e * (gr[3] - 1))
-    let top = py
-    let h = 1
-    if (prev >= 0) {
-      top = math.min(py, prev)
-      h = math.abs(py - prev) + 1
-    }
-    g_rect(gr[0] + i, top, 1, h, P.lizard)
-    prev = py
-  }
-  if (pw.live_p != null) {
-    let lx = gr[0] + math.round(math.max(0.0, math.min(1.0, pw.live_p)) * (gr[2] - 1))
-    for (let k = 0; k < gr[3]; k = k + 3) {
-      g_rect(lx, gr[1] + k, 1, 2, P.sky)
-    }
-    let ly = gr[1] + gr[3] - 1 - math.round(pw_effective(pw.live_p) * (gr[3] - 1))
-    g_rect(lx - 1, ly - 1, 3, 3, P.sky)
-  }
-  for (let i = 0; i < len(c); i = i + 1) {
-    let at = pw_graph_xy(gr, c[i])
-    if (pw.curve_hover == i) {
-      g_rect(at[0] - 3, at[1] - 3, 7, 7, P.amber)
-    } else {
-      g_rect(at[0] - 2, at[1] - 2, 5, 5, P.lizard)
-    }
-  }
-  let pr = lay.preset
-  g_field(pr[0], pr[1], pr[2], pr[3], V.hover == "pw:preset")
-  g_text(t(prefixed("preset.", pw_preset_name())), pr[0] + 4, pr[1] + 2, P.text)
-  g_icon("chevron-down", pr[0] + pr[2] - 12, pr[1] + 4, P.mute)
-}
-
--~> A slider: its label, the track (a range fills between its two handles) and the value.
-function pw_draw_slider(label, row, v, lo, hi, value_text) {
-  g_text(label, row.label_x, row.y, P.mute)
-  let tr = row.track
-  g_rect(tr[0], tr[1], tr[2], tr[3], P.coal)
-  g_frame(tr[0], tr[1], tr[2], tr[3], P.void)
-  let a = tr[0]
-  let b = pw_track_x(tr, v[0], lo, hi)
-  if (len(v) > 1) {
-    a = b
-    b = pw_track_x(tr, v[1], lo, hi)
-  }
-  g_rect(a, tr[1] + 1, math.max(1, b - a), tr[3] - 2, P.lizard)
-  if (len(v) > 1) {
-    g_rect(a - 1, tr[1] - 4, 3, 12, P.void)
-    g_rect(a, tr[1] - 3, 1, 10, P.bright)
-  }
-  g_rect(b - 1, tr[1] - 4, 3, 12, P.void)
-  g_rect(b, tr[1] - 3, 1, 10, P.bright)
-  g_text(value_text, row.value_r - g_text_w(value_text), row.y, P.amber)
-}
-
-function pw_draw_sliders(lay) {
-  let ox = lay.win[0]
-  let oy = lay.win[1]
-  for (let i = 0; i < len(lay.sliders); i = i + 1) {
-    let row = lay.sliders[i]
-    let lim = pw_limits(row.id)
-    pw_draw_slider(t(prefixed("pen.", row.id)), row, pw_value(row.id), lim[0], lim[1], pw_value_text(row.id))
-  }
-  g_rect(ox + 103, oy + 108, 191, 1, P.bevel)
-  let label = t("pen.pressure") + " "
-  g_text(label, ox + 103, oy + 113, P.mute)
-  let at = ox + 103 + g_text_w(label)
-  let val = "—"
-  let vc = P.dim
-  if (pw.live_p != null) {
-    val = pen_code_number(math.round(pw.live_p * 100) / 100.0)
-    vc = P.sky
-  }
-  g_text(val, at, oy + 113, vc)
-  let src = pw.live_src
-  if (src == null) {
-    src = pw.source
-  }
-  g_text(" · " + text.lower(t(prefixed("input.", src))), at + g_text_w(val), oy + 113, P.mute)
-  g_text(t("pen.sky_line"), ox + 103, oy + 127, P.dim)
-}
-
--~> A segmented control: the current one pressed in.
-function pw_draw_segments(segs, current) {
-  for (let i = 0; i < len(segs); i = i + 1) {
-    let s = segs[i]
-    let r = s.rect
-    let face = P.raised
+-~> The tab rail: `coal`, a `void` line on its right, a row per tab.
+function pw_draw_rail(lay) {
+  let rr = lay.rail
+  g_rect(rr[0], rr[1], rr[2], rr[3], P.coal)
+  g_rect(rr[0] + rr[2], rr[1], 1, rr[3], P.void)
+  for (let i = 0; i < len(lay.tabs); i = i + 1) {
+    let tb = lay.tabs[i]
+    let r = tb.rect
+    let sel = tb.id == pw.tab
+    let ic = P.mute
     let tc = P.text
-    if (s.id == current) {
-      face = P.moss
+    if (sel) {
+      g_rect(r[0], r[1], r[2], r[3], P.moss)
+      g_rect(r[0], r[1], 2, r[3], P.lizard)
+      ic = P.lizard
       tc = P.bright
-    } elif (V.hover == "pw:seg:" + s.id) {
-      face = P.bevel
+    } elif (V.hover == "pw:tab:" + tb.id) {
+      g_rect(r[0], r[1], r[2], r[3], P.row)
     }
-    g_frame(r[0], r[1], r[2], r[3], P.void)
-    g_rect(r[0] + 1, r[1] + 1, r[2] - 2, r[3] - 2, face)
-    g_text(s.label, r[0] + 3, r[1], tc)
+    g_icon(bt_icons[tb.id], r[0] + 6, r[1] + 5, ic)
+    g_text(t(prefixed("brush.tab.", tb.id)), r[0] + 18, r[1] + 3, tc)
+    if (bt_changed(tb.id)) {
+      g_rect(r[0] + r[2] - 5, r[1] + 8, 3, 3, P.amber)
+    }
   }
 }
 
-function pw_draw_stabilizer(lay) {
-  let ox = lay.win[0]
-  let oy = lay.win[1]
-  g_text(text.upper(t("pen.stabilization")), ox + 303, oy + 15, P.mute)
-  let s = stabilize_settings(pw.draft)
-  pw_draw_segments(lay.modes, s.mode)
-  pw_draw_slider(t("stab.length"), lay.length, pw_value("length"), 2, 64, pw_value_text("length"))
-  let cb = lay.catch
-  g_frame(cb[0], cb[1], cb[2], cb[3], P.void)
-  g_rect(cb[0] + 1, cb[1] + 1, cb[2] - 2, cb[3] - 2, P.coal)
-  if (s.catch_up) {
-    g_icon("check", cb[0], cb[1], P.lizard)
+function pw_draw_tab(tl) {
+  let hover = pw_hover_id()
+  if (tl.pressure != null) {
+    bpr_draw(tl.pressure, tl.x, tl.y, hover)
+    return null
   }
-  g_text(t("stab.catch_up"), cb[0] + 11, oy + 65, P.text)
+  if (tl.tiles != null) {
+    bti_draw(tl.id, tl.tiles, tl.x, tl.y, hover)
+  } else {
+    g_text(text.upper(t(prefixed("brush.tab.", tl.id))), tl.x, tl.y, P.mute)
+  }
+  bc_draw(tl.rows, hover)
+  bc_draw_note(tl.sx, tl.note_y, tl.sw, be_note(tl.id), P.mute)
 }
 
-function pw_draw_inputs(lay) {
-  pw_draw_segments(lay.inputs, pw.source)
-  let b = lay.box
-  g_rect(b[0], b[1], b[2], b[3], P.coal)
-  g_rect(b[0], b[1], 2, b[3], P.lizard)
-  let name = pw_override_name()
-  let lim = pw_limits("override")
-  pw_draw_slider(t(prefixed("pen.", name)), lay.override, [pw_override_value()], lim[0], lim[1], pw_value_text("override"))
-  g_text(t(prefixed("override.", pw.source)), b[0] + 7, b[1] + 16, P.text)
-}
-
--~> The pad's paper, frame and trash (its strokes go in at full resolution, pen_pad.liz).
-function pw_draw_pad_frame(lay) {
+-~> The pad: paper, frame, its strokes, the labels and the three buttons.
+function pw_draw_pad(lay) {
   let p = lay.pad
   g_frame(p[0], p[1], p[2], p[3], P.void)
-  g_rect(p[0] + 1, p[1] + 1, p[2] - 2, p[3] - 2, #fbf8ef)
-  g_rect(p[0] + 1, p[1] + 1, p[2] - 2, 1, #e4dfd0)
-  if (len(pw.pad) == 0 && pw.pad_live == null) {
+  g_rect(p[0] + 1, p[1] + 1, p[2] - 2, p[3] - 2, pad_paper())
+  if (!pw.pad_dark) {
+    g_rect(p[0] + 1, p[1] + 1, p[2] - 2, 1, #e4dfd0)
+  }
+  pad_paint(p)
+  if (pw.pad_sample) {
+    g_text(t("brush.sample"), p[0] + 5, p[1] + p[3] - 15, P.mute)
+  } elif (len(pw.pad) == 0 && pw.pad_live == null) {
     let hint = t("pen.pad_hint")
     g_text(hint, p[0] + (p[2] - g_text_w(hint)) // 2, p[1] + p[3] // 2 - 7, P.dim)
   }
-  let tb = lay.trash
-  let state = "normal"
-  if (V.hover == "pw:trash") {
-    state = "hover"
-  }
-  g_button(tb[0], tb[1], tb[2], tb[3], "trash", "", state)
+  let note = t("brush.test_only")
+  g_text(note, p[0] + p[2] - 5 - g_text_w(note), p[1] + p[3] - 15, P.dim)
+  pw_pad_button(lay.sample, "stroke", "sample", pw.pad_sample)
+  pw_pad_button(lay.paper, "fill", "paper", pw.pad_dark)
+  pw_pad_button(lay.trash, "trash", "trash", false)
 }
 
-function pw_draw_save(lay) {
-  let nr = lay.name
-  g_text(text.lower(t("props.name")), lay.win[0] + 310, nr[1] + 1, P.mute)
-  g_field(nr[0], nr[1], nr[2], nr[3], pw.name_focus)
-  g_text(pw.name, nr[0] + 4, nr[1] + 2, P.text)
-  if (pw.name_focus) {
-    g_rect(nr[0] + 4 + pw.name_caret * 7, nr[1] + 2, 1, 12, P.amber)
+function pw_pad_button(r, icon, id, on) {
+  let state = "normal"
+  if (on) {
+    state = "active"
+  } elif (V.hover == "pw:" + id) {
+    state = "hover"
   }
+  g_button(r[0], r[1], r[2], r[3], icon, "", state)
+}
+
+-~> The footer: name, a note (what Save or Export said), Export… and Save brush.
+function pw_draw_footer(lay) {
+  let nr = lay.name
+  g_text(text.lower(t("props.name")), lay.win[0] + 6, nr[1] + 2, P.mute)
+  g_field(nr[0], nr[1], nr[2], nr[3], pw.name_focus)
+  g_text(pw.name, nr[0] + 4, nr[1] + 3, P.text)
+  if (pw.name_focus) {
+    g_rect(nr[0] + 4 + pw.name_caret * 7, nr[1] + 3, 1, 12, P.amber)
+  }
+  if (pw.note != "") {
+    let room = lay.export[0] - (nr[0] + nr[2]) - 12
+    g_text(g_fit_words(pw.note, room), nr[0] + nr[2] + 6, nr[1] + 2, P.amber)
+  }
+  let er = lay.export
+  let state = "normal"
+  if (V.hover == "pw:export") {
+    state = "hover"
+  }
+  g_button(er[0], er[1], er[2], er[3], "export", t("brush.export"), state)
   let sr = lay.save
   g_frame(sr[0], sr[1], sr[2], sr[3], P.void)
   let face = P.moss
@@ -386,44 +313,88 @@ function pw_draw_save(lay) {
     face = #1f4c2b
   }
   g_rect(sr[0] + 1, sr[1] + 1, sr[2] - 2, sr[3] - 2, face)
-  g_rect(sr[0] + 1, sr[1] + 1, sr[2] - 2, 1, P.lizard)
-  g_icon("plus", sr[0] + 4, sr[1] + 4, P.lizard)
-  g_text(t("pen.save_new"), sr[0] + 14, sr[1] + 1, P.bright)
-  let note = pw.note
-  let nc = P.amber
-  if (note == "") {
-    note = t("pen.pad_note")
-    nc = P.dim
-  }
-  g_text(note, lay.pad[0] + lay.pad[2] + 5, lay.win[1] + 200, nc)
+  g_bevel(sr[0] + 1, sr[1] + 1, sr[2] - 2, sr[3] - 2, P.lizard, P.void)
+  g_icon("save", sr[0] + 6, sr[1] + 5, P.lizard)
+  g_text(t("brush.save"), sr[0] + 16, sr[1] + 2, P.bright)
 }
 
--~> How many characters a line of the code view holds before it wraps.
-let pw_code_chars = 63
+-~> == The code block ==
 
--~> The lines the code view shows now, long ones wrapped (style guide R002
--~> 18b: `"catch_up": true}}` goes on the next line), and the ones to mark:
--~> {"lines", "mark", "mark_end"} (mark -1 for none; mark_end is the last
--~> piece of the marked line).
-function pw_code_view() {
-  let code = pen_code_lines(pw.draft)
-  let at = -1
-  if (pw.changed != "") {
-    at = pen_code_line_of(code, pw.changed)
+-~> How many characters a line of the code view holds before it wraps.
+let pw_code_chars = 66
+
+-~> The key the code block writes the pen under: the name field's for a
+-~> built-in's copy, else the pen's own.
+function pw_code_key() {
+  if (pen_is_builtin(pw.key)) {
+    let k = pen_lib_key(pw.name)
+    if (k != "") {
+      return k
+    }
   }
+  pen_key_of(pw.draft)
+}
+
+-~> The pen as Save brush writes it: the draft under the name field's name.
+function pw_code_pen() {
+  let pen = pen_deep_copy(pw.draft)
+  if (text.trim(pw.name) != "") {
+    pen.name = text.trim(pw.name)
+  }
+  pen
+}
+
+-~> The lines the code view shows now and the ones to mark: {"lines",
+-~> "mark", "mark_end"} (mark -1 for none). The hash is written as
+-~> `pens.<key> = {...}` with its keys packed into lines of at most
+-~> pw_code_chars, in the order pen_code writes them (style guide R005: the
+-~> flat keys, a block such as "grain" on one line); a key too long for a
+-~> line goes on lines of its own, cut after a ", ". The marked lines hold
+-~> the key of the last change.
+function pw_code_view() {
+  let pen = pw_code_pen()
+  let ks = pen_code_keys(pen, pen_code_order)
+  let first_max = pw_code_chars - len(pw_code_label(99)) - 3
+  let changed = text.split(pw.changed, ".")[0]
   let lines = []
   let mark = -1
   let mark_end = -1
-  for (let i = 0; i < len(code); i = i + 1) {
-    if (i == at) {
-      mark = len(lines)
+  let cur = "pens." + pw_code_key() + " = {"
+  let cur_keys = []
+  for (let i = 0; i < len(ks); i = i + 1) {
+    let item = pen_code_string(ks[i]) + ": " + pen_code_value(pen[ks[i]])
+    if (i < len(ks) - 1) {
+      item = item + ","
+    } else {
+      item = item + "}"
     }
-    let pieces = pw_code_pieces(code[i].s, pw_code_chars)
-    for (let k = 0; k < len(pieces); k = k + 1) {
-      push(lines, {"s": pieces[k], "key": code[i].key})
+    let max = pw_code_chars
+    if (len(lines) == 0) {
+      max = first_max
     }
-    if (i == at) {
-      mark_end = len(lines) - 1
+    if (len(cur) + 1 + len(item) > max && len(cur_keys) > 0) {
+      push(lines, {"s": cur, "keys": cur_keys})
+      cur = " "
+      cur_keys = []
+    }
+    let gap = " "
+    if (text.ends(cur, "{")) {
+      gap = ""
+    }
+    let pieces = pw_code_pieces(cur + gap + item, pw_code_chars)
+    for (let k = 0; k < len(pieces) - 1; k = k + 1) {
+      push(lines, {"s": pieces[k], "keys": cur_keys + [ks[i]]})
+    }
+    cur = pieces[len(pieces) - 1]
+    cur_keys = cur_keys + [ks[i]]
+  }
+  push(lines, {"s": cur, "keys": cur_keys})
+  for (let i = 0; i < len(lines); i = i + 1) {
+    if (changed != "" && list.index(lines[i].keys, changed) >= 0) {
+      if (mark < 0) {
+        mark = i
+      }
+      mark_end = i
     }
   }
   {"lines": lines, "mark": mark, "mark_end": mark_end}
@@ -471,43 +442,46 @@ function pw_code_follow() {
   pw.code_top = math.max(0, math.min(top, len(v.lines) - pw_code_lines))
 }
 
+-~> The label at the code block's top right: `pens.chalk · 1-4 / 9`.
+function pw_code_label(n) {
+  let last = math.min(n, pw.code_top + pw_code_lines)
+  "pens." + pw_code_key() + " · " + str(pw.code_top + 1) + "-" + str(last) + " / " + str(n)
+}
+
 function pw_draw_code(lay) {
   let cr = lay.code
   if (cr == null) {
     return null
   }
-  g_rect(cr[0], cr[1], cr[2], cr[3], P.coal)
   g_frame(cr[0], cr[1], cr[2], cr[3], P.void)
+  g_rect(cr[0] + 1, cr[1] + 1, cr[2] - 2, cr[3] - 2, P.coal)
   let v = pw_code_view()
   let n = len(v.lines)
+  let label = pw_code_label(n)
   g_clip(cr[0] + 1, cr[1] + 1, cr[2] - 6, cr[3] - 2)
   for (let i = 0; i < pw_code_lines; i = i + 1) {
     let k = pw.code_top + i
     if (k < n) {
-      let y = cr[1] + 2 + i * 13
+      let y = cr[1] + 3 + i * 13
       if (k >= v.mark && k <= v.mark_end) {
-        g_rect(cr[0] + 1, y, cr[2] - 6, 13, P.row)
+        g_rect(cr[0] + 1, y, cr[2] - 8, 13, P.row)
         g_rect(cr[0] + 1, y, 2, 13, P.amber)
       }
-      code_draw(code_render(v.lines[k].s, 0, false), cr[0] + 20, y)
+      code_draw(code_render(v.lines[k].s, 0, false), cr[0] + 5, y)
     }
   }
   fb.unclip()
-  let label = "pens." + pen_key_of(pw.draft) + " = {…"
-  if (pen_is_builtin(pw.key)) {
-    label = "pens." + pen_lib_key(pw.name) + " = {…"
-  }
-  -~> on the last line, when its code leaves room for it
-  let lk = pw.code_top + pw_code_lines - 1
-  let room = lk >= n || 20 + g_text_w(v.lines[lk].s) + 16 < cr[2] - g_text_w(label) - 8
-  if (room) {
-    g_text(label, cr[0] + cr[2] - g_text_w(label) - 8, cr[1] + cr[3] - 15, P.dim)
+  -~> on the first line, when its code leaves room for it
+  let first = v.lines[math.min(pw.code_top, n - 1)].s
+  if (5 + g_text_w(first) + 16 < cr[2] - g_text_w(label) - 10) {
+    g_text(label, cr[0] + cr[2] - 10 - g_text_w(label), cr[1] + 3, P.dim)
   }
   -~> the 3 pixel scrollbar
+  let track = cr[3] - 4
+  g_rect(cr[0] + cr[2] - 5, cr[1] + 2, 3, track, P.coal)
   if (n > pw_code_lines) {
-    let track = cr[3] - 4
     let th = math.max(6, track * pw_code_lines // n)
     let ty = cr[1] + 2 + (track - th) * pw.code_top // math.max(1, n - pw_code_lines)
-    g_rect(cr[0] + cr[2] - 4, ty, 3, th, P.bevel)
+    g_rect(cr[0] + cr[2] - 5, ty, 3, th, P.bevel)
   }
 }

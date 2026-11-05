@@ -1,9 +1,10 @@
 -~> pen_library: the editor's pens: the built-in ones of lib/draw/pens.liz,
--~> then the ones saved from the pen settings (~/.linkz/pens, read through
--~> src.saved_pens). A saved pen goes into `pens` under its key and at the
--~> end of pens.list, with its key noted in the copy the editor keeps
--~> (pen.key; pen_code never writes it). Saving never touches a built-in.
+-~> then the brushes of the library (~/.linkz/brushes, read through
+-~> src.saved_pens; see lib/app/brush_files.liz). A saved pen goes into
+-~> `pens` under its key and at the end of pens.list, with its key noted in
+-~> the copy the editor keeps (pen.key; pen_code never writes it). Saving never touches a built-in.
 
+use "../app/brush_files"
 use "../draw/pens"
 use "i18n"
 use "pen_code"
@@ -99,32 +100,17 @@ function pen_lib_load() {
 -~> The key a pen name is saved under: lower case, every run of other
 -~> characters as one _ ("Soft Ink!" is soft_ink), "pen_" before a digit.
 function pen_lib_key(name) {
-  let out = ""
-  let gap = false
-  let s = text.lower(text.trim(name))
-  for (let i = 0; i < len(s); i = i + 1) {
-    if (text.find("abcdefghijklmnopqrstuvwxyz0123456789", s[i]) >= 0) {
-      if (gap && out != "") {
-        out = out + "_"
-      }
-      out = out + s[i]
-      gap = false
-    } else {
-      gap = true
-    }
-  }
-  if (out != "" && text.find("0123456789", out[0]) >= 0) {
-    out = "pen_" + out
-  }
-  out
+  brush_key(name)
 }
 
--~> The folder saved pens go to.
+-~> The folder the old pen pop-up saved pens to (they are copied into the
+-~> brush library the first time it is read, see brush_files.liz).
 function pen_lib_dir() {
   linkz.config_dir() + "/pens"
 }
 
--~> Saves a pen under a name: {"key"} once written and in `pens`, or
+-~> Saves a pen under a name (in the brush library, and as the old pop-up did
+-~> in ~/.linkz/pens): {"key"} once written and in `pens`, or
 -~> {"refused": why} (no name, or a built-in's name: a built-in is never
 -~> replaced, its copy needs a name of its own).
 function pen_lib_save(pen, name) {
@@ -140,6 +126,7 @@ function pen_lib_save(pen, name) {
   delete(own, "key")
   fs.mkdir(pen_lib_dir())
   fs.write(pen_lib_dir() + "/" + key + ".liz", pen_code_file(own))
+  brush_library_save(own)
   pen_lib_put(key, own)
   {"key": key}
 }
